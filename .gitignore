@@ -1,0 +1,90 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build outputs
+dist/
+build/
+*.js.map
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Docker
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Secrets (never commit these!)
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+
+# Mobile builds
+*.apk
+*.aab
+*.ipa
+*.app
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/build/
+
+# Electron builds
+release/
+
+# Python (if any)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Keycloak exports with secrets
+keycloak/realm-export-with-secrets.json
+
+# MinIO data (local)
+minio_data/
+
+# PostgreSQL data (local)
+postgres_data/
+
+# MongoDB data (local)
+mongodb_data/
+
+# Elasticsearch data (local)
+elasticsearch_data/

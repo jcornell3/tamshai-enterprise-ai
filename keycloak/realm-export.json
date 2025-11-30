@@ -1,0 +1,446 @@
+{
+  "id": "tamshai-corp",
+  "realm": "tamshai-corp",
+  "displayName": "Tamshai Corp",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Tamshai Corp</span></div>",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyInitialCounter": 0,
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
+  "otpSupportedApplications": [
+    "totpAppGoogleName",
+    "totpAppMicrosoftAuthenticatorName",
+    "totpAppFreeOTPName"
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "hr-read",
+        "description": "Read access to HR data (employee names, departments, org chart)"
+      },
+      {
+        "name": "hr-write",
+        "description": "Full access to HR data (includes salaries, performance data)"
+      },
+      {
+        "name": "finance-read",
+        "description": "Read access to finance data (budget summaries, public reports)"
+      },
+      {
+        "name": "finance-write",
+        "description": "Full access to finance data (detailed financials, invoices)"
+      },
+      {
+        "name": "sales-read",
+        "description": "Read access to CRM data (company names, deal pipeline)"
+      },
+      {
+        "name": "sales-write",
+        "description": "Full access to CRM data (contact details, deal values)"
+      },
+      {
+        "name": "support-read",
+        "description": "Read access to support data (tickets with masked PII, KB articles)"
+      },
+      {
+        "name": "support-write",
+        "description": "Full access to support data (full ticket details)"
+      },
+      {
+        "name": "manager",
+        "description": "Manager role - can view direct reports data"
+      },
+      {
+        "name": "executive",
+        "description": "Executive role - read access to all departments",
+        "composite": true,
+        "composites": {
+          "realm": ["hr-read", "finance-read", "sales-read", "support-read"]
+        }
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "HR-Department",
+      "path": "/HR-Department",
+      "realmRoles": ["hr-read", "hr-write"]
+    },
+    {
+      "name": "Finance-Team",
+      "path": "/Finance-Team",
+      "realmRoles": ["finance-read", "finance-write"]
+    },
+    {
+      "name": "Sales-Team",
+      "path": "/Sales-Team",
+      "realmRoles": ["sales-read"]
+    },
+    {
+      "name": "Sales-Managers",
+      "path": "/Sales-Managers",
+      "realmRoles": ["sales-read", "sales-write", "manager"]
+    },
+    {
+      "name": "Support-Team",
+      "path": "/Support-Team",
+      "realmRoles": ["support-read"]
+    },
+    {
+      "name": "Engineering-Team",
+      "path": "/Engineering-Team",
+      "realmRoles": []
+    },
+    {
+      "name": "Engineering-Managers",
+      "path": "/Engineering-Managers",
+      "realmRoles": ["manager"]
+    },
+    {
+      "name": "IT-Team",
+      "path": "/IT-Team",
+      "realmRoles": []
+    },
+    {
+      "name": "Managers",
+      "path": "/Managers",
+      "realmRoles": ["manager"]
+    },
+    {
+      "name": "C-Suite",
+      "path": "/C-Suite",
+      "realmRoles": ["executive", "manager"]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice.chen",
+      "email": "alice@tamshai.local",
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/HR-Department", "/Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Human Resources"], "employeeId": ["EMP010"], "title": ["VP of Human Resources"]}
+    },
+    {
+      "username": "bob.martinez",
+      "email": "bob@tamshai.local",
+      "firstName": "Bob",
+      "lastName": "Martinez",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/Finance-Team", "/Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Finance"], "employeeId": ["EMP020"], "title": ["Finance Director"]}
+    },
+    {
+      "username": "carol.johnson",
+      "email": "carol@tamshai.local",
+      "firstName": "Carol",
+      "lastName": "Johnson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/Sales-Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Sales"], "employeeId": ["EMP030"], "title": ["VP of Sales"]}
+    },
+    {
+      "username": "dan.williams",
+      "email": "dan@tamshai.local",
+      "firstName": "Dan",
+      "lastName": "Williams",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/Support-Team", "/Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Customer Support"], "employeeId": ["EMP040"], "title": ["Support Director"]}
+    },
+    {
+      "username": "eve.thompson",
+      "email": "eve@tamshai.local",
+      "firstName": "Eve",
+      "lastName": "Thompson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/C-Suite"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Executive"], "employeeId": ["EMP001"], "title": ["CEO"]}
+    },
+    {
+      "username": "frank.davis",
+      "email": "frank@tamshai.local",
+      "firstName": "Frank",
+      "lastName": "Davis",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/IT-Team"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["IT"], "employeeId": ["EMP061"], "title": ["Intern"]}
+    },
+    {
+      "username": "ryan.garcia",
+      "email": "ryan.g@tamshai.local",
+      "firstName": "Ryan",
+      "lastName": "Garcia",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/Sales-Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Sales"], "employeeId": ["EMP031"], "title": ["Sales Manager"]}
+    },
+    {
+      "username": "nina.patel",
+      "email": "nina.p@tamshai.local",
+      "firstName": "Nina",
+      "lastName": "Patel",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/Engineering-Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Engineering"], "employeeId": ["EMP051"], "title": ["Engineering Manager"]}
+    },
+    {
+      "username": "marcus.johnson",
+      "email": "marcus.j@tamshai.local",
+      "firstName": "Marcus",
+      "lastName": "Johnson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "[REDACTED-DEV-PASSWORD]", "temporary": false}],
+      "groups": ["/Engineering-Team"],
+      "requiredActions": ["CONFIGURE_TOTP"],
+      "attributes": {"department": ["Engineering"], "employeeId": ["EMP052"], "title": ["Software Engineer"]}
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "ai-desktop",
+      "name": "Tamshai AI Desktop",
+      "description": "Desktop application for AI assistant",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:3100/callback", "tamshai-ai://callback"],
+      "webOrigins": ["http://localhost:3100"],
+      "attributes": {"pkce.code.challenge.method": "S256"},
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "ai-mobile",
+      "name": "Tamshai AI Mobile",
+      "description": "Mobile application for AI assistant",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["com.tamshai.ai://callback", "com.tamshai.ai.dev://callback"],
+      "attributes": {"pkce.code.challenge.method": "S256"},
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "mcp-gateway",
+      "name": "MCP Gateway Service",
+      "description": "Backend service for MCP orchestration",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "[REDACTED-DEV-SECRET]",
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "hr-app",
+      "name": "Tamshai HR Application",
+      "description": "Human Resources self-service application with hierarchical access",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:4001/callback", "http://localhost:4001/*"],
+      "webOrigins": ["http://localhost:4001"],
+      "attributes": {"pkce.code.challenge.method": "S256"},
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "finance-app",
+      "name": "Tamshai Finance Application",
+      "description": "Financial reporting and budget management application",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:4002/callback", "http://localhost:4002/*"],
+      "webOrigins": ["http://localhost:4002"],
+      "attributes": {"pkce.code.challenge.method": "S256"},
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "sales-app",
+      "name": "Tamshai Sales CRM Application",
+      "description": "Customer relationship management application",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:4003/callback", "http://localhost:4003/*"],
+      "webOrigins": ["http://localhost:4003"],
+      "attributes": {"pkce.code.challenge.method": "S256"},
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    },
+    {
+      "clientId": "support-app",
+      "name": "Tamshai Support Application",
+      "description": "Customer support ticketing application",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:4004/callback", "http://localhost:4004/*"],
+      "webOrigins": ["http://localhost:4004"],
+      "attributes": {"pkce.code.challenge.method": "S256"},
+      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "roles",
+      "description": "OpenID Connect scope for user roles",
+      "protocol": "openid-connect",
+      "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true"},
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "requiredActions": [
+    {"alias": "CONFIGURE_TOTP", "name": "Configure OTP", "providerId": "CONFIGURE_TOTP", "enabled": true, "defaultAction": true, "priority": 10},
+    {"alias": "CONFIGURE_RECOVERY_AUTHN_CODES", "name": "Recovery Authentication Codes", "providerId": "CONFIGURE_RECOVERY_AUTHN_CODES", "enabled": true, "defaultAction": true, "priority": 20}
+  ],
+  "authenticationFlows": [
+    {
+      "alias": "browser-with-otp",
+      "description": "Browser flow with required OTP",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 10
+        },
+        {
+          "authenticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "flowAlias": "browser-with-otp forms"
+        }
+      ]
+    },
+    {
+      "alias": "browser-with-otp forms",
+      "description": "Username, password, and OTP form",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-password-form",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20
+        }
+      ]
+    }
+  ],
+  "browserFlow": "browser-with-otp",
+  "registrationFlow": "registration",
+  "directGrantFlow": "direct grant",
+  "resetCredentialsFlow": "reset credentials",
+  "clientAuthenticationFlow": "clients"
+}
