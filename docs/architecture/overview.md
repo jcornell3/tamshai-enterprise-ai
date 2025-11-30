@@ -1,0 +1,655 @@
+# Architecture Overview
+
+## Document Information
+- **Version**: 1.0
+- **Status**: Draft - Pending Approval
+- **Author**: AI Architecture Assistant
+- **Organization**: Tamshai Corp
+- **Last Updated**: November 2025
+
+---
+
+## 1. Executive Summary
+
+This document describes the architecture for Tamshai Corp's Enterprise AI Access System. The system enables employees to use AI assistants (specifically Claude) while ensuring that data access respects existing role-based security boundaries established through Single Sign-On (SSO).
+
+### 1.1 Problem Statement
+
+As enterprises adopt AI assistants, a critical challenge emerges: AI agents can potentially become privilege escalation vectors if not properly constrained. An AI with access to multiple data sources could inadvertently expose sensitive information to unauthorized users.
+
+### 1.2 Solution Approach
+
+This architecture implements **token propagation** where the authenticated user's identity and permissions flow through the entire AI request chain. MCP (Model Context Protocol) servers enforce role-based access at the data layer, ensuring the AI can only access data the user is authorized to see.
+
+---
+
+## 2. Architecture Principles
+
+### 2.1 Security Principles
+
+1. **Zero Trust**: Every request is authenticated and authorized, regardless of source
+2. **Least Privilege**: Users and services have minimum necessary permissions
+3. **Defense in Depth**: Multiple security layers (gateway, MCP gateway, individual MCPs)
+4. **Token Propagation**: User context flows through entire request chain
+5. **Audit Everything**: Comprehensive logging for compliance and forensics
+
+### 2.2 Design Principles
+
+1. **Open Source First**: Prefer open-source solutions to avoid vendor lock-in
+2. **Cloud Agnostic**: Architecture portable across cloud providers
+3. **Container Native**: All services containerized for consistency
+4. **API First**: Well-defined interfaces between components
+5. **Fail Secure**: Deny access on any error or ambiguity
+
+---
+
+## 3. System Architecture
+
+### 3.1 High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌────────────────┐   ┌────────────────┐   ┌────────────────┐              │
+│   │    Desktop     │   │    Android     │   │      iOS       │              │
+│   │   (Electron)   │   │ (React Native) │   │ (React Native) │              │
+│   │                │   │                │   │                │              │
+│   │  OIDC + PKCE   │   │  OIDC + PKCE   │   │  OIDC + PKCE   │              │
+│   └───────┬────────┘   └───────┬────────┘   └───────┬────────┘              │
+│           │                    │                    │                        │
+│           └────────────────────┼────────────────────┘                        │
+│                                │                                             │
+│                                ▼                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                          AUTHENTICATION LAYER                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│                       ┌─────────────────────┐                                │
+│                       │      Keycloak       │                                │
+│                       │  ─────────────────  │                                │
+│                       │  • OIDC Provider    │                                │
+│                       │  • SAML 2.0 IdP     │                                │
+│                       │  • MFA (TOTP)       │                                │
+│                       │  • User Federation  │                                │
+│                       │  • Role Management  │                                │
+│                       │  • Token Issuance   │                                │
+│                       └─────────┬───────────┘                                │
+│                                 │                                            │
+│                                 │ JWT Access Tokens                          │
+│                                 ▼                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                            GATEWAY LAYER                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│                       ┌─────────────────────┐                                │
+│                       │    Kong Gateway     │                                │
+│                       │  ─────────────────  │                                │
+│                       │  • Token Validation │                                │
+│                       │  • Rate Limiting    │                                │
+│                       │  • Request Routing  │                                │
+│                       │  • TLS Termination  │                                │
+│                       │  • Access Logging   │                                │
+│                       └─────────┬───────────┘                                │
+│                                 │                                            │
+│                                 │ Validated JWT                              │
+│                                 ▼                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                         MCP ORCHESTRATION LAYER                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│                       ┌─────────────────────┐                                │
+│                       │    MCP Gateway      │                                │
+│                       │  ─────────────────  │                                │
+│                       │  • Role Extraction  │                                │
+│                       │  • MCP Routing      │                                │
+│                       │  • Query Filtering  │                                │
+│                       │  • Response Agg.    │                                │
+│                       │  • Audit Trail      │                                │
+│                       │  • Claude API Proxy │                                │
+│                       └─────────┬───────────┘                                │
+│                                 │                                            │
+│           ┌─────────────────────┼─────────────────────┐                      │
+│           │                     │                     │                      │
+│           ▼                     ▼                     ▼                      │
+│   ┌───────────────┐    ┌───────────────┐    ┌───────────────┐               │
+│   │   HR MCP      │    │ Finance MCP   │    │  Sales MCP    │    ...        │
+│   │ ───────────── │    │ ───────────── │    │ ───────────── │               │
+│   │ Roles: HR     │    │ Roles: FIN    │    │ Roles: SALES  │               │
+│   │ Data: PG      │    │ Data: PG+MinIO│    │ Data: MongoDB │               │
+│   └───────┬───────┘    └───────┬───────┘    └───────┬───────┘               │
+│           │                    │                    │                        │
+│           └────────────────────┼────────────────────┘                        │
+│                                │                                             │
+│                                ▼                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                             DATA LAYER                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
+│   │ PostgreSQL │  │   MinIO    │  │  MongoDB   │  │Elasticsearch│           │
+│   │ ────────── │  │ ────────── │  │ ────────── │  │ ────────── │            │
+│   │ HR Data    │  │ Documents  │  │ CRM Data   │  │ Tickets    │            │
+│   │ Finance    │  │ Reports    │  │ Pipeline   │  │ KB Search  │            │
+│   └────────────┘  └────────────┘  └────────────┘  └────────────┘            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Request Flow
+
+```
+┌──────┐     ┌──────────┐     ┌──────┐     ┌───────────┐     ┌─────────┐     ┌──────────┐
+│Client│     │ Keycloak │     │ Kong │     │MCP Gateway│     │ MCP Svr │     │  Claude  │
+└──┬───┘     └────┬─────┘     └──┬───┘     └─────┬─────┘     └────┬────┘     └────┬─────┘
+   │              │              │               │                │               │
+   │ 1. Login     │              │               │                │               │
+   │─────────────>│              │               │                │               │
+   │              │              │               │                │               │
+   │ 2. MFA       │              │               │                │               │
+   │<────────────>│              │               │                │               │
+   │              │              │               │                │               │
+   │ 3. JWT Token │              │               │                │               │
+   │<─────────────│              │               │                │               │
+   │              │              │               │                │               │
+   │ 4. AI Query + Token         │               │                │               │
+   │─────────────────────────────>               │                │               │
+   │              │              │               │                │               │
+   │              │  5. Validate │               │                │               │
+   │              │<─────────────│               │                │               │
+   │              │              │               │                │               │
+   │              │  6. Valid    │               │                │               │
+   │              │─────────────>│               │                │               │
+   │              │              │               │                │               │
+   │              │              │ 7. Route      │                │               │
+   │              │              │──────────────>│                │               │
+   │              │              │               │                │               │
+   │              │              │               │ 8. Check Roles │               │
+   │              │              │               │───────────────>│               │
+   │              │              │               │                │               │
+   │              │              │               │ 9. Query Data  │               │
+   │              │              │               │<───────────────│               │
+   │              │              │               │                │               │
+   │              │              │               │ 10. Claude API │               │
+   │              │              │               │────────────────────────────────>
+   │              │              │               │                │               │
+   │              │              │               │ 11. Response   │               │
+   │              │              │               │<────────────────────────────────
+   │              │              │               │                │               │
+   │ 12. AI Response             │               │                │               │
+   │<────────────────────────────────────────────│                │               │
+   │              │              │               │                │               │
+```
+
+---
+
+## 4. Component Details
+
+### 4.1 Keycloak (Identity Provider)
+
+**Purpose**: Centralized authentication and authorization
+
+**Configuration**:
+```
+Realm: tamshai-corp
+├── Clients
+│   ├── ai-desktop (OIDC, public, PKCE)
+│   ├── ai-mobile (OIDC, public, PKCE)
+│   ├── mcp-gateway (OIDC, confidential)
+│   └── admin-console (OIDC, confidential)
+│
+├── Realm Roles
+│   ├── hr-read
+│   ├── hr-write
+│   ├── finance-read
+│   ├── finance-write
+│   ├── sales-read
+│   ├── sales-write
+│   ├── support-read
+│   ├── support-write
+│   └── executive (composite: all *-read roles)
+│
+├── Groups (map to roles)
+│   ├── HR-Department → hr-read, hr-write
+│   ├── Finance-Team → finance-read, finance-write
+│   ├── Sales-Team → sales-read
+│   ├── Support-Team → support-read
+│   └── C-Suite → executive
+│
+└── Authentication
+    ├── Browser Flow (username/password + OTP)
+    └── Direct Grant (disabled for security)
+```
+
+**JWT Token Structure**:
+```json
+{
+  "sub": "user-uuid",
+  "preferred_username": "alice.chen",
+  "email": "alice@tamshai.local",
+  "realm_access": {
+    "roles": ["hr-read", "hr-write"]
+  },
+  "groups": ["/HR-Department"],
+  "iat": 1699000000,
+  "exp": 1699003600,
+  "aud": "ai-desktop"
+}
+```
+
+### 4.2 Kong API Gateway
+
+**Purpose**: Edge security, rate limiting, routing
+
+**Plugins**:
+- **OIDC**: Token validation against Keycloak
+- **Rate Limiting**: 100 requests/minute per user
+- **Request Transformer**: Add user context headers
+- **Response Transformer**: Remove sensitive headers
+- **Logging**: HTTP log to audit system
+
+**Routes**:
+| Route | Upstream | Auth Required |
+|-------|----------|---------------|
+| /api/ai/* | mcp-gateway:3000 | Yes |
+| /api/health | mcp-gateway:3000 | No |
+
+### 4.3 MCP Gateway
+
+**Purpose**: AI orchestration with role-based MCP routing
+
+**Responsibilities**:
+1. Extract roles from validated JWT
+2. Determine which MCP servers user can access
+3. Route AI queries to appropriate MCPs
+4. Aggregate responses from multiple MCPs
+5. Proxy requests to Claude API
+6. Log all queries and data access
+
+**Core Logic**:
+```typescript
+interface MCPGateway {
+  // Determine accessible MCPs based on user roles
+  getAccessibleMCPs(roles: string[]): MCPServer[];
+  
+  // Execute query across allowed MCPs
+  executeQuery(query: string, userContext: UserContext): Promise<QueryResult>;
+  
+  // Send to Claude with MCP context
+  sendToClaude(query: string, mcpData: MCPData[]): Promise<ClaudeResponse>;
+  
+  // Audit logging
+  logAccess(user: string, query: string, mcps: string[], result: any): void;
+}
+```
+
+**MCP to Role Mapping**:
+```typescript
+const MCP_ROLE_MAP = {
+  'mcp-hr': ['hr-read', 'hr-write', 'executive'],
+  'mcp-finance': ['finance-read', 'finance-write', 'executive'],
+  'mcp-sales': ['sales-read', 'sales-write', 'executive'],
+  'mcp-support': ['support-read', 'support-write', 'executive'],
+  'mcp-docs': [] // Empty = any authenticated user
+};
+```
+
+### 4.4 MCP Servers
+
+Each MCP server exposes domain-specific data through the Model Context Protocol.
+
+#### HR MCP Server
+- **Data Source**: PostgreSQL
+- **Exposed Tools**:
+  - `get_employee(id)`: Employee details
+  - `search_employees(query)`: Search by name/department
+  - `get_org_chart(department)`: Organization structure
+- **Data Filtering**: Salary data only visible with `hr-write` role
+
+#### Finance MCP Server
+- **Data Sources**: PostgreSQL + MinIO
+- **Exposed Tools**:
+  - `get_budget(department, year)`: Budget allocation
+  - `get_financial_report(type, period)`: P&L, balance sheet
+  - `get_invoice(id)`: Invoice details
+- **Data Filtering**: Detailed financials require `finance-write`
+
+#### Sales MCP Server
+- **Data Source**: MongoDB
+- **Exposed Tools**:
+  - `get_customer(id)`: Customer profile
+  - `search_customers(query)`: CRM search
+  - `get_pipeline()`: Sales pipeline summary
+- **Data Filtering**: Contact details require `sales-write`
+
+#### Support MCP Server
+- **Data Source**: Elasticsearch
+- **Exposed Tools**:
+  - `search_tickets(query)`: Full-text ticket search
+  - `get_ticket(id)`: Ticket details
+  - `search_kb(query)`: Knowledge base search
+- **Data Filtering**: Customer PII masked for basic roles
+
+---
+
+## 5. Security Architecture
+
+### 5.1 Authentication Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    OIDC + PKCE Flow                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. Client generates code_verifier (random string)               │
+│  2. Client computes code_challenge = SHA256(code_verifier)       │
+│  3. Client redirects to Keycloak with code_challenge             │
+│  4. User authenticates (username/password + MFA)                 │
+│  5. Keycloak returns authorization_code                          │
+│  6. Client exchanges code + code_verifier for tokens             │
+│  7. Keycloak validates code_verifier against stored challenge    │
+│  8. Keycloak returns access_token + refresh_token                │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 Token Security
+
+| Token Type | Lifetime | Storage | Refresh |
+|------------|----------|---------|---------|
+| Access Token | 5 minutes | Memory only | Via refresh token |
+| Refresh Token | 30 minutes | Secure storage | Sliding window |
+| ID Token | 5 minutes | Memory only | N/A |
+
+**Secure Storage**:
+- Desktop: Electron safeStorage API (OS keychain)
+- Android: EncryptedSharedPreferences (Android Keystore)
+- iOS: Keychain Services
+
+### 5.3 Network Security
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Network Zones                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    Public Zone                           │    │
+│  │  • Kong Gateway (HTTPS only, TLS 1.3)                   │    │
+│  │  • Keycloak (HTTPS only, TLS 1.3)                       │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                           │                                      │
+│                           │ Internal Network                     │
+│                           ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    Private Zone                          │    │
+│  │  • MCP Gateway                                          │    │
+│  │  • MCP Servers                                          │    │
+│  │  • Databases                                            │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 5.4 Audit Logging
+
+All data access is logged with:
+```json
+{
+  "timestamp": "2025-11-29T10:30:00Z",
+  "user_id": "alice-uuid",
+  "username": "alice.chen",
+  "roles": ["hr-read", "hr-write"],
+  "action": "ai_query",
+  "query": "Show me employee headcount by department",
+  "mcp_servers_accessed": ["mcp-hr"],
+  "data_returned": {
+    "record_count": 5,
+    "fields": ["department", "count"]
+  },
+  "client_ip": "192.168.1.100",
+  "client_type": "desktop"
+}
+```
+
+---
+
+## 6. Data Architecture
+
+### 6.1 Sample Data Model
+
+#### HR Database (PostgreSQL)
+```sql
+-- Employees
+CREATE TABLE employees (
+    id UUID PRIMARY KEY,
+    employee_number VARCHAR(20) UNIQUE,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    email VARCHAR(255) UNIQUE,
+    department_id UUID REFERENCES departments(id),
+    manager_id UUID REFERENCES employees(id),
+    hire_date DATE,
+    salary DECIMAL(12,2),  -- hr-write only
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Departments
+CREATE TABLE departments (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100),
+    code VARCHAR(10) UNIQUE,
+    budget DECIMAL(15,2)
+);
+```
+
+#### Finance Data (PostgreSQL + MinIO)
+```sql
+-- Budgets
+CREATE TABLE budgets (
+    id UUID PRIMARY KEY,
+    department_id UUID REFERENCES departments(id),
+    fiscal_year INT,
+    amount DECIMAL(15,2),
+    spent DECIMAL(15,2) DEFAULT 0
+);
+
+-- Documents stored in MinIO
+-- Path: /finance/reports/{year}/{type}/{filename}
+```
+
+#### Sales CRM (MongoDB)
+```javascript
+// customers collection
+{
+  _id: ObjectId,
+  company_name: String,
+  industry: String,
+  contacts: [{
+    name: String,
+    email: String,    // sales-write only
+    phone: String     // sales-write only
+  }],
+  deals: [{
+    name: String,
+    value: Number,
+    stage: String,
+    probability: Number
+  }]
+}
+```
+
+### 6.2 Data Access Matrix
+
+| Data | hr-read | hr-write | fin-read | fin-write | sales-read | sales-write | exec |
+|------|---------|----------|----------|-----------|------------|-------------|------|
+| Employee Name | ✓ | ✓ | | | | | ✓ |
+| Employee Salary | | ✓ | | | | | |
+| Org Chart | ✓ | ✓ | | | | | ✓ |
+| Budget Summary | | | ✓ | ✓ | | | ✓ |
+| Financial Details | | | | ✓ | | | |
+| Customer Company | | | | | ✓ | ✓ | ✓ |
+| Customer Contact | | | | | | ✓ | |
+| Deal Pipeline | | | | | ✓ | ✓ | ✓ |
+
+---
+
+## 7. Deployment Architecture
+
+### 7.1 Local Development (Docker Compose)
+
+```yaml
+# Simplified view - full compose in infrastructure/docker/
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    ports: ["8080:8080"]
+    
+  kong:
+    image: kong:3.4
+    ports: ["8000:8000", "8443:8443"]
+    
+  mcp-gateway:
+    build: ./services/mcp-gateway
+    ports: ["3000:3000"]
+    
+  postgres:
+    image: postgres:16
+    ports: ["5432:5432"]
+    
+  mongodb:
+    image: mongo:7
+    ports: ["27017:27017"]
+    
+  minio:
+    image: minio/minio
+    ports: ["9000:9000"]
+    
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    ports: ["9200:9200"]
+```
+
+### 7.2 Production (GCP + Kubernetes)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        GCP Project                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    GKE Cluster                           │    │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │    │
+│  │  │  Keycloak   │  │    Kong     │  │ MCP Gateway │      │    │
+│  │  │  (2 pods)   │  │   Ingress   │  │  (2 pods)   │      │    │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘      │    │
+│  │                                                          │    │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │    │
+│  │  │   HR MCP    │  │Finance MCP  │  │ Sales MCP   │      │    │
+│  │  │  (1 pod)    │  │  (1 pod)    │  │  (1 pod)    │      │    │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘      │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  ┌─────────────────────┐  ┌─────────────────────┐               │
+│  │   Cloud SQL         │  │  Cloud Storage      │               │
+│  │   (PostgreSQL)      │  │  (Documents)        │               │
+│  └─────────────────────┘  └─────────────────────┘               │
+│                                                                  │
+│  ┌─────────────────────┐  ┌─────────────────────┐               │
+│  │   MongoDB Atlas     │  │  Elastic Cloud      │               │
+│  │   (CRM Data)        │  │  (Search)           │               │
+│  └─────────────────────┘  └─────────────────────┘               │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. Testing Strategy
+
+### 8.1 Integration Tests
+
+Role-based access validation:
+```typescript
+describe('Role-Based Access Control', () => {
+  test('HR user can access employee data', async () => {
+    const token = await login('alice.chen', 'password');
+    const result = await query(token, 'List employees in Engineering');
+    expect(result.data).toContainEmployeeRecords();
+  });
+  
+  test('HR user cannot access finance data', async () => {
+    const token = await login('alice.chen', 'password');
+    const result = await query(token, 'Show Q3 budget report');
+    expect(result.error).toBe('ACCESS_DENIED');
+  });
+  
+  test('Executive can access all read data', async () => {
+    const token = await login('eve.thompson', 'password');
+    const hrResult = await query(token, 'Employee count');
+    const finResult = await query(token, 'Budget summary');
+    expect(hrResult.data).toBeDefined();
+    expect(finResult.data).toBeDefined();
+  });
+  
+  test('Unauthenticated user is rejected', async () => {
+    const result = await query(null, 'Any query');
+    expect(result.error).toBe('UNAUTHORIZED');
+  });
+});
+```
+
+### 8.2 Test Matrix
+
+| Test Case | Alice (HR) | Bob (FIN) | Carol (SALES) | Eve (EXEC) | Frank (NONE) |
+|-----------|------------|-----------|---------------|------------|--------------|
+| View employees | ✓ | ✗ | ✗ | ✓ | ✗ |
+| View salaries | ✓ | ✗ | ✗ | ✗ | ✗ |
+| View budgets | ✗ | ✓ | ✗ | ✓ | ✗ |
+| View customers | ✗ | ✗ | ✓ | ✓ | ✗ |
+| View public docs | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+---
+
+## 9. Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Token theft | Medium | High | Short token lifetime, secure storage |
+| MCP bypass | Low | Critical | All MCPs behind gateway, network isolation |
+| Data leakage via AI | Medium | High | Response filtering, query auditing |
+| Keycloak compromise | Low | Critical | MFA, strong passwords, monitoring |
+| Insider threat | Medium | Medium | Audit logging, least privilege |
+
+---
+
+## 10. Approval
+
+| Role | Name | Signature | Date |
+|------|------|-----------|------|
+| Project Sponsor | | | |
+| Security Review | | | |
+| Technical Lead | | | |
+
+---
+
+## Appendix A: Glossary
+
+- **IdP**: Identity Provider - system that authenticates users
+- **JWT**: JSON Web Token - compact, URL-safe token format
+- **MCP**: Model Context Protocol - standard for AI tool integration
+- **MFA**: Multi-Factor Authentication
+- **OIDC**: OpenID Connect - authentication layer on OAuth 2.0
+- **PKCE**: Proof Key for Code Exchange - OAuth 2.0 extension for public clients
+- **RBAC**: Role-Based Access Control
+- **SAML**: Security Assertion Markup Language
+- **SSO**: Single Sign-On
+
+## Appendix B: References
+
+1. Keycloak Documentation: https://www.keycloak.org/documentation
+2. Model Context Protocol Spec: https://modelcontextprotocol.io
+3. Kong Gateway Documentation: https://docs.konghq.com
+4. OAuth 2.0 for Native Apps (RFC 8252)
+5. PKCE (RFC 7636)
