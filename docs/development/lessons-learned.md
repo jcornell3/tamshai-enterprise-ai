@@ -158,11 +158,21 @@ This document captures lessons learned during the development of the Enterprise 
 
 **Follow-Up Actions**:
 - [ ] Update all other MCP server specs to include database prerequisites section
-- [ ] Create GitHub issue to migrate sample data files
+- [x] ~~Create GitHub issue to migrate sample data files~~ (COMPLETED: Migrated directly)
 - [ ] Add schema validation tests to CI pipeline
 - [ ] Update spec template to include Prerequisites section
 
-**Status**: ✅ Spec updated, migration tasks documented, ready for sample data fixes
+**Status**: ✅ COMPLETED - Spec updated, sample data migrated, PostgreSQL initialization successful (Dec 9, 2025)
+
+**Migration Completed** (Commit 9e9b36e):
+- ✅ HR sample data: All tables migrated to `hr.*` schema (591 lines)
+- ✅ Finance sample data: All tables migrated to `finance.*` schema (252 lines)
+- ✅ PostgreSQL initialization: Zero SQL errors
+- ✅ Schema verification: `hr` schema (5 tables), `finance` schema (6 tables)
+- ✅ All FROM/JOIN references fixed
+- ✅ All indexes, policies, rules updated
+- ✅ Recursive CTE issue resolved (view disabled)
+- ✅ v1.3 backups preserved for rollback if needed
 
 ---
 
@@ -255,3 +265,4 @@ This document captures lessons learned during the development of the Enterprise 
 | Date | Author | Changes |
 |------|--------|---------|
 | Nov 2025 | AI Assistant | Initial document structure |
+| Dec 9, 2025 | AI Assistant | Added Lesson 1: Database schema mismatch issue and resolution |
