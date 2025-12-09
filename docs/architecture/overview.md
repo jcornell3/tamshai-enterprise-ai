@@ -1,11 +1,12 @@
 # Architecture Overview
 
 ## Document Information
-- **Version**: 1.0
-- **Status**: Draft - Pending Approval
+- **Version**: 1.4
+- **Status**: Implementation Ready
 - **Author**: AI Architecture Assistant
 - **Organization**: Tamshai Corp
-- **Last Updated**: November 2025
+- **Last Updated**: December 2024
+- **Architecture Version**: v1.4 (December 2024)
 
 ---
 
@@ -20,6 +21,22 @@ As enterprises adopt AI assistants, a critical challenge emerges: AI agents can 
 ### 1.2 Solution Approach
 
 This architecture implements **token propagation** where the authenticated user's identity and permissions flow through the entire AI request chain. MCP (Model Context Protocol) servers enforce role-based access at the data layer, ensuring the AI can only access data the user is authorized to see.
+
+### 1.3 Architecture v1.4 Enhancements (December 2024)
+
+This document reflects **Architecture v1.4**, which introduces four critical enhancements to the foundational v1.3 architecture:
+
+1. **SSE Transport Protocol (Section 6.1)**: Server-Sent Events (SSE) streaming prevents timeout failures during Claude's 30-60 second multi-step reasoning processes. All clients use the EventSource API for real-time response streaming.
+
+2. **Truncation Warnings (Section 5.3)**: MCP servers detect when query results exceed the constitutional 50-record limit (Article III.2) and inject AI-visible warnings. This ensures Claude informs users that results are incomplete and suggests query refinement.
+
+3. **LLM-Friendly Error Schemas (Section 7.4)**: All MCP tools return discriminated union responses (`success | error | pending_confirmation`) with structured error codes and `suggestedAction` fields, enabling Claude to self-correct and retry failed operations (Article II.3 compliance).
+
+4. **Human-in-the-Loop Confirmations (Section 5.6)**: Write operations (delete, update) require explicit user approval via Approval Card UI components. Confirmation IDs are stored in Redis with 5-minute TTL, preventing accidental destructive actions.
+
+**Constitutional Impact**: v1.4 enhancements fulfill Article II.3 (structured errors) and enforce Article III.2 (record limits) without requiring constitutional amendments. All client-side security principles (Article V) remain unchanged.
+
+**Implementation Status**: All 4 specifications (MCP Gateway, MCP Suite, Web Apps, Desktop App) have been updated with v1.4 requirements and are implementation-ready. See [.specify/V1.4_UPDATE_STATUS.md](../../.specify/V1.4_UPDATE_STATUS.md) for detailed status.
 
 ---
 

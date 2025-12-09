@@ -1,0 +1,408 @@
+# Specification: MCP Domain Services (HR, Finance, Sales, Support)
+
+## 1. Business Intent
+**User Story:** As an employee, I want the AI to answer questions about HR, Finance, and Sales data so that I can make informed decisions without querying databases manually.
+
+**Business Value:** Unlocks the actual data value of the enterprise for AI assistance. Enables natural language access to business data while maintaining security boundaries.
+
+## 2. Access Control & Security (Crucial)
+* **Required Role(s):** Domain-specific (hr-*, finance-*, sales-*, support-*)
+* **Data Classification:** Internal / Confidential / Restricted (depending on data type)
+* **PII Risks:** Yes - Salaries, SSNs, contact info must be masked for non-privileged users
+* **RLS Impact:** All MCP servers must enforce RLS policies defined in Phase 2
+
+## 3. MCP Tool Definition (v1.4 Updated)
+
+**All tools now return discriminated union response schema (v1.4 - Section 7.4):**
+
+```typescript
+type MCPToolResponse =
+  | { status: 'success', data: any, metadata?: { truncated?: boolean, totalCount?: string, warning?: string } }
+  | { status: 'error', code: string, message: string, suggestedAction?: string }
+  | { status: 'pending_confirmation', confirmationId: string, message: string, confirmationData: any };
+```
+
+### MCP HR Server (Port 3101)
+
+#### Read Tools
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `get_employee` | Get employee details by ID | `{ employee_id: string }` | `MCPToolResponse<Employee>` | hr-read, manager, executive |
+| `list_employees` | List employees (filtered by RLS) | `{ department?: string, limit?: number }` | `MCPToolResponse<Employee[]>` with truncation metadata | hr-read, executive |
+| `get_org_chart` | Get organizational hierarchy | `{ root_employee_id?: string }` | `MCPToolResponse<OrgNode>` | hr-read, executive |
+| `get_performance_reviews` | Get performance reviews | `{ employee_id: string }` | `MCPToolResponse<Review[]>` with truncation metadata | hr-write, executive |
+
+#### Write Tools (v1.4 - Section 5.6)
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `delete_employee` | Delete employee (requires confirmation) | `{ employee_id: string }` | `MCPToolResponse` (pending_confirmation) | hr-write, executive |
+| `update_salary` | Update employee salary (requires confirmation) | `{ employee_id: string, new_salary: number }` | `MCPToolResponse` (pending_confirmation) | hr-write, executive |
+
+### MCP Finance Server (Port 3102)
+
+#### Read Tools
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `get_budget` | Get budget by department | `{ department: string, year?: number }` | `MCPToolResponse<Budget>` | finance-read, executive |
+| `list_invoices` | List invoices (filtered) | `{ status?: string, limit?: number }` | `MCPToolResponse<Invoice[]>` with truncation metadata | finance-read, executive |
+| `get_expense_report` | Get expense report | `{ employee_id: string, month: string }` | `MCPToolResponse<ExpenseReport>` | finance-read, executive |
+
+#### Write Tools (v1.4 - Section 5.6)
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `delete_invoice` | Delete invoice (requires confirmation) | `{ invoice_id: string }` | `MCPToolResponse` (pending_confirmation) | finance-write, executive |
+| `approve_budget` | Approve department budget (requires confirmation) | `{ department: string, amount: number }` | `MCPToolResponse` (pending_confirmation) | finance-write, executive |
+
+### MCP Sales Server (Port 3103)
+
+#### Read Tools
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `get_customer` | Get customer details | `{ customer_id: string }` | `MCPToolResponse<Customer>` | sales-read, executive |
+| `list_opportunities` | List sales opportunities | `{ stage?: string, limit?: number }` | `MCPToolResponse<Opportunity[]>` with truncation metadata | sales-read, executive |
+| `get_pipeline` | Get sales pipeline summary | `{ quarter?: string }` | `MCPToolResponse<PipelineSummary>` | sales-read, executive |
+
+#### Write Tools (v1.4 - Section 5.6)
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `delete_customer` | Delete customer (requires confirmation) | `{ customer_id: string }` | `MCPToolResponse` (pending_confirmation) | sales-write, executive |
+| `close_opportunity` | Close opportunity as won/lost (requires confirmation) | `{ opportunity_id: string, outcome: 'won' \| 'lost' }` | `MCPToolResponse` (pending_confirmation) | sales-write, executive |
+
+### MCP Support Server (Port 3104)
+
+#### Read Tools
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `search_tickets` | Search support tickets | `{ query: string, status?: string, limit?: number }` | `MCPToolResponse<Ticket[]>` with truncation metadata | support-read, executive |
+| `get_knowledge_article` | Get KB article | `{ article_id: string }` | `MCPToolResponse<Article>` | support-read, executive |
+
+#### Write Tools (v1.4 - Section 5.6)
+| Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
+| :--- | :--- | :--- | :--- | :--- |
+| `close_ticket` | Close support ticket (requires confirmation) | `{ ticket_id: string, resolution: string }` | `MCPToolResponse` (pending_confirmation) | support-write, executive |
+
+## 4. User Interaction Scenarios
+
+### Read Operations
+* **Self-Service HR:** Marcus (Engineer) asks "What's my PTO balance?" -> MCP HR returns `{ status: 'success', data: { pto_balance: 15 } }` -> AI responds with balance.
+* **Manager Query:** Nina (Manager) asks "Who on my team has performance reviews due?" -> MCP HR applies RLS -> Returns only Nina's team members with `{ status: 'success', data: [...] }`.
+* **Executive Dashboard:** Eve (CEO) asks "What's our Q4 budget vs actual spend?" -> MCP Finance returns company-wide data -> AI generates summary.
+* **Sales Insight:** Carol (Sales VP) asks "Show me top 5 deals closing this month" -> MCP Sales queries MongoDB -> Returns filtered opportunities.
+
+### Error Handling (v1.4 - Section 7.4)
+* **Not Found Error:** User asks "Show me employee ABC123" -> Tool returns `{ status: 'error', code: 'EMPLOYEE_NOT_FOUND', message: 'Employee not found. Verify the employee ID is correct.', suggestedAction: 'Use list_employees tool to find valid employee IDs.' }` -> AI informs user politely.
+* **Permission Error:** Frank (Intern) asks "Show me all employee salaries" -> Tool returns `{ status: 'error', code: 'INSUFFICIENT_PERMISSIONS', message: 'You do not have permission to view salary data.' }` -> AI explains access restriction.
+
+### Truncation Warnings (v1.4 - Section 5.3)
+* **Large Result Set:** User asks "List all employees" -> Query returns 500 records -> Tool returns `{ status: 'success', data: [...50 records...], metadata: { truncated: true, totalCount: '50+', warning: 'Only 50 of 50+ records returned. Ask user to refine query (e.g., filter by department).' } }` -> AI informs user "I found 50+ employees, showing first 50. Please specify a department for more specific results."
+
+### Write Operations (v1.4 - Section 5.6)
+* **Delete Confirmation:** Alice (HR) asks "Delete employee Frank Davis" -> Tool returns `{ status: 'pending_confirmation', confirmationId: 'uuid', message: 'Delete employee Frank Davis (frank.davis@tamshai.com)? This action cannot be undone.', confirmationData: { employee_id: 'uuid', name: 'Frank Davis' } }` -> AI displays "Are you sure you want to delete Frank Davis? [Approve/Deny]" -> User clicks Approve -> Frontend calls `/api/confirm/:id` -> Tool executes deletion -> AI confirms "Frank Davis has been deleted."
+* **Update Confirmation:** Alice asks "Increase Sarah's salary to $120,000" -> Tool returns pending_confirmation -> AI requests approval -> User approves -> Salary updated -> AI confirms change.
+
+## 5. Success Criteria
+- [ ] All four MCP servers deployed and accessible (ports 3101-3104)
+- [ ] Each server validates JWT and extracts user context
+- [ ] Session variables set before all PostgreSQL queries
+- [ ] MongoDB queries have role-based filters applied
+- [ ] PII masking implemented for salary, SSN, contact info fields
+- [ ] **[v1.4] All tools return discriminated union responses** (success | error | pending_confirmation)
+- [ ] **[v1.4] LLM-friendly error schemas** implemented (Article II.3 compliance)
+- [ ] **[v1.4] Truncation metadata included** in list-based queries (Article III.2 enforcement)
+- [ ] **[v1.4] Write tools return pending_confirmation** for destructive actions
+- [ ] **[v1.4] Confirmation data includes** all info needed for UI approval card
+- [ ] Integration tests verify RBAC for each tool
+- [ ] **[v1.4] Integration tests verify error schema** AI can interpret
+- [ ] **[v1.4] Integration tests verify truncation warnings** injected correctly
+- [ ] **[v1.4] Integration tests verify confirmation flow** (pending → approve → execute)
+- [ ] Performance SLA met (< 500ms for simple queries)
+- [ ] All tools documented with input/output schemas
+
+## 6. Scope
+* **Four MCP Servers:** HR, Finance, Sales, Support
+* **Data Sources:**
+  - PostgreSQL: HR and Finance data
+  - MongoDB: Sales/CRM data
+  - Elasticsearch: Support tickets and knowledge base
+* **Authentication:** JWT validation from MCP Gateway
+* **Authorization:** RLS policies + application-level filtering
+* **Error Handling:** Structured error responses, no raw exceptions
+* **Logging:** Request/response logging with user context
+
+## 7. Technical Details
+
+### Context Propagation Pattern
+```typescript
+// Extract from JWT (passed from Gateway)
+const { userId, roles, username } = await validateToken(req.headers.authorization);
+
+// Set PostgreSQL session variables
+await db.query(`
+  SET LOCAL app.current_user_id = $1;
+  SET LOCAL app.current_user_roles = $2;
+`, [userId, roles.join(',')]);
+
+// Execute query (RLS automatically applied)
+const result = await db.query('SELECT * FROM hr.employees WHERE active = true');
+```
+
+### PII Masking Pattern
+```typescript
+function maskSalary(employee: Employee, userRoles: string[]): Employee {
+  const canViewSalary = userRoles.some(r =>
+    r === 'hr-write' || r === 'finance-read' || r === 'executive'
+  );
+
+  if (!canViewSalary) {
+    employee.salary = '*** (Hidden)';
+    employee.ssn = '*** (Hidden)';
+  }
+
+  return employee;
+}
+```
+
+### LLM-Friendly Error Schema Pattern (v1.4 - Section 7.4 + Article II.3)
+```typescript
+// Zod schema for all MCP tool responses
+import { z } from 'zod';
+
+const MCPToolResponseSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('success'),
+    data: z.any(),
+    metadata: z.object({
+      truncated: z.boolean().optional(),
+      totalCount: z.string().optional(),
+      warning: z.string().optional()
+    }).optional()
+  }),
+  z.object({
+    status: z.literal('error'),
+    code: z.string(),
+    message: z.string(),
+    suggestedAction: z.string().optional(),
+    technicalDetails: z.string().optional()
+  }),
+  z.object({
+    status: z.literal('pending_confirmation'),
+    confirmationId: z.string(),
+    message: z.string(),
+    confirmationData: z.any()
+  })
+]);
+
+// Tool implementation with error handling
+async function getEmployee(employeeId: string, userContext: UserContext): Promise<MCPToolResponse> {
+  try {
+    // Set session variables for RLS
+    await db.query(`
+      SET LOCAL app.current_user_id = $1;
+      SET LOCAL app.current_user_roles = $2;
+    `, [userContext.userId, userContext.roles.join(',')]);
+
+    const result = await db.query(
+      'SELECT * FROM hr.employees WHERE employee_id = $1',
+      [employeeId]
+    );
+
+    if (result.rows.length === 0) {
+      // LLM-friendly error (AI can interpret and retry)
+      return {
+        status: 'error',
+        code: 'EMPLOYEE_NOT_FOUND',
+        message: `Employee with ID ${employeeId} not found.`,
+        suggestedAction: 'Use list_employees tool to find valid employee IDs, or verify the ID format is correct (UUID expected).'
+      };
+    }
+
+    const employee = result.rows[0];
+
+    // Apply PII masking
+    const maskedEmployee = maskSalary(employee, userContext.roles);
+
+    return {
+      status: 'success',
+      data: maskedEmployee
+    };
+  } catch (error) {
+    // Database error (should not crash AI flow)
+    return {
+      status: 'error',
+      code: 'DATABASE_ERROR',
+      message: 'Failed to retrieve employee data.',
+      suggestedAction: 'Retry the query or contact support if the issue persists.',
+      technicalDetails: error.message  // For logging only, not shown to AI
+    };
+  }
+}
+```
+
+### Truncation Warning Pattern (v1.4 - Section 5.3 + Article III.2)
+```typescript
+async function listEmployees(
+  department?: string,
+  limit: number = 50,  // Article III.2 max
+  userContext: UserContext
+): Promise<MCPToolResponse> {
+  try {
+    // Set session variables for RLS
+    await db.query(`
+      SET LOCAL app.current_user_id = $1;
+      SET LOCAL app.current_user_roles = $2;
+    `, [userContext.userId, userContext.roles.join(',')]);
+
+    // Query 1 extra record to detect truncation
+    const result = await db.query(
+      `SELECT * FROM hr.employees
+       WHERE ($1::text IS NULL OR department = $1)
+       AND active = true
+       LIMIT $2`,
+      [department, limit + 1]
+    );
+
+    const truncated = result.rows.length > limit;
+    const records = result.rows.slice(0, limit);  // Return max 50
+
+    return {
+      status: 'success',
+      data: records.map(emp => maskSalary(emp, userContext.roles)),
+      metadata: {
+        truncated,
+        totalCount: truncated ? `${limit}+` : result.rows.length.toString(),
+        warning: truncated
+          ? `TRUNCATION WARNING: Only ${limit} of ${limit}+ records returned. ` +
+            `Results are incomplete. Ask user to refine query by specifying: ` +
+            `department, team, location, or other filters.`
+          : null
+      }
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      code: 'DATABASE_ERROR',
+      message: 'Failed to list employees.',
+      suggestedAction: 'Retry the query or contact support.'
+    };
+  }
+}
+```
+
+### Pending Confirmation Pattern (v1.4 - Section 5.6)
+```typescript
+async function deleteEmployee(
+  employeeId: string,
+  userContext: UserContext
+): Promise<MCPToolResponse> {
+  try {
+    // Verify permissions
+    if (!userContext.roles.includes('hr-write') && !userContext.roles.includes('executive')) {
+      return {
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: 'Only HR administrators can delete employee records.',
+        suggestedAction: 'Contact your HR administrator if you need to delete employee data.'
+      };
+    }
+
+    // Fetch employee details for confirmation UI
+    const employeeResult = await getEmployee(employeeId, userContext);
+
+    if (employeeResult.status === 'error') {
+      return employeeResult;  // Propagate error
+    }
+
+    const employee = employeeResult.data;
+    const confirmationId = crypto.randomUUID();
+
+    // Store pending action in Redis (Gateway will handle this)
+    // Note: In practice, Gateway stores this when it receives pending_confirmation
+    return {
+      status: 'pending_confirmation',
+      confirmationId,
+      message: `⚠️ Delete employee ${employee.name} (${employee.email})?\n\n` +
+               `This action will permanently delete the employee record and cannot be undone.\n\n` +
+               `Department: ${employee.department}\n` +
+               `Employee ID: ${employee.employee_id}`,
+      confirmationData: {
+        action: 'delete_employee',
+        employeeId: employee.employee_id,
+        employeeName: employee.name,
+        employeeEmail: employee.email,
+        department: employee.department,
+        userId: userContext.userId  // For ownership verification
+      }
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      code: 'OPERATION_FAILED',
+      message: 'Failed to prepare delete operation.',
+      suggestedAction: 'Retry the operation or contact support.'
+    };
+  }
+}
+
+// Execution handler (called by Gateway after user approves)
+async function executeDeleteEmployee(
+  confirmationData: any,
+  userContext: UserContext
+): Promise<MCPToolResponse> {
+  try {
+    // Set session variables
+    await db.query(`
+      SET LOCAL app.current_user_id = $1;
+      SET LOCAL app.current_user_roles = $2;
+    `, [userContext.userId, userContext.roles.join(',')]);
+
+    // Execute deletion
+    const result = await db.query(
+      'DELETE FROM hr.employees WHERE employee_id = $1 RETURNING *',
+      [confirmationData.employeeId]
+    );
+
+    if (result.rowCount === 0) {
+      return {
+        status: 'error',
+        code: 'EMPLOYEE_NOT_FOUND',
+        message: 'Employee no longer exists or was already deleted.'
+      };
+    }
+
+    return {
+      status: 'success',
+      data: {
+        deleted: true,
+        employeeId: confirmationData.employeeId,
+        employeeName: confirmationData.employeeName,
+        message: `Employee ${confirmationData.employeeName} has been permanently deleted.`
+      }
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      code: 'DELETE_FAILED',
+      message: 'Failed to delete employee.',
+      suggestedAction: 'Contact support. The employee record may have dependencies that must be removed first.'
+    };
+  }
+}
+```
+
+## Status
+**PLANNED 🔲** - Next implementation phase after MCP Gateway completion; v1.4 patterns documented.
+
+## Architecture Version
+**Updated for**: v1.4 (December 2024)
+**v1.4 Changes Applied**:
+- ✅ Section 3: Updated all tool definitions with discriminated union response schemas
+- ✅ Section 3: Added 8 write tools across 4 MCP servers (delete, update operations)
+- ✅ Section 4: Added error handling, truncation, and confirmation scenarios
+- ✅ Section 5: Added 6 v1.4 success criteria
+- ✅ Section 7.4: LLM-friendly error schema pattern (Article II.3 compliance)
+- ✅ Section 5.3: Truncation warning pattern (Article III.2 enforcement)
+- ✅ Section 5.6: Human-in-the-loop confirmation pattern with Redis TTL
+
+**Constitutional Compliance**:
+- Article II.3 (Error Schemas): ✅ **FULFILLED** by LLM-friendly error responses
+- Article III.2 (Context Limits): ✅ **ENFORCED** by truncation metadata with warnings

@@ -88,3 +88,7 @@ mongodb_data/
 
 # Elasticsearch data (local)
 elasticsearch_data/
+
+# Claude Code / GitHub Spec Kit
+.claude/
+.claude/settings.local.json
