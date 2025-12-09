@@ -11,6 +11,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 CREATE SCHEMA IF NOT EXISTS finance;
 
+-- Grant permissions to tamshai user
+GRANT USAGE ON SCHEMA finance TO tamshai;
+GRANT ALL ON ALL TABLES IN SCHEMA finance TO tamshai;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT ALL ON TABLES TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT ALL ON SEQUENCES TO tamshai;
+
 -- =============================================================================
 -- FISCAL YEARS
 -- =============================================================================

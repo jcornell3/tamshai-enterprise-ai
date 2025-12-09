@@ -90,7 +90,8 @@ export async function queryWithRLS<T extends Record<string, any> = any>(
     logger.error('Query with RLS failed', {
       error,
       userId: userContext.userId,
-      query: queryText.substring(0, 100),
+      query: queryText,  // Show full query for debugging
+      values,
     });
     throw error;
   } finally {

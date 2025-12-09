@@ -176,6 +176,130 @@ This document captures lessons learned during the development of the Enterprise 
 
 ---
 
+### Lesson 2: Column Name Mismatch Between Spec Examples and Actual Schema (Dec 2025)
+
+**Issue Discovered**: Database column names in actual sample data don't match the column names assumed in v1.4 specification examples
+
+**What Happened**:
+- v1.4 MCP HR server code was written following spec examples that used `employee_id`, `job_title`, `employment_status`, `department`
+- Actual sample data (both v1.3 and migrated v1.4) uses `id`, `title`, `status`, `department_id`
+- After fixing schema permissions (Lesson 1), deployment still failed with `column "employment_status" does not exist` errors
+- This blocked all HR data access functionality
+
+**Root Cause**:
+- Specification examples in `.specify/specs/004-mcp-suite/spec.md` showed sample SQL with assumed column names
+- Sample data from v1.3 predated the spec and used different naming conventions
+- No cross-validation between spec examples and actual database schema
+- MCP server implementation blindly followed spec examples without checking actual schema
+
+**Impact**:
+- MCP HR server completely non-functional on deployment
+- All 3 tools (get_employee, list_employees, delete_employee) broken
+- Additional ~1 hour of debugging to identify column mismatches
+- Requires updates to 8+ SQL queries across 3 tool files
+
+**Column Name Discrepancies**:
+
+| Spec Example Name | Actual Column Name | Table | Impact |
+|-------------------|-------------------|-------|---------|
+| `employee_id` | `id` | hr.employees | All queries |
+| `job_title` | `title` | hr.employees | List/Get queries |
+| `employment_status` | `status` | hr.employees | All WHERE clauses |
+| `department` | `department_id` | hr.employees | Filter logic, needs JOIN |
+
+**What Worked**:
+- SQL error messages clearly identified missing columns
+- Docker logs showed exact failing queries
+- v1.3 backup files preserved original schema for comparison
+
+**What Didn't Work**:
+- Spec examples were not validated against actual database schema
+- No automated schema discovery or validation in spec process
+- Assumed spec examples matched reality without verification
+- Fixing Lesson 1 (schema permissions) revealed this deeper issue
+
+**Resolution Implemented**:
+1. **Update MCP HR Server Code** (8 files total):
+   - [services/mcp-hr/src/tools/get-employee.ts](services/mcp-hr/src/tools/get-employee.ts): Update query to use `id`, `title`, `status`
+   - [services/mcp-hr/src/tools/list-employees.ts](services/mcp-hr/src/tools/list-employees.ts): Update all column references
+   - [services/mcp-hr/src/tools/delete-employee.ts](services/mcp-hr/src/tools/delete-employee.ts): Update employee lookup and soft delete
+   - Update TypeScript interfaces to match actual schema
+   - Add JOIN to departments table for `department` name (since actual column is `department_id`)
+
+2. **Update Spec with Actual Schema** (`.specify/specs/004-mcp-suite/spec.md`):
+   - Correct Section 6.1 database schema documentation
+   - Update all code examples to use actual column names
+   - Add explicit schema discovery step to prerequisites
+
+**Key Learnings**:
+
+1. **Never Trust Spec Examples Without Validation**:
+   - Spec examples must be validated against actual database schema
+   - Use schema introspection tools (`\d table` in psql) before writing code
+   - Automated schema validation should be part of spec creation process
+
+2. **Schema Discovery is a Critical Pre-Implementation Step**:
+   - Before writing MCP server code, run `\d schema.table` for all tables
+   - Document actual schema in spec, not assumed schema
+   - Cross-reference spec SQL examples with actual table structures
+
+3. **Column Naming Conventions Should Be Enforced**:
+   - If spec assumes conventions (e.g., `table_name_id` for PKs), enforce them in sample data
+   - Or: Discover actual conventions and document in spec
+   - Consistency between spec and reality is more important than theoretical ideals
+
+4. **Foreign Key Columns Require Special Handling**:
+   - `department_id` (UUID FK) is not the same as `department` (VARCHAR)
+   - Spec examples showing `WHERE department = 'Engineering'` require JOINs if actual column is `department_id`
+   - Document whether filters use FK IDs or display names
+
+5. **Testing Should Happen Against Actual Schema, Not Mocked Data**:
+   - Integration tests must use real sample data, not mocked schemas
+   - This would have caught the mismatch immediately
+   - "It compiles" doesn't mean "it works with actual data"
+
+**Recommendations**:
+
+1. **Add Schema Discovery to Spec Process**:
+   ```markdown
+   ## X. Database Schema Discovery
+
+   Before implementation, run these commands to discover actual schema:
+
+   \`\`\`bash
+   psql -U tamshai -d tamshai_hr -c "\d+ hr.employees"
+   psql -U tamshai -d tamshai_hr -c "\d+ hr.departments"
+   \`\`\`
+
+   Document output in this section. All code examples MUST use these exact column names.
+   ```
+
+2. **Automated Schema Validation Tests**:
+   - Add CI test that compares spec SQL examples against actual schema
+   - Fail build if spec references non-existent columns
+   - Generate schema documentation from actual database, not from assumptions
+
+3. **Code Generation from Schema**:
+   - Consider generating TypeScript interfaces from database schema
+   - Tools like `pg-to-ts` or `postgraphile` can auto-generate types
+   - Reduces manual transcription errors
+
+4. **Explicit Migration Notes for Column Renames**:
+   - If spec wants different names than v1.3 sample data, create explicit migration
+   - Add `ALTER TABLE ... RENAME COLUMN` statements
+   - Don't assume sample data will magically match spec
+
+**Follow-Up Actions**:
+- [ ] Update all MCP HR tool queries to use actual column names
+- [ ] Update MCP Finance server queries (verify schema first)
+- [ ] Add schema discovery step to `.specify/specs/004-mcp-suite/spec.md`
+- [ ] Create automated schema validation CI test
+- [ ] Update spec template to include "Schema Discovery" section
+
+**Status**: ⏳ IN PROGRESS - MCP HR code updates pending (Dec 9, 2025)
+
+---
+
 ## Phase 4: Desktop Client
 
 *To be filled in during development*
