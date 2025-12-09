@@ -19,6 +19,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 CREATE SCHEMA IF NOT EXISTS hr;
 
+-- Grant permissions to tamshai user
+GRANT USAGE ON SCHEMA hr TO tamshai;
+GRANT ALL ON ALL TABLES IN SCHEMA hr TO tamshai;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA hr TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON TABLES TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON SEQUENCES TO tamshai;
+
 -- =============================================================================
 -- DEPARTMENTS
 -- =============================================================================

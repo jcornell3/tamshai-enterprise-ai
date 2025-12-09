@@ -77,21 +77,22 @@ export async function deleteEmployee(
     }
 
     try {
-      // 3. Verify employee exists and get details
+      // 3. Verify employee exists and get details (using actual schema columns)
       const employeeResult = await queryWithRLS(
         userContext,
         `
         SELECT
-          e.employee_id,
+          e.id,
           e.first_name,
           e.last_name,
           e.email,
-          e.department,
-          e.job_title,
-          (SELECT COUNT(*) FROM hr.employees WHERE manager_id = e.employee_id AND employment_status = 'active') as report_count
+          d.name as department_name,
+          e.title,
+          (SELECT COUNT(*) FROM hr.employees WHERE manager_id = e.id AND status = 'ACTIVE') as report_count
         FROM hr.employees e
-        WHERE e.employee_id = $1
-          AND e.employment_status = 'active'
+        LEFT JOIN hr.departments d ON e.department_id = d.id
+        WHERE e.id = $1
+          AND e.status = 'ACTIVE'
         `,
         [employeeId]
       );
@@ -118,8 +119,8 @@ export async function deleteEmployee(
         employeeId,
         employeeName: `${employee.first_name} ${employee.last_name}`,
         employeeEmail: employee.email,
-        department: employee.department,
-        jobTitle: employee.job_title,
+        department: employee.department_name,  // Updated column name
+        jobTitle: employee.title,               // Updated column name
         reason: reason || 'No reason provided',
       };
 
@@ -128,8 +129,8 @@ export async function deleteEmployee(
       // 6. Return pending_confirmation response
       const message = `⚠️ Delete employee ${employee.first_name} ${employee.last_name} (${employee.email})?
 
-Department: ${employee.department}
-Position: ${employee.job_title}
+Department: ${employee.department_name}
+Position: ${employee.title}
 ${reason ? `Reason: ${reason}` : ''}
 
 This action will permanently mark the employee record as inactive and cannot be undone.`;
@@ -159,20 +160,19 @@ export async function executeDeleteEmployee(
     const employeeId = confirmationData.employeeId as string;
 
     try {
-      // Mark employee as inactive instead of hard delete
+      // Mark employee as inactive instead of hard delete (using actual schema columns)
       const result = await queryWithRLS(
         userContext,
         `
         UPDATE hr.employees
         SET
-          employment_status = 'terminated',
-          updated_at = NOW(),
-          updated_by = $2
-        WHERE employee_id = $1
-          AND employment_status = 'active'
-        RETURNING employee_id, first_name, last_name
+          status = 'TERMINATED',
+          updated_at = NOW()
+        WHERE id = $1
+          AND status = 'ACTIVE'
+        RETURNING id, first_name, last_name
         `,
-        [employeeId, userContext.userId]
+        [employeeId]
       );
 
       if (result.rowCount === 0) {
@@ -184,7 +184,7 @@ export async function executeDeleteEmployee(
       return createSuccessResponse({
         success: true,
         message: `Employee ${deleted.first_name} ${deleted.last_name} has been successfully deleted`,
-        employeeId: deleted.employee_id,
+        employeeId: deleted.id,  // Updated column name
       });
     } catch (error) {
       return handleDatabaseError(error as Error, 'execute_delete_employee');

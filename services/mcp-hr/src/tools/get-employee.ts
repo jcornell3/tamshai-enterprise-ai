@@ -27,22 +27,26 @@ export const GetEmployeeInputSchema = z.object({
 export type GetEmployeeInput = z.infer<typeof GetEmployeeInputSchema>;
 
 /**
- * Employee data structure
+ * Employee data structure (matched to actual schema)
+ *
+ * Note: Actual database uses 'id', 'title', 'status', 'department_id'
+ * but we expose user-friendly names in the interface.
  */
 export interface Employee {
-  employee_id: string;
+  id: string;                    // Actual column: id (UUID)
   first_name: string;
   last_name: string;
   email: string;
   phone: string | null;
   hire_date: string;
-  job_title: string;
-  department: string;
+  title: string;                 // Actual column: title (not job_title)
+  department_name: string | null; // Computed from JOIN with departments
+  department_id: string | null;  // Actual column: department_id (UUID FK)
   manager_id: string | null;
   manager_name: string | null;
-  salary: number | null;  // May be masked based on permissions
-  location: string;
-  employment_status: string;
+  salary: number | null;          // May be masked based on permissions
+  location: string | null;
+  status: string;                 // Actual column: status (not employment_status)
 }
 
 /**
@@ -64,19 +68,20 @@ export async function getEmployee(
     const { employeeId } = GetEmployeeInputSchema.parse(input);
 
     try {
-      // Query with RLS enforcement
+      // Query with RLS enforcement (using actual schema columns)
       const result = await queryWithRLS<Employee>(
         userContext,
         `
         SELECT
-          e.employee_id,
+          e.id,
           e.first_name,
           e.last_name,
           e.email,
           e.phone,
           e.hire_date::text as hire_date,
-          e.job_title,
-          e.department,
+          e.title,
+          d.name as department_name,
+          e.department_id,
           e.manager_id,
           m.first_name || ' ' || m.last_name as manager_name,
           CASE
@@ -86,11 +91,12 @@ export async function getEmployee(
             ELSE NULL
           END as salary,
           e.location,
-          e.employment_status
+          e.status
         FROM hr.employees e
-        LEFT JOIN hr.employees m ON e.manager_id = m.employee_id
-        WHERE e.employee_id = $1
-          AND e.employment_status = 'active'
+        LEFT JOIN hr.employees m ON e.manager_id = m.id
+        LEFT JOIN hr.departments d ON e.department_id = d.id
+        WHERE e.id = $1
+          AND e.status = 'ACTIVE'
         `,
         [employeeId]
       );
