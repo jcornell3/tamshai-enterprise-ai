@@ -92,3 +92,7 @@ elasticsearch_data/
 # Claude Code / GitHub Spec Kit
 .claude/
 .claude/settings.local.json
+
+# Temporary specification notes
+*.spec.txt
+tamshai-enterprise-ai-spec.txt
