@@ -499,6 +499,164 @@ While this uses string interpolation instead of parameterized queries, it's safe
 
 ---
 
+### Lesson 4: Table Name Mismatches - Spec Assumes Non-Existent Tables (Dec 2025)
+
+**Issue Discovered**: MCP Finance server tools reference tables that don't exist in v1.3 sample data
+
+**What Happened**:
+- After fixing `list-invoices` tool (Lesson 2 column fixes + Lesson 3 SET LOCAL fix), attempted to verify other Finance tools
+- `get-budget.ts` queries `finance.budgets` table → **Table doesn't exist**
+- `get-expense-report.ts` queries `finance.expense_reports` table → **Table doesn't exist**
+- Actual v1.3 schema has `finance.department_budgets` and `finance.financial_reports` instead
+- This is more severe than column name mismatches - entire table structures are wrong
+
+**Root Cause**:
+- Spec assumed idealized table names without validating against v1.3 sample data
+- v1.3 sample data used different table naming conventions and semantic meanings
+- No cross-validation between spec examples and actual table inventory
+- Implementation followed spec examples without discovering actual schema first
+
+**Impact**:
+- **4 out of 5 Finance tools completely non-functional** (only `list-invoices` works)
+- `get-budget`, `approve-budget`, `get-expense-report`, `delete-invoice` all broken
+- Cannot test Finance server functionality beyond invoice listing
+- Requires either rewriting tools to match existing schema OR creating new sample data tables
+
+**Table Name Discrepancies**:
+
+| Spec Assumed Table | Actual v1.3 Table | Semantic Match? | Impact |
+|-------------------|-------------------|-----------------|---------|
+| `finance.budgets` | `finance.department_budgets` | ✅ Yes (budgets by dept/year) | Rewrite queries |
+| `finance.expense_reports` | `finance.financial_reports` | ❌ No (different purpose) | Missing functionality |
+| - | - | - | - |
+
+**Additional Issues Found**:
+- `get-expense-report.ts` JOINs to `hr.employees` using `e.employee_id` (wrong column, should be `e.id`)
+- Cross-schema JOINs not tested in spec examples
+- No verification that related tables exist in different schemas
+
+**What Worked**:
+- Database error messages clearly showed "relation does not exist"
+- `\dt finance.*` command quickly revealed actual table inventory
+- Pattern recognition from Lesson 2 helped identify similar issue faster
+
+**What Didn't Work**:
+- Fixing `list-invoices` gave false confidence that other tools would work
+- No systematic schema discovery before implementing ALL tools
+- Assumed spec table names were validated against sample data
+
+**Resolution Strategy**:
+
+Given time constraints and v1.4 deployment focus, adapting tools to existing schema:
+
+**Option 1 (Chosen): Adapt Tools to Existing Schema**
+- Rewrite `get-budget.ts` to query `finance.department_budgets`
+- Rewrite `approve-budget.ts` to update `finance.department_budgets`
+- Mark `get-expense-report.ts` and `delete-invoice.ts` as **NOT IMPLEMENTED** (no expense tracking in v1.3)
+- Document limitations in tool descriptions
+
+**Option 2 (Deferred): Create Missing Tables**
+- Add `finance.expense_reports` table to sample data
+- Simplify `finance.budgets` view over `department_budgets`
+- Requires schema migration, testing, RLS policies
+- Better long-term solution but delays v1.4 deployment
+
+**Key Learnings**:
+
+1. **Table Existence Must Be Verified Before Implementation**:
+   - Run `\dt schema.*` to list all tables BEFORE writing any tool
+   - Don't assume spec table names match reality
+   - Table inventory is as critical as column discovery
+
+2. **Semantic Mismatches Are Worse Than Naming Mismatches**:
+   - `financial_reports` (published financial statements) ≠ `expense_reports` (employee expenses)
+   - Can't just rename - these serve different business purposes
+   - Some spec features may require new tables, not just query rewrites
+
+3. **Cross-Schema References Need Extra Validation**:
+   - JOINs to tables in different schemas (`hr.employees` from `finance.*`) are fragile
+   - Must verify column names in BOTH schemas
+   - Easy to miss when focusing on one schema at a time
+
+4. **Progressive Discovery Reveals Deeper Issues**:
+   - Lesson 1: Schema prefixes missing
+   - Lesson 2: Column names wrong
+   - Lesson 3: SET LOCAL parameterization broken
+   - Lesson 4: Entire tables missing
+   - Each fix revealed next layer of spec-reality mismatch
+
+5. **Sample Data Should Drive Spec, Not Vice Versa**:
+   - For existing projects, spec should document ACTUAL schema
+   - For new features, update sample data FIRST, then write spec
+   - Spec-first approach failed when sample data already existed
+
+**Recommendations**:
+
+1. **Mandatory Schema Discovery Checklist**:
+   ```markdown
+   Before implementing ANY database-backed tool:
+   - [ ] Run \dt schema.* to list all tables
+   - [ ] Run \d schema.table for each referenced table
+   - [ ] Verify all JOIN targets exist in their schemas
+   - [ ] Document actual schema in spec
+   - [ ] Flag any missing tables as new requirements
+   ```
+
+2. **Tool Implementation Status Matrix**:
+   ```markdown
+   | Tool | Table Required | Table Exists? | Status |
+   |------|---------------|---------------|--------|
+   | list_invoices | finance.invoices | ✅ Yes | Implemented |
+   | get_budget | finance.budgets | ❌ No (use department_budgets) | Needs rewrite |
+   | approve_budget | finance.budgets | ❌ No (use department_budgets) | Needs rewrite |
+   | get_expense_report | finance.expense_reports | ❌ No | Not implemented |
+   | delete_invoice | finance.invoices | ✅ Yes | Needs testing |
+   ```
+
+3. **Semantic Mapping Documentation**:
+   - When table names differ, document semantic equivalence
+   - Mark tools that can be adapted vs. require new tables
+   - Set clear expectations about what's possible with existing schema
+
+4. **Incremental Validation**:
+   - Don't wait to discover all tools are broken
+   - Test EACH tool immediately after implementation
+   - Fail fast on first table mismatch, then audit ALL tables
+
+**Follow-Up Actions**:
+- [x] Document table name mismatches as Lesson 4
+- [ ] Rewrite `get-budget.ts` to use `department_budgets`
+- [ ] Rewrite `approve-budget.ts` to use `department_budgets`
+- [ ] Mark `get-expense-report.ts` as NOT IMPLEMENTED with clear error message
+- [ ] Test `delete-invoice.ts` with actual schema
+- [ ] Update spec to document actual v1.3 table inventory
+- [ ] Create GitHub issue for missing expense tracking feature (v1.5+)
+
+**Status**: 🔄 IN PROGRESS - Documenting and adapting to existing schema (Dec 9, 2025)
+
+**Actual Finance Schema Inventory**:
+```sql
+-- Tables that exist in v1.3
+finance.invoices              ✅ Used by list_invoices, delete_invoice
+finance.department_budgets    ✅ Can adapt for get_budget, approve_budget
+finance.budget_categories     ✅ Supporting table
+finance.fiscal_years          ✅ Supporting table
+finance.financial_reports     ⚠️ Different purpose than expense_reports
+finance.revenue_summary       ✅ Supporting table
+
+-- Tables assumed by spec but missing
+finance.budgets              ❌ Use department_budgets instead
+finance.expense_reports      ❌ No equivalent - feature missing
+```
+
+**Implementation Approach**:
+1. Adapt budgets tools to `department_budgets` (preserve department-level budgeting semantics)
+2. Return helpful error for expense report tools explaining feature not available in v1.3
+3. Document this as known limitation in v1.4
+4. Plan proper expense tracking for v1.5 with new sample data
+
+---
+
 ## Phase 4: Desktop Client
 
 *To be filled in during development*
