@@ -85,36 +85,37 @@ export async function listEmployees(
       // v1.4: Query with LIMIT + 1 to detect truncation
       const queryLimit = limit + 1;
 
+      // Build the full SQL query string
+      const sqlQuery = `SELECT
+  e.id,
+  e.first_name,
+  e.last_name,
+  e.email,
+  e.phone,
+  e.hire_date::text as hire_date,
+  e.title,
+  d.name as department_name,
+  e.department_id,
+  e.manager_id,
+  m.first_name || ' ' || m.last_name as manager_name,
+  CASE
+    WHEN current_setting('app.current_user_roles', true) LIKE '%hr-write%'
+      OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+    THEN e.salary
+    ELSE NULL
+  END as salary,
+  e.location,
+  e.status
+FROM hr.employees e
+LEFT JOIN hr.employees m ON e.manager_id = m.id
+LEFT JOIN hr.departments d ON e.department_id = d.id
+WHERE ${whereClause}
+ORDER BY e.last_name, e.first_name
+LIMIT $${paramIndex}`;
+
       const result = await queryWithRLS<Employee>(
         userContext,
-        `
-        SELECT
-          e.id,
-          e.first_name,
-          e.last_name,
-          e.email,
-          e.phone,
-          e.hire_date::text as hire_date,
-          e.title,
-          d.name as department_name,
-          e.department_id,
-          e.manager_id,
-          m.first_name || ' ' || m.last_name as manager_name,
-          CASE
-            WHEN current_setting('app.current_user_roles', true) LIKE '%hr-write%'
-              OR current_setting('app.current_user_roles', true) LIKE '%executive%'
-            THEN e.salary
-            ELSE NULL
-          END as salary,
-          e.location,
-          e.status
-        FROM hr.employees e
-        LEFT JOIN hr.employees m ON e.manager_id = m.id
-        LEFT JOIN hr.departments d ON e.department_id = d.id
-        WHERE ${whereClause}
-        ORDER BY e.last_name, e.first_name
-        LIMIT $${paramIndex}
-        `,
+        sqlQuery,
         [...values, queryLimit]
       );
 

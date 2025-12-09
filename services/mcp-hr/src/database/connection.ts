@@ -69,18 +69,35 @@ export async function queryWithRLS<T extends Record<string, any> = any>(
 
   try {
     // Set RLS session variables
+    // Note: SET LOCAL doesn't work well with parameterized queries in pg library
+    // Using string concatenation with proper escaping
     await client.query('BEGIN');
-    await client.query('SET LOCAL app.current_user_id = $1', [userContext.userId]);
-    await client.query('SET LOCAL app.current_user_email = $1', [userContext.email || '']);
-    await client.query('SET LOCAL app.current_user_roles = $1', [userContext.roles.join(',')]);
+    logger.info('Transaction BEGIN successful');
 
-    logger.debug('RLS session variables set', {
-      userId: userContext.userId,
-      roles: userContext.roles,
+    // Escape single quotes in values
+    const escapedUserId = userContext.userId.replace(/'/g, "''");
+    const escapedEmail = (userContext.email || '').replace(/'/g, "''");
+    const escapedRoles = userContext.roles.join(',').replace(/'/g, "''");
+
+    await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+    logger.info('SET user_id successful', { userId: userContext.userId });
+
+    await client.query(`SET LOCAL app.current_user_email = '${escapedEmail}'`);
+    logger.info('SET user_email successful');
+
+    await client.query(`SET LOCAL app.current_user_roles = '${escapedRoles}'`);
+    logger.info('SET user_roles successful', { roles: userContext.roles });
+
+    logger.info('About to execute main query', {
+      queryStart: queryText.substring(0, 50),
+      valueCount: values?.length || 0,
+      values,
     });
 
     // Execute the actual query
     const result = await client.query<T>(queryText, values);
+
+    logger.info('Main query successful', { rowCount: result.rowCount });
 
     await client.query('COMMIT');
 
