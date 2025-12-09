@@ -32,19 +32,20 @@ export const ListInvoicesInputSchema = z.object({
 export type ListInvoicesInput = z.infer<typeof ListInvoicesInputSchema>;
 
 /**
- * Invoice data structure
+ * Invoice data structure (matches actual schema)
  */
 export interface Invoice {
-  invoice_id: string;
-  vendor: string;
+  id: string;  // Actual column: id (not invoice_id)
+  vendor_name: string;  // Actual column: vendor_name (not vendor)
   invoice_number: string;
   amount: number;
   currency: string;
   invoice_date: string;
   due_date: string;
+  paid_date: string | null;
   status: string;
-  department: string;
-  description: string;
+  department_code: string | null;  // Actual column: department_code (not department)
+  description: string | null;
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
@@ -70,23 +71,25 @@ export async function listInvoices(
     const validated = ListInvoicesInputSchema.parse(input);
     const { vendor, status, department, minAmount, maxAmount, limit } = validated;
 
-    // Build dynamic WHERE clauses
+    // Build dynamic WHERE clauses (using actual schema columns)
     const whereClauses: string[] = ['1=1'];
     const values: any[] = [];
     let paramIndex = 1;
 
     if (vendor) {
-      whereClauses.push(`i.vendor ILIKE $${paramIndex++}`);
+      // Actual column: vendor_name (not vendor)
+      whereClauses.push(`i.vendor_name ILIKE $${paramIndex++}`);
       values.push(`%${vendor}%`);
     }
 
     if (status) {
       whereClauses.push(`i.status = $${paramIndex++}`);
-      values.push(status);
+      values.push(status.toUpperCase());  // Schema uses uppercase (PENDING, APPROVED, etc.)
     }
 
     if (department) {
-      whereClauses.push(`i.department = $${paramIndex++}`);
+      // Actual column: department_code (not department)
+      whereClauses.push(`i.department_code = $${paramIndex++}`);
       values.push(department);
     }
 
@@ -110,15 +113,16 @@ export async function listInvoices(
         userContext,
         `
         SELECT
-          i.invoice_id,
-          i.vendor,
+          i.id,
+          i.vendor_name,
           i.invoice_number,
           i.amount,
           i.currency,
           i.invoice_date::text as invoice_date,
           i.due_date::text as due_date,
+          i.paid_date::text as paid_date,
           i.status,
-          i.department,
+          i.department_code,
           i.description,
           i.approved_by,
           i.approved_at::text as approved_at,
