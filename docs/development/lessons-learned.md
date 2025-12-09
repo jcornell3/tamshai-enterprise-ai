@@ -436,15 +436,15 @@ While this uses string interpolation instead of parameterized queries, it's safe
 
 **Follow-Up Actions**:
 - [x] ~~Fix SET LOCAL parameterization in MCP HR~~ (COMPLETED)
-- [ ] Update MCP Finance server with same fix
+- [x] ~~Update MCP Finance server with same fix~~ (COMPLETED - Commit 9b8d6e3)
 - [ ] Update MCP Sales server (uses MongoDB, no RLS)
 - [ ] Update MCP Support server (uses Elasticsearch, no RLS)
 - [ ] Add SET LOCAL limitation to spec documentation
 - [ ] Create shared RLS utility module for session variable setup
 
-**Status**: ✅ COMPLETED - MCP HR server fully operational with proper RLS (Dec 9, 2025)
+**Status**: ✅ COMPLETED - Both MCP HR and MCP Finance servers fully operational with proper RLS (Dec 9, 2025)
 
-**Test Results**:
+**Test Results (MCP HR)**:
 ```json
 {
   "status": "success",
@@ -467,6 +467,35 @@ While this uses string interpolation instead of parameterized queries, it's safe
   }
 }
 ```
+
+**Test Results (MCP Finance)** (Commit 9b8d6e3):
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "24b0c9d1-5d17-4d78-8c82-46260d9a9194",
+      "vendor_name": "WeWork",
+      "invoice_number": "INV-2024-003",
+      "amount": "35000.00",
+      "status": "APPROVED",
+      "department_code": "OPS"
+    }
+    // ... 4 more invoices
+  ],
+  "metadata": {
+    "truncated": true,  // ✅ LIMIT+1 truncation detection working
+    "returnedCount": 5,
+    "warning": "⚠️ Showing 5 of 50+ invoices..."
+  }
+}
+```
+
+**Schema Fixes Applied to MCP Finance**:
+- `invoice_id` → `id`
+- `vendor` → `vendor_name`
+- `department` → `department_code`
+- Added `paid_date` field to interface
 
 ---
 
