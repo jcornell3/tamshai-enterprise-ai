@@ -296,7 +296,177 @@ This document captures lessons learned during the development of the Enterprise 
 - [ ] Create automated schema validation CI test
 - [ ] Update spec template to include "Schema Discovery" section
 
-**Status**: ⏳ IN PROGRESS - MCP HR code updates pending (Dec 9, 2025)
+**Status**: ✅ COMPLETED - All schema issues resolved, MCP HR fully operational (Dec 9, 2025)
+
+**Final Resolution** (Commit fce28d0):
+- ✅ All column names updated to match actual schema
+- ✅ Employee interface aligned with database reality
+- ✅ All 3 tools (get_employee, list_employees, delete_employee) working
+- ✅ JOINs to departments table for department names
+- ✅ Salary masking based on roles functioning correctly
+- ✅ Truncation detection (LIMIT+1) working as designed
+
+---
+
+### Lesson 3: PostgreSQL SET LOCAL Doesn't Support Parameterized Queries (Dec 2025)
+
+**Issue Discovered**: All MCP HR queries failing with "syntax error at or near $1" despite SQL looking correct
+
+**What Happened**:
+- After fixing column name mismatches (Lesson 2), deployment still failed with same error
+- Query logged to console looked perfect and ran fine when executed directly in psql
+- Error message showed "position 33" which didn't correspond to $1 location in logged SELECT query
+- Spent ~45 minutes debugging template literal syntax, parameter indexing, and query construction
+- Eventually added detailed logging to each step of transaction setup
+- Discovered error was happening on `SET LOCAL app.current_user_id = $1`, NOT on the SELECT query
+
+**Root Cause**:
+- PostgreSQL's `SET` and `SET LOCAL` commands don't properly support parameterized queries through the pg library
+- The syntax `SET LOCAL setting = $1` with parameters array is not supported
+- This is a known limitation but not well documented in pg library docs
+- Error was misleading because it showed up in catch block of main query, not at the point of failure
+
+**Impact**:
+- All RLS-protected queries completely broken (100% failure rate)
+- Every MCP HR tool non-functional
+- Error message was confusing and led to debugging wrong part of code
+- ~45 minutes additional debugging time after column fixes
+
+**What Worked**:
+- Adding step-by-step logging to transaction setup
+- Logging showed "BEGIN successful" but no "SET user_id successful"
+- This isolated the failure to the first SET LOCAL command
+- Testing SET LOCAL with parameters in isolation confirmed the issue
+
+**What Didn't Work**:
+- Relying on error position from PostgreSQL (position 33 was for SET LOCAL, not SELECT)
+- Assuming parameterized queries work everywhere in PostgreSQL
+- Trusting that pg library would handle all SQL commands uniformly
+- Debugging the SELECT query when error was actually in transaction setup
+
+**Resolution Implemented**:
+
+Changed from parameterized queries to escaped string interpolation:
+
+**Before** (BROKEN):
+```typescript
+await client.query('SET LOCAL app.current_user_id = $1', [userContext.userId]);
+await client.query('SET LOCAL app.current_user_email = $1', [userContext.email]);
+await client.query('SET LOCAL app.current_user_roles = $1', [userContext.roles.join(',')]);
+```
+
+**After** (WORKING):
+```typescript
+// Escape single quotes using PostgreSQL standard escaping
+const escapedUserId = userContext.userId.replace(/'/g, "''");
+const escapedEmail = (userContext.email || '').replace(/'/g, "''");
+const escapedRoles = userContext.roles.join(',').replace(/'/g, "''");
+
+await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+await client.query(`SET LOCAL app.current_user_email = '${escapedEmail}'`);
+await client.query(`SET LOCAL app.current_user_roles = '${escapedRoles}'`);
+```
+
+**Security Considerations**:
+
+While this uses string interpolation instead of parameterized queries, it's safe because:
+1. **UUIDs**: userId values are UUIDs (only `[a-f0-9-]` characters)
+2. **Email**: Validated by Zod schema, contains only safe characters
+3. **Roles**: From predefined enum (`hr-read`, `hr-write`, `executive`, etc.)
+4. **Escaping**: Single quotes properly escaped using PostgreSQL standard (`''` for `'`)
+
+**Key Learnings**:
+
+1. **SET LOCAL Commands Have Special Syntax Requirements**:
+   - Cannot use parameterized queries ($1, $2, etc.) with SET/SET LOCAL
+   - Must use string interpolation with proper escaping
+   - This is a pg library limitation, not a PostgreSQL limitation
+
+2. **Error Messages Can Be Misleading**:
+   - "syntax error at or near $1" at position 33 didn't point to the actual failing query
+   - Error surfaced in catch block of later query, not where it actually occurred
+   - Error position is relative to the failing statement, not the logged query
+
+3. **Step-by-Step Logging is Critical for Transaction Debugging**:
+   - Log success of each step: BEGIN, SET var1, SET var2, SET var3, main query
+   - Don't assume all steps succeed just because no error is thrown immediately
+   - Absence of success log is as important as presence of error log
+
+4. **Not All SQL Commands Support Parameterization**:
+   - DDL commands (CREATE, ALTER, DROP) generally don't support parameters
+   - Configuration commands (SET, RESET) don't support parameters
+   - PREPARE/EXECUTE have their own parameterization syntax
+   - Stick to parameterized queries for DML (SELECT, INSERT, UPDATE, DELETE)
+
+5. **Test Transaction Setup Separately from Main Queries**:
+   - When using transactions with session variables, test the setup in isolation
+   - Don't assume RLS session variable setting will work without testing
+   - Create minimal reproduction case for transaction + session variable queries
+
+**Recommendations**:
+
+1. **Document pg Library Limitations in Code Comments**:
+   ```typescript
+   // IMPORTANT: SET LOCAL doesn't support parameterized queries in pg library.
+   // Must use escaped string interpolation instead of parameters array.
+   // See: https://github.com/brianc/node-postgres/issues/...
+   ```
+
+2. **Create Utility Function for Safe SET LOCAL**:
+   ```typescript
+   async function setLocalVariable(
+     client: PoolClient,
+     setting: string,
+     value: string
+   ): Promise<void> {
+     const escapedValue = value.replace(/'/g, "''");
+     await client.query(`SET LOCAL ${setting} = '${escapedValue}'`);
+   }
+   ```
+
+3. **Add Integration Tests for RLS Session Variables**:
+   - Test that session variables are actually set in transaction
+   - Verify queries can read session variables with `current_setting()`
+   - Test that RLS policies using session variables work correctly
+
+4. **Prefer Row-Level Security Over Application-Level Filtering**:
+   - Despite the complexity of session variable setup, RLS is still preferred
+   - Database-level security is more reliable than application-level
+   - Session variables are the standard way to pass user context to RLS policies
+
+**Follow-Up Actions**:
+- [x] ~~Fix SET LOCAL parameterization in MCP HR~~ (COMPLETED)
+- [ ] Update MCP Finance server with same fix
+- [ ] Update MCP Sales server (uses MongoDB, no RLS)
+- [ ] Update MCP Support server (uses Elasticsearch, no RLS)
+- [ ] Add SET LOCAL limitation to spec documentation
+- [ ] Create shared RLS utility module for session variable setup
+
+**Status**: ✅ COMPLETED - MCP HR server fully operational with proper RLS (Dec 9, 2025)
+
+**Test Results**:
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "e1000000-0000-0000-0000-000000000060",
+      "first_name": "Brian",
+      "last_name": "Adams",
+      "title": "IT Manager",
+      "department_name": "IT",
+      "salary": null,  // ✅ Masked because user has hr-read, not hr-write
+      "status": "ACTIVE"
+    }
+    // ... 4 more employees
+  ],
+  "metadata": {
+    "truncated": true,  // ✅ LIMIT+1 truncation detection working
+    "returnedCount": 5,
+    "warning": "⚠️ Showing 5 of 50+ employees..."
+  }
+}
+```
 
 ---
 
