@@ -111,21 +111,28 @@ services:
     container_name: tamshai-mcp-gateway
     environment:
       NODE_ENV: development
-      PORT: 3000
-      KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: tamshai-corp
-      KEYCLOAK_CLIENT_ID: mcp-gateway
-      KEYCLOAK_CLIENT_SECRET: mcp-gateway-secret
+      PORT: 3100
+      # v1.4: JWT validation
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/tamshai
+      JWKS_URI: http://keycloak:8080/realms/tamshai/protocol/openid-connect/certs
+      # v1.4: Claude API
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
-      MCP_HR_URL: http://mcp-hr:3001
-      MCP_FINANCE_URL: http://mcp-finance:3002
-      MCP_SALES_URL: http://mcp-sales:3003
-      MCP_SUPPORT_URL: http://mcp-support:3004
-      LOG_LEVEL: debug
+      # v1.4: Redis for confirmations
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # MCP server URLs
+      MCP_HR_URL: http://mcp-hr:3101
+      MCP_FINANCE_URL: http://mcp-finance:3102
+      MCP_SALES_URL: http://mcp-sales:3103
+      MCP_SUPPORT_URL: http://mcp-support:3104
+      LOG_LEVEL: info
     ports:
-      - "3100:3000"
+      - "3100:3100"
     depends_on:
-      - keycloak
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
     networks:
       - tamshai-network
 
@@ -136,14 +143,23 @@ services:
     container_name: tamshai-mcp-hr
     environment:
       NODE_ENV: development
-      PORT: 3001
-      DATABASE_URL: postgresql://tamshai:tamshai_password@postgres:5432/tamshai_hr
-      REQUIRED_ROLES: hr-read,hr-write,executive
-      LOG_LEVEL: debug
+      PORT: 3101
+      # v1.4: PostgreSQL connection
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: tamshai_hr
+      POSTGRES_USER: tamshai
+      POSTGRES_PASSWORD: tamshai_password
+      # v1.4: Redis for confirmations
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: info
     ports:
-      - "3101:3001"
+      - "3101:3101"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - tamshai-network
@@ -155,21 +171,23 @@ services:
     container_name: tamshai-mcp-finance
     environment:
       NODE_ENV: development
-      PORT: 3002
-      DATABASE_URL: postgresql://tamshai:tamshai_password@postgres:5432/tamshai_finance
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: finance-docs
-      REQUIRED_ROLES: finance-read,finance-write,executive
-      LOG_LEVEL: debug
+      PORT: 3102
+      # v1.4: PostgreSQL connection
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: tamshai_finance
+      POSTGRES_USER: tamshai
+      POSTGRES_PASSWORD: tamshai_password
+      # v1.4: Redis for confirmations
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: info
     ports:
-      - "3102:3002"
+      - "3102:3102"
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      redis:
         condition: service_healthy
     networks:
       - tamshai-network
@@ -181,14 +199,20 @@ services:
     container_name: tamshai-mcp-sales
     environment:
       NODE_ENV: development
-      PORT: 3003
-      MONGODB_URL: mongodb://tamshai:tamshai_password@mongodb:27017/tamshai_sales?authSource=admin
-      REQUIRED_ROLES: sales-read,sales-write,executive
-      LOG_LEVEL: debug
+      PORT: 3103
+      # v1.4: MongoDB connection
+      MONGODB_URI: mongodb://tamshai:tamshai_password@mongodb:27017
+      MONGODB_DB: tamshai_crm
+      # v1.4: Redis for confirmations
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: info
     ports:
-      - "3103:3003"
+      - "3103:3103"
     depends_on:
       mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - tamshai-network
@@ -200,14 +224,19 @@ services:
     container_name: tamshai-mcp-support
     environment:
       NODE_ENV: development
-      PORT: 3004
+      PORT: 3104
+      # v1.4: Elasticsearch connection
       ELASTICSEARCH_URL: http://elasticsearch:9200
-      REQUIRED_ROLES: support-read,support-write,executive
-      LOG_LEVEL: debug
+      # v1.4: Redis for confirmations
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: info
     ports:
-      - "3104:3004"
+      - "3104:3104"
     depends_on:
       elasticsearch:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - tamshai-network
