@@ -19,6 +19,8 @@
 #
 # NETWORK: Uses 172.30.0.0/16 subnet (avoiding 172.28.0.0/16 used by mcp-network)
 
+name: tamshai-dev
+
 version: '3.8'
 
 services:
@@ -253,7 +255,7 @@ services:
       POSTGRES_MULTIPLE_DATABASES: keycloak:keycloak:keycloak_password,tamshai_hr:tamshai:tamshai_password,tamshai_finance:tamshai:tamshai_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
+      - ./postgres/init-multiple-databases.sh:/docker-entrypoint-initdb.d/01-init-multiple-databases.sh:ro
       - ../../sample-data/hr-data.sql:/docker-entrypoint-initdb.d/02-hr-data.sql:ro
       - ../../sample-data/finance-data.sql:/docker-entrypoint-initdb.d/03-finance-data.sql:ro
     ports:

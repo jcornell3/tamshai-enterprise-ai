@@ -118,18 +118,112 @@ type MCPToolResponse =
 - [ ] Performance SLA met (< 500ms for simple queries)
 - [ ] All tools documented with input/output schemas
 
-## 6. Scope
+## 6. Database Prerequisites & Sample Data
+
+### 6.1 PostgreSQL Schema Requirements
+
+**CRITICAL:** The existing `sample-data/hr-data.sql` file (from v1.3) creates tables in the `public` schema, but v1.4 MCP servers expect tables in domain-specific schemas. The sample data files MUST be updated before deployment.
+
+#### Required Schema Structure
+
+**HR Database (`tamshai_hr`):**
+```sql
+-- Must be added at the top of sample-data/hr-data.sql
+CREATE SCHEMA IF NOT EXISTS hr;
+
+-- All table definitions must use schema prefix:
+CREATE TABLE IF NOT EXISTS hr.employees (...);
+CREATE TABLE IF NOT EXISTS hr.departments (...);
+CREATE TABLE IF NOT EXISTS hr.grade_levels (...);
+CREATE TABLE IF NOT EXISTS hr.performance_reviews (...);
+```
+
+**Finance Database (`tamshai_finance`):**
+```sql
+-- Must be added at the top of sample-data/finance-data.sql
+CREATE SCHEMA IF NOT EXISTS finance;
+
+-- All table definitions must use schema prefix:
+CREATE TABLE IF NOT EXISTS finance.budgets (...);
+CREATE TABLE IF NOT EXISTS finance.invoices (...);
+CREATE TABLE IF NOT EXISTS finance.expense_reports (...);
+```
+
+#### Known Issues in Existing Sample Data
+
+**`sample-data/hr-data.sql` (Legacy v1.3 File):**
+1. ❌ **Missing schema creation:** No `CREATE SCHEMA hr;` statement
+2. ❌ **Tables in wrong schema:** All tables created in `public` instead of `hr`
+3. ❌ **SQL syntax error (line ~451):** Recursive CTE has type mismatch:
+   ```sql
+   -- ERROR: recursive query "org_tree" column 8 has type character varying(100)[]
+   -- in non-recursive term but type character varying[] overall
+   WITH RECURSIVE org_tree AS (
+     SELECT ..., ARRAY[last_name] as path  -- varchar(100)[]
+     FROM employees WHERE manager_id IS NULL
+     UNION ALL
+     SELECT ..., ot.path || e.last_name    -- varchar[] (type mismatch!)
+     FROM employees e JOIN org_tree ot ON e.manager_id = ot.id
+   )
+   ```
+   **Fix:** Cast the recursive term: `ot.path || e.last_name::varchar(100)`
+
+4. ⚠️ **Schema mismatch:** File uses `\c tamshai_hr;` (correct database) but creates tables without `hr.` prefix
+
+**Migration Required:** These files must be updated before v1.4 MCP servers can function.
+
+### 6.2 Sample Data Migration Checklist
+
+- [ ] Update `sample-data/hr-data.sql`:
+  - [ ] Add `CREATE SCHEMA IF NOT EXISTS hr;` after database connection
+  - [ ] Prefix all `CREATE TABLE` with `hr.` (e.g., `hr.employees`)
+  - [ ] Prefix all `INSERT INTO` with `hr.`
+  - [ ] Fix recursive CTE type error on line ~451
+  - [ ] Update all references in constraints, indexes, and queries
+
+- [ ] Update `sample-data/finance-data.sql`:
+  - [ ] Add `CREATE SCHEMA IF NOT EXISTS finance;`
+  - [ ] Prefix all tables with `finance.`
+  - [ ] Verify foreign key constraints use schema prefix
+
+- [ ] Verify MongoDB sample data (`sample-data/sales-data.js`):
+  - [ ] ✅ No schema changes needed (MongoDB databases, not schemas)
+  - [ ] Verify collection names match MCP Sales server expectations
+
+- [ ] Verify Elasticsearch sample data:
+  - [ ] ✅ No schema changes needed (index-based)
+  - [ ] Verify index names match MCP Support server expectations
+
+### 6.3 RLS Policies Alignment
+
+**CRITICAL:** RLS policies in sample data must match the schema prefix used by MCP servers.
+
+Example policy from `sample-data/hr-data.sql`:
+```sql
+-- BEFORE (v1.3 - incorrect):
+CREATE POLICY employee_access_policy ON employees
+FOR SELECT
+USING (...);
+
+-- AFTER (v1.4 - correct):
+CREATE POLICY employee_access_policy ON hr.employees
+FOR SELECT
+USING (...);
+```
+
+## 7. Scope
 * **Four MCP Servers:** HR, Finance, Sales, Support
 * **Data Sources:**
-  - PostgreSQL: HR and Finance data
-  - MongoDB: Sales/CRM data
+  - PostgreSQL: HR and Finance data (with `hr.` and `finance.` schemas)
+  - MongoDB: Sales/CRM data (database: `tamshai_crm`)
   - Elasticsearch: Support tickets and knowledge base
 * **Authentication:** JWT validation from MCP Gateway
 * **Authorization:** RLS policies + application-level filtering
 * **Error Handling:** Structured error responses, no raw exceptions
 * **Logging:** Request/response logging with user context
+* **Sample Data:** MUST be migrated from v1.3 (public schema) to v1.4 (domain schemas)
 
-## 7. Technical Details
+## 8. Technical Details
 
 ### Context Propagation Pattern
 ```typescript

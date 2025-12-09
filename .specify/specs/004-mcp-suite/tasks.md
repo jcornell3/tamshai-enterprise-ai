@@ -1,6 +1,39 @@
 # Tasks: MCP Domain Services
 
+## Group 0: Sample Data Migration (v1.3 → v1.4 Schema Update)
+**CRITICAL PREREQUISITE:** These tasks MUST be completed before MCP servers can function.
+
+### HR Sample Data (`sample-data/hr-data.sql`)
+- [ ] Add `CREATE SCHEMA IF NOT EXISTS hr;` statement after `\c tamshai_hr;` line. [P]
+- [ ] Update all `CREATE TABLE` statements to use `hr.` prefix (e.g., `hr.employees`, `hr.departments`). [P]
+- [ ] Update all `INSERT INTO` statements to use `hr.` prefix. [P]
+- [ ] Update all foreign key constraints to use `hr.` prefix. [P]
+- [ ] Update all indexes to reference `hr.` schema tables. [P]
+- [ ] **Fix recursive CTE type error** on line ~451:
+  - [ ] Change `ot.path || e.last_name` to `ot.path || e.last_name::varchar(100)` to match array type. [P]
+- [ ] Update all `CREATE POLICY` statements to use `hr.` prefix (e.g., `CREATE POLICY ... ON hr.employees`). [P]
+- [ ] Update all policy USING clauses that reference other tables to use `hr.` prefix. [P]
+- [ ] Verify all UPDATE statements reference `hr.` schema (e.g., `UPDATE hr.departments SET ...`). [P]
+- [ ] Test SQL file loads without errors: `psql -U tamshai -d tamshai_hr -f sample-data/hr-data.sql`. [P]
+
+### Finance Sample Data (`sample-data/finance-data.sql`)
+- [ ] Add `CREATE SCHEMA IF NOT EXISTS finance;` statement after `\c tamshai_finance;` line. [P]
+- [ ] Update all `CREATE TABLE` statements to use `finance.` prefix. [P]
+- [ ] Update all `INSERT INTO` statements to use `finance.` prefix. [P]
+- [ ] Update all foreign key constraints to use `finance.` prefix. [P]
+- [ ] Update all indexes to reference `finance.` schema tables. [P]
+- [ ] Update all `CREATE POLICY` statements to use `finance.` prefix. [P]
+- [ ] Test SQL file loads without errors: `psql -U tamshai -d tamshai_finance -f sample-data/finance-data.sql`. [P]
+
+### Verification
+- [ ] Verify PostgreSQL schemas exist: `\dn` should show `hr` and `finance` schemas. [P]
+- [ ] Verify tables in correct schema: `\dt hr.*` should list all HR tables. [P]
+- [ ] Verify RLS policies applied: `\d+ hr.employees` should show policies. [P]
+- [ ] Run sample query: `SELECT * FROM hr.employees LIMIT 1;` should return data. [P]
+
 ## Group 1: MCP HR Server (v1.4 Updated)
+**DEPENDS ON:** Group 0 (Sample Data Migration) must be completed first.
+
 - [ ] Create `services/mcp-hr` directory with TypeScript setup. [P]
 - [ ] Install dependencies: @modelcontextprotocol/sdk, pg, jsonwebtoken, zod, winston, ioredis. [P]
 - [ ] **[v1.4] Define MCPToolResponse type** in `src/types/response.ts` (Section 7.4). [P]
