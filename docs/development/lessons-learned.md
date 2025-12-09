@@ -625,14 +625,51 @@ Given time constraints and v1.4 deployment focus, adapting tools to existing sch
 
 **Follow-Up Actions**:
 - [x] Document table name mismatches as Lesson 4
-- [ ] Rewrite `get-budget.ts` to use `department_budgets`
-- [ ] Rewrite `approve-budget.ts` to use `department_budgets`
-- [ ] Mark `get-expense-report.ts` as NOT IMPLEMENTED with clear error message
+- [x] Rewrite `get-budget.ts` to use `department_budgets` (Commit ca7d7f5)
+- [x] Mark `approve-budget.ts` as NOT IMPLEMENTED (no approval workflow in v1.3)
+- [x] Mark `get-expense-report.ts` as NOT IMPLEMENTED (no expense tracking in v1.3)
 - [ ] Test `delete-invoice.ts` with actual schema
 - [ ] Update spec to document actual v1.3 table inventory
 - [ ] Create GitHub issue for missing expense tracking feature (v1.5+)
 
-**Status**: 🔄 IN PROGRESS - Documenting and adapting to existing schema (Dec 9, 2025)
+**Status**: ✅ RESOLVED - Tools adapted to v1.3 schema (Dec 9, 2025, Commit ca7d7f5)
+
+**Resolution Summary (Commit ca7d7f5)**:
+
+1. **get_budget.ts** - ✅ FIXED (Now Operational)
+   - Adapted to use `finance.department_budgets` table
+   - Updated Budget interface with actual columns:
+     - `budget_id` → `id`, `department` → `department_code`
+     - `total_allocated` → `budgeted_amount`, `total_spent` → `actual_amount`
+     - `total_remaining` → `forecast_amount`
+     - Added: `category_id`, `notes`
+     - Removed: `quarter`, `status`, `approved_by`, `approved_at`
+   - Test passed: Successfully returns budget data for department/fiscal year
+
+2. **approve_budget.ts** - ⚠️ NOT IMPLEMENTED
+   - v1.3 `department_budgets` has no approval workflow columns
+   - Missing: `status`, `approved_by`, `approved_at`
+   - Returns NOT_IMPLEMENTED error with clear LLM-friendly guidance
+   - Reason: Semantic mismatch - v1.3 has simplified budget tracking
+   - Future: Requires schema updates in v1.5+ (add approval columns)
+
+3. **get_expense_report.ts** - ⚠️ NOT IMPLEMENTED
+   - v1.3 has NO expense tracking functionality
+   - `finance.expense_reports` table doesn't exist at all
+   - `finance.financial_reports` serves different purpose (company summaries)
+   - Returns NOT_IMPLEMENTED error with migration path explanation
+   - Future: Requires new tables in v1.5+ (expense_reports, expense_line_items)
+
+**Final MCP Finance Tool Status**:
+```markdown
+| Tool | Status | Table Used | v1.4 Features | Notes |
+|------|--------|------------|---------------|-------|
+| list_invoices | ✅ Working | finance.invoices | Truncation, RLS | Fixed in commit 9b8d6e3 |
+| get_budget | ✅ Working | finance.department_budgets | RLS | Fixed in commit ca7d7f5 |
+| delete_invoice | ⏳ Untested | finance.invoices | Confirmation, RLS | Needs testing |
+| approve_budget | ❌ Not Impl | N/A | - | No approval workflow in v1.3 |
+| get_expense_report | ❌ Not Impl | N/A | - | No expense tracking in v1.3 |
+```
 
 **Actual Finance Schema Inventory**:
 ```sql
