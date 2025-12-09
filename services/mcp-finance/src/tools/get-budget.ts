@@ -27,25 +27,25 @@ export const GetBudgetInputSchema = z.object({
 export type GetBudgetInput = z.infer<typeof GetBudgetInputSchema>;
 
 /**
- * Budget data structure
+ * Budget data structure (matches actual schema)
  */
 export interface Budget {
-  budget_id: string;
-  department: string;
+  id: string;  // Actual column: id (not budget_id)
+  department_code: string;  // Actual column: department_code (not department)
   fiscal_year: number;
-  quarter: number;
-  total_allocated: number;
-  total_spent: number;
-  total_remaining: number;
-  status: string;
-  approved_by: string | null;
-  approved_at: string | null;
+  category_id: string | null;
+  budgeted_amount: number;  // Actual column: budgeted_amount (not total_allocated)
+  actual_amount: number;  // Actual column: actual_amount (not total_spent)
+  forecast_amount: number | null;  // Actual column: forecast_amount (not total_remaining)
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
 
 /**
- * Get a single budget by ID
+ * Get a single department budget by ID
+ *
+ * Uses actual v1.3 table: finance.department_budgets (not finance.budgets)
  *
  * RLS automatically enforces:
  * - Finance roles can see all budgets
@@ -66,20 +66,18 @@ export async function getBudget(
         userContext,
         `
         SELECT
-          b.budget_id,
-          b.department,
+          b.id,
+          b.department_code,
           b.fiscal_year,
-          b.quarter,
-          b.total_allocated,
-          b.total_spent,
-          b.total_remaining,
-          b.status,
-          b.approved_by,
-          b.approved_at::text as approved_at,
+          b.category_id,
+          b.budgeted_amount,
+          b.actual_amount,
+          b.forecast_amount,
+          b.notes,
           b.created_at::text as created_at,
           b.updated_at::text as updated_at
-        FROM finance.budgets b
-        WHERE b.budget_id = $1
+        FROM finance.department_budgets b
+        WHERE b.id = $1
         `,
         [budgetId]
       );
