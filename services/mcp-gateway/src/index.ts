@@ -1,12 +1,18 @@
 /**
- * Tamshai Corp MCP Gateway
- * 
+ * Tamshai Corp MCP Gateway (Architecture v1.4)
+ *
  * This service orchestrates AI queries by:
  * 1. Validating JWT tokens from Keycloak
  * 2. Extracting user roles from the token
  * 3. Routing queries to appropriate MCP servers based on roles
  * 4. Aggregating responses and sending to Claude API
  * 5. Logging all access for audit compliance
+ *
+ * v1.4 Features:
+ * - SSE Streaming for long-running queries (Section 6.1)
+ * - Truncation warning injection (Section 5.3)
+ * - Human-in-the-loop confirmations (Section 5.6)
+ * - LLM-friendly error handling (Section 7.4)
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -19,6 +25,18 @@ import winston from 'winston';
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import {
+  MCPToolResponse,
+  isSuccessResponse,
+  isErrorResponse,
+  isPendingConfirmationResponse,
+} from './types/mcp-response';
+import {
+  storePendingConfirmation,
+  getPendingConfirmation,
+  deletePendingConfirmation,
+  isTokenRevoked,
+} from './utils/redis';
 
 dotenv.config();
 
@@ -341,7 +359,7 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Authentication middleware
 async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Missing or invalid authorization header' });
     return;
@@ -351,6 +369,15 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 
   try {
     const userContext = await validateToken(token);
+
+    // v1.4: Check token revocation in Redis
+    const payload = jwt.decode(token) as jwt.JwtPayload;
+    if (payload?.jti && await isTokenRevoked(payload.jti)) {
+      logger.warn('Revoked token attempted', { jti: payload.jti, userId: userContext.userId });
+      res.status(401).json({ error: 'Token has been revoked' });
+      return;
+    }
+
     (req as any).userContext = userContext;
     next();
   } catch (error) {
@@ -457,6 +484,237 @@ app.post('/api/ai/query', authMiddleware, async (req: Request, res: Response) =>
 app.post('/internal/audit', express.json(), (req: Request, res: Response) => {
   logger.info('Gateway audit:', req.body);
   res.status(200).send('OK');
+});
+
+// =============================================================================
+// v1.4 ENDPOINTS
+// =============================================================================
+
+/**
+ * v1.4 SSE Streaming Query Endpoint (Section 6.1)
+ *
+ * Streams Claude responses using Server-Sent Events to prevent timeouts
+ * during long-running queries (30-60 seconds).
+ */
+app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const requestId = req.headers['x-request-id'] as string;
+  const userContext: UserContext = (req as any).userContext;
+  const query = req.query.q as string;
+
+  if (!query || typeof query !== 'string') {
+    res.status(400).json({ error: 'Query parameter "q" is required' });
+    return;
+  }
+
+  logger.info(`SSE Query from ${userContext.username}:`, {
+    requestId,
+    query: query.substring(0, 100),
+    roles: userContext.roles,
+  });
+
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  try {
+    // Determine accessible MCP servers
+    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+
+    // Query all accessible MCP servers in parallel
+    const mcpPromises = accessibleServers.map((server) =>
+      queryMCPServer(server, query, userContext)
+    );
+    const mcpResults = await Promise.all(mcpPromises);
+
+    // v1.4: Check for truncation warnings and pending confirmations
+    const hasTruncation = mcpResults.some((result) => {
+      const mcpResponse = result.data as MCPToolResponse;
+      return isSuccessResponse(mcpResponse) && mcpResponse.metadata?.truncated;
+    });
+
+    const pendingConfirmations = mcpResults.filter((result) => {
+      const mcpResponse = result.data as MCPToolResponse;
+      return isPendingConfirmationResponse(mcpResponse);
+    });
+
+    // If there are pending confirmations, return them immediately (no Claude call)
+    if (pendingConfirmations.length > 0) {
+      const confirmationResponse = pendingConfirmations[0].data as MCPToolResponse;
+      res.write(`data: ${JSON.stringify(confirmationResponse)}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    // Build context from MCP data
+    const dataContext = mcpResults
+      .filter((d) => d.data !== null)
+      .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
+      .join('\n\n');
+
+    // v1.4: Inject truncation warnings into system prompt
+    let truncationWarning = '';
+    if (hasTruncation) {
+      truncationWarning = `\n\nIMPORTANT: Some of the data results have been truncated (limited to 50 records per Article III.2). You MUST inform the user that the results are incomplete and suggest they refine their query with more specific filters.`;
+    }
+
+    const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization.
+You have access to enterprise data based on the user's role permissions.
+The user "${userContext.username}" has the following roles: ${userContext.roles.join(', ')}.
+
+When answering questions:
+1. Only use the data provided in the context below
+2. If the data doesn't contain information to answer the question, say so
+3. Never make up or infer sensitive information not in the data
+4. Be concise and professional
+5. If asked about data you don't have access to, explain that the user's role doesn't have permission${truncationWarning}
+
+Available data context:
+${dataContext || 'No relevant data available for this query.'}`;
+
+    // Stream Claude response
+    const stream = await anthropic.messages.stream({
+      model: config.claude.model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: query,
+        },
+      ],
+    });
+
+    // Stream each chunk to the client
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+        res.write(`data: ${JSON.stringify({ type: 'text', text: chunk.delta.text })}\n\n`);
+      }
+    }
+
+    // Send completion signal
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    const durationMs = Date.now() - startTime;
+    logger.info('SSE query completed', { requestId, durationMs });
+  } catch (error) {
+    logger.error('SSE query error:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to process query' })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+});
+
+/**
+ * v1.4 Confirmation Endpoint (Section 5.6)
+ *
+ * Handles human-in-the-loop confirmations for write operations.
+ * Retrieves pending action from Redis and executes or cancels it.
+ */
+app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, res: Response) => {
+  const { confirmationId } = req.params;
+  const { approved } = req.body;
+  const userContext: UserContext = (req as any).userContext;
+  const requestId = req.headers['x-request-id'] as string;
+
+  logger.info('Confirmation request', {
+    requestId,
+    confirmationId,
+    approved,
+    userId: userContext.userId,
+  });
+
+  if (typeof approved !== 'boolean') {
+    res.status(400).json({ error: 'Field "approved" must be a boolean' });
+    return;
+  }
+
+  try {
+    // Retrieve pending confirmation from Redis
+    const pendingAction = await getPendingConfirmation(confirmationId);
+
+    if (!pendingAction) {
+      res.status(404).json({
+        error: 'Confirmation not found or expired',
+        message: '⏱️ Confirmation expired. Please retry the operation.',
+      });
+      return;
+    }
+
+    // Verify user is the same one who initiated the request
+    if (pendingAction.userId !== userContext.userId) {
+      logger.warn('Confirmation user mismatch', {
+        requestId,
+        confirmationId,
+        initiatingUser: pendingAction.userId,
+        confirmingUser: userContext.userId,
+      });
+      res.status(403).json({ error: 'Confirmation can only be completed by the initiating user' });
+      return;
+    }
+
+    if (!approved) {
+      // User rejected the action
+      logger.info('Action rejected by user', { requestId, confirmationId });
+      res.json({
+        status: 'cancelled',
+        message: '❌ Action cancelled',
+      });
+      return;
+    }
+
+    // Execute the confirmed action by calling the MCP server
+    const mcpServerUrl = config.mcpServers[pendingAction.mcpServer as keyof typeof config.mcpServers];
+
+    if (!mcpServerUrl) {
+      res.status(500).json({ error: 'Invalid MCP server in pending action' });
+      return;
+    }
+
+    const executeResponse = await axios.post(
+      `${mcpServerUrl}/execute`,
+      {
+        action: pendingAction.action,
+        data: pendingAction,
+        userContext: {
+          userId: userContext.userId,
+          username: userContext.username,
+          roles: userContext.roles,
+        },
+      },
+      {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': userContext.userId,
+          'X-User-Roles': userContext.roles.join(','),
+          'X-Request-ID': requestId,
+        },
+      }
+    );
+
+    logger.info('Action executed successfully', {
+      requestId,
+      confirmationId,
+      action: pendingAction.action,
+    });
+
+    res.json({
+      status: 'success',
+      message: '✅ Action completed successfully',
+      result: executeResponse.data,
+    });
+  } catch (error) {
+    logger.error('Confirmation execution error:', error);
+    res.status(500).json({
+      error: 'Failed to execute confirmed action',
+      requestId,
+    });
+  }
 });
 
 // =============================================================================

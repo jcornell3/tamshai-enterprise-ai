@@ -43,7 +43,6 @@ export class RedisTokenRevocationService implements TokenRevocationService {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.redis = new Redis(this.config.redisUrl, {
       maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
       enableReadyCheck: true,
       lazyConnect: true,
     });

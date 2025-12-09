@@ -1,0 +1,133 @@
+/**
+ * MongoDB Database Connection
+ *
+ * This module provides MongoDB connection with role-based filtering
+ * for CRM data access.
+ */
+
+import { MongoClient, Db, Collection, Filter } from 'mongodb';
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [new winston.transports.Console()],
+});
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27018';
+const DATABASE_NAME = process.env.MONGODB_DB || 'tamshai_crm';
+
+let client: MongoClient | null = null;
+let db: Db | null = null;
+
+/**
+ * User context for role-based filtering
+ */
+export interface UserContext {
+  userId: string;
+  username: string;
+  email?: string;
+  roles: string[];
+}
+
+/**
+ * Connect to MongoDB
+ */
+async function connect(): Promise<Db> {
+  if (db) {
+    return db;
+  }
+
+  try {
+    client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    db = client.db(DATABASE_NAME);
+    logger.info('Connected to MongoDB', { database: DATABASE_NAME });
+    return db;
+  } catch (error) {
+    logger.error('Failed to connect to MongoDB', error);
+    throw error;
+  }
+}
+
+/**
+ * Get MongoDB database instance
+ */
+export async function getDatabase(): Promise<Db> {
+  if (!db) {
+    return await connect();
+  }
+  return db;
+}
+
+/**
+ * Get a MongoDB collection
+ */
+export async function getCollection(collectionName: string): Promise<Collection> {
+  const database = await getDatabase();
+  return database.collection(collectionName);
+}
+
+/**
+ * Build role-based filter for MongoDB queries
+ *
+ * Unlike PostgreSQL RLS, we manually add filters based on user roles:
+ * - Sales-read/sales-write: All opportunities
+ * - Executive: All opportunities
+ * - Manager: Their team's opportunities (owner_id in team)
+ * - User: Only their own opportunities (owner_id = userId)
+ */
+export function buildRoleFilter(userContext: UserContext): Filter<any> {
+  const { userId, roles } = userContext;
+
+  // Executives and sales roles can see all data
+  if (
+    roles.includes('executive') ||
+    roles.includes('sales-read') ||
+    roles.includes('sales-write')
+  ) {
+    return {};
+  }
+
+  // Managers can see their team's data (simplified - in production, would query team members)
+  if (roles.includes('manager')) {
+    return {
+      $or: [
+        { owner_id: userId },
+        { created_by: userId },
+      ],
+    };
+  }
+
+  // Default: only own records
+  return { owner_id: userId };
+}
+
+/**
+ * Check MongoDB connection health
+ */
+export async function checkConnection(): Promise<boolean> {
+  try {
+    const database = await getDatabase();
+    await database.command({ ping: 1 });
+    return true;
+  } catch (error) {
+    logger.error('MongoDB health check failed', error);
+    return false;
+  }
+}
+
+/**
+ * Close MongoDB connection (for graceful shutdown)
+ */
+export async function closeConnection(): Promise<void> {
+  if (client) {
+    await client.close();
+    client = null;
+    db = null;
+    logger.info('MongoDB connection closed');
+  }
+}
