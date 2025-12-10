@@ -150,13 +150,33 @@ async function deleteOpportunity(input: any, userContext: UserContext): Promise<
     const collection = await getCollection('deals');
     const roleFilter = buildRoleFilter(userContext);
 
-    const opportunity = await collection.findOne({ ...roleFilter, _id: new ObjectId(opportunityId) });
+    // Use aggregation pipeline to lookup customer name from customers collection
+    const opportunities = await collection.aggregate([
+      { $match: { ...roleFilter, _id: new ObjectId(opportunityId) } },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customer_id',
+          foreignField: '_id',
+          as: 'customer_info'
+        }
+      },
+      {
+        $addFields: {
+          customer_name: { $arrayElemAt: ['$customer_info.company_name', 0] }
+        }
+      },
+      { $project: { customer_info: 0 } } // Remove the customer_info array from output
+    ]).toArray();
 
-    if (!opportunity) {
+    if (opportunities.length === 0) {
       return handleOpportunityNotFound(opportunityId);
     }
 
-    if (opportunity.status === 'won') {
+    const opportunity = opportunities[0];
+
+    // Check if opportunity is won (actual field is 'stage' not 'status')
+    if (opportunity.stage === 'CLOSED_WON' || opportunity.stage === 'CLOSED_LOST') {
       return handleCannotDeleteWonOpportunity(opportunityId);
     }
 
@@ -169,7 +189,7 @@ async function deleteOpportunity(input: any, userContext: UserContext): Promise<
       opportunityId,
       customerName: opportunity.customer_name,
       value: opportunity.value,
-      status: opportunity.status,
+      stage: opportunity.stage,  // Use 'stage' not 'status'
       reason: reason || 'No reason provided',
     };
 
@@ -178,7 +198,7 @@ async function deleteOpportunity(input: any, userContext: UserContext): Promise<
     const message = `⚠️ Delete opportunity for ${opportunity.customer_name}?
 
 Value: $${opportunity.value.toLocaleString()}
-Status: ${opportunity.status}
+Stage: ${opportunity.stage}
 ${reason ? `Reason: ${reason}` : ''}
 
 This action will permanently delete the opportunity and cannot be undone.`;
