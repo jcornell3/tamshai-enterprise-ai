@@ -66,7 +66,8 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
   return withErrorHandling('list_opportunities', async () => {
     const { status, minValue, maxValue, limit } = ListOpportunitiesInputSchema.parse(input);
 
-    const collection = await getCollection('opportunities');
+    // Actual v1.3 collection name is 'deals' not 'opportunities'
+    const collection = await getCollection('deals');
     const roleFilter = buildRoleFilter(userContext);
 
     const filter: any = { ...roleFilter };
@@ -145,7 +146,8 @@ async function deleteOpportunity(input: any, userContext: UserContext): Promise<
 
     const { opportunityId, reason } = DeleteOpportunityInputSchema.parse(input);
 
-    const collection = await getCollection('opportunities');
+    // Actual v1.3 collection name is 'deals' not 'opportunities'
+    const collection = await getCollection('deals');
     const roleFilter = buildRoleFilter(userContext);
 
     const opportunity = await collection.findOne({ ...roleFilter, _id: new ObjectId(opportunityId) });
@@ -189,7 +191,8 @@ async function executeDeleteOpportunity(confirmationData: Record<string, unknown
   return withErrorHandling('execute_delete_opportunity', async () => {
     const opportunityId = confirmationData.opportunityId as string;
 
-    const collection = await getCollection('opportunities');
+    // Actual v1.3 collection name is 'deals' not 'opportunities'
+    const collection = await getCollection('deals');
     const roleFilter = buildRoleFilter(userContext);
 
     const result = await collection.deleteOne({ ...roleFilter, _id: new ObjectId(opportunityId) });
