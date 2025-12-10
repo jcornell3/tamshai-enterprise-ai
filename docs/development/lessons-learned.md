@@ -704,6 +704,200 @@ finance.expense_reports      ❌ No equivalent - feature missing
 
 ---
 
+### Lesson 5: MongoDB Database/Collection Name Mismatches (Dec 2025)
+
+**Issue Discovered**: MCP Sales server configuration and code reference database/collection names that don't match v1.3 sample data
+
+**What Happened**:
+- After successfully resolving PostgreSQL issues (Lessons 1-4), moved to testing MongoDB-backed MCP Sales server
+- Server configuration expected `tamshai_crm` database, but sample data loaded into `tamshai_sales`
+- Server code queried `opportunities` collection, but sample data created `deals` collection
+- Server started successfully but returned empty results (no data found)
+
+**Root Cause**:
+- Docker Compose environment variable set wrong database name (`MONGODB_DB: tamshai_crm`)
+- Sample data script used different database name (`tamshai_sales`)
+- Server code assumed spec collection names without validating against actual MongoDB collections
+- Similar to Lesson 4 (Finance) but for NoSQL instead of SQL
+
+**Impact**:
+- Server appeared healthy but couldn't retrieve any data
+- All 3 Sales tools would fail silently (empty result sets)
+- No error messages - just "no results found"
+- Required manual inspection of MongoDB to discover mismatch
+
+**Database/Collection Discrepancies**:
+
+| Component | Expected | Actual v1.3 | Fix Applied |
+|-----------|----------|-------------|-------------|
+| Database name | `tamshai_crm` | `tamshai_sales` | Updated docker-compose.yml |
+| Collection name | `opportunities` | `deals` | Updated 3 queries in index.ts |
+| - | - | - | - |
+
+**What Worked**:
+- MongoDB shell commands quickly revealed actual database/collection names
+- `db.getCollectionNames()` showed empty result for wrong database
+- Server health check still passed (connection successful, just wrong DB)
+- Error pattern familiar from Lesson 4 (table name mismatches)
+
+**What Didn't Work**:
+- Health check didn't detect wrong database (MongoDB allows connecting to non-existent DBs)
+- No query errors (MongoDB returns empty results, not errors, for missing collections)
+- Sample data script didn't fail when loaded into "wrong" database
+
+**Resolution**:
+
+**Fix 1: Database Name** (docker-compose.yml)
+```yaml
+# BEFORE (BROKEN):
+MONGODB_DB: tamshai_crm
+
+# AFTER (WORKING):
+MONGODB_DB: tamshai_sales
+```
+
+**Fix 2: Collection Name** (services/mcp-sales/src/index.ts - 3 locations)
+```typescript
+// BEFORE (BROKEN):
+const collection = await getCollection('opportunities');
+
+// AFTER (WORKING):
+const collection = await getCollection('deals');
+```
+
+**Test Results**:
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "_id": "670000000000000000000001",
+      "deal_name": "Acme Corp Enterprise License",
+      "stage": "CLOSED_WON",
+      "value": 450000,
+      "currency": "USD"
+    }
+    // ... 4 more deals
+  ],
+  "metadata": {
+    "truncated": true,
+    "returnedCount": 5,
+    "warning": "⚠️ Showing 5 of 50+ opportunities..."
+  }
+}
+```
+
+**v1.4 Features Verified**:
+- ✅ LIMIT+1 truncation detection working
+- ✅ Truncation metadata returned correctly
+- ✅ MongoDB role-based filtering operational (buildRoleFilter function)
+
+**Outstanding Issues**:
+
+**Field Name Mismatches** (not yet fixed):
+- Spec expects: `status` field (values: "open", "won", "lost")
+- Actual schema: `stage` field (values: "CLOSED_WON", "PROPOSAL", "NEGOTIATION", "DISCOVERY", "QUALIFICATION")
+- Spec expects: `customer_name` field (direct string)
+- Actual schema: `customer_id` field (ObjectId requiring JOIN to `customers` collection)
+
+These field mismatches don't prevent basic functionality but:
+- Status filtering won't work (filter uses wrong field name)
+- Customer name won't display (needs aggregation pipeline to JOIN)
+- Delete confirmation message will be incomplete
+
+**Key Learnings**:
+
+1. **Each Data Source Has Unique Mismatch Patterns**:
+   - PostgreSQL: Schema prefixes, column names, table names (Lessons 1-4)
+   - MongoDB: Database names, collection names, field names (Lesson 5)
+   - Elasticsearch: Index names, field mappings (expected in Lesson 6)
+   - Each requires specific validation approach
+
+2. **NoSQL "Fails Silently" vs SQL "Fails Loudly"**:
+   - PostgreSQL throws errors for wrong table/column names
+   - MongoDB returns empty results for wrong database/collection
+   - Silent failures harder to debug - need manual inspection
+   - Health checks insufficient (connection ≠ correct database)
+
+3. **Environment Variables Are Critical**:
+   - Database name in docker-compose must match sample data script
+   - Unlike PostgreSQL where schema is in SQL file, MongoDB DB name is in JavaScript
+   - Mismatch between config and data script = silent failure
+   - Must validate env vars against sample data scripts
+
+4. **Collection Names vs Table Names**:
+   - MongoDB collections more flexible than SQL tables (no schema enforcement)
+   - Can query non-existent collection without error
+   - Makes mismatches harder to catch in testing
+   - Need to list actual collections before implementing queries
+
+5. **Progressive Discovery Pattern Continues**:
+   - Lesson 1-3: PostgreSQL basics (schema, columns, SET LOCAL)
+   - Lesson 4: PostgreSQL advanced (table names, semantic mismatches)
+   - Lesson 5: MongoDB basics (database, collection names)
+   - Lesson 6 expected: Elasticsearch (index names, field mappings)
+   - Each data source reveals similar but data-source-specific issues
+
+**Recommendations**:
+
+1. **MongoDB Validation Checklist**:
+   ```markdown
+   Before implementing MongoDB-backed MCP server:
+   - [ ] List all databases: `db.getMongo().getDBNames()`
+   - [ ] Verify target database exists and has data
+   - [ ] List all collections: `db.getCollectionNames()`
+   - [ ] Inspect document schema: `db.collection.findOne()`
+   - [ ] Verify field names match spec
+   - [ ] Check for nested documents requiring aggregation
+   - [ ] Test with actual sample data before deployment
+   ```
+
+2. **Environment Variable Validation**:
+   - Document database/collection names in spec
+   - Add validation script that checks env vars against sample data
+   - Health check should verify not just connection but also data presence
+   - Example: `db.collection.countDocuments() > 0`
+
+3. **Sample Data Synchronization**:
+   - Sample data script should document target database name clearly
+   - Consider using env vars in sample data scripts too
+   - Add header comments to JS scripts with database expectations
+   - Example: `// TARGET DATABASE: tamshai_sales`
+
+4. **Field Name Documentation**:
+   - Create schema reference document for each MongoDB collection
+   - Document actual field names vs spec assumptions
+   - Highlight fields requiring aggregation (JOINs)
+   - Mark read-only vs writable fields
+
+**Follow-Up Actions**:
+- [x] Fix database name in docker-compose.yml (Commit 7766ee0)
+- [x] Fix collection name references in Sales server (Commit 7766ee0)
+- [x] Test list_opportunities with LIMIT+1 (Commit 7766ee0)
+- [ ] Fix field name mismatches (stage vs status, customer_id vs customer_name)
+- [ ] Add aggregation pipeline for customer name lookup
+- [ ] Test delete_opportunity with confirmation flow
+- [ ] Test get_customer tool
+- [ ] Create MongoDB schema reference documentation
+
+**Status**: ✅ PARTIALLY RESOLVED - Database/collection names fixed, field names deferred (Dec 9, 2025, Commit 7766ee0)
+
+**Comparison with Lesson 4**:
+
+| Aspect | Lesson 4 (Finance/PostgreSQL) | Lesson 5 (Sales/MongoDB) |
+|--------|-------------------------------|-------------------------|
+| Database | PostgreSQL | MongoDB |
+| Issue Type | Table name mismatch | Database + collection mismatch |
+| Error Behavior | Loud (relation does not exist) | Silent (empty results) |
+| Discovery Method | Error message | Manual inspection |
+| Fix Complexity | Adapt or mark NOT_IMPLEMENTED | Update config + code |
+| Field Issues | Column names wrong | Field names + nesting |
+| Impact | 4/5 tools broken | 3/3 tools returned no data |
+
+Both lessons confirm: **Spec must be written against ACTUAL sample data, not idealized schema**.
+
+---
+
 ## Phase 4: Desktop Client
 
 *To be filled in during development*
