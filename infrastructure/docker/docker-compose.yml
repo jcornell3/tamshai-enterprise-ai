@@ -204,7 +204,7 @@ services:
       PORT: 3103
       # v1.4: MongoDB connection
       MONGODB_URI: mongodb://tamshai:tamshai_password@mongodb:27017
-      MONGODB_DB: tamshai_crm
+      MONGODB_DB: tamshai_sales
       # v1.4: Redis for confirmations
       REDIS_HOST: redis
       REDIS_PORT: 6379
