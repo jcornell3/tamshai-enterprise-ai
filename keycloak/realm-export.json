@@ -82,7 +82,12 @@
         "description": "Executive role - read access to all departments",
         "composite": true,
         "composites": {
-          "realm": ["hr-read", "finance-read", "sales-read", "support-read"]
+          "realm": [
+            "hr-read",
+            "finance-read",
+            "sales-read",
+            "support-read"
+          ]
         }
       }
     ]
@@ -91,27 +96,41 @@
     {
       "name": "HR-Department",
       "path": "/HR-Department",
-      "realmRoles": ["hr-read", "hr-write"]
+      "realmRoles": [
+        "hr-read",
+        "hr-write"
+      ]
     },
     {
       "name": "Finance-Team",
       "path": "/Finance-Team",
-      "realmRoles": ["finance-read", "finance-write"]
+      "realmRoles": [
+        "finance-read",
+        "finance-write"
+      ]
     },
     {
       "name": "Sales-Team",
       "path": "/Sales-Team",
-      "realmRoles": ["sales-read"]
+      "realmRoles": [
+        "sales-read"
+      ]
     },
     {
       "name": "Sales-Managers",
       "path": "/Sales-Managers",
-      "realmRoles": ["sales-read", "sales-write", "manager"]
+      "realmRoles": [
+        "sales-read",
+        "sales-write",
+        "manager"
+      ]
     },
     {
       "name": "Support-Team",
       "path": "/Support-Team",
-      "realmRoles": ["support-read"]
+      "realmRoles": [
+        "support-read"
+      ]
     },
     {
       "name": "Engineering-Team",
@@ -121,7 +140,9 @@
     {
       "name": "Engineering-Managers",
       "path": "/Engineering-Managers",
-      "realmRoles": ["manager"]
+      "realmRoles": [
+        "manager"
+      ]
     },
     {
       "name": "IT-Team",
@@ -131,12 +152,17 @@
     {
       "name": "Managers",
       "path": "/Managers",
-      "realmRoles": ["manager"]
+      "realmRoles": [
+        "manager"
+      ]
     },
     {
       "name": "C-Suite",
       "path": "/C-Suite",
-      "realmRoles": ["executive", "manager"]
+      "realmRoles": [
+        "executive",
+        "manager"
+      ]
     }
   ],
   "users": [
@@ -147,10 +173,29 @@
       "lastName": "Chen",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/HR-Department", "/Managers"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Human Resources"], "employeeId": ["EMP010"], "title": ["VP of Human Resources"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/HR-Department",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Human Resources"
+        ],
+        "employeeId": [
+          "EMP010"
+        ],
+        "title": [
+          "VP of Human Resources"
+        ]
+      }
     },
     {
       "username": "bob.martinez",
@@ -159,10 +204,29 @@
       "lastName": "Martinez",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/Finance-Team", "/Managers"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Finance"], "employeeId": ["EMP020"], "title": ["Finance Director"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Finance-Team",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Finance"
+        ],
+        "employeeId": [
+          "EMP020"
+        ],
+        "title": [
+          "Finance Director"
+        ]
+      }
     },
     {
       "username": "carol.johnson",
@@ -171,10 +235,28 @@
       "lastName": "Johnson",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/Sales-Managers"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Sales"], "employeeId": ["EMP030"], "title": ["VP of Sales"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Sales-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Sales"
+        ],
+        "employeeId": [
+          "EMP030"
+        ],
+        "title": [
+          "VP of Sales"
+        ]
+      }
     },
     {
       "username": "dan.williams",
@@ -183,10 +265,29 @@
       "lastName": "Williams",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/Support-Team", "/Managers"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Customer Support"], "employeeId": ["EMP040"], "title": ["Support Director"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Support-Team",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Customer Support"
+        ],
+        "employeeId": [
+          "EMP040"
+        ],
+        "title": [
+          "Support Director"
+        ]
+      }
     },
     {
       "username": "eve.thompson",
@@ -195,10 +296,28 @@
       "lastName": "Thompson",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/C-Suite"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Executive"], "employeeId": ["EMP001"], "title": ["CEO"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/C-Suite"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Executive"
+        ],
+        "employeeId": [
+          "EMP001"
+        ],
+        "title": [
+          "CEO"
+        ]
+      }
     },
     {
       "username": "frank.davis",
@@ -207,10 +326,28 @@
       "lastName": "Davis",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/IT-Team"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["IT"], "employeeId": ["EMP061"], "title": ["Intern"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/IT-Team"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "IT"
+        ],
+        "employeeId": [
+          "EMP061"
+        ],
+        "title": [
+          "Intern"
+        ]
+      }
     },
     {
       "username": "ryan.garcia",
@@ -219,10 +356,28 @@
       "lastName": "Garcia",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/Sales-Managers"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Sales"], "employeeId": ["EMP031"], "title": ["Sales Manager"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Sales-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Sales"
+        ],
+        "employeeId": [
+          "EMP031"
+        ],
+        "title": [
+          "Sales Manager"
+        ]
+      }
     },
     {
       "username": "nina.patel",
@@ -231,10 +386,28 @@
       "lastName": "Patel",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/Engineering-Managers"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Engineering"], "employeeId": ["EMP051"], "title": ["Engineering Manager"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Engineering-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Engineering"
+        ],
+        "employeeId": [
+          "EMP051"
+        ],
+        "title": [
+          "Engineering Manager"
+        ]
+      }
     },
     {
       "username": "marcus.johnson",
@@ -243,10 +416,28 @@
       "lastName": "Johnson",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "password123", "temporary": false}],
-      "groups": ["/Engineering-Team"],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {"department": ["Engineering"], "employeeId": ["EMP052"], "title": ["Software Engineer"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Engineering-Team"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Engineering"
+        ],
+        "employeeId": [
+          "EMP052"
+        ],
+        "title": [
+          "Software Engineer"
+        ]
+      }
     }
   ],
   "clients": [
@@ -260,10 +451,22 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:3100/callback", "tamshai-ai://callback"],
-      "webOrigins": ["http://localhost:3100"],
-      "attributes": {"pkce.code.challenge.method": "S256"},
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "redirectUris": [
+        "http://localhost:3100/callback",
+        "tamshai-ai://callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3100"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     },
     {
       "clientId": "ai-mobile",
@@ -275,9 +478,19 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "redirectUris": ["com.tamshai.ai://callback", "com.tamshai.ai.dev://callback"],
-      "attributes": {"pkce.code.challenge.method": "S256"},
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "redirectUris": [
+        "com.tamshai.ai://callback",
+        "com.tamshai.ai.dev://callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     },
     {
       "clientId": "mcp-gateway",
@@ -286,11 +499,16 @@
       "enabled": true,
       "publicClient": false,
       "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
+      "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "protocol": "openid-connect",
       "secret": "mcp-gateway-secret",
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     },
     {
       "clientId": "hr-app",
@@ -302,10 +520,22 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:4001/callback", "http://localhost:4001/*"],
-      "webOrigins": ["http://localhost:4001"],
-      "attributes": {"pkce.code.challenge.method": "S256"},
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "redirectUris": [
+        "http://localhost:4001/callback",
+        "http://localhost:4001/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4001"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     },
     {
       "clientId": "finance-app",
@@ -317,10 +547,22 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:4002/callback", "http://localhost:4002/*"],
-      "webOrigins": ["http://localhost:4002"],
-      "attributes": {"pkce.code.challenge.method": "S256"},
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "redirectUris": [
+        "http://localhost:4002/callback",
+        "http://localhost:4002/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4002"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     },
     {
       "clientId": "sales-app",
@@ -332,10 +574,22 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:4003/callback", "http://localhost:4003/*"],
-      "webOrigins": ["http://localhost:4003"],
-      "attributes": {"pkce.code.challenge.method": "S256"},
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "redirectUris": [
+        "http://localhost:4003/callback",
+        "http://localhost:4003/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4003"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     },
     {
       "clientId": "support-app",
@@ -347,10 +601,22 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:4004/callback", "http://localhost:4004/*"],
-      "webOrigins": ["http://localhost:4004"],
-      "attributes": {"pkce.code.challenge.method": "S256"},
-      "defaultClientScopes": ["openid", "profile", "email", "roles"]
+      "redirectUris": [
+        "http://localhost:4004/callback",
+        "http://localhost:4004/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4004"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     }
   ],
   "clientScopes": [
@@ -358,7 +624,10 @@
       "name": "roles",
       "description": "OpenID Connect scope for user roles",
       "protocol": "openid-connect",
-      "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true"},
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
       "protocolMappers": [
         {
           "name": "realm roles",
@@ -391,8 +660,22 @@
     }
   ],
   "requiredActions": [
-    {"alias": "CONFIGURE_TOTP", "name": "Configure OTP", "providerId": "CONFIGURE_TOTP", "enabled": true, "defaultAction": true, "priority": 10},
-    {"alias": "CONFIGURE_RECOVERY_AUTHN_CODES", "name": "Recovery Authentication Codes", "providerId": "CONFIGURE_RECOVERY_AUTHN_CODES", "enabled": true, "defaultAction": true, "priority": 20}
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 10
+    },
+    {
+      "alias": "CONFIGURE_RECOVERY_AUTHN_CODES",
+      "name": "Recovery Authentication Codes",
+      "providerId": "CONFIGURE_RECOVERY_AUTHN_CODES",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 20
+    }
   ],
   "authenticationFlows": [
     {

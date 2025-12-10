@@ -62,7 +62,7 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
     volumes:
-      - ../keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ../../keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
       - ../keycloak/themes/tamshai:/opt/keycloak/themes/tamshai:ro
     ports:
       - "8180:8080"
@@ -115,8 +115,10 @@ services:
       NODE_ENV: development
       PORT: 3100
       # v1.4: JWT validation
-      KEYCLOAK_ISSUER: http://keycloak:8080/realms/tamshai
-      JWKS_URI: http://keycloak:8080/realms/tamshai/protocol/openid-connect/certs
+      KEYCLOAK_URL: http://localhost:8180
+      KEYCLOAK_ISSUER: http://localhost:8180/realms/tamshai-corp
+      JWKS_URI: http://keycloak:8080/realms/tamshai-corp/protocol/openid-connect/certs
+      KEYCLOAK_REALM: tamshai-corp
       # v1.4: Claude API
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
       # v1.4: Redis for confirmations

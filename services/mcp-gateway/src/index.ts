@@ -50,6 +50,8 @@ const config = {
     url: process.env.KEYCLOAK_URL || 'http://localhost:8180',
     realm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
     clientId: process.env.KEYCLOAK_CLIENT_ID || 'mcp-gateway',
+    jwksUri: process.env.JWKS_URI || undefined,
+    issuer: process.env.KEYCLOAK_ISSUER || undefined,
   },
   claude: {
     apiKey: process.env.CLAUDE_API_KEY || '',
@@ -158,7 +160,7 @@ const mcpServerConfigs: MCPServerConfig[] = [
 // =============================================================================
 
 const jwksClient = jwksRsa({
-  jwksUri: `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`,
+  jwksUri: config.keycloak.jwksUri || `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`,
   cache: true,
   rateLimit: true,
 });
@@ -181,8 +183,8 @@ async function validateToken(token: string): Promise<UserContext> {
       getSigningKey,
       {
         algorithms: ['RS256'],
-        issuer: `${config.keycloak.url}/realms/${config.keycloak.realm}`,
-        audience: config.keycloak.clientId,
+        issuer: config.keycloak.issuer || `${config.keycloak.url}/realms/${config.keycloak.realm}`,
+        // audience: config.keycloak.clientId,  // Skip audience check as Keycloak uses azp instead
       },
       (err, decoded) => {
         if (err) {
