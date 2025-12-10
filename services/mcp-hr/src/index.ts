@@ -82,7 +82,8 @@ app.get('/health', async (req: Request, res: Response) => {
 /**
  * Main query endpoint called by MCP Gateway
  *
- * Extracts user context from headers and routes to appropriate tool.
+ * Analyzes the natural language query and routes to appropriate tool.
+ * This enables the Gateway to pass queries directly without tool invocation.
  */
 app.post('/query', async (req: Request, res: Response) => {
   try {
@@ -107,19 +108,55 @@ app.post('/query', async (req: Request, res: Response) => {
     }
 
     logger.info('Processing query', {
-      query: query.substring(0, 100),
+      query: query?.substring(0, 100),
       userId: userContext.userId,
       roles: userContext.roles,
     });
 
-    // For now, return a simple response indicating the tools are available
-    // The Gateway will call specific tools based on Claude's tool use
-    res.json({
-      status: 'success',
-      message: 'MCP HR Server ready',
-      availableTools: ['get_employee', 'list_employees', 'delete_employee'],
-      userRoles: userContext.roles,
-    });
+    // Analyze the query to determine which tool to invoke
+    const queryLower = (query || '').toLowerCase();
+
+    // Check for employee listing queries
+    const isListQuery = queryLower.includes('list') ||
+      queryLower.includes('all employees') ||
+      queryLower.includes('show employees') ||
+      queryLower.includes('employee list') ||
+      queryLower.includes('employees') ||
+      queryLower.includes('who works') ||
+      queryLower.includes('staff');
+
+    // Check for specific employee queries (ID or name)
+    const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const hasEmployeeId = uuidPattern.test(query || '');
+
+    // Extract filter keywords
+    const departmentMatch = queryLower.match(/(?:in|from|department)\s+(\w+)/);
+    const locationMatch = queryLower.match(/(?:in|at|location)\s+([^,]+)/);
+
+    let result: MCPToolResponse;
+
+    if (hasEmployeeId) {
+      // Get specific employee by ID
+      const employeeId = query.match(uuidPattern)?.[0];
+      result = await getEmployee({ employeeId: employeeId! }, userContext);
+    } else if (isListQuery) {
+      // List employees with optional filters
+      const input: any = { limit: 50 };
+
+      if (departmentMatch) {
+        input.department = departmentMatch[1];
+      }
+      if (locationMatch) {
+        input.location = locationMatch[1].trim();
+      }
+
+      result = await listEmployees(input, userContext);
+    } else {
+      // Default: Return list of employees to provide context
+      result = await listEmployees({ limit: 50 }, userContext);
+    }
+
+    res.json(result);
   } catch (error) {
     logger.error('Query error:', error);
     res.status(500).json({
