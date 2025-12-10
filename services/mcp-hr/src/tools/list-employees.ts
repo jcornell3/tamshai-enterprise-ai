@@ -1,8 +1,15 @@
 /**
- * List Employees Tool (v1.4 with Truncation Detection)
+ * List Employees Tool (v1.4 with Cursor-Based Pagination)
  *
- * Lists employees with optional filters, implementing LIMIT+1 pattern
- * to detect when results are truncated (Section 5.3, Article III.2).
+ * Lists employees with optional filters, implementing cursor-based pagination
+ * to allow complete data retrieval across multiple API calls while maintaining
+ * token efficiency per request (Section 5.3, Article III.2).
+ *
+ * Pagination Strategy:
+ * - Each request returns up to `limit` records (default 50)
+ * - If more records exist, response includes `nextCursor`
+ * - Client passes cursor to get next page
+ * - Cursor encodes last record's sort key for efficient keyset pagination
  */
 
 import { z } from 'zod';
@@ -10,7 +17,7 @@ import { queryWithRLS, UserContext } from '../database/connection';
 import {
   MCPToolResponse,
   createSuccessResponse,
-  TruncationMetadata,
+  PaginationMetadata,
 } from '../types/response';
 import {
   handleDatabaseError,
@@ -20,6 +27,35 @@ import {
 import { Employee } from './get-employee';
 
 /**
+ * Cursor structure for keyset pagination
+ * Encoded as base64 JSON for opaque transport
+ */
+interface PaginationCursor {
+  lastName: string;
+  firstName: string;
+  id: string;
+}
+
+/**
+ * Encode cursor for client transport
+ */
+function encodeCursor(cursor: PaginationCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64');
+}
+
+/**
+ * Decode cursor from client request
+ */
+function decodeCursor(encoded: string): PaginationCursor | null {
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    return JSON.parse(decoded) as PaginationCursor;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Input schema for list_employees tool
  */
 export const ListEmployeesInputSchema = z.object({
@@ -27,19 +63,20 @@ export const ListEmployeesInputSchema = z.object({
   jobTitle: z.string().optional(),
   managerId: z.string().uuid().optional(),
   location: z.string().optional(),
-  limit: z.number().int().min(1).max(50).default(50),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(), // Base64-encoded pagination cursor
 });
 
 export type ListEmployeesInput = z.infer<typeof ListEmployeesInputSchema>;
 
 /**
- * List employees with filters and truncation detection
+ * List employees with filters and cursor-based pagination
  *
- * v1.4 Feature: LIMIT+1 query pattern (Section 5.3)
- * - Queries for limit + 1 records
- * - If we get more than limit, results are truncated
- * - Returns metadata.truncated = true with warning message
- * - Enforces Article III.2: 50-record maximum
+ * v1.4 Feature: Cursor-based pagination (Section 5.3)
+ * - Queries for limit + 1 records to detect if more exist
+ * - Returns nextCursor if more records are available
+ * - Client can request subsequent pages using the cursor
+ * - Enables complete data retrieval while maintaining token efficiency
  *
  * RLS automatically enforces data access based on roles.
  */
@@ -50,21 +87,22 @@ export async function listEmployees(
   return withErrorHandling('list_employees', async () => {
     // Validate input
     const validated = ListEmployeesInputSchema.parse(input);
-    const { department, jobTitle, managerId, location, limit } = validated;
+    const { department, jobTitle, managerId, location, limit, cursor } = validated;
+
+    // Decode cursor if provided
+    const cursorData = cursor ? decodeCursor(cursor) : null;
 
     // Build dynamic WHERE clauses (using actual schema columns)
-    const whereClauses: string[] = ["e.status = 'ACTIVE'"];  // Actual column: status (not employment_status)
+    const whereClauses: string[] = ["e.status = 'ACTIVE'"];
     const values: any[] = [];
     let paramIndex = 1;
 
     if (department) {
-      // department filter accepts department name, so JOIN with departments table
       whereClauses.push(`d.name ILIKE $${paramIndex++}`);
       values.push(`%${department}%`);
     }
 
     if (jobTitle) {
-      // Actual column: title (not job_title)
       whereClauses.push(`e.title ILIKE $${paramIndex++}`);
       values.push(`%${jobTitle}%`);
     }
@@ -79,13 +117,23 @@ export async function listEmployees(
       values.push(`%${location}%`);
     }
 
+    // Cursor-based pagination: add WHERE clause to start after cursor position
+    if (cursorData) {
+      whereClauses.push(`(
+        (e.last_name > $${paramIndex}) OR
+        (e.last_name = $${paramIndex} AND e.first_name > $${paramIndex + 1}) OR
+        (e.last_name = $${paramIndex} AND e.first_name = $${paramIndex + 1} AND e.id > $${paramIndex + 2})
+      )`);
+      values.push(cursorData.lastName, cursorData.firstName, cursorData.id);
+      paramIndex += 3;
+    }
+
     const whereClause = whereClauses.join(' AND ');
 
     try {
-      // v1.4: Query with LIMIT + 1 to detect truncation
+      // Query with LIMIT + 1 to detect if more records exist
       const queryLimit = limit + 1;
 
-      // Build the full SQL query string
       const sqlQuery = `SELECT
   e.id,
   e.first_name,
@@ -110,7 +158,7 @@ FROM hr.employees e
 LEFT JOIN hr.employees m ON e.manager_id = m.id
 LEFT JOIN hr.departments d ON e.department_id = d.id
 WHERE ${whereClause}
-ORDER BY e.last_name, e.first_name
+ORDER BY e.last_name, e.first_name, e.id
 LIMIT $${paramIndex}`;
 
       const result = await queryWithRLS<Employee>(
@@ -119,31 +167,31 @@ LIMIT $${paramIndex}`;
         [...values, queryLimit]
       );
 
-      // v1.4: Check if results are truncated
-      const isTruncated = result.rowCount! > limit;
-      const employees = isTruncated
-        ? result.rows.slice(0, limit)  // Return only requested limit
+      // Check if more records exist
+      const hasMore = result.rowCount! > limit;
+      const employees = hasMore
+        ? result.rows.slice(0, limit)
         : result.rows;
 
-      // v1.4: Build truncation metadata if needed
-      let metadata: TruncationMetadata | undefined;
+      // Build pagination metadata
+      let metadata: PaginationMetadata | undefined;
 
-      if (isTruncated) {
-        // Build filter description for warning message
-        const filters: string[] = [];
-        if (department) filters.push(`department="${department}"`);
-        if (jobTitle) filters.push(`job title containing "${jobTitle}"`);
-        if (managerId) filters.push(`manager ID "${managerId}"`);
-        if (location) filters.push(`location containing "${location}"`);
-
-        const filterDesc = filters.length > 0
-          ? ` with filters: ${filters.join(', ')}`
-          : '';
+      if (hasMore || cursorData) {
+        // Get the last record to build the next cursor
+        const lastEmployee = employees[employees.length - 1];
 
         metadata = {
-          truncated: true,
+          hasMore,
           returnedCount: employees.length,
-          warning: `⚠️ Showing ${employees.length} of 50+ employees${filterDesc}. Results are incomplete. Please refine your query with more specific filters (e.g., department, job title, location, or manager ID).`,
+          ...(hasMore && lastEmployee && {
+            nextCursor: encodeCursor({
+              lastName: lastEmployee.last_name,
+              firstName: lastEmployee.first_name,
+              id: lastEmployee.id,
+            }),
+            totalEstimate: `${limit}+`,
+            hint: `To see more employees, say "show next page" or "get more employees". You can also use filters like department, job title, or location to narrow results.`,
+          }),
         };
       }
 

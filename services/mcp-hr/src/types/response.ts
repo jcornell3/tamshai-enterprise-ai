@@ -6,7 +6,25 @@
  */
 
 /**
+ * Pagination metadata for cursor-based navigation
+ * Enables complete data retrieval across multiple API calls
+ */
+export interface PaginationMetadata {
+  /** Whether more records exist beyond this page */
+  hasMore: boolean;
+  /** Cursor to fetch next page (base64-encoded) */
+  nextCursor?: string;
+  /** Number of records in this response */
+  returnedCount: number;
+  /** Estimated total records (e.g., "100+" if unknown exact count) */
+  totalEstimate?: string;
+  /** AI-friendly hint for requesting more data */
+  hint?: string;
+}
+
+/**
  * Metadata for truncated result sets (Section 5.3)
+ * @deprecated Use PaginationMetadata instead - retained for backwards compatibility
  */
 export interface TruncationMetadata {
   truncated: boolean;
@@ -16,12 +34,12 @@ export interface TruncationMetadata {
 }
 
 /**
- * Success response with optional truncation metadata
+ * Success response with optional pagination metadata
  */
 export interface MCPSuccessResponse<T = unknown> {
   status: 'success';
   data: T;
-  metadata?: TruncationMetadata;
+  metadata?: PaginationMetadata;
 }
 
 /**
@@ -60,11 +78,11 @@ export type MCPToolResponse<T = unknown> =
   | MCPPendingConfirmationResponse;
 
 /**
- * Helper to create a success response
+ * Helper to create a success response with pagination
  */
 export function createSuccessResponse<T>(
   data: T,
-  metadata?: TruncationMetadata
+  metadata?: PaginationMetadata
 ): MCPSuccessResponse<T> {
   return {
     status: 'success',

@@ -83,11 +83,11 @@ app.get('/health', async (req: Request, res: Response) => {
  * Main query endpoint called by MCP Gateway
  *
  * Analyzes the natural language query and routes to appropriate tool.
- * This enables the Gateway to pass queries directly without tool invocation.
+ * Supports cursor-based pagination for complete data retrieval.
  */
 app.post('/query', async (req: Request, res: Response) => {
   try {
-    const { query, userContext: bodyUserContext } = req.body;
+    const { query, userContext: bodyUserContext, cursor } = req.body;
 
     // Build user context from request
     const userContext: UserContext = bodyUserContext || {
@@ -111,10 +111,19 @@ app.post('/query', async (req: Request, res: Response) => {
       query: query?.substring(0, 100),
       userId: userContext.userId,
       roles: userContext.roles,
+      hasCursor: !!cursor,
     });
 
     // Analyze the query to determine which tool to invoke
     const queryLower = (query || '').toLowerCase();
+
+    // Check for pagination requests (next page, more, continue)
+    const isPaginationRequest = queryLower.includes('next page') ||
+      queryLower.includes('more employees') ||
+      queryLower.includes('show more') ||
+      queryLower.includes('continue') ||
+      queryLower.includes('next batch') ||
+      !!cursor;  // If cursor is provided, it's a pagination request
 
     // Check for employee listing queries
     const isListQuery = queryLower.includes('list') ||
@@ -135,13 +144,18 @@ app.post('/query', async (req: Request, res: Response) => {
 
     let result: MCPToolResponse;
 
-    if (hasEmployeeId) {
+    if (hasEmployeeId && !isPaginationRequest) {
       // Get specific employee by ID
       const employeeId = query.match(uuidPattern)?.[0];
       result = await getEmployee({ employeeId: employeeId! }, userContext);
-    } else if (isListQuery) {
-      // List employees with optional filters
+    } else if (isListQuery || isPaginationRequest) {
+      // List employees with optional filters and pagination
       const input: any = { limit: 50 };
+
+      // Pass cursor for pagination
+      if (cursor) {
+        input.cursor = cursor;
+      }
 
       if (departmentMatch) {
         input.department = departmentMatch[1];

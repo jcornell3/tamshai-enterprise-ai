@@ -229,7 +229,8 @@ function getDeniedMCPServers(userRoles: string[]): MCPServerConfig[] {
 async function queryMCPServer(
   server: MCPServerConfig,
   query: string,
-  userContext: UserContext
+  userContext: UserContext,
+  cursor?: string  // Pagination cursor for subsequent pages
 ): Promise<{ server: string; data: unknown; error?: string }> {
   try {
     const response = await axios.post(
@@ -241,6 +242,7 @@ async function queryMCPServer(
           username: userContext.username,
           roles: userContext.roles,
         },
+        ...(cursor && { cursor }),  // Include cursor if provided
       },
       {
         timeout: 30000,
@@ -503,6 +505,7 @@ app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
   const requestId = req.headers['x-request-id'] as string;
   const userContext: UserContext = (req as any).userContext;
   const query = req.query.q as string;
+  const cursor = req.query.cursor as string | undefined;  // Pagination cursor
 
   if (!query || typeof query !== 'string') {
     res.status(400).json({ error: 'Query parameter "q" is required' });
@@ -513,6 +516,7 @@ app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
     requestId,
     query: query.substring(0, 100),
     roles: userContext.roles,
+    hasCursor: !!cursor,
   });
 
   // Set headers for SSE
@@ -525,17 +529,28 @@ app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
     // Determine accessible MCP servers
     const accessibleServers = getAccessibleMCPServers(userContext.roles);
 
-    // Query all accessible MCP servers in parallel
+    // Query all accessible MCP servers in parallel (with cursor for pagination)
     const mcpPromises = accessibleServers.map((server) =>
-      queryMCPServer(server, query, userContext)
+      queryMCPServer(server, query, userContext, cursor)
     );
     const mcpResults = await Promise.all(mcpPromises);
 
-    // v1.4: Check for truncation warnings and pending confirmations
-    const hasTruncation = mcpResults.some((result) => {
+    // v1.4: Check for pagination metadata and pending confirmations
+    const paginationInfo: { server: string; hasMore: boolean; nextCursor?: string; hint?: string }[] = [];
+
+    mcpResults.forEach((result) => {
       const mcpResponse = result.data as MCPToolResponse;
-      return isSuccessResponse(mcpResponse) && mcpResponse.metadata?.truncated;
+      if (isSuccessResponse(mcpResponse) && mcpResponse.metadata?.hasMore) {
+        paginationInfo.push({
+          server: result.server,
+          hasMore: mcpResponse.metadata.hasMore,
+          nextCursor: mcpResponse.metadata.nextCursor,
+          hint: mcpResponse.metadata.hint,
+        });
+      }
     });
+
+    const hasPagination = paginationInfo.length > 0;
 
     const pendingConfirmations = mcpResults.filter((result) => {
       const mcpResponse = result.data as MCPToolResponse;
@@ -557,10 +572,11 @@ app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
       .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
       .join('\n\n');
 
-    // v1.4: Inject truncation warnings into system prompt
-    let truncationWarning = '';
-    if (hasTruncation) {
-      truncationWarning = `\n\nIMPORTANT: Some of the data results have been truncated (limited to 50 records per Article III.2). You MUST inform the user that the results are incomplete and suggest they refine their query with more specific filters.`;
+    // v1.4: Build pagination instructions for Claude
+    let paginationInstructions = '';
+    if (hasPagination) {
+      const hints = paginationInfo.map(p => p.hint).filter(Boolean);
+      paginationInstructions = `\n\nPAGINATION INFO: More data is available. ${hints.join(' ')} You MUST inform the user that they are viewing a partial result set and can request more data.`;
     }
 
     const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization.
@@ -572,7 +588,7 @@ When answering questions:
 2. If the data doesn't contain information to answer the question, say so
 3. Never make up or infer sensitive information not in the data
 4. Be concise and professional
-5. If asked about data you don't have access to, explain that the user's role doesn't have permission${truncationWarning}
+5. If asked about data you don't have access to, explain that the user's role doesn't have permission${paginationInstructions}
 
 Available data context:
 ${dataContext || 'No relevant data available for this query.'}`;
@@ -595,6 +611,16 @@ ${dataContext || 'No relevant data available for this query.'}`;
       if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
         res.write(`data: ${JSON.stringify({ type: 'text', text: chunk.delta.text })}\n\n`);
       }
+    }
+
+    // Send pagination metadata if more data is available
+    if (hasPagination) {
+      res.write(`data: ${JSON.stringify({
+        type: 'pagination',
+        hasMore: true,
+        cursors: paginationInfo.map(p => ({ server: p.server, cursor: p.nextCursor })),
+        hint: 'More data available. Request next page to continue.',
+      })}\n\n`);
     }
 
     // Send completion signal
