@@ -1624,7 +1624,120 @@ curl -s -N -H "Authorization: Bearer $TOKEN" \
 - `/tmp/add_test_employees.sql`: Test data generation script
 
 **Commits**:
-- (pending): MCP HR /query implementation and documentation
+- d138aac: Truncation warnings implementation and testing
+- 02dd272: Cursor-based pagination implementation
+
+---
+
+### Lesson 9: Cursor-Based Pagination for Complete Data Retrieval (Dec 10, 2025)
+
+**Severity**: ENHANCEMENT - Enables complete data retrieval
+
+**Context**: Article III.2 enforces a 50-record limit per API call for token efficiency. However, users legitimately need access to all their data. The truncation warning message told users to "refine their query" but didn't allow accessing ALL records.
+
+**Problem**: How to allow complete data retrieval while maintaining token efficiency per request?
+
+**Solution: Cursor-Based (Keyset) Pagination**
+
+Unlike offset pagination (`OFFSET 50`), cursor-based pagination uses the last record's sort key to fetch the next page. This is:
+1. **Efficient**: Uses indexed WHERE clause instead of scanning/skipping rows
+2. **Consistent**: Results don't shift if data is added/deleted between requests
+3. **Scalable**: Performance stays constant regardless of page number
+
+**Implementation Pattern**:
+
+```typescript
+// 1. Cursor Type (encoded as base64 for transport)
+interface PaginationCursor {
+  lastName: string;
+  firstName: string;
+  id: string;  // Tie-breaker for identical names
+}
+
+// 2. Encode/Decode Functions
+function encodeCursor(cursor: PaginationCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64');
+}
+
+function decodeCursor(encoded: string): PaginationCursor | null {
+  try {
+    return JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'));
+  } catch { return null; }
+}
+
+// 3. Keyset WHERE Clause (for multi-column sort)
+if (cursorData) {
+  whereClauses.push(`(
+    (e.last_name > $${paramIndex}) OR
+    (e.last_name = $${paramIndex} AND e.first_name > $${paramIndex + 1}) OR
+    (e.last_name = $${paramIndex} AND e.first_name = $${paramIndex + 1} AND e.id > $${paramIndex + 2})
+  )`);
+  values.push(cursorData.lastName, cursorData.firstName, cursorData.id);
+}
+
+// 4. Response Metadata
+{
+  hasMore: true,
+  nextCursor: encodeCursor({ lastName: "Williams", firstName: "Dan", id: "e1000..." }),
+  returnedCount: 50,
+  totalEstimate: "50+",
+  hint: "To see more employees, say 'show next page'..."
+}
+```
+
+**Gateway SSE Event**:
+
+```json
+data: {"type":"pagination","hasMore":true,"cursors":[{"server":"hr","cursor":"base64..."}],"hint":"More data available."}
+```
+
+**API Flow**:
+
+```
+User: "List all employees"
+→ Page 1: 50 employees, cursor for next page
+→ Claude: "Here are 50 employees. More are available - say 'show more'..."
+
+User: "Show more employees"
+→ Gateway passes cursor to MCP server
+→ Page 2: 9 remaining employees, hasMore: false
+→ Claude: "Here are the remaining 9 employees. All data has been shown."
+```
+
+**Test Results**:
+| Page | Records | hasMore | First Employee | Last Employee |
+|------|---------|---------|----------------|---------------|
+| 1 | 50 | true | Adams, Brian | Williams, Dan |
+| 2 | 9 | false | Wilson, James | Zimmerman, Reese |
+| Total | 59 | - | Complete dataset retrieved | ✅ |
+
+**Key Design Decisions**:
+
+1. **Why Cursor over Offset?**
+   - Offset: `SELECT * FROM employees OFFSET 1000` scans 1000 rows to skip them
+   - Cursor: `SELECT * FROM employees WHERE (last_name, first_name, id) > ($1, $2, $3)` uses index directly
+
+2. **Why Multi-Column Cursor?**
+   - Single column (e.g., `id`) requires primary key ordering
+   - Multi-column preserves user-friendly sort (alphabetical by name)
+   - ID as tie-breaker handles duplicate names
+
+3. **Why Base64 Encoding?**
+   - Opaque to client (can't be tampered with easily)
+   - Safe for URL query parameters
+   - Hides internal schema details
+
+**Files Modified**:
+- `services/mcp-hr/src/tools/list-employees.ts`: Cursor pagination logic
+- `services/mcp-hr/src/index.ts`: Accept cursor in /query endpoint
+- `services/mcp-hr/src/types/response.ts`: PaginationMetadata type
+- `services/mcp-gateway/src/index.ts`: Detect hasMore, send pagination SSE event
+- `services/mcp-gateway/src/types/mcp-response.ts`: PaginationMetadata type
+
+**Future Enhancements**:
+- Implement pagination for other MCP servers (Finance, Sales, Support)
+- Consider server-side cursor caching for stateful conversations
+- Add `previousCursor` for backwards navigation
 
 ---
 
@@ -1720,3 +1833,4 @@ curl -s -N -H "Authorization: Bearer $TOKEN" \
 | Dec 9, 2025 | AI Assistant | Added Lessons 1-6: Database schema mismatches, RLS recursion |
 | Dec 10, 2025 | AI Assistant | Added Lesson 7: Keycloak SSO integration (340+ lines) |
 | Dec 10, 2025 | AI Assistant | Added Lesson 8: RLS data loading and truncation testing |
+| Dec 10, 2025 | AI Assistant | Added Lesson 9: Cursor-based pagination for complete data retrieval |
