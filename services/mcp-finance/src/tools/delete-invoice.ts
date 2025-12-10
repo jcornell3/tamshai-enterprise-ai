@@ -70,22 +70,22 @@ export async function deleteInvoice(
     const { invoiceId, reason } = DeleteInvoiceInputSchema.parse(input);
 
     try {
-      // 2. Verify invoice exists and get details
+      // 2. Verify invoice exists and get details (using actual schema columns)
       const invoiceResult = await queryWithRLS(
         userContext,
         `
         SELECT
-          i.invoice_id,
-          i.vendor,
+          i.id,
+          i.vendor_name,
           i.invoice_number,
           i.amount,
           i.currency,
           i.invoice_date,
-          i.department,
+          i.department_code,
           i.status,
           i.description
         FROM finance.invoices i
-        WHERE i.invoice_id = $1
+        WHERE i.id = $1
         `,
         [invoiceId]
       );
@@ -97,7 +97,8 @@ export async function deleteInvoice(
       const invoice = invoiceResult.rows[0];
 
       // 3. Check if invoice is approved (cannot delete approved invoices)
-      if (invoice.status === 'approved' || invoice.status === 'paid') {
+      // Note: Schema uses uppercase status values (PENDING, APPROVED, PAID, CANCELLED)
+      if (invoice.status === 'APPROVED' || invoice.status === 'PAID') {
         return handleCannotDeleteApprovedInvoice(invoiceId);
       }
 
@@ -110,11 +111,11 @@ export async function deleteInvoice(
         userId: userContext.userId,
         timestamp: Date.now(),
         invoiceId,
-        vendor: invoice.vendor,
+        vendor: invoice.vendor_name,  // Actual column: vendor_name
         invoiceNumber: invoice.invoice_number,
         amount: invoice.amount,
         currency: invoice.currency,
-        department: invoice.department,
+        department: invoice.department_code,  // Actual column: department_code
         status: invoice.status,
         reason: reason || 'No reason provided',
       };
@@ -122,10 +123,10 @@ export async function deleteInvoice(
       await storePendingConfirmation(confirmationId, confirmationData, 300);
 
       // 5. Return pending_confirmation response
-      const message = `⚠️ Delete invoice ${invoice.invoice_number} from ${invoice.vendor}?
+      const message = `⚠️ Delete invoice ${invoice.invoice_number} from ${invoice.vendor_name}?
 
 Amount: ${invoice.currency} ${invoice.amount}
-Department: ${invoice.department}
+Department: ${invoice.department_code}
 Status: ${invoice.status}
 ${reason ? `Reason: ${reason}` : ''}
 
@@ -156,14 +157,14 @@ export async function executeDeleteInvoice(
     const invoiceId = confirmationData.invoiceId as string;
 
     try {
-      // Hard delete invoice
+      // Hard delete invoice (using actual schema columns)
       const result = await queryWithRLS(
         userContext,
         `
         DELETE FROM finance.invoices
-        WHERE invoice_id = $1
-          AND status IN ('pending', 'cancelled')
-        RETURNING invoice_id, vendor, invoice_number
+        WHERE id = $1
+          AND status IN ('PENDING', 'CANCELLED')
+        RETURNING id, vendor_name, invoice_number
         `,
         [invoiceId]
       );
@@ -176,8 +177,8 @@ export async function executeDeleteInvoice(
 
       return createSuccessResponse({
         success: true,
-        message: `Invoice ${deleted.invoice_number} from ${deleted.vendor} has been successfully deleted`,
-        invoiceId: deleted.invoice_id,
+        message: `Invoice ${deleted.invoice_number} from ${deleted.vendor_name} has been successfully deleted`,
+        invoiceId: deleted.id,
       });
     } catch (error) {
       return handleDatabaseError(error as Error, 'execute_delete_invoice');
