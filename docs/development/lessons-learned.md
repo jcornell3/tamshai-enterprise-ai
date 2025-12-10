@@ -628,11 +628,11 @@ Given time constraints and v1.4 deployment focus, adapting tools to existing sch
 - [x] Rewrite `get-budget.ts` to use `department_budgets` (Commit ca7d7f5)
 - [x] Mark `approve-budget.ts` as NOT IMPLEMENTED (no approval workflow in v1.3)
 - [x] Mark `get-expense-report.ts` as NOT IMPLEMENTED (no expense tracking in v1.3)
-- [ ] Test `delete-invoice.ts` with actual schema
+- [x] Test `delete-invoice.ts` with actual schema (Commit 04f4125)
 - [ ] Update spec to document actual v1.3 table inventory
 - [ ] Create GitHub issue for missing expense tracking feature (v1.5+)
 
-**Status**: ✅ RESOLVED - Tools adapted to v1.3 schema (Dec 9, 2025, Commit ca7d7f5)
+**Status**: ✅ RESOLVED - Tools adapted and tested (Dec 9, 2025, Commits ca7d7f5, 04f4125)
 
 **Resolution Summary (Commit ca7d7f5)**:
 
@@ -660,16 +660,26 @@ Given time constraints and v1.4 deployment focus, adapting tools to existing sch
    - Returns NOT_IMPLEMENTED error with migration path explanation
    - Future: Requires new tables in v1.5+ (expense_reports, expense_line_items)
 
+4. **delete_invoice.ts** - ✅ FIXED AND TESTED (Commit 04f4125)
+   - Fixed column name mismatches (same as list_invoices)
+   - Updated status values to uppercase (PENDING, APPROVED, PAID, CANCELLED)
+   - Test 1: Confirmation request returned pending_confirmation (✅)
+   - Test 2: Business rule validation - cannot delete APPROVED invoice (✅)
+   - Verified Redis storage of pending confirmation with 5-minute TTL (✅)
+   - All v1.4 features operational: Confirmation flow, RLS, LLM-friendly errors
+
 **Final MCP Finance Tool Status**:
 ```markdown
 | Tool | Status | Table Used | v1.4 Features | Notes |
 |------|--------|------------|---------------|-------|
 | list_invoices | ✅ Working | finance.invoices | Truncation, RLS | Fixed in commit 9b8d6e3 |
 | get_budget | ✅ Working | finance.department_budgets | RLS | Fixed in commit ca7d7f5 |
-| delete_invoice | ⏳ Untested | finance.invoices | Confirmation, RLS | Needs testing |
+| delete_invoice | ✅ Working | finance.invoices | Confirmation, RLS, Errors | Tested in commit 04f4125 |
 | approve_budget | ❌ Not Impl | N/A | - | No approval workflow in v1.3 |
 | get_expense_report | ❌ Not Impl | N/A | - | No expense tracking in v1.3 |
 ```
+
+**Functional Coverage**: 3 out of 5 tools operational (60%)
 
 **Actual Finance Schema Inventory**:
 ```sql
