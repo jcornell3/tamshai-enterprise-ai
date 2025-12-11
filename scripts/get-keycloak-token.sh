@@ -11,7 +11,7 @@
 set -e
 
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180}"
-REALM="${KEYCLOAK_REALM:-tamshai}"
+REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 CLIENT_ID="${KEYCLOAK_CLIENT_ID:-mcp-gateway}"
 CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-[REDACTED-DEV-SECRET]}"
 
@@ -203,7 +203,7 @@ else
     echo "$PAYLOAD" | jq -r '"  Issuer: \(.iss // "unknown")"' >&2
     echo "$PAYLOAD" | jq -r '"  Expires: \(.exp // "unknown") (\((.exp // 0) - (now | floor)) seconds)"' >&2
 
-    ROLES=$(echo "$PAYLOAD" | jq -r '.resource_access["mcp-gateway"].roles // [] | join(", ")')
+    ROLES=$(echo "$PAYLOAD" | jq -r '.realm_access.roles // .resource_access["mcp-gateway"].roles // [] | join(", ")')
     echo "  Roles: $ROLES" >&2
 
     echo "" >&2
