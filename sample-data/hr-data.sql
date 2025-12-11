@@ -320,27 +320,63 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function to check if user A is a manager of user B (direct or indirect)
+-- FIXED: Added SECURITY DEFINER to bypass RLS recursion, depth limit, and proper chain traversal
+-- See docs/development/lessons-learned.md Lesson 6 for details on the original bug
 CREATE OR REPLACE FUNCTION is_manager_of(manager_email VARCHAR, employee_email VARCHAR)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER  -- Run with creator's privileges to avoid RLS recursion
+SET search_path = hr, public  -- Security: set explicit search path
+AS $$
 DECLARE
-    result BOOLEAN;
+    result BOOLEAN := FALSE;
+    manager_id_val UUID;
+    employee_id_val UUID;
 BEGIN
-    WITH RECURSIVE management_chain AS (
-        SELECT id, manager_id FROM hr.employees WHERE work_email = employee_email
+    -- Handle edge cases
+    IF manager_email IS NULL OR employee_email IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    -- A person cannot be their own manager
+    IF manager_email = employee_email THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Get employee IDs first (more efficient)
+    SELECT id INTO employee_id_val FROM hr.employees WHERE work_email = employee_email;
+    SELECT id INTO manager_id_val FROM hr.employees WHERE work_email = manager_email;
+
+    -- If either doesn't exist, return false
+    IF employee_id_val IS NULL OR manager_id_val IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Walk UP the management chain from employee to find manager
+    -- Uses depth limit (20 levels max) to prevent infinite loops
+    WITH RECURSIVE management_chain(current_id, depth) AS (
+        -- Base case: start with the employee's manager
+        SELECT manager_id, 1
+        FROM hr.employees
+        WHERE id = employee_id_val
+          AND manager_id IS NOT NULL
+
         UNION ALL
-        SELECT e.id, e.manager_id 
+
+        -- Recursive case: walk UP to each manager
+        SELECT e.manager_id, mc.depth + 1
         FROM hr.employees e
-        JOIN management_chain mc ON e.id = mc.manager_id
+        JOIN management_chain mc ON e.id = mc.current_id
+        WHERE e.manager_id IS NOT NULL
+          AND mc.depth < 20  -- Prevent deep recursion (20 levels max for any org)
     )
     SELECT EXISTS (
-        SELECT 1 FROM management_chain mc
-        JOIN hr.employees m ON mc.manager_id = m.id
-        WHERE m.work_email = manager_email
+        SELECT 1 FROM management_chain WHERE current_id = manager_id_val
     ) INTO result;
-    
-    RETURN result;
+
+    RETURN COALESCE(result, FALSE);
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- =============================================================================
 -- VIEWS FOR ROLE-BASED ACCESS
