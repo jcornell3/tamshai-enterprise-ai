@@ -16,7 +16,7 @@ import winston from 'winston';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { Client } from '@elastic/elasticsearch';
-import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, TruncationMetadata } from './types/response';
+import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from './types/response';
 import { storePendingConfirmation } from './utils/redis';
 
 dotenv.config();
@@ -62,19 +62,49 @@ app.get('/health', async (req: Request, res: Response) => {
 });
 
 // =============================================================================
-// TOOL: search_tickets (v1.4 with truncation)
+// TOOL: search_tickets (v1.4 with cursor-based pagination)
 // =============================================================================
+
+/**
+ * Cursor structure for Elasticsearch search_after pagination
+ */
+interface SearchCursor {
+  sort: any[]; // Elasticsearch sort values
+}
+
+/**
+ * Encode cursor for client transport
+ */
+function encodeCursor(cursor: SearchCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64');
+}
+
+/**
+ * Decode cursor from client request
+ */
+function decodeCursor(encoded: string): SearchCursor | null {
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    return JSON.parse(decoded) as SearchCursor;
+  } catch {
+    return null;
+  }
+}
 
 const SearchTicketsInputSchema = z.object({
   query: z.string().optional(),
   status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-  limit: z.number().int().min(1).max(50).default(50),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(), // Base64-encoded pagination cursor
 });
 
 async function searchTickets(input: any, userContext: UserContext): Promise<MCPToolResponse<any[]>> {
   try {
-    const { query, status, priority, limit } = SearchTicketsInputSchema.parse(input);
+    const { query, status, priority, limit, cursor } = SearchTicketsInputSchema.parse(input);
+
+    // Decode cursor if provided
+    const cursorData = cursor ? decodeCursor(cursor) : null;
 
     const must: any[] = [];
     if (query) {
@@ -93,38 +123,51 @@ async function searchTickets(input: any, userContext: UserContext): Promise<MCPT
       roleFilter.push({ term: { created_by: userContext.userId } });
     }
 
-    // v1.4: LIMIT+1 pattern
+    // v1.4: LIMIT+1 pattern to detect if more records exist
     const queryLimit = limit + 1;
+
+    const searchBody: any = {
+      query: {
+        bool: {
+          must: must.length > 0 ? must : { match_all: {} },
+          filter: roleFilter,
+        },
+      },
+      size: queryLimit,
+      sort: [{ created_at: 'desc' }, { _id: 'desc' }], // Multi-field sort for stable pagination
+    };
+
+    // Add search_after if cursor provided
+    if (cursorData) {
+      searchBody.search_after = cursorData.sort;
+    }
 
     const result = await esClient.search({
       index: 'support_tickets',
-      body: {
-        query: {
-          bool: {
-            must: must.length > 0 ? must : { match_all: {} },
-            filter: roleFilter,
-          },
-        },
-        size: queryLimit,
-        sort: [{ created_at: 'desc' }],
-      },
+      body: searchBody,
     });
 
     const hits = result.hits.hits;
-    const isTruncated = hits.length > limit;
-    const results = isTruncated ? hits.slice(0, limit) : hits;
+    const hasMore = hits.length > limit;
+    const results = hasMore ? hits.slice(0, limit) : hits;
 
-    let metadata: TruncationMetadata | undefined;
-    if (isTruncated) {
-      const filters: string[] = [];
-      if (query) filters.push(`query="${query}"`);
-      if (status) filters.push(`status="${status}"`);
-      if (priority) filters.push(`priority="${priority}"`);
-      const filterDesc = filters.length > 0 ? ` with filters: ${filters.join(', ')}` : '';
+    // Build pagination metadata
+    let metadata: PaginationMetadata | undefined;
+
+    if (hasMore || cursorData) {
+      // Get the last record's sort values for next cursor
+      const lastHit = results[results.length - 1];
+
       metadata = {
-        truncated: true,
+        hasMore,
         returnedCount: results.length,
-        warning: `⚠️ Showing ${results.length} of 50+ tickets${filterDesc}. Results are incomplete. Please refine your search query.`,
+        ...(hasMore && lastHit && lastHit.sort && {
+          nextCursor: encodeCursor({
+            sort: lastHit.sort as any[],
+          }),
+          totalEstimate: `${limit}+`,
+          hint: `To see more tickets, say "show next page" or "get more tickets". You can also refine your search with filters like status or priority.`,
+        }),
       };
     }
 
@@ -137,18 +180,22 @@ async function searchTickets(input: any, userContext: UserContext): Promise<MCPT
 }
 
 // =============================================================================
-// TOOL: search_knowledge_base (v1.4 with truncation)
+// TOOL: search_knowledge_base (v1.4 with cursor-based pagination)
 // =============================================================================
 
 const SearchKnowledgeBaseInputSchema = z.object({
   query: z.string(),
   category: z.string().optional(),
-  limit: z.number().int().min(1).max(50).default(50),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(), // Base64-encoded pagination cursor
 });
 
 async function searchKnowledgeBase(input: any, userContext: UserContext): Promise<MCPToolResponse<any[]>> {
   try {
-    const { query, category, limit } = SearchKnowledgeBaseInputSchema.parse(input);
+    const { query, category, limit, cursor } = SearchKnowledgeBaseInputSchema.parse(input);
+
+    // Decode cursor if provided
+    const cursorData = cursor ? decodeCursor(cursor) : null;
 
     const must: any[] = [
       { multi_match: { query, fields: ['title^2', 'content', 'tags'] } },
@@ -158,31 +205,50 @@ async function searchKnowledgeBase(input: any, userContext: UserContext): Promis
       must.push({ term: { category } });
     }
 
-    // v1.4: LIMIT+1 pattern
+    // v1.4: LIMIT+1 pattern to detect if more records exist
     const queryLimit = limit + 1;
+
+    const searchBody: any = {
+      query: {
+        bool: {
+          must,
+        },
+      },
+      size: queryLimit,
+      sort: [{ _score: 'desc' }, { _id: 'desc' }], // Sort by relevance, then _id for stable pagination
+    };
+
+    // Add search_after if cursor provided
+    if (cursorData) {
+      searchBody.search_after = cursorData.sort;
+    }
 
     const result = await esClient.search({
       index: 'knowledge_base',
-      body: {
-        query: {
-          bool: {
-            must,
-          },
-        },
-        size: queryLimit,
-      },
+      body: searchBody,
     });
 
     const hits = result.hits.hits;
-    const isTruncated = hits.length > limit;
-    const results = isTruncated ? hits.slice(0, limit) : hits;
+    const hasMore = hits.length > limit;
+    const results = hasMore ? hits.slice(0, limit) : hits;
 
-    let metadata: TruncationMetadata | undefined;
-    if (isTruncated) {
+    // Build pagination metadata
+    let metadata: PaginationMetadata | undefined;
+
+    if (hasMore || cursorData) {
+      // Get the last record's sort values for next cursor
+      const lastHit = results[results.length - 1];
+
       metadata = {
-        truncated: true,
+        hasMore,
         returnedCount: results.length,
-        warning: `⚠️ Showing ${results.length} of 50+ knowledge base articles. Results are incomplete. Please refine your search query.`,
+        ...(hasMore && lastHit && lastHit.sort && {
+          nextCursor: encodeCursor({
+            sort: lastHit.sort as any[],
+          }),
+          totalEstimate: `${limit}+`,
+          hint: `To see more knowledge base articles, say "show next page" or "get more articles". You can also refine your search query for better results.`,
+        }),
       };
     }
 
@@ -286,6 +352,7 @@ async function executeCloseTicket(confirmationData: Record<string, unknown>, use
 // =============================================================================
 
 app.post('/query', async (req: Request, res: Response) => {
+  const { query, cursor } = req.body;
   const userContext: UserContext = req.body.userContext || {
     userId: req.headers['x-user-id'] as string,
     username: req.headers['x-user-username'] as string || 'unknown',
@@ -295,6 +362,59 @@ app.post('/query', async (req: Request, res: Response) => {
 
   if (!userContext.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  logger.info('Processing query', {
+    query: query?.substring(0, 100),
+    userId: userContext.userId,
+    roles: userContext.roles,
+    hasCursor: !!cursor,
+  });
+
+  // Simple query routing based on keywords
+  const queryLower = query?.toLowerCase() || '';
+
+  // Check for pagination requests
+  const isPaginationRequest = queryLower.includes('next page') ||
+    queryLower.includes('more tickets') ||
+    queryLower.includes('more articles') ||
+    queryLower.includes('show more') ||
+    queryLower.includes('continue') ||
+    !!cursor;
+
+  // Check if this is a search tickets query
+  const isSearchTicketsQuery = queryLower.includes('search') ||
+    queryLower.includes('find') ||
+    queryLower.includes('tickets') ||
+    (isPaginationRequest && queryLower.includes('ticket'));
+
+  // Check if this is a knowledge base query
+  const isKnowledgeBaseQuery = queryLower.includes('knowledge') ||
+    queryLower.includes('article') ||
+    queryLower.includes('documentation') ||
+    (isPaginationRequest && queryLower.includes('article'));
+
+  if (isSearchTicketsQuery) {
+    const input: any = { limit: 50 };
+    if (cursor) {
+      input.cursor = cursor;
+    }
+
+    const result = await searchTickets(input, userContext);
+    res.json(result);
+    return;
+  }
+
+  if (isKnowledgeBaseQuery) {
+    // Need a search query for KB
+    const input: any = { query: query || 'help', limit: 50 };
+    if (cursor) {
+      input.cursor = cursor;
+    }
+
+    const result = await searchKnowledgeBase(input, userContext);
+    res.json(result);
     return;
   }
 

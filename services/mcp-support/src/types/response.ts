@@ -2,10 +2,38 @@
  * MCP Tool Response Types (Architecture v1.4)
  */
 
+/**
+ * Pagination metadata for cursor-based navigation
+ * Enables complete data retrieval across multiple API calls
+ */
+export interface PaginationMetadata {
+  /** Whether more records exist beyond this page */
+  hasMore: boolean;
+  /** Cursor to fetch next page (base64-encoded) */
+  nextCursor?: string;
+  /** Number of records in this response */
+  returnedCount: number;
+  /** Estimated total records (e.g., "100+" if unknown exact count) */
+  totalEstimate?: string;
+  /** AI-friendly hint for requesting more data */
+  hint?: string;
+}
+
+/**
+ * Legacy truncation metadata (for backwards compatibility)
+ * @deprecated Use PaginationMetadata instead
+ */
+export interface TruncationMetadata {
+  truncated: boolean;
+  totalCount?: number;
+  returnedCount: number;
+  warning?: string;
+}
+
 export interface MCPSuccessResponse<T = unknown> {
   status: 'success';
   data: T;
-  metadata?: TruncationMetadata;
+  metadata?: PaginationMetadata;
 }
 
 export interface MCPErrorResponse {
@@ -29,15 +57,8 @@ export type MCPToolResponse<T = unknown> =
   | MCPErrorResponse
   | MCPPendingConfirmationResponse;
 
-export interface TruncationMetadata {
-  truncated: boolean;
-  totalCount?: number;
-  returnedCount: number;
-  warning?: string;
-}
-
-export function createSuccessResponse<T>(data: T, metadata?: TruncationMetadata): MCPSuccessResponse<T> {
-  return { status: 'success', data, metadata };
+export function createSuccessResponse<T>(data: T, metadata?: PaginationMetadata): MCPSuccessResponse<T> {
+  return { status: 'success', data, ...(metadata && { metadata }) };
 }
 
 export function createErrorResponse(code: string, message: string, suggestedAction?: string, details?: Record<string, unknown>): MCPErrorResponse {

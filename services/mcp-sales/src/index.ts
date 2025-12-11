@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
 import { UserContext, checkConnection, closeConnection, getCollection, buildRoleFilter } from './database/connection';
-import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, TruncationMetadata } from './types/response';
+import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from './types/response';
 import { handleOpportunityNotFound, handleCustomerNotFound, handleInsufficientPermissions, handleCannotDeleteWonOpportunity, handleDatabaseError, withErrorHandling } from './utils/error-handler';
 import { storePendingConfirmation } from './utils/redis';
 
@@ -52,19 +52,50 @@ app.get('/health', async (req: Request, res: Response) => {
 });
 
 // =============================================================================
-// TOOL: list_opportunities (v1.4 with truncation)
+// TOOL: list_opportunities (v1.4 with cursor-based pagination)
 // =============================================================================
+
+/**
+ * Cursor structure for MongoDB keyset pagination
+ * Encoded as base64 JSON for opaque transport
+ */
+interface PaginationCursor {
+  _id: string; // MongoDB ObjectId as string
+}
+
+/**
+ * Encode cursor for client transport
+ */
+function encodeCursor(cursor: PaginationCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64');
+}
+
+/**
+ * Decode cursor from client request
+ */
+function decodeCursor(encoded: string): PaginationCursor | null {
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    return JSON.parse(decoded) as PaginationCursor;
+  } catch {
+    return null;
+  }
+}
 
 const ListOpportunitiesInputSchema = z.object({
   status: z.enum(['open', 'won', 'lost']).optional(),
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
-  limit: z.number().int().min(1).max(50).default(50),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(), // Base64-encoded pagination cursor
 });
 
 async function listOpportunities(input: any, userContext: UserContext): Promise<MCPToolResponse<any[]>> {
   return withErrorHandling('list_opportunities', async () => {
-    const { status, minValue, maxValue, limit } = ListOpportunitiesInputSchema.parse(input);
+    const { status, minValue, maxValue, limit, cursor } = ListOpportunitiesInputSchema.parse(input);
+
+    // Decode cursor if provided
+    const cursorData = cursor ? decodeCursor(cursor) : null;
 
     // Actual v1.3 collection name is 'deals' not 'opportunities'
     const collection = await getCollection('deals');
@@ -75,24 +106,39 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
     if (minValue !== undefined) filter.value = { ...filter.value, $gte: minValue };
     if (maxValue !== undefined) filter.value = { ...filter.value, $lte: maxValue };
 
-    // v1.4: LIMIT+1 pattern
+    // Cursor-based pagination: add filter to start after cursor position
+    if (cursorData) {
+      filter._id = { $lt: new ObjectId(cursorData._id) };
+    }
+
+    // v1.4: LIMIT+1 pattern to detect if more records exist
     const queryLimit = limit + 1;
-    const opportunities = await collection.find(filter).limit(queryLimit).toArray();
+    const opportunities = await collection
+      .find(filter)
+      .sort({ _id: -1 }) // Sort by _id descending for consistent pagination
+      .limit(queryLimit)
+      .toArray();
 
-    const isTruncated = opportunities.length > limit;
-    const results = isTruncated ? opportunities.slice(0, limit) : opportunities;
+    const hasMore = opportunities.length > limit;
+    const results = hasMore ? opportunities.slice(0, limit) : opportunities;
 
-    let metadata: TruncationMetadata | undefined;
-    if (isTruncated) {
-      const filters: string[] = [];
-      if (status) filters.push(`status="${status}"`);
-      if (minValue !== undefined) filters.push(`min value=${minValue}`);
-      if (maxValue !== undefined) filters.push(`max value=${maxValue}`);
-      const filterDesc = filters.length > 0 ? ` with filters: ${filters.join(', ')}` : '';
+    // Build pagination metadata
+    let metadata: PaginationMetadata | undefined;
+
+    if (hasMore || cursorData) {
+      // Get the last record to build the next cursor
+      const lastOpportunity = results[results.length - 1];
+
       metadata = {
-        truncated: true,
+        hasMore,
         returnedCount: results.length,
-        warning: `⚠️ Showing ${results.length} of 50+ opportunities${filterDesc}. Results are incomplete. Please refine your query with more specific filters.`,
+        ...(hasMore && lastOpportunity && {
+          nextCursor: encodeCursor({
+            _id: lastOpportunity._id.toString(),
+          }),
+          totalEstimate: `${limit}+`,
+          hint: `To see more opportunities, say "show next page" or "get more opportunities". You can also use filters like status or value range to narrow results.`,
+        }),
       };
     }
 
@@ -234,6 +280,7 @@ async function executeDeleteOpportunity(confirmationData: Record<string, unknown
 // =============================================================================
 
 app.post('/query', async (req: Request, res: Response) => {
+  const { query, cursor } = req.body;
   const userContext: UserContext = req.body.userContext || {
     userId: req.headers['x-user-id'] as string,
     username: req.headers['x-user-username'] as string || 'unknown',
@@ -243,6 +290,41 @@ app.post('/query', async (req: Request, res: Response) => {
 
   if (!userContext.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  logger.info('Processing query', {
+    query: query?.substring(0, 100),
+    userId: userContext.userId,
+    roles: userContext.roles,
+    hasCursor: !!cursor,
+  });
+
+  // Simple query routing based on keywords
+  const queryLower = query?.toLowerCase() || '';
+
+  // Check for pagination requests
+  const isPaginationRequest = queryLower.includes('next page') ||
+    queryLower.includes('more opportunities') ||
+    queryLower.includes('show more') ||
+    queryLower.includes('continue') ||
+    !!cursor;
+
+  // Check if this is a list opportunities query
+  const isListQuery = queryLower.includes('list') ||
+    queryLower.includes('show') ||
+    queryLower.includes('opportunities') ||
+    queryLower.includes('deals') ||
+    isPaginationRequest;
+
+  if (isListQuery || isPaginationRequest) {
+    const input: any = { limit: 50 };
+    if (cursor) {
+      input.cursor = cursor;
+    }
+
+    const result = await listOpportunities(input, userContext);
+    res.json(result);
     return;
   }
 
