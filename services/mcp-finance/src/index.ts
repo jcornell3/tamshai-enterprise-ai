@@ -89,10 +89,11 @@ app.get('/health', async (req: Request, res: Response) => {
  * Main query endpoint called by MCP Gateway
  *
  * Extracts user context from headers and routes to appropriate tool.
+ * Supports cursor-based pagination for list operations.
  */
 app.post('/query', async (req: Request, res: Response) => {
   try {
-    const { query, userContext: bodyUserContext } = req.body;
+    const { query, userContext: bodyUserContext, cursor } = req.body;
 
     // Build user context from request
     const userContext: UserContext = bodyUserContext || {
@@ -116,9 +117,37 @@ app.post('/query', async (req: Request, res: Response) => {
       query: query.substring(0, 100),
       userId: userContext.userId,
       roles: userContext.roles,
+      hasCursor: !!cursor,
     });
 
-    // For now, return a simple response indicating the tools are available
+    // Simple query routing based on keywords
+    const queryLower = query.toLowerCase();
+
+    // Check for pagination requests
+    const isPaginationRequest = queryLower.includes('next page') ||
+      queryLower.includes('more invoices') ||
+      queryLower.includes('show more') ||
+      queryLower.includes('continue') ||
+      !!cursor;
+
+    // Check if this is a list invoices query
+    const isListInvoicesQuery = queryLower.includes('list') ||
+      queryLower.includes('show') ||
+      queryLower.includes('invoices') ||
+      isPaginationRequest;
+
+    if (isListInvoicesQuery || isPaginationRequest) {
+      const input: any = { limit: 50 };
+      if (cursor) {
+        input.cursor = cursor;
+      }
+
+      const result = await listInvoices(input, userContext);
+      res.json(result);
+      return;
+    }
+
+    // For other queries, return a simple response indicating the tools are available
     // The Gateway will call specific tools based on Claude's tool use
     res.json({
       status: 'success',
