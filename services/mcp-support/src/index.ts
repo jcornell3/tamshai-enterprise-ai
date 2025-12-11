@@ -134,7 +134,7 @@ async function searchTickets(input: any, userContext: UserContext): Promise<MCPT
         },
       },
       size: queryLimit,
-      sort: [{ created_at: 'desc' }, { _id: 'desc' }], // Multi-field sort for stable pagination
+      sort: [{ created_at: 'desc' }], // Sort by created_at (date field) - no secondary sort needed to avoid fielddata issues
     };
 
     // Add search_after if cursor provided
