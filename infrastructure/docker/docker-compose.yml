@@ -13,6 +13,8 @@
 #   - Web Portal:    4000 (frontend app)
 #   - Web HR:        4001 (frontend app)
 #   - Web Finance:   4002 (frontend app)
+#   - Web Sales:     4003 (frontend app)
+#   - Web Support:   4004 (frontend app)
 #   - PostgreSQL:    5433 (moved from 5432 to avoid local postgres conflicts)
 #   - MongoDB:       27018 (moved from 27017)
 #   - Elasticsearch: 9201 (moved from 9200)
@@ -313,6 +315,56 @@ services:
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
     ports:
       - "4002:80"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - tamshai-network
+
+  web-sales:
+    build:
+      context: ../../clients/web
+      dockerfile: apps/sales/Dockerfile
+    container_name: tamshai-web-sales
+    environment:
+      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_API_GATEWAY_URL: http://kong:8000
+      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+    ports:
+      - "4003:80"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - tamshai-network
+
+  web-support:
+    build:
+      context: ../../clients/web
+      dockerfile: apps/support/Dockerfile
+    container_name: tamshai-web-support
+    environment:
+      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_API_GATEWAY_URL: http://kong:8000
+      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+    ports:
+      - "4004:80"
     depends_on:
       keycloak:
         condition: service_healthy
