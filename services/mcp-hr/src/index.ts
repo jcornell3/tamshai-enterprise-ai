@@ -139,8 +139,10 @@ app.post('/query', async (req: Request, res: Response) => {
     const hasEmployeeId = uuidPattern.test(query || '');
 
     // Extract filter keywords
-    const departmentMatch = queryLower.match(/(?:in|from|department)\s+(\w+)/);
-    const locationMatch = queryLower.match(/(?:in|at|location)\s+([^,]+)/);
+    // Department: match "in X department", "from X", or "department X"
+    const departmentMatch = queryLower.match(/(?:in\s+(\w+)\s+department|from\s+(\w+)|department\s+(\w+))/);
+    // Location: only match explicit location keywords (not "in" which is ambiguous)
+    const locationMatch = queryLower.match(/(?:at|location|based in|located in|office)\s+([^,]+)/);
 
     let result: MCPToolResponse;
 
@@ -158,7 +160,8 @@ app.post('/query', async (req: Request, res: Response) => {
       }
 
       if (departmentMatch) {
-        input.department = departmentMatch[1];
+        // Extract from whichever capture group matched (1, 2, or 3)
+        input.department = departmentMatch[1] || departmentMatch[2] || departmentMatch[3];
       }
       if (locationMatch) {
         input.location = locationMatch[1].trim();

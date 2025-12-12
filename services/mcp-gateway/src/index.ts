@@ -327,7 +327,13 @@ const app = express();
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3100', 'tamshai-ai://*'],
+  origin: [
+    'http://localhost:3100',     // MCP Gateway itself
+    'http://localhost:4000',     // Portal app
+    'http://localhost:4001',     // HR app
+    'http://localhost:4002',     // Finance app
+    'tamshai-ai://*'             // Desktop app (Electron)
+  ],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -363,13 +369,19 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Authentication middleware
 async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
+  const tokenFromQuery = req.query.token as string | undefined;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Accept token from either Authorization header or query param (for SSE)
+  let token: string;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (tokenFromQuery) {
+    // EventSource doesn't support custom headers, so accept token via query param
+    token = tokenFromQuery;
+  } else {
     res.status(401).json({ error: 'Missing or invalid authorization header' });
     return;
   }
-
-  const token = authHeader.substring(7);
 
   try {
     const userContext = await validateToken(token);
@@ -742,6 +754,232 @@ app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, re
       error: 'Failed to execute confirmed action',
       requestId,
     });
+  }
+});
+
+// =============================================================================
+// MCP TOOL PROXY ENDPOINTS
+// =============================================================================
+
+/**
+ * Generic MCP tool proxy endpoint
+ * Routes: /api/mcp/:serverName/:toolName
+ *
+ * Allows web applications to directly call MCP tools with proper authorization.
+ * The gateway validates the user's access to the MCP server and forwards the request.
+ */
+app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, res: Response) => {
+  const requestId = req.headers['x-request-id'] as string;
+  const userContext: UserContext = (req as any).userContext;
+  const { serverName, toolName } = req.params;
+
+  // Convert query params to proper types (Express parses everything as strings)
+  const queryParams: any = {};
+  for (const [key, value] of Object.entries(req.query)) {
+    if (value === undefined) continue;
+    // Try to parse as number if it looks numeric
+    if (typeof value === 'string' && /^\d+$/.test(value)) {
+      queryParams[key] = parseInt(value, 10);
+    } else {
+      queryParams[key] = value;
+    }
+  }
+
+  logger.info(`MCP tool call: ${serverName}/${toolName}`, {
+    requestId,
+    userId: userContext.userId,
+    queryParams,
+  });
+
+  try {
+    // Find the MCP server configuration
+    const server = mcpServerConfigs.find((s) => s.name === serverName);
+    if (!server) {
+      res.status(404).json({
+        status: 'error',
+        code: 'SERVER_NOT_FOUND',
+        message: `MCP server '${serverName}' not found`,
+        suggestedAction: `Available servers: ${mcpServerConfigs.map((s) => s.name).join(', ')}`,
+      });
+      return;
+    }
+
+    // Check if user has access to this server
+    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+    const hasAccess = accessibleServers.some((s) => s.name === serverName);
+
+    if (!hasAccess) {
+      logger.warn('Unauthorized MCP server access attempt', {
+        requestId,
+        userId: userContext.userId,
+        serverName,
+        userRoles: userContext.roles,
+      });
+
+      res.status(403).json({
+        status: 'error',
+        code: 'ACCESS_DENIED',
+        message: `You do not have access to the '${serverName}' data source`,
+        suggestedAction: `Required roles: ${server.requiredRoles.join(' or ')}. Your roles: ${userContext.roles.join(', ')}`,
+      });
+      return;
+    }
+
+    // Forward request to MCP server (MCP servers expect POST with {input, userContext})
+    const mcpResponse = await axios.post(
+      `${server.url}/tools/${toolName}`,
+      {
+        input: queryParams, // Query params become input
+        userContext: {
+          userId: userContext.userId,
+          username: userContext.username,
+          email: userContext.email,
+          roles: userContext.roles,
+        },
+      },
+      {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
+        },
+      }
+    );
+
+    // v1.4: Check for truncation warnings and inject into response
+    const toolResponse = mcpResponse.data as MCPToolResponse;
+    if (isSuccessResponse(toolResponse) && toolResponse.metadata?.truncated) {
+      logger.info('Truncation detected in MCP response', {
+        requestId,
+        serverName,
+        toolName,
+        returnedCount: toolResponse.metadata.returnedCount,
+      });
+    }
+
+    res.json(toolResponse);
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        // MCP server returned an error
+        res.status(error.response.status).json(error.response.data);
+      } else if (error.code === 'ECONNREFUSED') {
+        res.status(503).json({
+          status: 'error',
+          code: 'SERVICE_UNAVAILABLE',
+          message: `MCP server '${serverName}' is not available`,
+          suggestedAction: 'Please try again later or contact support',
+        });
+      } else {
+        throw error;
+      }
+    } else {
+      logger.error('MCP tool proxy error:', error);
+      res.status(500).json({
+        status: 'error',
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to communicate with MCP server',
+        suggestedAction: 'Please try again or contact support',
+      });
+    }
+  }
+});
+
+/**
+ * MCP POST endpoint for write operations (confirmations, etc.)
+ */
+app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, res: Response) => {
+  const requestId = req.headers['x-request-id'] as string;
+  const userContext: UserContext = (req as any).userContext;
+  const { serverName, toolName } = req.params;
+  const body = req.body;
+
+  logger.info(`MCP tool call (POST): ${serverName}/${toolName}`, {
+    requestId,
+    userId: userContext.userId,
+    body,
+  });
+
+  try {
+    // Find the MCP server configuration
+    const server = mcpServerConfigs.find((s) => s.name === serverName);
+    if (!server) {
+      res.status(404).json({
+        status: 'error',
+        code: 'SERVER_NOT_FOUND',
+        message: `MCP server '${serverName}' not found`,
+      });
+      return;
+    }
+
+    // Check if user has access to this server
+    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+    const hasAccess = accessibleServers.some((s) => s.name === serverName);
+
+    if (!hasAccess) {
+      logger.warn('Unauthorized MCP server access attempt', {
+        requestId,
+        userId: userContext.userId,
+        serverName,
+        userRoles: userContext.roles,
+      });
+
+      res.status(403).json({
+        status: 'error',
+        code: 'ACCESS_DENIED',
+        message: `You do not have access to the '${serverName}' data source`,
+      });
+      return;
+    }
+
+    // Forward request to MCP server
+    const mcpResponse = await axios.post(
+      `${server.url}/tools/${toolName}`,
+      body,
+      {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': userContext.userId,
+          'X-User-Roles': userContext.roles.join(','),
+          'X-Request-ID': requestId,
+        },
+      }
+    );
+
+    const toolResponse = mcpResponse.data as MCPToolResponse;
+
+    // v1.4: Handle pending confirmations
+    if (isPendingConfirmationResponse(toolResponse)) {
+      logger.info('Pending confirmation created', {
+        requestId,
+        confirmationId: toolResponse.confirmationId,
+        action: toolName,
+      });
+    }
+
+    res.json(toolResponse);
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        res.status(error.response.status).json(error.response.data);
+      } else if (error.code === 'ECONNREFUSED') {
+        res.status(503).json({
+          status: 'error',
+          code: 'SERVICE_UNAVAILABLE',
+          message: `MCP server '${serverName}' is not available`,
+        });
+      } else {
+        throw error;
+      }
+    } else {
+      logger.error('MCP tool proxy error:', error);
+      res.status(500).json({
+        status: 'error',
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to communicate with MCP server',
+      });
+    }
   }
 });
 

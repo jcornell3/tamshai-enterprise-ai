@@ -10,6 +10,9 @@
 #   - MCP Finance:   3102
 #   - MCP Sales:     3103
 #   - MCP Support:   3104
+#   - Web Portal:    4000 (frontend app)
+#   - Web HR:        4001 (frontend app)
+#   - Web Finance:   4002 (frontend app)
 #   - PostgreSQL:    5433 (moved from 5432 to avoid local postgres conflicts)
 #   - MongoDB:       27018 (moved from 27017)
 #   - Elasticsearch: 9201 (moved from 9200)
@@ -242,6 +245,84 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - tamshai-network
+
+  # =============================================================================
+  # WEB APPLICATIONS (Frontend)
+  # =============================================================================
+  web-portal:
+    build:
+      context: ../../clients/web
+      dockerfile: apps/portal/Dockerfile
+    container_name: tamshai-web-portal
+    environment:
+      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_API_GATEWAY_URL: http://kong:8000
+      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+    ports:
+      - "4000:80"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - tamshai-network
+
+  web-hr:
+    build:
+      context: ../../clients/web
+      dockerfile: apps/hr/Dockerfile
+    container_name: tamshai-web-hr
+    environment:
+      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_API_GATEWAY_URL: http://kong:8000
+      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+    ports:
+      - "4001:80"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - tamshai-network
+
+  web-finance:
+    build:
+      context: ../../clients/web
+      dockerfile: apps/finance/Dockerfile
+    container_name: tamshai-web-finance
+    environment:
+      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_API_GATEWAY_URL: http://kong:8000
+      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+    ports:
+      - "4002:80"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
     networks:
       - tamshai-network
 

@@ -20,6 +20,12 @@ export interface PaginationMetadata {
   totalEstimate?: string;
   /** AI-friendly hint for requesting more data */
   hint?: string;
+  /** Backwards compatibility: truncated field for v1.4 truncation warnings */
+  truncated?: boolean;
+  /** Total count (exact or estimated) */
+  totalCount?: number | string;
+  /** Warning message for AI and user */
+  warning?: string;
 }
 
 /**

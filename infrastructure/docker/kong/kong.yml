@@ -10,7 +10,7 @@ _transform: true
 services:
   # MCP Gateway Service
   - name: mcp-gateway-service
-    url: http://mcp-gateway:3000
+    url: http://mcp-gateway:3100
     connect_timeout: 60000
     write_timeout: 60000
     read_timeout: 60000
@@ -27,11 +27,35 @@ services:
 # ROUTES
 # =============================================================================
 routes:
-  # AI Query Endpoints (protected)
+  # SSE Query Endpoint (v1.4 - Section 6.1)
+  # GET /api/query?q=...&token=... for streaming AI responses
+  - name: sse-query-route
+    service: mcp-gateway-service
+    paths:
+      - /api/query
+    methods:
+      - GET
+      - OPTIONS
+    strip_path: false
+    preserve_host: true
+
+  # AI Query Endpoints (protected) - POST version
   - name: ai-query-route
     service: mcp-gateway-service
     paths:
       - /api/ai
+    methods:
+      - POST
+      - OPTIONS
+    strip_path: false
+    preserve_host: true
+
+  # Confirmation Endpoint (v1.4 - Section 5.6)
+  # POST /api/confirm/:id for human-in-the-loop approvals
+  - name: confirm-route
+    service: mcp-gateway-service
+    paths:
+      - ~/api/confirm/.*
     methods:
       - POST
       - OPTIONS
@@ -48,14 +72,18 @@ routes:
       - GET
     strip_path: false
 
-  # MCP Tools Discovery (protected)
-  - name: mcp-tools-route
+  # MCP Tool Proxy Endpoints (protected) - v1.4
+  # Matches all /api/mcp/* paths including /api/mcp/tools and /api/mcp/:server/:tool
+  - name: mcp-tool-proxy-route
     service: mcp-gateway-service
     paths:
-      - /api/mcp/tools
+      - ~/api/mcp/.*
     methods:
       - GET
+      - POST
+      - OPTIONS
     strip_path: false
+    preserve_host: true
 
   # User Info (protected)
   - name: user-info-route
@@ -70,11 +98,14 @@ routes:
 # PLUGINS
 # =============================================================================
 plugins:
-  # CORS - Allow cross-origin requests from desktop/mobile clients
+  # CORS - Allow cross-origin requests from desktop/mobile clients and web apps
   - name: cors
     config:
       origins:
         - http://localhost:3100
+        - http://localhost:4000
+        - http://localhost:4001
+        - http://localhost:4002
         - tamshai-ai://*
         - com.tamshai.ai://*
       methods:
@@ -133,12 +164,9 @@ plugins:
       custom_fields_by_lua:
         user_id: "return kong.request.get_header('X-User-ID') or 'anonymous'"
 
-  # Request Termination for blocked paths
-  - name: request-termination
-    config:
-      status_code: 404
-      message: "Not Found"
-    route: null  # Will be applied selectively
+  # Request Termination - REMOVED
+  # The global request-termination plugin was causing all routes to return 404
+  # Kong naturally returns 404 for unmatched routes without this plugin
 
 # =============================================================================
 # CONSUMERS (for future API key support)
@@ -169,5 +197,5 @@ upstreams:
         unhealthy:
           http_failures: 3
     targets:
-      - target: mcp-gateway:3000
+      - target: mcp-gateway:3100
         weight: 100
