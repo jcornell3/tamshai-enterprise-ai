@@ -31,28 +31,28 @@ if (Test-Path $protocolKey) {
 
         # Parse the command to check if it has the right structure
         $cmdString = $command.'(Default)'
-        if ($cmdString -match 'electron\.exe.*index\.js') {
+        if ($cmdString -like '*index.js*') {
             Write-Host "✓ Command looks correct (includes index.js)" -ForegroundColor Green
         } else {
             Write-Host "✗ Command might be incorrect (missing index.js?)" -ForegroundColor Red
         }
 
-        # Check if files exist
-        if ($cmdString -match '"(.+electron\.exe)"') {
-            $electronPath = $matches[1]
-            if (Test-Path $electronPath) {
-                Write-Host "✓ Electron executable exists" -ForegroundColor Green
-            } else {
-                Write-Host "✗ Electron executable NOT found at: $electronPath" -ForegroundColor Red
+        # Check if files exist - extract paths manually
+        $parts = $cmdString -split '"'
+        foreach ($part in $parts) {
+            if ($part -like '*electron.exe') {
+                if (Test-Path $part) {
+                    Write-Host "✓ Electron executable exists: $part" -ForegroundColor Green
+                } else {
+                    Write-Host "✗ Electron executable NOT found: $part" -ForegroundColor Red
+                }
             }
-        }
-
-        if ($cmdString -match '"(.+index\.js)"') {
-            $indexPath = $matches[1]
-            if (Test-Path $indexPath) {
-                Write-Host "✓ Main entry point exists" -ForegroundColor Green
-            } else {
-                Write-Host "✗ Main entry point NOT found at: $indexPath" -ForegroundColor Red
+            if ($part -like '*index.js') {
+                if (Test-Path $part) {
+                    Write-Host "✓ Main entry point exists: $part" -ForegroundColor Green
+                } else {
+                    Write-Host "✗ Main entry point NOT found: $part" -ForegroundColor Red
+                }
             }
         }
     } else {
