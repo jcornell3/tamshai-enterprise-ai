@@ -43,8 +43,25 @@ Set-ItemProperty -Path $iconKey -Name "(Default)" -Value "`"$electronExe,1`""
 $commandKey = "$protocolKey\shell\open\command"
 New-Item -Path $commandKey -Force | Out-Null
 
-# Point to the Electron executable with %1 for the URL argument
-$command = "`"$electronExe`" `"%1`""
+# Point to the Electron executable with the main process entry point and %1 for the URL argument
+$mainEntry = Join-Path $PSScriptRoot "dist\main\index.js"
+
+if (-not (Test-Path $mainEntry)) {
+    Write-Host "Warning: Main entry point not found at $mainEntry" -ForegroundColor Yellow
+    Write-Host "Building the main process first..." -ForegroundColor Yellow
+
+    # Try to build
+    npm run build 2>&1 | Out-Null
+
+    if (-not (Test-Path $mainEntry)) {
+        Write-Host "Error: Failed to build. Run 'npm run build' manually." -ForegroundColor Red
+        exit 1
+    }
+}
+
+Write-Host "Found main entry: $mainEntry" -ForegroundColor Gray
+
+$command = "`"$electronExe`" `"$mainEntry`" `"%1`""
 Set-ItemProperty -Path $commandKey -Name "(Default)" -Value $command
 
 Write-Host ""
