@@ -190,23 +190,25 @@ function registerIpcHandlers(): void {
 }
 
 /**
- * Register custom protocol for deep linking (tamshai-ai://)
+ * Register custom protocol scheme (must be called BEFORE app.ready)
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'tamshai-ai',
+    privileges: {
+      standard: true,
+      secure: true,
+      corsEnabled: false,
+      supportFetchAPI: false
+    }
+  }
+]);
+
+/**
+ * Register app as default protocol client
  */
 function registerCustomProtocol(): void {
-  // Register protocol as standard scheme
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: 'tamshai-ai',
-      privileges: {
-        standard: true,
-        secure: true,
-        corsEnabled: false,
-        supportFetchAPI: false
-      }
-    }
-  ]);
-
-  // Set app as default protocol client
+  // Set app as default protocol client (called AFTER app.ready)
   if (!app.isDefaultProtocolClient('tamshai-ai')) {
     app.setAsDefaultProtocolClient('tamshai-ai');
   }
@@ -282,7 +284,7 @@ if (!gotTheLock) {
   // Another instance is already running
   app.quit();
 } else {
-  app.on('second-instance', (event, commandLine) => {
+  app.on('second-instance', (_event, commandLine) => {
     // Focus existing window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -300,7 +302,7 @@ if (!gotTheLock) {
 /**
  * Security: Prevent eval and other dangerous APIs
  */
-app.on('web-contents-created', (event, contents) => {
+app.on('web-contents-created', (_event, contents) => {
   contents.on('will-attach-webview', (event) => {
     event.preventDefault();
   });
