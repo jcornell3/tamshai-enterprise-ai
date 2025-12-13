@@ -216,6 +216,38 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 /**
+ * Single instance lock (must be checked BEFORE app.ready)
+ * Ensures only one instance runs and passes deep links to existing instance
+ */
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running - quit immediately
+  console.log('[App] Another instance is running, quitting...');
+  app.quit();
+} else {
+  // We have the lock - setup second-instance handler
+  app.on('second-instance', (_event, commandLine) => {
+    console.log('[App] Second instance detected, commandLine:', commandLine);
+
+    // Focus existing window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    // Handle deep link from command line
+    const url = commandLine.find(arg => arg.startsWith('tamshai-ai://'));
+    if (url) {
+      console.log('[App] Deep link found in command line:', url);
+      handleDeepLink(url);
+    } else {
+      console.log('[App] No deep link found in command line');
+    }
+  });
+}
+
+/**
  * Register app as default protocol client
  */
 function registerCustomProtocol(): void {
@@ -290,33 +322,6 @@ app.on('open-url', (event, url) => {
   event.preventDefault();
   handleDeepLink(url);
 });
-
-// Windows/Linux: second-instance event
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-  // Another instance is already running
-  app.quit();
-} else {
-  app.on('second-instance', (_event, commandLine) => {
-    console.log('[App] Second instance detected, commandLine:', commandLine);
-
-    // Focus existing window
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-
-    // Handle deep link from command line
-    const url = commandLine.find(arg => arg.startsWith('tamshai-ai://'));
-    if (url) {
-      console.log('[App] Deep link found in command line:', url);
-      handleDeepLink(url);
-    } else {
-      console.log('[App] No deep link found in command line');
-    }
-  });
-}
 
 /**
  * Security: Prevent eval and other dangerous APIs
