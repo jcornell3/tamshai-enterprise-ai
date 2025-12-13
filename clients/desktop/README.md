@@ -161,6 +161,34 @@ added 500+ packages in 30s
 
 ## Development
 
+### Windows: Register Protocol Handler (One-Time Setup)
+
+**Required for OAuth login to work on Windows**. This registers the `tamshai-ai://` protocol so Windows knows to open the Electron app when Keycloak redirects.
+
+**From PowerShell (NOT WSL)**:
+```powershell
+# Navigate to desktop client in Windows
+cd C:\Users\YourUsername\Documents\tamshai-enterprise-ai\clients\desktop
+
+# Run the registration script
+.\register-protocol-dev.ps1
+```
+
+**Expected output**:
+```
+Registering tamshai-ai:// protocol handler for Windows...
+Found Electron at: C:\...\node_modules\electron\dist\electron.exe
+Creating registry entries...
+Protocol handler registered successfully!
+```
+
+**Note**: This only needs to be done once. The protocol handler persists across restarts.
+
+**To unregister** (if needed):
+```powershell
+Remove-Item -Path "HKCU:\Software\Classes\tamshai-ai" -Recurse
+```
+
 ### Starting the Desktop App
 
 **Windows (PowerShell)**:
@@ -179,6 +207,7 @@ npm run dev
 2. Electron app window opens
 3. DevTools enabled for debugging
 4. Hot reload on file changes
+5. Protocol handler registered (logged in console)
 
 **Expected console output**:
 ```
@@ -190,6 +219,8 @@ dev server running for the electron renderer process at:
   ➜  Network: use --host to expose
 
 starting electron app...
+[Protocol] Registered tamshai-ai:// protocol handler: true
+[Auth] OIDC client initialized
 ```
 
 **If the app doesn't open**:
