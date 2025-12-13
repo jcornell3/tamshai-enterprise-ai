@@ -73,7 +73,13 @@ export class AuthService {
     console.log('[Auth] Opening browser for login:', authUrl);
 
     // Open system browser
-    await shell.openExternal(authUrl);
+    try {
+      await shell.openExternal(authUrl);
+      console.log('[Auth] Browser opened successfully');
+    } catch (error) {
+      console.error('[Auth] Failed to open browser:', error);
+      throw new Error(`Failed to open browser: ${(error as Error).message}`);
+    }
   }
 
   /**
