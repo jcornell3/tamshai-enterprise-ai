@@ -1,0 +1,147 @@
+# Tamshai Enterprise AI - Mobile Development Override
+#
+# Docker Compose override file for React Native mobile app development.
+# This file modifies services to be accessible from mobile devices on the same LAN.
+#
+# Usage:
+#   1. Generate .env.mobile file:
+#      ./scripts/discover-mobile-host.sh       (Linux/macOS)
+#      .\scripts\discover-mobile-host.ps1      (Windows)
+#
+#   2. Start services with mobile override:
+#      docker compose -f docker-compose.yml -f docker-compose.mobile.yml up -d
+#
+# Key Changes:
+#   - Keycloak: KC_HOSTNAME set to LAN IP for mobile access
+#   - MCP Gateway: Binds to 0.0.0.0 and adds mobile CORS origins
+#   - Kong Gateway: Configured for external access
+#   - All services: Network binding updated for LAN accessibility
+#
+# Security Note:
+#   This configuration is for DEVELOPMENT ONLY. Do not use in production.
+#   Services are exposed to LAN without mTLS for mobile testing.
+
+services:
+  #----------------------------------------------------------------------------
+  # KEYCLOAK - Identity Provider (Mobile Override)
+  #----------------------------------------------------------------------------
+  keycloak:
+    environment:
+      # Override hostname for mobile access
+      - KC_HOSTNAME=${MOBILE_HOST_IP}
+      - KC_HOSTNAME_PORT=8180
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      - KC_HTTP_ENABLED=true
+
+      # Allow mobile app redirects
+      - KC_HOSTNAME_STRICT_BACKCHANNEL=false
+
+      # Logging (verbose for mobile debugging)
+      - KC_LOG_LEVEL=INFO
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access (instead of 127.0.0.1)
+      - "0.0.0.0:8180:8080"
+
+    networks:
+      tamshai-network:
+        # No IP override needed - uses default from main compose
+
+  #----------------------------------------------------------------------------
+  # MCP GATEWAY - AI Orchestration (Mobile Override)
+  #----------------------------------------------------------------------------
+  mcp-gateway:
+    environment:
+      # Override Keycloak URL for mobile clients
+      - KEYCLOAK_URL=http://${MOBILE_HOST_IP}:8180
+
+      # Add mobile app to CORS origins
+      - CORS_ORIGINS=${CORS_ORIGINS}
+
+      # Bind to all interfaces
+      - HOST=0.0.0.0
+      - PORT=3100
+
+      # Redis (use LAN IP if Redis is on different host)
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access
+      - "0.0.0.0:3100:3100"
+
+  #----------------------------------------------------------------------------
+  # KONG GATEWAY - API Gateway (Mobile Override)
+  #----------------------------------------------------------------------------
+  kong:
+    environment:
+      # Allow external access
+      - KONG_PROXY_LISTEN=0.0.0.0:8000
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access
+      - "0.0.0.0:8100:8000"   # Proxy
+      - "0.0.0.0:8101:8001"   # Admin API
+
+  #----------------------------------------------------------------------------
+  # MCP HR SERVER (Mobile Override)
+  #----------------------------------------------------------------------------
+  mcp-hr:
+    environment:
+      # Keycloak URL for token validation
+      - KEYCLOAK_URL=http://${MOBILE_HOST_IP}:8180
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access (for direct testing)
+      - "0.0.0.0:3101:3101"
+
+  #----------------------------------------------------------------------------
+  # MCP FINANCE SERVER (Mobile Override)
+  #----------------------------------------------------------------------------
+  mcp-finance:
+    environment:
+      # Keycloak URL for token validation
+      - KEYCLOAK_URL=http://${MOBILE_HOST_IP}:8180
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access
+      - "0.0.0.0:3102:3102"
+
+  #----------------------------------------------------------------------------
+  # MCP SALES SERVER (Mobile Override)
+  #----------------------------------------------------------------------------
+  mcp-sales:
+    environment:
+      # Keycloak URL for token validation
+      - KEYCLOAK_URL=http://${MOBILE_HOST_IP}:8180
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access
+      - "0.0.0.0:3103:3103"
+
+  #----------------------------------------------------------------------------
+  # MCP SUPPORT SERVER (Mobile Override)
+  #----------------------------------------------------------------------------
+  mcp-support:
+    environment:
+      # Keycloak URL for token validation
+      - KEYCLOAK_URL=http://${MOBILE_HOST_IP}:8180
+
+    ports:
+      # Bind to 0.0.0.0 for LAN access
+      - "0.0.0.0:3104:3104"
+
+  #----------------------------------------------------------------------------
+  # REDIS (Mobile Override - Optional)
+  #----------------------------------------------------------------------------
+  # Redis typically doesn't need external access, but bind for testing
+  redis:
+    ports:
+      - "0.0.0.0:6380:6379"
+
+# Networks remain the same (inherited from main docker-compose.yml)
+networks:
+  tamshai-network:
+    external: false
