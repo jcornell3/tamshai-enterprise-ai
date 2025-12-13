@@ -61,7 +61,8 @@ if (-not (Test-Path $mainEntry)) {
 
 Write-Host "Found main entry: $mainEntry" -ForegroundColor Gray
 
-$command = "`"$electronExe`" `"$mainEntry`" `"%1`""
+# Use -- separator to ensure %1 is treated as an argument, not a file path
+$command = "`"$electronExe`" `"$mainEntry`" -- `"%1`""
 Set-ItemProperty -Path $commandKey -Name "(Default)" -Value $command
 
 Write-Host ""
