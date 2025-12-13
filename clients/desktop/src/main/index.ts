@@ -54,17 +54,28 @@ function createWindow(): void {
 
   // Apply Content Security Policy
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    // Development CSP: Allow inline scripts for Vite HMR
+    const devCSP =
+      "default-src 'self'; " +
+      "connect-src 'self' http://localhost:* ws://localhost:* http://localhost:3100 http://localhost:8180 http://localhost:8100; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +  // Required for Vite dev server
+      "img-src 'self' data:; " +
+      "font-src 'self' data:;";
+
+    // Production CSP: Strict security
+    const prodCSP =
+      "default-src 'self'; " +
+      "connect-src 'self' http://localhost:3100 http://localhost:8180 http://localhost:8100; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self'; " +
+      "img-src 'self' data:; " +
+      "font-src 'self' data:;";
+
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; " +
-          "connect-src 'self' http://localhost:3100 http://localhost:8180 http://localhost:8100; " +
-          "style-src 'self' 'unsafe-inline'; " +
-          "script-src 'self'; " +
-          "img-src 'self' data:; " +
-          "font-src 'self' data:;"
-        ]
+        'Content-Security-Policy': [isDev ? devCSP : prodCSP]
       }
     });
   });
