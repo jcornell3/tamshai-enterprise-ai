@@ -38,7 +38,7 @@ if (Test-Path $protocolKey) {
         }
 
         # Check if files exist
-        if ($cmdString -match '"([^"]+electron\.exe)"') {
+        if ($cmdString -match '"(.+electron\.exe)"') {
             $electronPath = $matches[1]
             if (Test-Path $electronPath) {
                 Write-Host "✓ Electron executable exists" -ForegroundColor Green
@@ -47,7 +47,7 @@ if (Test-Path $protocolKey) {
             }
         }
 
-        if ($cmdString -match '"([^"]+index\.js)"') {
+        if ($cmdString -match '"(.+index\.js)"') {
             $indexPath = $matches[1]
             if (Test-Path $indexPath) {
                 Write-Host "✓ Main entry point exists" -ForegroundColor Green
