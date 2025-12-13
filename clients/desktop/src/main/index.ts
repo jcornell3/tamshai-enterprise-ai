@@ -223,12 +223,17 @@ const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   // Another instance is already running - quit immediately
-  console.log('[App] Another instance is running, quitting...');
+  // The command line args will be passed to the first instance via second-instance event
+  console.log('[App] Another instance is running, passing args and quitting...');
+  console.log('[App] process.argv:', process.argv);
   app.quit();
 } else {
   // We have the lock - setup second-instance handler
-  app.on('second-instance', (_event, commandLine) => {
-    console.log('[App] Second instance detected, commandLine:', commandLine);
+  app.on('second-instance', (_event, commandLine, workingDirectory) => {
+    console.log('[App] Second instance detected!');
+    console.log('[App] commandLine:', commandLine);
+    console.log('[App] workingDirectory:', workingDirectory);
+    console.log('[App] process.argv:', process.argv);
 
     // Focus existing window
     if (mainWindow) {
@@ -236,13 +241,15 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
 
-    // Handle deep link from command line
-    const url = commandLine.find(arg => arg.startsWith('tamshai-ai://'));
+    // Handle deep link from command line (look in both commandLine and process.argv)
+    const url = commandLine.find(arg => arg.startsWith('tamshai-ai://')) ||
+                process.argv.find(arg => arg.startsWith('tamshai-ai://'));
     if (url) {
       console.log('[App] Deep link found in command line:', url);
       handleDeepLink(url);
     } else {
       console.log('[App] No deep link found in command line');
+      console.log('[App] All args:', commandLine);
     }
   });
 }
