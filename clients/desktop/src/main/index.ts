@@ -221,7 +221,10 @@ protocol.registerSchemesAsPrivileged([
 function registerCustomProtocol(): void {
   // Set app as default protocol client (called AFTER app.ready)
   if (!app.isDefaultProtocolClient('tamshai-ai')) {
-    app.setAsDefaultProtocolClient('tamshai-ai');
+    const registered = app.setAsDefaultProtocolClient('tamshai-ai');
+    console.log('[Protocol] Registered tamshai-ai:// protocol handler:', registered);
+  } else {
+    console.log('[Protocol] Already registered as default protocol client');
   }
 }
 
@@ -296,6 +299,8 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (_event, commandLine) => {
+    console.log('[App] Second instance detected, commandLine:', commandLine);
+
     // Focus existing window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -305,7 +310,10 @@ if (!gotTheLock) {
     // Handle deep link from command line
     const url = commandLine.find(arg => arg.startsWith('tamshai-ai://'));
     if (url) {
+      console.log('[App] Deep link found in command line:', url);
       handleDeepLink(url);
+    } else {
+      console.log('[App] No deep link found in command line');
     }
   });
 }
