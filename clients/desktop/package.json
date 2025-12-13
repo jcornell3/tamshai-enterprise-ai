@@ -1,0 +1,80 @@
+{
+  "name": "tamshai-ai-desktop",
+  "version": "0.1.0",
+  "description": "Tamshai AI Assistant - Cross-platform Desktop Client",
+  "main": "dist/main/index.js",
+  "author": "Tamshai Corp",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "start": "electron-vite preview",
+    "package": "electron-builder",
+    "package:win": "electron-builder --win",
+    "package:mac": "electron-builder --mac",
+    "package:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.9.1",
+    "openid-client": "^5.6.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.0.1",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "electron": "^35.7.5",
+    "electron-builder": "^24.9.1",
+    "electron-updater": "^6.1.7",
+    "electron-vite": "^5.0.0",
+    "eslint": "^8.54.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "typescript": "^5.3.3",
+    "vite": "^6.1.7"
+  },
+  "build": {
+    "appId": "com.tamshai.ai-desktop",
+    "productName": "Tamshai AI Assistant",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg", "zip"],
+      "icon": "resources/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "resources/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "icon": "resources/icon.png"
+    },
+    "protocols": [{
+      "name": "tamshai-ai",
+      "schemes": ["tamshai-ai"]
+    }]
+  }
+}

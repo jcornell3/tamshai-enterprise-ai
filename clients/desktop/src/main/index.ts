@@ -1,0 +1,316 @@
+/**
+ * Tamshai AI Desktop - Main Process
+ *
+ * Architecture v1.4 compliant Electron main process with:
+ * - Security hardening (CSP, context isolation, sandbox)
+ * - Deep linking for OAuth callbacks (tamshai-ai://)
+ * - OIDC PKCE authentication
+ * - Secure token storage via safeStorage API
+ */
+
+import { app, BrowserWindow, shell, session, ipcMain, protocol } from 'electron';
+import { join } from 'path';
+import { AuthService } from './auth';
+import { StorageService } from './storage';
+
+// Singleton services
+let authService: AuthService;
+let storageService: StorageService;
+let mainWindow: BrowserWindow | null = null;
+
+// Development mode detection
+const isDev = process.env.NODE_ENV === 'development';
+
+/**
+ * Create main application window with security hardening
+ */
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    title: 'Tamshai AI Assistant',
+    webPreferences: {
+      // Security: Disable Node.js integration in renderer
+      nodeIntegration: false,
+
+      // Security: Enable context isolation (preload script runs in separate context)
+      contextIsolation: true,
+
+      // Security: Enable sandbox mode
+      sandbox: true,
+
+      // Security: Disable web security in dev only (for localhost CORS)
+      webSecurity: !isDev,
+
+      // Preload script for IPC bridge
+      preload: join(__dirname, '../preload/index.js'),
+    },
+
+    // Show window only when ready to prevent white flash
+    show: false,
+  });
+
+  // Apply Content Security Policy
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "connect-src 'self' http://localhost:3100 http://localhost:8180 http://localhost:8100; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "script-src 'self'; " +
+          "img-src 'self' data:; " +
+          "font-src 'self' data:;"
+        ]
+      }
+    });
+  });
+
+  // Load renderer
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173'); // Vite dev server
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+  }
+
+  // Show window when ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  // Security: Prevent new window creation (open in default browser instead)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Allow OAuth redirects to open in system browser
+    if (url.startsWith('http://localhost:8180') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  // Security: Prevent navigation to external sites
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowedOrigins = [
+      'http://localhost:5173', // Vite dev server
+      'http://localhost:3100', // MCP Gateway
+      'http://localhost:8180', // Keycloak
+    ];
+
+    const isAllowed = allowedOrigins.some(origin => url.startsWith(origin));
+    if (!isAllowed) {
+      event.preventDefault();
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+/**
+ * Initialize application services
+ */
+async function initializeServices(): Promise<void> {
+  authService = new AuthService();
+  storageService = new StorageService();
+
+  await authService.initialize();
+}
+
+/**
+ * Register IPC handlers for renderer communication
+ */
+function registerIpcHandlers(): void {
+  // Authentication handlers
+  ipcMain.handle('auth:login', async () => {
+    try {
+      await authService.login();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('auth:logout', async () => {
+    try {
+      await authService.logout();
+      await storageService.clearTokens();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('auth:getToken', async () => {
+    try {
+      const token = await authService.getAccessToken();
+      return { success: true, token };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Storage handlers
+  ipcMain.handle('storage:storeTokens', async (_, tokens) => {
+    try {
+      await storageService.storeTokens(tokens);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('storage:getTokens', async () => {
+    try {
+      const tokens = await storageService.getTokens();
+      return { success: true, tokens };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('storage:clearTokens', async () => {
+    try {
+      await storageService.clearTokens();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // Notification handler
+  ipcMain.handle('notification:show', async (_, title: string, body: string) => {
+    // Use Electron Notification API (future enhancement)
+    console.log(`[Notification] ${title}: ${body}`);
+    return { success: true };
+  });
+}
+
+/**
+ * Register custom protocol for deep linking (tamshai-ai://)
+ */
+function registerCustomProtocol(): void {
+  // Register protocol as standard scheme
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'tamshai-ai',
+      privileges: {
+        standard: true,
+        secure: true,
+        corsEnabled: false,
+        supportFetchAPI: false
+      }
+    }
+  ]);
+
+  // Set app as default protocol client
+  if (!app.isDefaultProtocolClient('tamshai-ai')) {
+    app.setAsDefaultProtocolClient('tamshai-ai');
+  }
+}
+
+/**
+ * Handle OAuth callback deep link
+ */
+function handleDeepLink(url: string): void {
+  console.log('[Deep Link] Received:', url);
+
+  if (url.startsWith('tamshai-ai://oauth/callback')) {
+    authService.handleCallback(url)
+      .then(async (tokens) => {
+        await storageService.storeTokens(tokens);
+
+        // Notify renderer of successful authentication
+        if (mainWindow) {
+          mainWindow.webContents.send('auth:success', tokens);
+        }
+      })
+      .catch((error) => {
+        console.error('[Auth] Callback error:', error);
+
+        if (mainWindow) {
+          mainWindow.webContents.send('auth:error', error.message);
+        }
+      });
+  }
+}
+
+/**
+ * App lifecycle: Ready
+ */
+app.whenReady().then(async () => {
+  registerCustomProtocol();
+  await initializeServices();
+  registerIpcHandlers();
+  createWindow();
+
+  // macOS: Re-create window when dock icon is clicked
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+/**
+ * App lifecycle: All windows closed
+ */
+app.on('window-all-closed', () => {
+  // macOS: Keep app running even when all windows are closed
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+/**
+ * Deep linking handlers
+ */
+
+// macOS: open-url event
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+// Windows/Linux: second-instance event
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine) => {
+    // Focus existing window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    // Handle deep link from command line
+    const url = commandLine.find(arg => arg.startsWith('tamshai-ai://'));
+    if (url) {
+      handleDeepLink(url);
+    }
+  });
+}
+
+/**
+ * Security: Prevent eval and other dangerous APIs
+ */
+app.on('web-contents-created', (event, contents) => {
+  contents.on('will-attach-webview', (event) => {
+    event.preventDefault();
+  });
+
+  contents.on('will-navigate', (event, navigationUrl) => {
+    const parsedUrl = new URL(navigationUrl);
+
+    // Block navigation to file:// protocol
+    if (parsedUrl.protocol === 'file:') {
+      event.preventDefault();
+    }
+  });
+});
