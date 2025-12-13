@@ -9,9 +9,63 @@
  */
 
 import { app, BrowserWindow, shell, session, ipcMain, protocol } from 'electron';
-import { join } from 'path';
+import { join, resolve } from 'path';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { AuthService } from './auth';
 import { StorageService } from './storage';
+
+// =============================================================================
+// STARTUP DEBUGGING - File-based logging for protocol handler debugging
+// This logs to a file because console.log may not be visible when the second
+// instance crashes before communicating with the first instance.
+// =============================================================================
+const DEBUG_LOG_DIR = join(app.getPath('userData'), 'debug');
+const DEBUG_LOG_FILE = join(DEBUG_LOG_DIR, 'startup.log');
+
+function debugLog(msg: string): void {
+  try {
+    if (!existsSync(DEBUG_LOG_DIR)) {
+      mkdirSync(DEBUG_LOG_DIR, { recursive: true });
+    }
+    const timestamp = new Date().toISOString();
+    const pid = process.pid;
+    appendFileSync(DEBUG_LOG_FILE, `[${timestamp}] [PID:${pid}] ${msg}\n`);
+  } catch {
+    // Ignore logging errors
+  }
+}
+
+// Log startup information immediately
+debugLog('=== ELECTRON STARTUP ===');
+debugLog(`process.argv: ${JSON.stringify(process.argv)}`);
+debugLog(`process.cwd(): ${process.cwd()}`);
+debugLog(`__dirname: ${__dirname}`);
+debugLog(`app.isPackaged: ${app.isPackaged}`);
+
+// Catch uncaught exceptions to debug crashes
+process.on('uncaughtException', (err) => {
+  debugLog(`UNCAUGHT EXCEPTION: ${err.message}`);
+  debugLog(`Stack: ${err.stack}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  debugLog(`UNHANDLED REJECTION: ${reason}`);
+});
+
+// Fix working directory in development mode
+// When Windows launches via protocol handler, CWD may be System32
+if (!app.isPackaged) {
+  const projectRoot = resolve(__dirname, '../../');
+  debugLog(`Changing CWD from ${process.cwd()} to ${projectRoot}`);
+  try {
+    process.chdir(projectRoot);
+    debugLog(`CWD is now: ${process.cwd()}`);
+  } catch (err) {
+    debugLog(`Failed to change CWD: ${err}`);
+  }
+}
+
+// =============================================================================
 
 // Singleton services
 let authService: AuthService;
@@ -219,17 +273,25 @@ protocol.registerSchemesAsPrivileged([
  * Single instance lock (must be checked BEFORE app.ready)
  * Ensures only one instance runs and passes deep links to existing instance
  */
+debugLog('Requesting single instance lock...');
 const gotTheLock = app.requestSingleInstanceLock();
+debugLog(`gotTheLock: ${gotTheLock}`);
 
 if (!gotTheLock) {
   // Another instance is already running - quit immediately
   // The command line args will be passed to the first instance via second-instance event
+  debugLog('Another instance is running - quitting to pass args to it');
   console.log('[App] Another instance is running, passing args and quitting...');
   console.log('[App] process.argv:', process.argv);
   app.quit();
 } else {
+  debugLog('Got the lock - this is the primary instance');
   // We have the lock - setup second-instance handler
   app.on('second-instance', (_event, commandLine, workingDirectory) => {
+    debugLog('=== SECOND INSTANCE EVENT RECEIVED ===');
+    debugLog(`commandLine: ${JSON.stringify(commandLine)}`);
+    debugLog(`workingDirectory: ${workingDirectory}`);
+
     console.log('[App] Second instance detected!');
     console.log('[App] commandLine:', commandLine);
     console.log('[App] workingDirectory:', workingDirectory);
@@ -245,9 +307,11 @@ if (!gotTheLock) {
     const url = commandLine.find(arg => arg.startsWith('tamshai-ai://')) ||
                 process.argv.find(arg => arg.startsWith('tamshai-ai://'));
     if (url) {
+      debugLog(`Deep link found: ${url}`);
       console.log('[App] Deep link found in command line:', url);
       handleDeepLink(url);
     } else {
+      debugLog('No deep link found in command line');
       console.log('[App] No deep link found in command line');
       console.log('[App] All args:', commandLine);
     }
