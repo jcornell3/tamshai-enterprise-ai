@@ -61,5 +61,5 @@ if (Test-Path $protocolKey) {
 } else {
     Write-Host "Protocol is NOT registered" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Run .\register-protocol-dev.ps1 to register it" -ForegroundColor Yellow
+    Write-Host 'Run .\register-protocol-dev.ps1 to register it' -ForegroundColor Yellow
 }
