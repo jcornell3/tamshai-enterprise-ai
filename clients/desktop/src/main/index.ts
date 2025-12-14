@@ -87,6 +87,14 @@ const isDev = process.env.NODE_ENV === 'development';
  * Create main application window with security hardening
  */
 function createWindow(): void {
+  // Prevent creating multiple windows
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    debugLog('Window already exists, focusing instead of creating new');
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    return;
+  }
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
