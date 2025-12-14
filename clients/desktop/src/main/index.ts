@@ -413,6 +413,18 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
 
+  // Check if app was launched with a deep link URL (Windows: passed as argument)
+  // This handles the case where this instance becomes primary with a callback URL
+  const deepLinkUrl = process.argv.find(arg => arg.startsWith('tamshai-ai://'));
+  if (deepLinkUrl) {
+    debugLog(`App launched with deep link URL: ${deepLinkUrl}`);
+    console.log('[App] Launched with deep link URL:', deepLinkUrl);
+    // Wait a short moment for the window to be ready before handling
+    setTimeout(() => {
+      handleDeepLink(deepLinkUrl);
+    }, 500);
+  }
+
   // macOS: Re-create window when dock icon is clicked
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
