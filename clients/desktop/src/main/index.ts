@@ -10,7 +10,7 @@
 
 import { app, BrowserWindow, shell, session, ipcMain, protocol } from 'electron';
 import { join, resolve } from 'path';
-import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { AuthService } from './auth';
 import { StorageService } from './storage';
 
@@ -443,28 +443,38 @@ function initializeApp(): void {
         debugLog('Cold start OAuth callback detected - assuming orphaned instance due to race condition');
         console.warn('[App] OAuth callback in cold start - likely orphaned second instance');
 
-        // UX FIX: Auto-close orphaned instance instead of showing error
+        // UX FIX: Pass URL via file-based IPC, then auto-close orphaned instance
         //
         // Scenario A (Race Condition - COMMON):
-        //   - Primary instance (PID A) is alive and received URL via 'second-instance' event
+        //   - Primary instance (PID A) is alive but second-instance event didn't fire
         //   - This instance (PID B) is the orphaned second window from the race condition
-        //   - Solution: Close this window automatically, let PID A handle the OAuth callback
+        //   - Solution: Write URL to file, let PID A read it, then auto-close
         //
         // Scenario B (True Cold Start - RARE):
-        //   - User closed app while browser was open, then callback redirected
         //   - No primary instance exists, and we have no PKCE verifier anyway
-        //   - Solution: Close silently since login is invalid (lost session state)
+        //   - Solution: Write URL to file (will be ignored), then auto-close
         //
-        // In both cases, auto-closing provides better UX than showing an error
+        // File-based IPC is necessary because second-instance event doesn't fire
+        // when both instances incorrectly acquire the lock
+
+        const callbackFilePath = join(app.getPath('userData'), 'oauth-callback.txt');
+        debugLog(`Writing OAuth callback URL to: ${callbackFilePath}`);
+
+        try {
+          fs.writeFileSync(callbackFilePath, deepLinkUrlArg, 'utf8');
+          debugLog('OAuth callback URL written successfully');
+        } catch (err) {
+          debugLog(`Failed to write callback file: ${err}`);
+        }
 
         debugLog('Auto-closing orphaned callback instance in 2 seconds...');
-        console.log('[App] Auto-closing orphaned instance - primary instance will handle callback');
+        console.log('[App] Auto-closing orphaned instance - primary will read callback file');
 
         setTimeout(() => {
           debugLog('Quitting orphaned callback instance');
           console.log('[App] Closing orphaned instance now');
           app.quit();
-        }, 2000); // 2-second delay to ensure second-instance event fires in primary
+        }, 2000); // 2-second delay to ensure file is written
 
         return; // Stop further initialization for this orphaned instance
       } else {
@@ -475,6 +485,35 @@ function initializeApp(): void {
         });
       }
     }
+
+    // Monitor for OAuth callback file from orphaned instances (race condition workaround)
+    const callbackFilePath = join(app.getPath('userData'), 'oauth-callback.txt');
+    debugLog(`Monitoring for callback file at: ${callbackFilePath}`);
+
+    const fileWatcher = setInterval(() => {
+      try {
+        if (fs.existsSync(callbackFilePath)) {
+          debugLog('OAuth callback file detected!');
+          const url = fs.readFileSync(callbackFilePath, 'utf8');
+          debugLog(`Read OAuth callback URL from file: ${url}`);
+
+          // Delete file immediately to prevent re-processing
+          fs.unlinkSync(callbackFilePath);
+          debugLog('Deleted callback file');
+
+          // Process OAuth callback
+          console.log('[App] Processing OAuth callback from file-based IPC');
+          handleDeepLink(url);
+        }
+      } catch (err) {
+        debugLog(`Error monitoring callback file: ${err}`);
+      }
+    }, 500); // Check every 500ms
+
+    // Cleanup file watcher on app quit
+    app.on('will-quit', () => {
+      clearInterval(fileWatcher);
+    });
 
     // macOS: Re-create window when dock icon is clicked
     app.on('activate', () => {
