@@ -371,6 +371,11 @@ async function attemptSingleInstanceLock(): Promise<void> {
   // We have the lock - this is the primary instance
   debugLog('Got the lock - this is the primary instance');
 
+  // Log periodically to confirm process is still alive and holding lock
+  setInterval(() => {
+    debugLog(`[HEARTBEAT] PID ${process.pid} still alive and holding lock`);
+  }, 10000); // Every 10 seconds
+
   // Setup second-instance handler to receive data from subsequent instances
   app.on('second-instance', (_event, commandLine, workingDirectory, additionalData) => {
     debugLog('=== SECOND INSTANCE EVENT RECEIVED ===');
@@ -427,16 +432,31 @@ function initializeApp(): void {
     createWindow();
 
     // Handle "cold start" - app was launched directly with a deep link URL
-    // This happens when the app wasn't running and was launched via protocol handler
+    // This happens when the app wasn't running and was launched via protocol handler,
+    // OR when the first instance's lock was not properly held (Windows timing issue)
     if (deepLinkUrlArg) {
       debugLog(`Cold start with deep link URL: ${deepLinkUrlArg}`);
       console.log('[App] Cold start with deep link URL:', deepLinkUrlArg);
 
-      // Wait for window to be ready before handling the deep link
-      mainWindow?.webContents.on('did-finish-load', () => {
-        debugLog('Window loaded, processing cold start deep link...');
-        handleDeepLink(deepLinkUrlArg);
-      });
+      // Check if this is an OAuth callback
+      if (deepLinkUrlArg.includes('oauth/callback')) {
+        debugLog('Cold start OAuth callback detected - this will fail (no PKCE verifier)');
+        console.warn('[App] OAuth callback received in cold start - no auth session exists');
+
+        // Show error to user instead of attempting token exchange
+        mainWindow?.webContents.on('did-finish-load', () => {
+          debugLog('Sending cold start error to renderer');
+          mainWindow?.webContents.send('auth:error',
+            'Authentication session expired. Please start the app first, then click "Sign in with SSO".'
+          );
+        });
+      } else {
+        // Non-OAuth deep link - handle normally
+        mainWindow?.webContents.on('did-finish-load', () => {
+          debugLog('Window loaded, processing cold start deep link...');
+          handleDeepLink(deepLinkUrlArg);
+        });
+      }
     }
 
     // macOS: Re-create window when dock icon is clicked
