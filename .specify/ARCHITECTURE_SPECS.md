@@ -1,9 +1,9 @@
 # Tamshai Enterprise AI - Specification-Driven Development (SDD) Architecture
 
 **Lead Architect**: John Cornell
-**Architecture Version**: 1.3 FINAL
+**Architecture Version**: 1.4 (ADR-004 Platform Pivot)
 **SDD Framework**: GitHub Spec Kit
-**Last Updated**: December 8, 2024
+**Last Updated**: December 14, 2024
 
 ---
 
@@ -268,54 +268,55 @@ return <div>Salary: {employee.salary}</div>;
 
 ---
 
-#### 006-ai-desktop: Electron AI Assistant
-**Status**: PLANNED 🔲
+#### 006-ai-desktop: React Native Desktop AI Assistant
+**Status**: PIVOT IN PROGRESS ⚡
 **Feature Branch**: `006-ai-desktop`
 **Constitutional Compliance**: **Article V.2, V.3 - CRITICAL**
 
 **Business Intent**:
 Provide unified desktop AI assistant with secure token storage and natural language interface to enterprise data.
 
+⚠️ **PLATFORM PIVOT (ADR-004)**: Originally planned for Electron, now migrating to React Native for Windows/macOS due to fundamental Windows single-instance lock race condition. See `clients/desktop/ELECTRON_SINGLE_INSTANCE_LOCK_INVESTIGATION.md`.
+
 **Technical Stack**:
-- **Runtime**: Electron (Main + Renderer processes)
-- **Frontend**: React + TypeScript + Tailwind
-- **Auth**: OIDC via System Browser (PKCE) ← **Article V.3**
-- **Token Storage**: `safeStorage` API (OS Keychain) ← **Article V.2**
-- **Streaming**: SSE (`fetch` with `ReadableStream`)
+- **Framework**: React Native 0.73+ with `react-native-windows` and `react-native-macos`
+- **Language**: TypeScript 5.x
+- **Auth**: `react-native-app-auth` (OIDC PKCE via system browser) ← **Article V.3**
+- **Token Storage**: Platform-native secure storage ← **Article V.2**
+  - Windows: `react-native-keychain` → Windows Credential Manager
+  - macOS: `react-native-keychain` → macOS Keychain
+- **Streaming**: Custom fetch-based SSE (similar to mobile)
 
 **Article V Compliance Checklist**:
 
 ✅ **V.2 - Secure Token Storage**:
 ```typescript
-// Main Process (Node.js)
-import { safeStorage } from 'electron';
+// React Native - Platform-agnostic secure storage
+import * as Keychain from 'react-native-keychain';
 
-// Store refresh token encrypted in OS keychain
-function storeRefreshToken(token: string) {
-  const encrypted = safeStorage.encryptString(token);
-  // Store encrypted buffer in system keychain
-  keytar.setPassword('tamshai-ai', 'refresh_token', encrypted.toString('base64'));
-}
+// Store tokens in OS-native secure storage
+await Keychain.setGenericPassword('tokens', JSON.stringify(tokens), {
+  service: 'com.tamshai.ai',
+  accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+});
 
-// Access token: MEMORY ONLY (never persisted)
-let accessTokenInMemory: string | null = null;
+// Access token: Kept in memory during app lifecycle
+// Refresh token: Stored in OS keychain (Windows Credential Manager / macOS Keychain)
 ```
 
 ✅ **V.3 - PKCE Authentication**:
 ```typescript
-// System browser OIDC flow
-import { shell } from 'electron';
+// System browser OIDC flow via react-native-app-auth
+import { authorize } from 'react-native-app-auth';
 
-// Open system browser for login
-const authUrl = buildPKCEAuthUrl();
-shell.openExternal(authUrl);
-
-// Register deep link handler for callback
-app.setAsDefaultProtocolClient('tamshai-ai');
-app.on('open-url', (event, url) => {
-  // Handle tamshai-ai://callback?code=...
-  exchangeCodeForTokens(url);
+const result = await authorize({
+  issuer: 'http://localhost:8180/realms/tamshai-corp',
+  clientId: 'mcp-gateway-desktop',
+  redirectUrl: 'com.tamshai.ai://oauth/callback',
+  usePKCE: true,  // REQUIRED by Article V.3
+  scopes: ['openid', 'profile', 'email', 'roles'],
 });
+// Native UWP protocol handling - no race condition!
 ```
 
 **Features**:
@@ -357,18 +358,25 @@ app.on('open-url', (event, url) => {
 **Security Architecture**:
 ```
 ┌─────────────────────────────────────────────┐
-│         Electron App (Desktop)              │
+│     React Native App (Windows/macOS)        │
 │  ┌──────────────────────────────────────┐  │
-│  │  Renderer Process (React)            │  │
+│  │  JavaScript Thread (React)           │  │
 │  │  - Chat UI                           │  │
-│  │  - NO token access (context isolated)│  │
-│  └──────────────────────────────────────┘  │
-│               ↓ IPC                         │
-│  ┌──────────────────────────────────────┐  │
-│  │  Main Process (Node.js)              │  │
 │  │  - Access Token (memory only)        │  │
-│  │  - Refresh Token (safeStorage → OS)  │  │
-│  │  - API calls to MCP Gateway          │  │
+│  │  - NO localStorage/AsyncStorage      │  │
+│  └──────────────────────────────────────┘  │
+│               ↓ Native Bridge               │
+│  ┌──────────────────────────────────────┐  │
+│  │  Native Module (react-native-keychain)│  │
+│  │  - Windows: Credential Manager       │  │
+│  │  - macOS: Keychain Services          │  │
+│  │  - Refresh Token (encrypted)         │  │
+│  └──────────────────────────────────────┘  │
+│               ↓ Native Protocol Handler     │
+│  ┌──────────────────────────────────────┐  │
+│  │  UWP/AppKit Protocol Activation      │  │
+│  │  - OS activates existing instance    │  │
+│  │  - No process spawn race condition   │  │
 │  └──────────────────────────────────────┘  │
 └─────────────────────────────────────────────┘
                ↓ HTTPS + JWT
@@ -378,6 +386,12 @@ app.on('open-url', (event, url) => {
 │       - All authorization logic             │
 └─────────────────────────────────────────────┘
 ```
+
+**Why React Native over Electron**:
+- UWP protocol activation is native - OS handles instance routing
+- No process spawn → lock check → race condition sequence
+- Unified codebase with mobile (007-mobile)
+- ~90% code sharing between Windows, macOS, iOS, Android
 
 **Success Criteria**:
 - [ ] OIDC login via system browser
@@ -604,12 +618,45 @@ tamshai-enterprise-ai/
 **Rationale**: Authorization in clients is a critical security vulnerability. Backend enforcement is the only acceptable pattern.
 **Date**: 2024-11-30 (Constitution ratification)
 
+### ADR-004: Desktop Platform Pivot from Electron to React Native
+**Decision**: Migrate desktop application from Electron to React Native for Windows/macOS.
+**Status**: APPROVED
+**Date**: 2024-12-14
+
+**Context**:
+During OAuth deep linking implementation on Windows, we discovered a fundamental race condition in Electron's `requestSingleInstanceLock()` (Electron GitHub #35680). When the protocol handler launches a second instance ~30 seconds after the first, both instances can incorrectly acquire the lock. This breaks OAuth callback routing because:
+- `second-instance` event doesn't fire when both hold the lock
+- PKCE code verifier is lost (stored in original instance memory)
+- User experiences broken login flow
+
+**Workarounds Attempted**:
+1. 600ms delay before lock request - partially effective
+2. `additionalData` API for URL passing - works when lock works
+3. Auto-close orphaned instances - loses OAuth callback URL
+4. File-based IPC - adds complexity, inelegant
+
+**Decision Rationale**:
+1. **Fundamental Platform Limitation**: Cannot be fixed at application level
+2. **React Native for Windows**: Uses native UWP protocol activation - OS routes callbacks to existing instance directly, eliminating the race condition entirely
+3. **Strategic Alignment**: Phase 6 (Mobile) already planned for React Native - merging into unified codebase
+4. **Code Reuse**: ~90% shared code between Windows, macOS, iOS, Android
+
+**Impact**:
+- Electron desktop client (`clients/desktop/`) deprecated (kept for reference)
+- New React Native desktop client development
+- Mobile timeline accelerated via shared codebase
+- 006-ai-desktop and 007-mobile effectively merge
+
+**Documentation**:
+- Full investigation: `clients/desktop/ELECTRON_SINGLE_INSTANCE_LOCK_INVESTIGATION.md`
+- OAuth debug history: `clients/desktop/OAUTH_DEBUG_STATUS.md`
+
 ---
 
 ## Next Actions
 
 ### Immediate (This Sprint)
-1. ✅ Formalize all 6 specifications (COMPLETED)
+1. ✅ Formalize all 7 specifications (COMPLETED)
 2. ⚡ Complete MCP Gateway token revocation (003-mcp-core)
 3. ⚡ Implement RLS policies (002-security-layer)
 
@@ -617,9 +664,14 @@ tamshai-enterprise-ai/
 4. 🔲 Implement MCP Suite servers (004-mcp-suite)
 5. 🔲 Begin Sample Apps with strict Article V compliance (005-sample-apps)
 
-### Future
-6. 🔲 Desktop client with safeStorage integration (006-ai-desktop)
-7. 🔲 Mobile app specification (007-mobile-app) - TBD
+### Desktop/Mobile Pivot (ADR-004)
+6. ⚡ Initialize React Native unified client (replaces 006-ai-desktop + 007-mobile)
+7. 🔲 Implement Windows desktop with `react-native-windows`
+8. 🔲 Implement macOS desktop with `react-native-macos`
+9. 🔲 Implement iOS/Android mobile (code sharing from desktop)
+
+### Deprecated
+- ~~Electron desktop client~~ - See ADR-004, kept for reference only
 
 ---
 

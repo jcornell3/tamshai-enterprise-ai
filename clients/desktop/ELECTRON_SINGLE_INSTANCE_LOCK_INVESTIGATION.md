@@ -333,6 +333,50 @@ We recommend Electron team investigate whether Windows is releasing/invalidating
 
 ---
 
+## Architecture Decision: Platform Pivot to React Native
+
+**Date**: December 14, 2024
+**Status**: APPROVED
+
+### Decision
+
+After extensive investigation and failed workaround attempts, we have decided to **pivot from Electron to React Native for Windows** for the desktop application.
+
+### Rationale
+
+1. **Fundamental Electron Limitation**: The race condition is in Electron's Windows implementation and cannot be fixed at the application level.
+
+2. **Failed Workarounds**: Multiple approaches were attempted:
+   - 600ms delay before lock request - partially effective
+   - `additionalData` API for URL passing - works when lock works
+   - Auto-close orphaned instances - loses OAuth callback URL
+   - File-based IPC - adds complexity, not elegant
+
+3. **React Native Advantages**:
+   - Uses native UWP protocol handling on Windows
+   - OS activates existing app instance directly (no process spawn/lock check)
+   - Race condition literally doesn't exist
+   - Consolidates desktop and mobile into single codebase
+   - Code sharing (~90%) between Windows, macOS, iOS, Android
+
+4. **Strategic Alignment**:
+   - Phase 6 (Mobile Apps) already planned for React Native
+   - Merging Phase 5 (Desktop) and Phase 6 into unified codebase
+   - Microsoft maintains high-quality React Native for Windows fork
+
+### Migration Plan
+
+See `.specify/specs/008-react-native-desktop/` for detailed migration specification.
+
+### Impact
+
+- Electron desktop client deprecated (kept for reference)
+- New React Native Windows/macOS client development begins
+- Mobile timeline accelerated (shared codebase)
+- Team upskills on React Native desktop patterns
+
+---
+
 **Contact**: John Cornell
 **Repository**: https://github.com/jcornell3/tamshai-enterprise-ai
 **Electron Version**: 35.7.5

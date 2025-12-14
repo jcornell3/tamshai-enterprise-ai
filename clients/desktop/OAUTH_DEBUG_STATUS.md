@@ -173,7 +173,15 @@ if (deepLinkUrlArg.includes('oauth/callback')) {
 
 ## Remaining Issue
 
-**None** - All known issues have been addressed with workarounds.
+**Windows Race Condition (Electron #35680)** - Fundamental platform limitation
+
+The Windows single-instance lock race condition cannot be reliably worked around at the application level. When the race condition occurs:
+- Both instances acquire the lock
+- `second-instance` event doesn't fire
+- OAuth callback URL is lost
+- User must restart the login flow
+
+**Decision**: Pivot to React Native for Windows which uses native UWP protocol handling and doesn't have this issue. See `ELECTRON_SINGLE_INSTANCE_LOCK_INVESTIGATION.md` for full analysis and architecture decision.
 
 ## Key Debug Scripts
 

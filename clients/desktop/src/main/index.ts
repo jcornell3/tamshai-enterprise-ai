@@ -10,7 +10,7 @@
 
 import { app, BrowserWindow, shell, session, ipcMain, protocol } from 'electron';
 import { join, resolve } from 'path';
-import { appendFileSync, existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { AuthService } from './auth';
 import { StorageService } from './storage';
 
@@ -440,43 +440,33 @@ function initializeApp(): void {
 
       // Check if this is an OAuth callback
       if (deepLinkUrlArg.includes('oauth/callback')) {
-        debugLog('Cold start OAuth callback detected - assuming orphaned instance due to race condition');
-        console.warn('[App] OAuth callback in cold start - likely orphaned second instance');
-
-        // UX FIX: Pass URL via file-based IPC, then auto-close orphaned instance
+        // KNOWN LIMITATION: Windows Race Condition (Electron #35680)
         //
-        // Scenario A (Race Condition - COMMON):
-        //   - Primary instance (PID A) is alive but second-instance event didn't fire
-        //   - This instance (PID B) is the orphaned second window from the race condition
-        //   - Solution: Write URL to file, let PID A read it, then auto-close
+        // On Windows, a race condition in Electron's single-instance lock can cause
+        // both the primary instance and callback instance to acquire the lock.
+        // When this happens, the second-instance event doesn't fire, and the callback
+        // URL is lost because this orphaned instance has no PKCE verifier.
         //
-        // Scenario B (True Cold Start - RARE):
-        //   - No primary instance exists, and we have no PKCE verifier anyway
-        //   - Solution: Write URL to file (will be ignored), then auto-close
+        // This is a fundamental Electron/Windows limitation. The workarounds attempted
+        // (600ms delay, auto-close orphan, file-based IPC) were insufficient.
         //
-        // File-based IPC is necessary because second-instance event doesn't fire
-        // when both instances incorrectly acquire the lock
+        // DECISION: Pivot to React Native for Windows which uses native UWP protocol
+        // handling and doesn't have this race condition. See:
+        // - clients/desktop/ELECTRON_SINGLE_INSTANCE_LOCK_INVESTIGATION.md
+        // - .specify/ARCHITECTURE_SPECS.md (Architecture Decision Record)
+        //
+        // For now, show error and auto-close the orphaned instance.
+        debugLog('Cold start OAuth callback detected - orphaned instance (Electron race condition)');
+        console.warn('[App] OAuth callback in cold start - Electron race condition triggered');
+        console.warn('[App] This is a known limitation. See ELECTRON_SINGLE_INSTANCE_LOCK_INVESTIGATION.md');
 
-        const callbackFilePath = join(app.getPath('userData'), 'oauth-callback.txt');
-        debugLog(`Writing OAuth callback URL to: ${callbackFilePath}`);
-
-        try {
-          fs.writeFileSync(callbackFilePath, deepLinkUrlArg, 'utf8');
-          debugLog('OAuth callback URL written successfully');
-        } catch (err) {
-          debugLog(`Failed to write callback file: ${err}`);
-        }
-
-        debugLog('Auto-closing orphaned callback instance in 2 seconds...');
-        console.log('[App] Auto-closing orphaned instance - primary will read callback file');
-
+        // Auto-close orphaned instance after brief delay
         setTimeout(() => {
           debugLog('Quitting orphaned callback instance');
-          console.log('[App] Closing orphaned instance now');
           app.quit();
-        }, 2000); // 2-second delay to ensure file is written
+        }, 2000);
 
-        return; // Stop further initialization for this orphaned instance
+        return; // Stop further initialization
       } else {
         // Non-OAuth deep link - handle normally
         mainWindow?.webContents.on('did-finish-load', () => {
@@ -485,35 +475,6 @@ function initializeApp(): void {
         });
       }
     }
-
-    // Monitor for OAuth callback file from orphaned instances (race condition workaround)
-    const callbackFilePath = join(app.getPath('userData'), 'oauth-callback.txt');
-    debugLog(`Monitoring for callback file at: ${callbackFilePath}`);
-
-    const fileWatcher = setInterval(() => {
-      try {
-        if (fs.existsSync(callbackFilePath)) {
-          debugLog('OAuth callback file detected!');
-          const url = fs.readFileSync(callbackFilePath, 'utf8');
-          debugLog(`Read OAuth callback URL from file: ${url}`);
-
-          // Delete file immediately to prevent re-processing
-          fs.unlinkSync(callbackFilePath);
-          debugLog('Deleted callback file');
-
-          // Process OAuth callback
-          console.log('[App] Processing OAuth callback from file-based IPC');
-          handleDeepLink(url);
-        }
-      } catch (err) {
-        debugLog(`Error monitoring callback file: ${err}`);
-      }
-    }, 500); // Check every 500ms
-
-    // Cleanup file watcher on app quit
-    app.on('will-quit', () => {
-      clearInterval(fileWatcher);
-    });
 
     // macOS: Re-create window when dock icon is clicked
     app.on('activate', () => {
