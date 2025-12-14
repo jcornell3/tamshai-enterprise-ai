@@ -328,14 +328,27 @@ if (!gotTheLock) {
 
 /**
  * Register app as default protocol client
+ *
+ * In development mode, we need to pass additional arguments to ensure
+ * the protocol handler invokes Electron with the correct entry point.
+ * The default setAsDefaultProtocolClient only passes "%1" which causes
+ * Electron to try to load the URL as a file path.
  */
 function registerCustomProtocol(): void {
-  // Set app as default protocol client (called AFTER app.ready)
-  if (!app.isDefaultProtocolClient('tamshai-ai')) {
-    const registered = app.setAsDefaultProtocolClient('tamshai-ai');
-    console.log('[Protocol] Registered tamshai-ai:// protocol handler:', registered);
+  if (app.isPackaged) {
+    // Production: Use default registration (packaged app handles it correctly)
+    if (!app.isDefaultProtocolClient('tamshai-ai')) {
+      const registered = app.setAsDefaultProtocolClient('tamshai-ai');
+      console.log('[Protocol] Registered tamshai-ai:// protocol handler:', registered);
+    } else {
+      console.log('[Protocol] Already registered as default protocol client');
+    }
   } else {
-    console.log('[Protocol] Already registered as default protocol client');
+    // Development: Skip auto-registration, rely on manual register-protocol-dev.ps1
+    // This prevents overwriting the correct registry entry with a broken one.
+    // The manual script registers with: electron.exe dist/main/index.js -- "%1"
+    console.log('[Protocol] Development mode - skipping auto-registration');
+    console.log('[Protocol] Use register-protocol-dev.ps1 to register the protocol handler');
   }
 }
 
