@@ -187,7 +187,14 @@ function createWindow(): void {
   });
 
   mainWindow.on('closed', () => {
+    debugLog('*** WINDOW CLOSED EVENT ***');
+    console.log('[Window] Window closed');
     mainWindow = null;
+  });
+
+  mainWindow.on('close', (event) => {
+    debugLog('*** WINDOW CLOSE EVENT (before close) ***');
+    console.log('[Window] Window about to close');
   });
 }
 
