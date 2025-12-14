@@ -60,6 +60,32 @@ process.on('unhandledRejection', (reason) => {
   debugLog(`UNHANDLED REJECTION: ${reason}`);
 });
 
+// Track process exit
+process.on('exit', (code) => {
+  debugLog(`*** PROCESS EXIT with code: ${code} ***`);
+});
+
+process.on('SIGINT', () => {
+  debugLog('*** RECEIVED SIGINT ***');
+});
+
+process.on('SIGTERM', () => {
+  debugLog('*** RECEIVED SIGTERM ***');
+});
+
+// Electron app lifecycle events
+app.on('before-quit', () => {
+  debugLog('*** APP BEFORE-QUIT EVENT ***');
+});
+
+app.on('will-quit', () => {
+  debugLog('*** APP WILL-QUIT EVENT ***');
+});
+
+app.on('quit', () => {
+  debugLog('*** APP QUIT EVENT ***');
+});
+
 // Fix working directory in development mode
 // When Windows launches via protocol handler, CWD may be System32
 if (!app.isPackaged) {
