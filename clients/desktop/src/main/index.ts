@@ -18,8 +18,16 @@ import { StorageService } from './storage';
 // STARTUP DEBUGGING - File-based logging for protocol handler debugging
 // This logs to a file because console.log may not be visible when the second
 // instance crashes before communicating with the first instance.
+//
+// IMPORTANT: We use a hardcoded path based on APPDATA because app.getPath()
+// may not work before Electron is fully initialized (causes crashes when
+// launched via protocol handler on Windows).
 // =============================================================================
-const DEBUG_LOG_DIR = join(app.getPath('userData'), 'debug');
+const DEBUG_LOG_DIR = process.platform === 'win32'
+  ? join(process.env.APPDATA || '', 'tamshai-ai-desktop', 'debug')
+  : process.platform === 'darwin'
+    ? join(process.env.HOME || '', 'Library', 'Application Support', 'tamshai-ai-desktop', 'debug')
+    : join(process.env.HOME || '', '.config', 'tamshai-ai-desktop', 'debug');
 const DEBUG_LOG_FILE = join(DEBUG_LOG_DIR, 'startup.log');
 
 function debugLog(msg: string): void {

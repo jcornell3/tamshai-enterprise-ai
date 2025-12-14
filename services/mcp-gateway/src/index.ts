@@ -37,6 +37,7 @@ import {
   deletePendingConfirmation,
   isTokenRevoked,
 } from './utils/redis';
+import { scrubPII } from './utils/pii-scrubber';
 
 dotenv.config();
 
@@ -443,7 +444,7 @@ app.post('/api/ai/query', authMiddleware, async (req: Request, res: Response) =>
 
   logger.info(`AI Query from ${userContext.username}:`, {
     requestId,
-    query: query.substring(0, 100),
+    query: scrubPII(query.substring(0, 100)),
     roles: userContext.roles,
   });
 
@@ -463,14 +464,14 @@ app.post('/api/ai/query', authMiddleware, async (req: Request, res: Response) =>
 
     const durationMs = Date.now() - startTime;
 
-    // Audit log
+    // Audit log - scrub PII before logging (security fix)
     const auditLog: AuditLog = {
       timestamp: new Date().toISOString(),
       requestId,
       userId: userContext.userId,
       username: userContext.username,
       roles: userContext.roles,
-      query,
+      query: scrubPII(query),  // Scrub PII from query before logging
       mcpServersAccessed: accessibleServers.map((s) => s.name),
       mcpServersDenied: deniedServers.map((s) => s.name),
       responseSuccess: true,
@@ -526,7 +527,7 @@ app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
 
   logger.info(`SSE Query from ${userContext.username}:`, {
     requestId,
-    query: query.substring(0, 100),
+    query: scrubPII(query.substring(0, 100)),  // Scrub PII from query before logging
     roles: userContext.roles,
     hasCursor: !!cursor,
   });

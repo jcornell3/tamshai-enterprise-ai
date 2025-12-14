@@ -391,6 +391,76 @@ app.on('open-url', (event, url) => {
 
 ---
 
+#### 007-mobile: Mobile AI Assistant (React Native)
+**Status**: PLANNED 🔲
+**Feature Branch**: `007-mobile`
+**Constitutional Compliance**: **Article V.1, V.2, V.3 - CRITICAL**
+
+**Business Intent**:
+Provide mobile AI assistant applications (iOS and Android) enabling employees to access enterprise AI capabilities from their mobile devices with the same security guarantees as web and desktop clients.
+
+**Technical Stack**:
+- **Framework**: React Native 0.73+ (iOS + Android)
+- **Language**: TypeScript 5.x
+- **Auth**: `react-native-app-auth` (OIDC PKCE via system browser)
+- **Token Storage**: `react-native-keychain` (iOS Keychain / Android Keystore)
+- **Streaming**: Custom fetch-based SSE (React Native lacks native EventSource)
+- **State**: Zustand
+
+**Network Infrastructure Requirements**:
+
+Mobile development requires special network configuration because `localhost` is inaccessible from physical devices:
+
+1. **Host Discovery**: Scripts to detect LAN IP address and generate `.env.mobile`
+2. **Docker Compose Override**: Mobile-specific configuration with external URLs
+3. **Windows Firewall**: Allow inbound connections on ports 8180, 8100, 3100
+4. **WSL2 Port Forwarding**: Forward Windows ports to WSL2 guest (if applicable)
+5. **Keycloak Mobile Client**: New public client with `com.tamshai.ai://` redirect URI
+
+**Article V Compliance**:
+
+✅ **V.1 - No Authorization Logic in Client**:
+```typescript
+// Backend returns masked data, client renders as-is
+const EmployeeSalary = ({ employee }) => (
+  <Text>{employee.salary}</Text>  // "*** (Hidden)" from backend
+);
+```
+
+✅ **V.2 - Secure Token Storage**:
+```typescript
+import * as Keychain from 'react-native-keychain';
+
+await Keychain.setGenericPassword('tokens', JSON.stringify(tokens), {
+  service: 'com.tamshai.ai',
+  accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+});
+```
+
+✅ **V.3 - PKCE Authentication**:
+```typescript
+import { authorize } from 'react-native-app-auth';
+
+const result = await authorize({
+  issuer: `${HOST_IP}:8180/realms/tamshai-corp`,
+  clientId: 'mcp-gateway-mobile',
+  redirectUrl: 'com.tamshai.ai://oauth/callback',
+  usePKCE: true,  // REQUIRED
+});
+```
+
+**Success Criteria**:
+- [ ] Host discovery scripts work on Windows/macOS/Linux
+- [ ] Mobile device can reach Keycloak and MCP Gateway
+- [ ] OIDC login works on iOS and Android
+- [ ] Tokens stored in platform-specific secure storage
+- [ ] SSE streaming works for AI queries
+- [ ] Confirmation cards work for write operations
+
+**Location**: `.specify/specs/007-mobile/`
+
+---
+
 ## Specification File Structure
 
 Each specification follows this structure:
@@ -450,6 +520,7 @@ Each specification follows this structure:
 | 004-mcp-suite | ✅ I.1, I.3 | ✅ II.1, II.2, II.3 | ✅ III.1, III.2 | ✅ IV.1, IV.2 | N/A |
 | 005-sample-apps | ✅ I.4 | N/A | N/A | ✅ IV.1 | ✅ **V.1, V.2, V.3** |
 | 006-ai-desktop | ✅ I.4 | N/A | N/A | N/A | ✅ **V.1, V.2, V.3** |
+| 007-mobile | ✅ I.4 | N/A | N/A | N/A | ✅ **V.1, V.2, V.3** |
 
 **Legend**:
 - ✅ = Compliance required and documented
@@ -491,7 +562,11 @@ tamshai-enterprise-ai/
 │   │   │   ├── spec.md
 │   │   │   ├── plan.md
 │   │   │   └── tasks.md
-│   │   └── 006-ai-desktop/       [🔲 PLANNED]
+│   │   ├── 006-ai-desktop/       [🔲 PLANNED]
+│   │   │   ├── spec.md
+│   │   │   ├── plan.md
+│   │   │   └── tasks.md
+│   │   └── 007-mobile/           [🔲 PLANNED]
 │   │       ├── spec.md
 │   │       ├── plan.md
 │   │       └── tasks.md

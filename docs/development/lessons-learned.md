@@ -4121,3 +4121,66 @@ Kong's declarative configuration has subtle semantics around `route: null` that 
 *Issues fixed: 3 (global plugin, missing routes, port mismatch)*
 *Kong Gateway: ✅ FULLY FUNCTIONAL*
 *Web apps routing through Kong: 3/3*
+
+---
+
+## Tech Debt Tracking
+
+### Identified Items
+
+#### TD-001: NOT_IMPLEMENTED Tools in MCP Finance (LOW)
+**Files**:
+- `services/mcp-finance/src/tools/get-expense-report.ts`
+- `services/mcp-finance/src/tools/approve-budget.ts`
+
+**Status**: Intentional limitation
+
+**Description**:
+Two tools in the MCP Finance server return `NOT_IMPLEMENTED` errors because the underlying database schema (v1.3) does not include the `expense_reports` table. These tools are stubbed to return helpful error messages that guide the AI and users.
+
+**Why This Exists**:
+The v1.3 finance schema includes `budgets` and `invoices` tables but deferred `expense_reports` to a future schema version. Rather than remove the tools entirely (which could cause AI confusion), they return structured errors with `suggestedAction` guidance.
+
+**Remediation**:
+1. When the v1.4+ schema is implemented with the `expense_reports` table, update these tools
+2. Run the migration: `sample-data/finance-data-v1.4.sql` (to be created)
+3. Update the tools to query actual data instead of returning NOT_IMPLEMENTED
+
+**Code Example** (current behavior):
+```typescript
+return {
+  status: 'error',
+  code: 'NOT_IMPLEMENTED',
+  message: 'Expense report functionality requires database schema v1.4+',
+  suggestedAction: 'Use list_invoices to view financial transactions. Expense reports will be available in a future update.'
+};
+```
+
+**Priority**: LOW - The stubs provide good UX and don't break functionality
+
+---
+
+#### TD-002: Security Review Findings (December 2025)
+**Date Identified**: December 12, 2025
+**Reviewer**: Security Review
+
+**Findings Addressed**:
+| Finding | Severity | Status | Resolution |
+|---------|----------|--------|------------|
+| Manual SQL escaping in RLS | HIGH | ✅ Fixed | Migrated to pg-format library |
+| Hardcoded credentials in docker-compose | HIGH | ✅ Fixed | Added validation script |
+| Regex-based prompt defense | MEDIUM | ✅ Acknowledged | First-line defense by design |
+| Development ports exposed | MEDIUM | ⚠️ Dev only | Production uses different config |
+| PII in audit logs | LOW | ✅ Fixed | Added PII scrubber utility |
+| NOT_IMPLEMENTED stubs | LOW | ✅ Documented | See TD-001 above |
+
+**Files Changed**:
+- `services/mcp-hr/src/database/connection.ts` - pg-format for SQL escaping
+- `services/mcp-finance/src/database/connection.ts` - pg-format for SQL escaping
+- `services/mcp-gateway/src/utils/pii-scrubber.ts` - NEW: PII scrubbing utility
+- `services/mcp-gateway/src/index.ts` - Integrated PII scrubber in logging
+- `scripts/validate-production-config.sh` - NEW: Credential validation
+
+---
+
+*Last updated: December 12, 2025*

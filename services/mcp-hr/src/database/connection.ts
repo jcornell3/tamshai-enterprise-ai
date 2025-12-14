@@ -6,6 +6,7 @@
  */
 
 import { Pool, PoolClient, QueryResult } from 'pg';
+import format from 'pg-format';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -69,23 +70,22 @@ export async function queryWithRLS<T extends Record<string, any> = any>(
 
   try {
     // Set RLS session variables
-    // Note: SET LOCAL doesn't work well with parameterized queries in pg library
-    // Using string concatenation with proper escaping
+    // Using pg-format for proper SQL escaping (security fix: avoid manual string escaping)
     await client.query('BEGIN');
     logger.info('Transaction BEGIN successful');
 
-    // Escape single quotes in values
-    const escapedUserId = userContext.userId.replace(/'/g, "''");
-    const escapedEmail = (userContext.email || '').replace(/'/g, "''");
-    const escapedRoles = userContext.roles.join(',').replace(/'/g, "''");
+    // Use pg-format's %L (literal) specifier for safe SQL escaping
+    // This handles all edge cases including encoding attacks
+    const rolesString = userContext.roles.join(',');
+    const emailString = userContext.email || '';
 
-    await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+    await client.query(format('SET LOCAL app.current_user_id = %L', userContext.userId));
     logger.info('SET user_id successful', { userId: userContext.userId });
 
-    await client.query(`SET LOCAL app.current_user_email = '${escapedEmail}'`);
+    await client.query(format('SET LOCAL app.current_user_email = %L', emailString));
     logger.info('SET user_email successful');
 
-    await client.query(`SET LOCAL app.current_user_roles = '${escapedRoles}'`);
+    await client.query(format('SET LOCAL app.current_user_roles = %L', rolesString));
     logger.info('SET user_roles successful', { roles: userContext.roles });
 
     logger.info('About to execute main query', {
