@@ -433,23 +433,40 @@ function initializeApp(): void {
 
     // Handle "cold start" - app was launched directly with a deep link URL
     // This happens when the app wasn't running and was launched via protocol handler,
-    // OR when the first instance's lock was not properly held (Windows timing issue)
+    // OR when the first instance's lock was not properly held (Windows race condition)
     if (deepLinkUrlArg) {
       debugLog(`Cold start with deep link URL: ${deepLinkUrlArg}`);
       console.log('[App] Cold start with deep link URL:', deepLinkUrlArg);
 
       // Check if this is an OAuth callback
       if (deepLinkUrlArg.includes('oauth/callback')) {
-        debugLog('Cold start OAuth callback detected - this will fail (no PKCE verifier)');
-        console.warn('[App] OAuth callback received in cold start - no auth session exists');
+        debugLog('Cold start OAuth callback detected - assuming orphaned instance due to race condition');
+        console.warn('[App] OAuth callback in cold start - likely orphaned second instance');
 
-        // Show error to user instead of attempting token exchange
-        mainWindow?.webContents.on('did-finish-load', () => {
-          debugLog('Sending cold start error to renderer');
-          mainWindow?.webContents.send('auth:error',
-            'Authentication session expired. Please start the app first, then click "Sign in with SSO".'
-          );
-        });
+        // UX FIX: Auto-close orphaned instance instead of showing error
+        //
+        // Scenario A (Race Condition - COMMON):
+        //   - Primary instance (PID A) is alive and received URL via 'second-instance' event
+        //   - This instance (PID B) is the orphaned second window from the race condition
+        //   - Solution: Close this window automatically, let PID A handle the OAuth callback
+        //
+        // Scenario B (True Cold Start - RARE):
+        //   - User closed app while browser was open, then callback redirected
+        //   - No primary instance exists, and we have no PKCE verifier anyway
+        //   - Solution: Close silently since login is invalid (lost session state)
+        //
+        // In both cases, auto-closing provides better UX than showing an error
+
+        debugLog('Auto-closing orphaned callback instance in 2 seconds...');
+        console.log('[App] Auto-closing orphaned instance - primary instance will handle callback');
+
+        setTimeout(() => {
+          debugLog('Quitting orphaned callback instance');
+          console.log('[App] Closing orphaned instance now');
+          app.quit();
+        }, 2000); // 2-second delay to ensure second-instance event fires in primary
+
+        return; // Stop further initialization for this orphaned instance
       } else {
         // Non-OAuth deep link - handle normally
         mainWindow?.webContents.on('did-finish-load', () => {

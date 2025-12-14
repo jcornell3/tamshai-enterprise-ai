@@ -144,16 +144,36 @@ app.on('second-instance', (_event, commandLine, workingDirectory, additionalData
 
 This ensures the deep link URL is passed cleanly via in-memory IPC, keeping the PKCE code verifier in the primary instance where it was created.
 
-### Problem 8: Cold Start - No Primary Instance Running
+### Problem 8: Orphaned Second Window (Race Condition UX Impact)
 
-**Symptom**: Token exchange failed with "No PKCE code verifier found"
-**Root Cause**: When the app isn't running and is launched via protocol handler (cold start), the instance launched with the callback URL becomes the primary instance. But it didn't initiate the login flow, so it has no PKCE verifier.
+**Symptom**: Due to the Windows race condition (Problem 7), the second instance sometimes acquires the lock and shows a window, resulting in two windows visible to the user.
 
-**Fix**: Detect cold start scenario and handle appropriately. The delay mitigation in Problem 7 also helps here by giving an existing instance time to acquire the lock first.
+**Root Cause**: When the race condition occurs, the callback instance (PID B) becomes a "primary" instance with its own window, while the original instance (PID A) also remains primary. Both instances believe they hold the lock.
+
+**Fix**: Auto-close orphaned callback instances instead of showing errors
+```typescript
+if (deepLinkUrlArg.includes('oauth/callback')) {
+  // Scenario A (Race Condition - COMMON):
+  //   Primary instance (PID A) received URL via 'second-instance' event
+  //   This instance (PID B) is orphaned - auto-close it
+  //
+  // Scenario B (True Cold Start - RARE):
+  //   No primary instance, no PKCE verifier - close silently
+
+  setTimeout(() => {
+    app.quit(); // Self-terminate after 2 seconds
+  }, 2000);
+  return; // Stop initialization
+}
+```
+
+**User Experience**:
+- Before: Two windows appear, user must click "Sign in with SSO" again in second window
+- After: Second window auto-closes after 2 seconds, primary window handles login seamlessly
 
 ## Remaining Issue
 
-**None** - All known issues have been addressed.
+**None** - All known issues have been addressed with workarounds.
 
 ## Key Debug Scripts
 

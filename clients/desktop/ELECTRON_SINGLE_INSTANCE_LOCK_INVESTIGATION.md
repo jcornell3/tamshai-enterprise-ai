@@ -236,15 +236,47 @@ app.requestSingleInstanceLock({
 
 ## Workaround for Application Developers
 
-### Option 1: Accept Dual Lock and Close Orphan
-Detect cold start OAuth callback and close the window after showing error:
+### Option 1: Accept Dual Lock and Auto-Close Orphan (✅ IMPLEMENTED)
+
+**Status**: We have implemented this workaround in our application.
+
+**Approach**: Since we cannot prevent the race condition, we accept that the second instance may get the lock. Instead of showing an error, we detect the orphaned callback instance and auto-close it.
+
+**Implementation**:
 ```typescript
+// In initializeApp(), after createWindow()
 if (deepLinkUrlArg?.includes('oauth/callback')) {
+  debugLog('Cold start OAuth callback detected - assuming orphaned instance due to race condition');
+
+  // UX FIX: Auto-close orphaned instance
+  //
+  // Scenario A (Race Condition - COMMON):
+  //   - Primary instance (PID A) received URL via 'second-instance' event
+  //   - This instance (PID B) is the orphaned second window
+  //   - Solution: Close automatically, let PID A handle OAuth
+  //
+  // Scenario B (True Cold Start - RARE):
+  //   - No primary instance, no PKCE verifier anyway
+  //   - Solution: Close silently (login invalid)
+
   setTimeout(() => {
-    app.quit(); // Close this orphaned callback window
-  }, 5000);
+    debugLog('Quitting orphaned callback instance');
+    app.quit();
+  }, 2000); // 2-second delay to ensure second-instance event fires
+
+  return; // Stop further initialization
 }
 ```
+
+**User Experience**:
+- **Before**: Two windows appear, user sees error, must click "Sign in with SSO" again
+- **After**: Second window briefly appears then auto-closes, primary window handles login seamlessly
+
+**Why This Works**:
+- Primary instance (PID A) receives the URL via `second-instance` event (confirmed in logs)
+- Orphaned instance (PID B) self-terminates before user interaction
+- 2-second delay ensures IPC event has time to fire
+- Handles both race condition scenario AND true cold start scenario gracefully
 
 ### Option 2: File-Based Lock
 Implement custom file-based locking:
