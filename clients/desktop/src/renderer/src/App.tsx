@@ -21,23 +21,28 @@ function App() {
 
   // Check for existing tokens on mount
   useEffect(() => {
+    console.log('[App] Setting up auth listeners...');
     checkAuth();
 
     // Listen for auth success from OAuth callback
     window.electronAPI.onAuthSuccess((tokens) => {
-      console.log('[App] Auth success event received');
+      console.log('[App] *** AUTH SUCCESS EVENT RECEIVED ***');
+      console.log('[App] Tokens:', tokens);
       setTokens(tokens);
       setIsAuthenticated(true);
     });
 
     // Listen for auth errors
     window.electronAPI.onAuthError((error) => {
-      console.error('[App] Auth error event received:', error);
+      console.error('[App] *** AUTH ERROR EVENT RECEIVED ***:', error);
       setIsAuthenticated(false);
     });
 
+    console.log('[App] Auth listeners registered');
+
     // Cleanup listeners on unmount
     return () => {
+      console.log('[App] Cleaning up auth listeners...');
       window.electronAPI.removeAuthSuccessListener();
       window.electronAPI.removeAuthErrorListener();
     };

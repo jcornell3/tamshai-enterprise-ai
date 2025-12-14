@@ -357,24 +357,42 @@ function registerCustomProtocol(): void {
  */
 function handleDeepLink(url: string): void {
   console.log('[Deep Link] Received:', url);
+  debugLog(`handleDeepLink called with: ${url}`);
 
   if (url.startsWith('tamshai-ai://oauth/callback')) {
+    debugLog('URL matches OAuth callback pattern, processing...');
+
     authService.handleCallback(url)
       .then(async (tokens) => {
+        debugLog('Token exchange successful, storing tokens...');
         await storageService.storeTokens(tokens);
+        debugLog('Tokens stored successfully');
 
         // Notify renderer of successful authentication
         if (mainWindow) {
+          debugLog('Sending auth:success event to renderer');
+          console.log('[Deep Link] Sending auth:success to renderer');
           mainWindow.webContents.send('auth:success', tokens);
+
+          // Also focus the window to bring it to foreground
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+          debugLog('Window focused');
+        } else {
+          debugLog('ERROR: mainWindow is null, cannot send auth:success');
+          console.error('[Deep Link] mainWindow is null!');
         }
       })
       .catch((error) => {
+        debugLog(`Token exchange FAILED: ${error.message}`);
         console.error('[Auth] Callback error:', error);
 
         if (mainWindow) {
           mainWindow.webContents.send('auth:error', error.message);
         }
       });
+  } else {
+    debugLog(`URL does not match OAuth callback pattern`);
   }
 }
 
