@@ -50,6 +50,11 @@ debugLog(`process.cwd(): ${process.cwd()}`);
 debugLog(`__dirname: ${__dirname}`);
 debugLog(`app.isPackaged: ${app.isPackaged}`);
 
+// Detect deep link URL in command line arguments early (before any async operations)
+// This is used for both the race condition delay and cold start handling
+const deepLinkUrlArg = process.argv.find(arg => arg.startsWith('tamshai-ai://'));
+debugLog(`Deep link URL in args: ${deepLinkUrlArg || 'none'}`);
+
 // Catch uncaught exceptions to debug crashes
 process.on('uncaughtException', (err) => {
   debugLog(`UNCAUGHT EXCEPTION: ${err.message}`);
@@ -319,32 +324,62 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 /**
- * Single instance lock (must be checked BEFORE app.ready)
- * Ensures only one instance runs and passes deep links to existing instance
+ * Single instance lock with race condition mitigation
+ *
+ * Uses Electron's additionalData API to pass the deep link URL from the
+ * second instance to the first instance via IPC (not command line).
+ *
+ * The 600ms delay before requesting the lock mitigates a known Windows
+ * race condition (Electron issue #35680) where both instances can
+ * incorrectly get the lock simultaneously.
  */
-debugLog('Requesting single instance lock...');
-const gotTheLock = app.requestSingleInstanceLock();
-debugLog(`gotTheLock: ${gotTheLock}`);
+interface SingleInstanceData {
+  deepLinkUrl: string | null;
+}
 
-if (!gotTheLock) {
-  // Another instance is already running - quit immediately
-  // The command line args will be passed to the first instance via second-instance event
-  debugLog('Another instance is running - quitting to pass args to it');
-  console.log('[App] Another instance is running, passing args and quitting...');
-  console.log('[App] process.argv:', process.argv);
-  app.quit();
-} else {
+async function attemptSingleInstanceLock(): Promise<void> {
+  // Prepare data to pass to primary instance (if we are secondary)
+  const additionalData: SingleInstanceData = {
+    deepLinkUrl: deepLinkUrlArg || null
+  };
+
+  // Race Condition Mitigation (Windows specific)
+  // If we have a deep link URL, we are likely the second instance launched by
+  // the protocol handler. Wait briefly to ensure the OS lock table is updated
+  // so requestSingleInstanceLock doesn't return true falsely.
+  // This addresses Electron issue #35680.
+  if (deepLinkUrlArg && process.platform === 'win32') {
+    debugLog('Deep link detected. Delaying lock request by 600ms to prevent race condition...');
+    await new Promise(resolve => setTimeout(resolve, 600));
+  }
+
+  // Request lock with additionalData for URL passing
+  debugLog('Requesting single instance lock...');
+  const gotTheLock = app.requestSingleInstanceLock(additionalData);
+  debugLog(`gotTheLock: ${gotTheLock}`);
+
+  if (!gotTheLock) {
+    // Another instance is already running - quit immediately
+    // The additionalData (including deep link URL) will be passed to the first instance
+    debugLog('Another instance is running - quitting to pass data to it');
+    console.log('[App] Another instance is running, passing data and quitting...');
+    console.log('[App] additionalData:', additionalData);
+    app.quit();
+    return;
+  }
+
+  // We have the lock - this is the primary instance
   debugLog('Got the lock - this is the primary instance');
-  // We have the lock - setup second-instance handler
-  app.on('second-instance', (_event, commandLine, workingDirectory) => {
+
+  // Setup second-instance handler to receive data from subsequent instances
+  app.on('second-instance', (_event, commandLine, workingDirectory, additionalData) => {
     debugLog('=== SECOND INSTANCE EVENT RECEIVED ===');
     debugLog(`commandLine: ${JSON.stringify(commandLine)}`);
     debugLog(`workingDirectory: ${workingDirectory}`);
+    debugLog(`additionalData: ${JSON.stringify(additionalData)}`);
 
     console.log('[App] Second instance detected!');
-    console.log('[App] commandLine:', commandLine);
-    console.log('[App] workingDirectory:', workingDirectory);
-    console.log('[App] process.argv:', process.argv);
+    console.log('[App] additionalData:', additionalData);
 
     // Focus existing window
     if (mainWindow) {
@@ -352,20 +387,69 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
 
-    // Handle deep link from command line (look in both commandLine and process.argv)
-    const url = commandLine.find(arg => arg.startsWith('tamshai-ai://')) ||
-                process.argv.find(arg => arg.startsWith('tamshai-ai://'));
+    // Extract URL from additionalData (preferred - clean IPC method)
+    const data = additionalData as SingleInstanceData | undefined;
+    let url: string | undefined;
+
+    if (data?.deepLinkUrl) {
+      debugLog(`Deep link received via additionalData: ${data.deepLinkUrl}`);
+      url = data.deepLinkUrl;
+    } else {
+      // Fallback: Check commandLine arguments if additionalData wasn't provided
+      debugLog('No URL in additionalData, checking commandLine args...');
+      url = commandLine.find(arg => arg.startsWith('tamshai-ai://'));
+      if (url) {
+        debugLog(`Found fallback URL in commandLine: ${url}`);
+      }
+    }
+
     if (url) {
-      debugLog(`Deep link found: ${url}`);
-      console.log('[App] Deep link found in command line:', url);
+      console.log('[App] Deep link found:', url);
       handleDeepLink(url);
     } else {
-      debugLog('No deep link found in command line');
-      console.log('[App] No deep link found in command line');
-      console.log('[App] All args:', commandLine);
+      debugLog('No deep link found in second instance data');
+      console.log('[App] No deep link found');
     }
   });
+
+  // Initialize the app (only primary instance reaches here)
+  initializeApp();
 }
+
+/**
+ * Initialize the application (called only by primary instance)
+ */
+function initializeApp(): void {
+  app.whenReady().then(async () => {
+    registerCustomProtocol();
+    await initializeServices();
+    registerIpcHandlers();
+    createWindow();
+
+    // Handle "cold start" - app was launched directly with a deep link URL
+    // This happens when the app wasn't running and was launched via protocol handler
+    if (deepLinkUrlArg) {
+      debugLog(`Cold start with deep link URL: ${deepLinkUrlArg}`);
+      console.log('[App] Cold start with deep link URL:', deepLinkUrlArg);
+
+      // Wait for window to be ready before handling the deep link
+      mainWindow?.webContents.on('did-finish-load', () => {
+        debugLog('Window loaded, processing cold start deep link...');
+        handleDeepLink(deepLinkUrlArg);
+      });
+    }
+
+    // macOS: Re-create window when dock icon is clicked
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+}
+
+// Start the single instance lock process
+attemptSingleInstanceLock();
 
 /**
  * Register app as default protocol client
@@ -436,35 +520,6 @@ function handleDeepLink(url: string): void {
     debugLog(`URL does not match OAuth callback pattern`);
   }
 }
-
-/**
- * App lifecycle: Ready
- */
-app.whenReady().then(async () => {
-  registerCustomProtocol();
-  await initializeServices();
-  registerIpcHandlers();
-  createWindow();
-
-  // Check if app was launched with a deep link URL (Windows: passed as argument)
-  // This handles the case where this instance becomes primary with a callback URL
-  const deepLinkUrl = process.argv.find(arg => arg.startsWith('tamshai-ai://'));
-  if (deepLinkUrl) {
-    debugLog(`App launched with deep link URL: ${deepLinkUrl}`);
-    console.log('[App] Launched with deep link URL:', deepLinkUrl);
-    // Wait a short moment for the window to be ready before handling
-    setTimeout(() => {
-      handleDeepLink(deepLinkUrl);
-    }, 500);
-  }
-
-  // macOS: Re-create window when dock icon is clicked
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
 
 /**
  * App lifecycle: All windows closed

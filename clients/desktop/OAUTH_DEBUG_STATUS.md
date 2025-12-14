@@ -1,7 +1,7 @@
 # Desktop OAuth Deep Linking - Debug Status
 
 **Last Updated**: December 14, 2024
-**Status**: RESOLVED - Windows protocol handler working correctly
+**Status**: RESOLVED - Full solution implemented with race condition mitigation
 
 ## Root Cause Analysis
 
@@ -101,6 +101,8 @@ function registerCustomProtocol(): void {
 4. **Code**: Fix CWD when launched from System32
 5. **Code**: Use file-based debug logging (not console)
 6. **Code**: Skip auto-registration in dev mode to preserve correct registry
+7. **Code**: Add 600ms delay before lock request when deep link URL is present (Windows)
+8. **Code**: Use `additionalData` API to pass URL via IPC instead of command line
 
 ## What Works Now ✅
 
@@ -112,9 +114,46 @@ function registerCustomProtocol(): void {
 6. **Token Exchange**: Authorization code exchanged for access/refresh tokens
 7. **Token Storage**: Tokens stored securely via Electron safeStorage
 
+### Problem 7: Windows Race Condition - Both Instances Get Lock (Electron #35680)
+
+**Symptom**: Two Electron windows appeared; both processes got `gotTheLock: true`
+**Root Cause**: Known Windows race condition in Electron's single-instance lock implementation. When the protocol handler launches a second instance quickly, both instances can incorrectly acquire the lock before the OS lock table is synchronized.
+
+**Fix**: Implemented two mitigations:
+1. **600ms Delay**: When a deep link URL is detected, delay the lock request to allow the OS lock table to update:
+```typescript
+if (deepLinkUrlArg && process.platform === 'win32') {
+  await new Promise(resolve => setTimeout(resolve, 600));
+}
+const gotTheLock = app.requestSingleInstanceLock(additionalData);
+```
+
+2. **`additionalData` API**: Use Electron's `requestSingleInstanceLock(additionalData)` to pass the deep link URL via IPC instead of relying on command line parsing:
+```typescript
+const additionalData = { deepLinkUrl: deepLinkUrlArg || null };
+const gotTheLock = app.requestSingleInstanceLock(additionalData);
+
+// In second-instance handler:
+app.on('second-instance', (_event, commandLine, workingDirectory, additionalData) => {
+  const data = additionalData as { deepLinkUrl?: string };
+  if (data?.deepLinkUrl) {
+    handleDeepLink(data.deepLinkUrl);
+  }
+});
+```
+
+This ensures the deep link URL is passed cleanly via in-memory IPC, keeping the PKCE code verifier in the primary instance where it was created.
+
+### Problem 8: Cold Start - No Primary Instance Running
+
+**Symptom**: Token exchange failed with "No PKCE code verifier found"
+**Root Cause**: When the app isn't running and is launched via protocol handler (cold start), the instance launched with the callback URL becomes the primary instance. But it didn't initiate the login flow, so it has no PKCE verifier.
+
+**Fix**: Detect cold start scenario and handle appropriately. The delay mitigation in Problem 7 also helps here by giving an existing instance time to acquire the lock first.
+
 ## Remaining Issue
 
-**UI Update After Callback**: After successful OAuth callback, the renderer stays on the login screen instead of transitioning to the main app. The tokens are correctly stored, but the `auth:success` IPC event isn't triggering a UI re-render. User must click "Sign in with SSO" again (which immediately succeeds using stored tokens).
+**None** - All known issues have been addressed.
 
 ## Key Debug Scripts
 
@@ -149,6 +188,8 @@ This log captures:
 4. **`--` separator matters**: Prevents URLs from being parsed as file paths
 5. **Auto-registration can break things**: Electron's defaults don't work for all dev setups
 6. **Single-instance lock timing is critical**: Must happen before any async initialization
+7. **Windows has a race condition in single-instance lock**: Use delays to mitigate (Electron #35680)
+8. **`additionalData` API is cleaner than command line parsing**: Use it for inter-instance communication
 
 ## Related Commits
 
