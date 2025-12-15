@@ -9,15 +9,60 @@
 #include "NativeModules.h"
 #include <winrt/Microsoft.ReactNative.h>
 #include <string>
+#include <fstream>
+#include <atomic>
 
 // Global to store the initial URL from protocol activation
 std::wstring g_initialUrl;
+
+// Global for IPC file polling (checked by JS via native module)
+std::atomic<bool> g_hasNewUrl{false};
+std::wstring g_pendingUrl;
+
+// Mutex name for single-instance detection
+const wchar_t* SINGLE_INSTANCE_MUTEX_NAME = L"TamshaiAiUnified_SingleInstance_Mutex";
+
+// File path for IPC (simpler than named pipes)
+std::wstring GetIpcFilePath() {
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    return std::wstring(tempPath) + L"tamshai_ai_callback_url.txt";
+}
+
+// Write URL to IPC file for running instance to pick up
+void WriteUrlToIpcFile(const std::wstring& url) {
+    std::wstring ipcPath = GetIpcFilePath();
+    std::wofstream file(ipcPath, std::ios::trunc);
+    if (file.is_open()) {
+        file << url;
+        file.close();
+        OutputDebugStringW(L"[IPC] Wrote URL to IPC file: ");
+        OutputDebugStringW(url.c_str());
+        OutputDebugStringW(L"\n");
+    }
+}
+
+// Read URL from IPC file
+std::wstring ReadUrlFromIpcFile() {
+    std::wstring ipcPath = GetIpcFilePath();
+    std::wifstream file(ipcPath);
+    std::wstring url;
+    if (file.is_open()) {
+        std::getline(file, url);
+        file.close();
+        // Delete the file after reading
+        DeleteFileW(ipcPath.c_str());
+    }
+    return url;
+}
 
 // =============================================================================
 // DeepLinkModule - Native module to expose protocol activation URL to JS
 // This works around a known issue in React Native Windows where getInitialURL()
 // returns null when the app is launched via protocol activation.
 // See: https://github.com/microsoft/react-native-windows/issues/6996
+//
+// Also provides IPC file polling for single-instance URL passing.
 // =============================================================================
 REACT_MODULE(DeepLinkModule)
 struct DeepLinkModule {
@@ -40,6 +85,21 @@ struct DeepLinkModule {
   REACT_METHOD(clearInitialURL)
   void clearInitialURL() noexcept {
     g_initialUrl.clear();
+  }
+
+  // Check for URL from IPC file (for single-instance URL passing)
+  // Call this periodically from JS to check if another instance passed a URL
+  REACT_METHOD(checkForCallbackUrl)
+  void checkForCallbackUrl(winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
+    std::wstring url = ReadUrlFromIpcFile();
+    if (!url.empty()) {
+      OutputDebugStringW(L"[DeepLinkModule] Found callback URL from IPC: ");
+      OutputDebugStringW(url.c_str());
+      OutputDebugStringW(L"\n");
+      promise.Resolve(winrt::hstring(url));
+    } else {
+      promise.Resolve(winrt::hstring(L""));
+    }
   }
 
  private:
@@ -65,18 +125,40 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   // Check for protocol activation URL in command line
   // When launched via protocol (com.tamshai.ai://...), the URL is passed as command line arg
+  std::wstring protocolUrl;
   if (commandLine && strlen(commandLine) > 0) {
     std::string cmdLine(commandLine);
+    OutputDebugStringA("[Protocol] Command line: ");
+    OutputDebugStringA(cmdLine.c_str());
+    OutputDebugStringA("\n");
+
     // Check if it's a protocol URL (starts with com.tamshai.ai://)
     if (cmdLine.find("com.tamshai.ai://") != std::string::npos) {
       // Convert to wide string for storage
       int size_needed = MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(), (int)cmdLine.size(), NULL, 0);
-      g_initialUrl.resize(size_needed);
-      MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(), (int)cmdLine.size(), &g_initialUrl[0], size_needed);
-      OutputDebugStringW(L"[Protocol] Initial URL from command line: ");
-      OutputDebugStringW(g_initialUrl.c_str());
+      protocolUrl.resize(size_needed);
+      MultiByteToWideChar(CP_UTF8, 0, cmdLine.c_str(), (int)cmdLine.size(), &protocolUrl[0], size_needed);
+      OutputDebugStringW(L"[Protocol] URL from command line: ");
+      OutputDebugStringW(protocolUrl.c_str());
       OutputDebugStringW(L"\n");
     }
+  }
+
+  // Single-instance check using mutex
+  HANDLE hMutex = CreateMutexW(NULL, TRUE, SINGLE_INSTANCE_MUTEX_NAME);
+  bool isFirstInstance = (GetLastError() != ERROR_ALREADY_EXISTS);
+
+  if (!isFirstInstance && !protocolUrl.empty()) {
+    // Another instance is already running - pass the URL via IPC file and exit
+    OutputDebugStringW(L"[SingleInstance] Another instance running. Passing URL via IPC file.\n");
+    WriteUrlToIpcFile(protocolUrl);
+    CloseHandle(hMutex);
+    return 0;  // Exit this instance
+  }
+
+  // If we have a protocol URL on first launch, store it
+  if (!protocolUrl.empty()) {
+    g_initialUrl = protocolUrl;
   }
 
   // Find the path hosting the app exe file

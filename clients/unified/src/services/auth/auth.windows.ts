@@ -576,6 +576,51 @@ export async function hasValidStoredTokens(): Promise<boolean> {
   return !!stored?.refreshToken;
 }
 
+// Interval ID for IPC file polling
+let ipcPollingInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Start polling for callback URL from IPC file
+ * This handles the case where a second instance passes the OAuth callback URL
+ * via a temp file (single-instance pattern)
+ */
+function startIpcPolling(): void {
+  if (ipcPollingInterval) {
+    return; // Already polling
+  }
+
+  if (!DeepLinkModule?.checkForCallbackUrl) {
+    console.log('[Auth:Windows] DeepLinkModule.checkForCallbackUrl not available, skipping IPC polling');
+    return;
+  }
+
+  console.log('[Auth:Windows] Starting IPC file polling for callback URL');
+
+  ipcPollingInterval = setInterval(async () => {
+    try {
+      const url = await DeepLinkModule.checkForCallbackUrl();
+      if (url && url.startsWith('com.tamshai.ai://callback')) {
+        console.log('[Auth:Windows] Received callback URL from IPC:', url);
+        stopIpcPolling();
+        handleOAuthCallback(url);
+      }
+    } catch (err) {
+      // Silently ignore polling errors
+    }
+  }, 500); // Poll every 500ms
+}
+
+/**
+ * Stop polling for callback URL
+ */
+function stopIpcPolling(): void {
+  if (ipcPollingInterval) {
+    clearInterval(ipcPollingInterval);
+    ipcPollingInterval = null;
+    console.log('[Auth:Windows] Stopped IPC file polling');
+  }
+}
+
 /**
  * Initialize the URL listener for OAuth callbacks
  * Call this early in app startup
@@ -613,6 +658,9 @@ export function initializeOAuthListener(): void {
       .catch((err: Error) => {
         console.warn('[Auth:Windows] DeepLinkModule.getInitialURL failed:', err);
       });
+
+    // Start polling for IPC file (for single-instance URL passing)
+    startIpcPolling();
   } else {
     console.warn('[Auth:Windows] DeepLinkModule not available');
   }
