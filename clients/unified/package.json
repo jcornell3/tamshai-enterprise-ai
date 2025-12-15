@@ -14,11 +14,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.0",
     "react": "19.1.0",
     "react-native": "0.80.0",
-    "react-native-safe-area-context": "^5.4.0",
     "react-native-app-auth": "^8.0.0",
     "react-native-keychain": "^9.2.2",
+    "react-native-safe-area-context": "^5.4.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
@@ -33,6 +34,7 @@
     "@react-native/metro-config": "0.80.0",
     "@react-native/typescript-config": "0.80.0",
     "@types/jest": "^29.5.13",
+    "@types/node": "^25.0.2",
     "@types/react": "^19.1.0",
     "@types/react-test-renderer": "^19.1.0",
     "eslint": "^8.19.0",

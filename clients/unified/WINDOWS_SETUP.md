@@ -16,15 +16,38 @@ Install Visual Studio 2022 with the following workloads:
 
 1. Open **Visual Studio Installer**
 2. Click **Modify** on Visual Studio 2022
-3. Select these workloads:
+3. Select these **Workloads**:
    - ✅ **Desktop development with C++**
-   - ✅ **Universal Windows Platform development**
-4. In **Individual components**, ensure these are selected:
-   - ✅ Windows 10 SDK (10.0.19041.0) or later
+   - ✅ **WinUI application development** (formerly "Universal Windows Platform development")
+     - Note: This workload was renamed in VS 2022. It uses the same component ID `Microsoft.VisualStudio.Workload.Universal`
+   - ✅ **.NET Desktop development** (optional, for C# projects)
+4. In **Individual components** tab, ensure these are selected:
+   - ✅ Windows 10 SDK (10.0.22621.0) or later
    - ✅ Windows 11 SDK (if targeting Windows 11)
    - ✅ MSVC v143 - VS 2022 C++ x64/x86 build tools
+   - ✅ C++ Universal Windows Platform support for v143 build tools
    - ✅ C++ CMake tools for Windows
 5. Click **Modify** to install
+
+**Troubleshooting: If WinUI workload is missing**
+
+If you don't see "WinUI application development" in the Workloads tab, install the UWP components manually via PowerShell:
+
+```powershell
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify `
+  --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" `
+  --add Microsoft.VisualStudio.ComponentGroup.UWP.Support `
+  --add Microsoft.VisualStudio.ComponentGroup.UWP.VC `
+  --add Microsoft.VisualStudio.Component.Windows10SDK.22621
+```
+
+**Verify UWP is installed:**
+
+```powershell
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Workload.Universal -property productDisplayVersion
+```
+
+If this returns a version number, UWP/WinUI is installed. If blank, the workload is missing.
 
 ### 2. Node.js (Windows)
 
@@ -49,11 +72,13 @@ npm --version   # Should be 10.x or later
 
 ### 3. Windows Development Requirements
 
-```powershell
-# Enable Developer Mode (required for symlinks)
-# Settings > Update & Security > For Developers > Developer Mode: ON
+**Enable Developer Mode** (required for symlinks and sideloading UWP apps):
 
-# Or via PowerShell (Admin):
+- **Windows 11**: Settings > System > For developers > Developer Mode: ON
+- **Windows 10**: Settings > Update & Security > For Developers > Developer Mode: ON
+
+Or via PowerShell (Admin):
+```powershell
 reg add "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
 ```
 
@@ -72,12 +97,20 @@ cd C:\Users\<username>\path\to\tamshai-enterprise-ai\clients\unified
 # Install dependencies (Windows needs its own node_modules)
 npm install
 
-# Initialize React Native Windows
-npx react-native-windows-init --overwrite
+# Initialize React Native Windows (for RN 0.76+)
+# Note: react-native-windows-init is deprecated for RN >= 0.76
+# Use the new init-windows command instead:
+npx react-native init-windows --overwrite
 
 # This creates:
 # - windows/           (Visual Studio solution)
 # - windows/TamshaiAI/ (UWP project)
+```
+
+**Note for React Native 0.75 and earlier:**
+```powershell
+# For older RN versions, use the legacy command:
+npx react-native-windows-init --overwrite
 ```
 
 ### Step 2: Configure Protocol Handler
@@ -206,12 +239,32 @@ msbuild windows\TamshaiAI.sln /p:Configuration=Release /p:Platform=x64
 npm config ls -l
 ```
 
+### Error: "Microsoft.DesktopBridge.props was not found"
+
+This error occurs when the UWP/WinUI workload is not installed:
+
+```
+error MSB4019: The imported project "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\DesktopBridge\Microsoft.DesktopBridge.props" was not found.
+```
+
+**Solution:** Install the **WinUI application development** workload:
+
+1. Open Visual Studio Installer
+2. Click **Modify** on VS 2022
+3. Select **WinUI application development** workload
+4. Click **Modify** to install
+
+Or via command line:
+```powershell
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" modify --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" --add Microsoft.VisualStudio.Workload.Universal --includeRecommended
+```
+
 ### Error: "Windows SDK not found"
 
 1. Open Visual Studio Installer
 2. Modify VS 2022
-3. Ensure Windows SDK is checked
-4. Repair if needed
+3. In Individual components, check **Windows 10 SDK (10.0.22621.0)** or later
+4. Click Modify to install
 
 ### Error: Metro bundler connection issues (WSL)
 

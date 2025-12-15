@@ -11,7 +11,7 @@
 
 import { create } from 'zustand';
 import { AuthState, Tokens, User, AuthActions } from '../types';
-import * as authService from '../services/auth';
+import * as authService from '../services/auth/index';
 
 interface AuthStore extends AuthState, AuthActions {}
 

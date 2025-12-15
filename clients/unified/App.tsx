@@ -18,6 +18,8 @@ import {
   View,
   Text,
   ActivityIndicator,
+  Platform,
+  Pressable,
 } from 'react-native';
 import {
   SafeAreaProvider,
@@ -25,9 +27,12 @@ import {
 } from 'react-native-safe-area-context';
 import { useAuthStore } from './src/stores';
 
-// Screens (to be implemented)
-// import LoginScreen from './src/screens/LoginScreen';
-// import ChatScreen from './src/screens/ChatScreen';
+// Initialize Windows OAuth listener
+if (Platform.OS === 'windows') {
+  // Lazy import to avoid bundling on other platforms
+  const { initializeOAuthListener } = require('./src/services/auth/auth.windows');
+  initializeOAuthListener();
+}
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -81,12 +86,12 @@ function AppContent({ isDarkMode }: AppContentProps) {
             Enterprise AI Assistant
           </Text>
           <View style={styles.spacer} />
-          <Text
+          <Pressable
             style={styles.loginButton}
             onPress={login}
           >
-            Sign in with SSO
-          </Text>
+            <Text style={styles.loginButtonText}>Sign in with SSO</Text>
+          </Pressable>
           <Text style={[styles.helpText, { color: textColor }]}>
             Uses your company Keycloak credentials
           </Text>
@@ -102,12 +107,9 @@ function AppContent({ isDarkMode }: AppContentProps) {
         <Text style={[styles.headerTitle, { color: textColor }]}>
           Tamshai AI
         </Text>
-        <Text
-          style={styles.logoutButton}
-          onPress={logout}
-        >
-          Logout
-        </Text>
+        <Pressable onPress={logout}>
+          <Text style={styles.logoutButton}>Logout</Text>
+        </Pressable>
       </View>
 
       <View style={styles.userInfo}>
@@ -158,13 +160,15 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     backgroundColor: '#007AFF',
-    color: '#ffffff',
     paddingVertical: 16,
     paddingHorizontal: 48,
     borderRadius: 8,
+  },
+  loginButtonText: {
+    color: '#ffffff',
     fontSize: 18,
     fontWeight: '600',
-    overflow: 'hidden',
+    textAlign: 'center',
   },
   helpText: {
     fontSize: 14,

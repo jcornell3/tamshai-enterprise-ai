@@ -2,5 +2,5 @@
  * Service Exports
  */
 
-export * from './auth';
+export * from './auth/index';
 export * from './api';
