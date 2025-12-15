@@ -763,6 +763,16 @@ app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, re
 // =============================================================================
 
 /**
+ * Validate tool name to prevent SSRF/path traversal attacks
+ * Tool names must be alphanumeric with underscores/hyphens only
+ */
+function isValidToolName(toolName: string): boolean {
+  // Only allow alphanumeric characters, underscores, and hyphens
+  // Prevents path traversal (../) and other injection attacks
+  return /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(toolName);
+}
+
+/**
  * Generic MCP tool proxy endpoint
  * Routes: /api/mcp/:serverName/:toolName
  *
@@ -773,6 +783,22 @@ app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, r
   const requestId = req.headers['x-request-id'] as string;
   const userContext: UserContext = (req as any).userContext;
   const { serverName, toolName } = req.params;
+
+  // SECURITY: Validate toolName to prevent SSRF/path traversal
+  if (!isValidToolName(toolName)) {
+    logger.warn('Invalid tool name rejected', {
+      requestId,
+      userId: userContext.userId,
+      toolName,
+    });
+    res.status(400).json({
+      status: 'error',
+      code: 'INVALID_TOOL_NAME',
+      message: 'Tool name contains invalid characters',
+      suggestedAction: 'Tool names must start with a letter and contain only alphanumeric characters, underscores, or hyphens',
+    });
+    return;
+  }
 
   // Convert query params to proper types (Express parses everything as strings)
   const queryParams: any = {};
@@ -827,8 +853,9 @@ app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, r
     }
 
     // Forward request to MCP server (MCP servers expect POST with {input, userContext})
+    // SECURITY: toolName is validated above, server.url comes from trusted config
     const mcpResponse = await axios.post(
-      `${server.url}/tools/${toolName}`,
+      `${server.url}/tools/${encodeURIComponent(toolName)}`,
       {
         input: queryParams, // Query params become input
         userContext: {
@@ -895,6 +922,22 @@ app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, 
   const { serverName, toolName } = req.params;
   const body = req.body;
 
+  // SECURITY: Validate toolName to prevent SSRF/path traversal
+  if (!isValidToolName(toolName)) {
+    logger.warn('Invalid tool name rejected', {
+      requestId,
+      userId: userContext.userId,
+      toolName,
+    });
+    res.status(400).json({
+      status: 'error',
+      code: 'INVALID_TOOL_NAME',
+      message: 'Tool name contains invalid characters',
+      suggestedAction: 'Tool names must start with a letter and contain only alphanumeric characters, underscores, or hyphens',
+    });
+    return;
+  }
+
   logger.info(`MCP tool call (POST): ${serverName}/${toolName}`, {
     requestId,
     userId: userContext.userId,
@@ -934,8 +977,9 @@ app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, 
     }
 
     // Forward request to MCP server
+    // SECURITY: toolName is validated above, server.url comes from trusted config
     const mcpResponse = await axios.post(
-      `${server.url}/tools/${toolName}`,
+      `${server.url}/tools/${encodeURIComponent(toolName)}`,
       body,
       {
         timeout: 30000,
