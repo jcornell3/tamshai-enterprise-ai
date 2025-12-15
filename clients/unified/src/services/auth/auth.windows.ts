@@ -115,20 +115,15 @@ function generateRandomString(length: number): string {
 }
 
 // Simple SHA-256 implementation for PKCE code challenge
-// This is a pure JS implementation that works without Web Crypto API
+// This is a pure JS implementation - we skip Web Crypto API on Windows
+// because crypto.subtle.digest() hangs indefinitely in React Native Windows
 async function sha256(message: string): Promise<ArrayBuffer> {
-  // Try Web Crypto API first
-  try {
-    if (typeof crypto !== 'undefined' && crypto.subtle) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(message);
-      return await crypto.subtle.digest('SHA-256', data);
-    }
-  } catch (e) {
-    console.warn('[Auth:Windows] crypto.subtle not available, using JS fallback');
-  }
+  // NOTE: We intentionally skip Web Crypto API on Windows.
+  // While crypto.subtle exists, digest() hangs forever in RN Windows.
+  // Always use the pure JS implementation for reliability.
+  console.log('[Auth:Windows] Using pure JS SHA-256 implementation');
 
-  // Pure JS SHA-256 fallback
+  // Pure JS SHA-256 implementation
   const utf8 = unescape(encodeURIComponent(message));
   const msgBuffer = new Uint8Array(utf8.length);
   for (let i = 0; i < utf8.length; i++) {
