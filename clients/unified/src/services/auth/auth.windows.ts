@@ -340,9 +340,13 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   console.log('[Auth:Windows] Starting OIDC login flow...');
 
   // Generate PKCE values
+  console.log('[Auth:Windows] Generating PKCE code verifier...');
   const codeVerifier = generateRandomString(64);
+  console.log('[Auth:Windows] Code verifier generated, generating challenge...');
   const codeChallenge = await generateCodeChallenge(codeVerifier);
+  console.log('[Auth:Windows] Code challenge generated:', codeChallenge.substring(0, 10) + '...');
   const state = generateRandomString(32);
+  console.log('[Auth:Windows] State generated');
 
   // Build authorization URL
   const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
