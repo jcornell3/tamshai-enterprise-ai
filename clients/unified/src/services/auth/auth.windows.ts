@@ -252,13 +252,26 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   const tokenPromise = setupListener();
 
   // Open system browser
-  const canOpen = await Linking.canOpenURL(authUrl);
-  if (!canOpen) {
+  console.log('[Auth:Windows] Auth URL:', authUrl);
+
+  try {
+    const canOpen = await Linking.canOpenURL(authUrl);
+    console.log('[Auth:Windows] canOpenURL result:', canOpen);
+
+    if (!canOpen) {
+      pendingAuthState = null;
+      throw new Error('Cannot open authentication URL');
+    }
+
+    console.log('[Auth:Windows] Calling Linking.openURL...');
+    await Linking.openURL(authUrl);
+    console.log('[Auth:Windows] Linking.openURL completed');
+  } catch (error) {
+    console.error('[Auth:Windows] Error opening URL:', error);
     pendingAuthState = null;
-    throw new Error('Cannot open authentication URL');
+    throw error;
   }
 
-  await Linking.openURL(authUrl);
   console.log('[Auth:Windows] Opened browser for authentication');
 
   // Wait for callback
