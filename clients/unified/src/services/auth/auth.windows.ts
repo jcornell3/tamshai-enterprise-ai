@@ -412,14 +412,14 @@ export async function hasValidStoredTokens(): Promise<boolean> {
 export function initializeOAuthListener(): void {
   // Handle URL when app is already running
   Linking.addEventListener('url', ({ url }) => {
-    if (url.startsWith('com.tamshai.ai://oauth/callback')) {
+    if (url.startsWith('com.tamshai.ai://callback')) {
       handleOAuthCallback(url);
     }
   });
 
   // Handle URL that opened the app
   Linking.getInitialURL().then((url) => {
-    if (url && url.startsWith('com.tamshai.ai://oauth/callback')) {
+    if (url && url.startsWith('com.tamshai.ai://callback')) {
       handleOAuthCallback(url);
     }
   });

@@ -18,10 +18,11 @@ import * as mobileAuth from './auth.mobile';
 import * as windowsAuth from './auth.windows';
 
 // Default auth configuration
+// Uses the ai-mobile client which is configured for public PKCE flow
 export const DEFAULT_CONFIG: AuthConfig = {
   issuer: 'http://localhost:8180/realms/tamshai-corp',
-  clientId: 'mcp-gateway-unified',
-  redirectUrl: 'com.tamshai.ai://oauth/callback',
+  clientId: 'ai-mobile',
+  redirectUrl: 'com.tamshai.ai://callback',
   scopes: ['openid', 'profile', 'email', 'roles'],
   usePKCE: true,
 };
