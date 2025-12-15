@@ -122,13 +122,17 @@ async function sha256(message: string): Promise<ArrayBuffer> {
   // While crypto.subtle exists, digest() hangs forever in RN Windows.
   // Always use the pure JS implementation for reliability.
   console.log('[Auth:Windows] Using pure JS SHA-256 implementation');
+  console.log('[Auth:Windows] Input message length:', message.length);
 
+  try {
   // Pure JS SHA-256 implementation
   const utf8 = unescape(encodeURIComponent(message));
+  console.log('[Auth:Windows] UTF8 encoded length:', utf8.length);
   const msgBuffer = new Uint8Array(utf8.length);
   for (let i = 0; i < utf8.length; i++) {
     msgBuffer[i] = utf8.charCodeAt(i);
   }
+  console.log('[Auth:Windows] Message buffer created');
 
   // SHA-256 constants
   const K = new Uint32Array([
@@ -192,14 +196,23 @@ async function sha256(message: string): Promise<ArrayBuffer> {
   for (let i = 0; i < 8; i++) {
     resultView.setUint32(i * 4, H[i], false);
   }
+  console.log('[Auth:Windows] SHA-256 hash computed successfully');
   return result;
+  } catch (error) {
+    console.error('[Auth:Windows] Error in sha256:', error);
+    throw error;
+  }
 }
 
 async function generateCodeChallenge(verifier: string): Promise<string> {
-  const digest = await sha256(verifier);
+  console.log('[Auth:Windows] generateCodeChallenge called with verifier length:', verifier.length);
+  try {
+    const digest = await sha256(verifier);
+    console.log('[Auth:Windows] SHA-256 digest received, length:', digest.byteLength);
 
-  // Base64 encode - handle environments without btoa
-  const bytes = new Uint8Array(digest);
+    // Base64 encode - handle environments without btoa
+    const bytes = new Uint8Array(digest);
+    console.log('[Auth:Windows] Bytes array created, length:', bytes.length);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -223,7 +236,13 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
   }
 
   // Base64URL encoding
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const result = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  console.log('[Auth:Windows] Code challenge generated successfully');
+  return result;
+  } catch (error) {
+    console.error('[Auth:Windows] Error in generateCodeChallenge:', error);
+    throw error;
+  }
 }
 
 // Store for pending auth state
