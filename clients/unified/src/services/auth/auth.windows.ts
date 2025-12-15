@@ -3,6 +3,7 @@
  *
  * Windows-specific implementation using:
  * - Linking API for OAuth (opens system browser, handles protocol callback)
+ * - DeepLinkModule native module for protocol activation URL (workaround for RNW issue #6996)
  * - In-memory storage with optional persistence (AsyncStorage native module has linking issues)
  *
  * Article V Compliance:
@@ -13,8 +14,12 @@
  * For production, implement a native module for Windows Credential Manager.
  */
 
-import { Linking } from 'react-native';
+import { Linking, NativeModules } from 'react-native';
 import { Tokens, AuthConfig } from '../../types';
+
+// DeepLinkModule - Custom native module for Windows protocol activation
+// Works around: https://github.com/microsoft/react-native-windows/issues/6996
+const { DeepLinkModule } = NativeModules;
 
 const STORAGE_KEY = '@tamshai_tokens';
 
@@ -425,17 +430,39 @@ export async function hasValidStoredTokens(): Promise<boolean> {
 export function initializeOAuthListener(): void {
   // Handle URL when app is already running
   Linking.addEventListener('url', ({ url }) => {
+    console.log('[Auth:Windows] URL event received:', url);
     if (url.startsWith('com.tamshai.ai://callback')) {
       handleOAuthCallback(url);
     }
   });
 
-  // Handle URL that opened the app
+  // Handle URL that opened the app - try both methods
+  // Method 1: React Native's Linking.getInitialURL (may return null due to RNW bug #6996)
   Linking.getInitialURL().then((url) => {
+    console.log('[Auth:Windows] Linking.getInitialURL:', url);
     if (url && url.startsWith('com.tamshai.ai://callback')) {
       handleOAuthCallback(url);
     }
   });
+
+  // Method 2: Our custom DeepLinkModule (workaround for RNW bug #6996)
+  // This captures the URL from command line args when app is launched via protocol
+  if (DeepLinkModule) {
+    DeepLinkModule.getInitialURL()
+      .then((url: string) => {
+        console.log('[Auth:Windows] DeepLinkModule.getInitialURL:', url);
+        if (url && url.startsWith('com.tamshai.ai://callback')) {
+          handleOAuthCallback(url);
+          // Clear it so it's not processed again
+          DeepLinkModule.clearInitialURL();
+        }
+      })
+      .catch((err: Error) => {
+        console.warn('[Auth:Windows] DeepLinkModule.getInitialURL failed:', err);
+      });
+  } else {
+    console.warn('[Auth:Windows] DeepLinkModule not available');
+  }
 
   console.log('[Auth:Windows] OAuth listener initialized');
 }

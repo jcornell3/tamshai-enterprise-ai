@@ -79,11 +79,18 @@ yarn-error.log
 .env.local
 .env.*.local
 
-# Windows
-windows/
-*.sln
-*.vcxproj*
-packages/
+# Windows - track native source, ignore build artifacts
+# Note: windows/ folder contains customized native code (DeepLinkModule for OAuth)
+# See TamshaiAiUnified.cpp for protocol activation workaround
+windows/packages/
+windows/x64/
+windows/**/obj/
+windows/**/bin/
+windows/**/AppPackages/
+windows/**/*.binlog
+windows/**/*.err
+windows/**/*.wrn
+windows/**/Generated Files/
 
 # macOS
 macos/
