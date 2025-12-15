@@ -159,14 +159,24 @@ async function sha256(message: string): Promise<ArrayBuffer> {
   const gamma0 = (x: number) => rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3);
   const gamma1 = (x: number) => rotr(x, 17) ^ rotr(x, 19) ^ (x >>> 10);
 
-  // Padding
-  const bitLength = msgBuffer.length * 8;
-  const padLength = ((msgBuffer.length + 8) % 64 < 56 ? 56 : 120) - ((msgBuffer.length + 8) % 64);
-  const padded = new Uint8Array(msgBuffer.length + 1 + padLength + 8);
+  // Padding - SHA-256 requires message + 1 bit + padding + 64-bit length, all in 512-bit blocks
+  const msgLen = msgBuffer.length;
+  const bitLength = msgLen * 8;
+
+  // Calculate padded length: must be multiple of 64 bytes (512 bits)
+  // Need space for: original message + 1 byte (0x80) + padding + 8 bytes (64-bit length)
+  let paddedLen = msgLen + 1 + 8; // minimum: message + 0x80 + 64-bit length
+  paddedLen = Math.ceil(paddedLen / 64) * 64; // round up to next 64-byte boundary
+
+  console.log('[Auth:Windows] Padding: msgLen=' + msgLen + ', paddedLen=' + paddedLen);
+
+  const padded = new Uint8Array(paddedLen);
   padded.set(msgBuffer);
-  padded[msgBuffer.length] = 0x80;
+  padded[msgLen] = 0x80; // append single '1' bit
+
+  // Append length as 64-bit big-endian (we only use lower 32 bits since messages are small)
   const view = new DataView(padded.buffer);
-  view.setUint32(padded.length - 4, bitLength, false);
+  view.setUint32(paddedLen - 4, bitLength, false); // lower 32 bits of bit length
 
   // Process blocks
   for (let i = 0; i < padded.length; i += 64) {
