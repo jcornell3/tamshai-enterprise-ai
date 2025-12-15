@@ -17,9 +17,11 @@
 import { Linking, NativeModules } from 'react-native';
 import { Tokens, AuthConfig } from '../../types';
 
+// Native modules for Windows authentication
 // DeepLinkModule - Custom native module for Windows protocol activation
 // Works around: https://github.com/microsoft/react-native-windows/issues/6996
-const { DeepLinkModule } = NativeModules;
+// WebAuthModule - Uses WebAuthenticationBroker for modal auth dialog (not browser tab)
+const { DeepLinkModule, WebAuthModule } = NativeModules;
 
 const STORAGE_KEY = '@tamshai_tokens';
 
@@ -358,7 +360,8 @@ async function exchangeCodeForTokens(
 }
 
 /**
- * Perform OIDC login
+ * Perform OIDC login using WebAuthenticationBroker (modal dialog)
+ * Falls back to system browser if WebAuthModule is not available
  */
 export async function login(config: AuthConfig): Promise<Tokens> {
   console.log('[Auth:Windows] Starting OIDC login flow...');
@@ -385,7 +388,53 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   });
 
   const authUrl = `${authEndpoint}?${params.toString()}`;
+  console.log('[Auth:Windows] Auth URL:', authUrl);
 
+  // Try WebAuthModule first (modal dialog - preferred UX)
+  if (WebAuthModule?.authenticate) {
+    console.log('[Auth:Windows] Using WebAuthenticationBroker (modal dialog)');
+    try {
+      // WebAuthModule.authenticate returns the full callback URL with code
+      const callbackUrl = await WebAuthModule.authenticate(authUrl, config.redirectUrl);
+      console.log('[Auth:Windows] WebAuthModule returned:', callbackUrl);
+
+      // Parse the callback URL
+      const urlObj = new URL(callbackUrl);
+      const code = urlObj.searchParams.get('code');
+      const returnedState = urlObj.searchParams.get('state');
+      const error = urlObj.searchParams.get('error');
+
+      if (error) {
+        throw new Error(`OAuth error: ${error}`);
+      }
+
+      if (returnedState !== state) {
+        throw new Error('State mismatch - possible CSRF attack');
+      }
+
+      if (!code) {
+        throw new Error('No authorization code received');
+      }
+
+      // Exchange code for tokens
+      const tokens = await exchangeCodeForTokens(code, codeVerifier, config);
+      await storeTokens(tokens);
+      console.log('[Auth:Windows] Login successful via WebAuthenticationBroker');
+      return tokens;
+    } catch (error: any) {
+      // If user cancelled, propagate that specific error
+      if (error?.code === 'USER_CANCELLED') {
+        throw new Error('User cancelled authentication');
+      }
+      console.error('[Auth:Windows] WebAuthModule error:', error);
+      // Fall through to browser fallback
+      console.log('[Auth:Windows] Falling back to system browser...');
+    }
+  } else {
+    console.log('[Auth:Windows] WebAuthModule not available, using system browser');
+  }
+
+  // Fallback: Use system browser with deep link callback
   // Set up listener for callback before opening browser
   const setupListener = (): Promise<Tokens> => {
     return new Promise((resolve, reject) => {
@@ -410,8 +459,6 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   const tokenPromise = setupListener();
 
   // Open system browser
-  console.log('[Auth:Windows] Auth URL:', authUrl);
-
   try {
     const canOpen = await Linking.canOpenURL(authUrl);
     console.log('[Auth:Windows] canOpenURL result:', canOpen);
@@ -438,7 +485,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   // Store tokens
   await storeTokens(tokens);
 
-  console.log('[Auth:Windows] Login successful');
+  console.log('[Auth:Windows] Login successful via system browser');
   return tokens;
 }
 

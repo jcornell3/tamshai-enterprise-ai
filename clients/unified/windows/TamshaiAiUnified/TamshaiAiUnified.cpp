@@ -8,6 +8,8 @@
 
 #include "NativeModules.h"
 #include <winrt/Microsoft.ReactNative.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Security.Authentication.Web.h>
 #include <string>
 #include <fstream>
 #include <atomic>
@@ -99,6 +101,101 @@ struct DeepLinkModule {
       promise.Resolve(winrt::hstring(url));
     } else {
       promise.Resolve(winrt::hstring(L""));
+    }
+  }
+
+ private:
+  winrt::Microsoft::ReactNative::ReactContext m_reactContext;
+};
+
+// =============================================================================
+// WebAuthModule - Native module for WebAuthenticationBroker-based OAuth
+// Uses Windows WebAuthenticationBroker to show auth in a modal dialog
+// instead of opening the system browser.
+//
+// CRITICAL: WebAuthenticationBroker.AuthenticateAsync MUST run on UI thread!
+// Running on RN thread will silently fail with UserCancel status.
+// =============================================================================
+REACT_MODULE(WebAuthModule)
+struct WebAuthModule {
+  REACT_INIT(Initialize)
+  void Initialize(winrt::Microsoft::ReactNative::ReactContext const &reactContext) noexcept {
+    m_reactContext = reactContext;
+  }
+
+  // Authenticate using WebAuthenticationBroker (modal dialog)
+  // Returns the full callback URL with auth code on success
+  REACT_METHOD(authenticate)
+  winrt::fire_and_forget authenticate(
+      std::wstring authUrl,
+      std::wstring callbackUrl,
+      winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
+
+    auto capturedPromise = promise;
+    auto context = m_reactContext;
+
+    OutputDebugStringW(L"[WebAuthModule] authenticate called\n");
+    OutputDebugStringW(L"[WebAuthModule] authUrl: ");
+    OutputDebugStringW(authUrl.c_str());
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
+    OutputDebugStringW(callbackUrl.c_str());
+    OutputDebugStringW(L"\n");
+
+    // CRITICAL: Must run on UI thread for WebAuthenticationBroker to work
+    co_await winrt::resume_foreground(context.UIDispatcher());
+
+    try {
+      OutputDebugStringW(L"[WebAuthModule] Running on UI thread, calling AuthenticateAsync\n");
+
+      winrt::Windows::Foundation::Uri startUri(authUrl);
+      winrt::Windows::Foundation::Uri endUri(callbackUrl);
+
+      auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
+          winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
+          startUri,
+          endUri);
+
+      auto status = result.ResponseStatus();
+      OutputDebugStringW(L"[WebAuthModule] AuthenticateAsync completed with status: ");
+      OutputDebugStringW(std::to_wstring(static_cast<int>(status)).c_str());
+      OutputDebugStringW(L"\n");
+
+      switch (status) {
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success: {
+          auto responseData = result.ResponseData();
+          OutputDebugStringW(L"[WebAuthModule] Success! Response: ");
+          OutputDebugStringW(responseData.c_str());
+          OutputDebugStringW(L"\n");
+          capturedPromise.Resolve(winrt::hstring(responseData));
+          break;
+        }
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
+          OutputDebugStringW(L"[WebAuthModule] User cancelled\n");
+          capturedPromise.Reject(winrt::Microsoft::ReactNative::ReactError{
+              "USER_CANCELLED", "User cancelled authentication", nullptr});
+          break;
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
+          auto errorDetail = result.ResponseErrorDetail();
+          OutputDebugStringW(L"[WebAuthModule] HTTP error: ");
+          OutputDebugStringW(std::to_wstring(errorDetail).c_str());
+          OutputDebugStringW(L"\n");
+          capturedPromise.Reject(winrt::Microsoft::ReactNative::ReactError{
+              "HTTP_ERROR", "HTTP error during authentication", nullptr});
+          break;
+        }
+        default:
+          OutputDebugStringW(L"[WebAuthModule] Unknown error\n");
+          capturedPromise.Reject(winrt::Microsoft::ReactNative::ReactError{
+              "UNKNOWN_ERROR", "Unknown authentication error", nullptr});
+          break;
+      }
+    } catch (winrt::hresult_error const& ex) {
+      OutputDebugStringW(L"[WebAuthModule] Exception: ");
+      OutputDebugStringW(ex.message().c_str());
+      OutputDebugStringW(L"\n");
+      capturedPromise.Reject(winrt::Microsoft::ReactNative::ReactError{
+          "EXCEPTION", winrt::to_string(ex.message()), nullptr});
     }
   }
 
