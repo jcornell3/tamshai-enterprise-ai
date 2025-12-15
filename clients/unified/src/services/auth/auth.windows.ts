@@ -3,21 +3,82 @@
  *
  * Windows-specific implementation using:
  * - Linking API for OAuth (opens system browser, handles protocol callback)
- * - AsyncStorage for token storage (fallback until native CredentialManager is implemented)
+ * - In-memory storage with optional persistence (AsyncStorage native module has linking issues)
  *
  * Article V Compliance:
- * - V.2: Tokens stored securely (TODO: migrate to Windows Credential Manager)
+ * - V.2: Tokens stored in memory (TODO: migrate to Windows Credential Manager via native module)
  * - V.3: PKCE authentication via system browser
  *
  * Note: This is a JavaScript-only implementation that works without native modules.
- * For production, consider implementing a native module for Windows Credential Manager.
+ * For production, implement a native module for Windows Credential Manager.
  */
 
 import { Linking } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Tokens, AuthConfig } from '../../types';
 
 const STORAGE_KEY = '@tamshai_tokens';
+
+// In-memory storage fallback since AsyncStorage native module has linking issues on Windows
+// Tokens will persist for the app session but need re-login after app restart
+// TODO: Implement native Windows Credential Manager module for persistent secure storage
+let inMemoryStorage: Record<string, string> = {};
+
+// Try to use AsyncStorage if available, fall back to in-memory
+let useAsyncStorage = false;
+let AsyncStorageModule: typeof import('@react-native-async-storage/async-storage').default | null = null;
+
+// Attempt to load AsyncStorage - will use in-memory if it fails
+try {
+  AsyncStorageModule = require('@react-native-async-storage/async-storage').default;
+  // Test if it actually works
+  if (AsyncStorageModule) {
+    useAsyncStorage = true;
+    console.log('[Auth:Windows] AsyncStorage module loaded');
+  }
+} catch (e) {
+  console.log('[Auth:Windows] AsyncStorage not available, using in-memory storage');
+}
+
+// Storage abstraction
+const Storage = {
+  async setItem(key: string, value: string): Promise<void> {
+    if (useAsyncStorage && AsyncStorageModule) {
+      try {
+        await AsyncStorageModule.setItem(key, value);
+        return;
+      } catch (e) {
+        console.warn('[Auth:Windows] AsyncStorage.setItem failed, falling back to memory:', e);
+        useAsyncStorage = false;
+      }
+    }
+    inMemoryStorage[key] = value;
+  },
+
+  async getItem(key: string): Promise<string | null> {
+    if (useAsyncStorage && AsyncStorageModule) {
+      try {
+        return await AsyncStorageModule.getItem(key);
+      } catch (e) {
+        console.warn('[Auth:Windows] AsyncStorage.getItem failed, falling back to memory:', e);
+        useAsyncStorage = false;
+      }
+    }
+    return inMemoryStorage[key] || null;
+  },
+
+  async removeItem(key: string): Promise<void> {
+    if (useAsyncStorage && AsyncStorageModule) {
+      try {
+        await AsyncStorageModule.removeItem(key);
+        return;
+      } catch (e) {
+        console.warn('[Auth:Windows] AsyncStorage.removeItem failed, falling back to memory:', e);
+        useAsyncStorage = false;
+      }
+    }
+    delete inMemoryStorage[key];
+  },
+};
 
 // PKCE utilities
 function generateRandomString(length: number): string {
@@ -300,8 +361,8 @@ async function storeTokens(tokens: Tokens): Promise<void> {
       accessTokenExpirationDate: tokens.accessTokenExpirationDate,
     });
 
-    await AsyncStorage.setItem(STORAGE_KEY, tokenData);
-    console.log('[Auth:Windows] Tokens stored');
+    await Storage.setItem(STORAGE_KEY, tokenData);
+    console.log('[Auth:Windows] Tokens stored' + (useAsyncStorage ? '' : ' (in-memory)'));
   } catch (error) {
     console.error('[Auth:Windows] Failed to store tokens:', error);
     throw error;
@@ -313,7 +374,7 @@ async function storeTokens(tokens: Tokens): Promise<void> {
  */
 export async function getStoredTokens(): Promise<{ refreshToken: string; accessTokenExpirationDate?: string } | null> {
   try {
-    const tokenData = await AsyncStorage.getItem(STORAGE_KEY);
+    const tokenData = await Storage.getItem(STORAGE_KEY);
     if (tokenData) {
       return JSON.parse(tokenData);
     }
@@ -329,7 +390,7 @@ export async function getStoredTokens(): Promise<{ refreshToken: string; accessT
  */
 async function clearStoredTokens(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await Storage.removeItem(STORAGE_KEY);
     console.log('[Auth:Windows] Stored tokens cleared');
   } catch (error) {
     console.error('[Auth:Windows] Failed to clear tokens:', error);
