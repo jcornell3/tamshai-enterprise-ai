@@ -398,7 +398,15 @@ export async function login(config: AuthConfig): Promise<Tokens> {
 
   // Try WebAuthModule first (modal dialog - preferred UX)
   // SPEC REQUIREMENT: Must use OS-native secure browser modal, not browser tab
-  if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
+  // EXCEPTION: WebAuthenticationBroker runs in a sandboxed broker process that cannot
+  // access localhost due to Windows network isolation. For localhost development,
+  // we must use the browser fallback. WAB will work with production HTTPS endpoints.
+  const isLocalhost = config.issuer.includes('localhost') || config.issuer.includes('127.0.0.1');
+
+  if (isLocalhost) {
+    console.log('[Auth:Windows] Localhost detected - WebAuthenticationBroker cannot access localhost due to Windows network isolation');
+    console.log('[Auth:Windows] Using system browser for localhost development. WAB will be used in production with HTTPS.');
+  } else if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
     console.log('[Auth:Windows] Using WebAuthenticationBroker (modal dialog)');
     try {
       // Get the ms-app:// callback URI that WAB requires
@@ -624,7 +632,7 @@ export async function logout(config: AuthConfig): Promise<void> {
  * Store tokens
  * TODO: Migrate to Windows Credential Manager for production
  */
-async function storeTokens(tokens: Tokens): Promise<void> {
+export async function storeTokens(tokens: Tokens): Promise<void> {
   try {
     const tokenData = JSON.stringify({
       refreshToken: tokens.refreshToken,

@@ -7,7 +7,7 @@
  * Article V Compliance:
  * - V.1: No authorization logic in client (backend enforces all access control)
  * - V.2: Tokens stored in platform-native secure storage
- * - V.3: PKCE authentication via system browser
+ * - V.3: PKCE authentication via system browser (or WebView2 modal on Windows localhost)
  */
 
 import React, { useEffect } from 'react';
@@ -25,9 +25,12 @@ import {
   SafeAreaProvider,
   SafeAreaView,
 } from 'react-native-safe-area-context';
-import { useAuthStore } from './src/stores';
+import { useAuthStore, needsModalOAuth } from './src/stores';
+import { OAuthModal } from './src/components';
+import { useOAuthModal } from './src/hooks';
+import { DEFAULT_CONFIG } from './src/services/auth';
 
-// Initialize Windows OAuth listener
+// Initialize Windows OAuth listener (for browser-based callback handling)
 if (Platform.OS === 'windows') {
   // Lazy import to avoid bundling on other platforms
   const { initializeOAuthListener } = require('./src/services/auth/auth.windows');
@@ -50,12 +53,46 @@ interface AppContentProps {
 }
 
 function AppContent({ isDarkMode }: AppContentProps) {
-  const { isAuthenticated, isLoading, user, checkAuth, login, logout } = useAuthStore();
+  const {
+    isAuthenticated,
+    isLoading,
+    user,
+    error,
+    checkAuth,
+    login,
+    logout,
+    completeOAuthLogin,
+  } = useAuthStore();
+
+  // OAuth modal hook for Windows localhost
+  const oauthModal = useOAuthModal({
+    config: DEFAULT_CONFIG,
+    onTokens: (tokens) => {
+      console.log('[App] OAuth modal completed, storing tokens');
+      completeOAuthLogin(tokens);
+    },
+    onError: (errorMsg) => {
+      console.error('[App] OAuth modal error:', errorMsg);
+      // Clear the special error state
+      useAuthStore.setState({ error: errorMsg });
+    },
+  });
 
   // Check for existing auth on mount
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Handle the special modal trigger error
+  useEffect(() => {
+    if (error === '__NEEDS_OAUTH_MODAL__' && needsModalOAuth()) {
+      console.log('[App] Detected modal OAuth trigger, starting OAuth modal flow');
+      // Clear the trigger error
+      useAuthStore.setState({ error: null });
+      // Start the modal OAuth flow
+      oauthModal.startAuth();
+    }
+  }, [error]);
 
   const backgroundColor = isDarkMode ? '#1a1a2e' : '#ffffff';
   const textColor = isDarkMode ? '#ffffff' : '#1a1a2e';
@@ -89,13 +126,29 @@ function AppContent({ isDarkMode }: AppContentProps) {
           <Pressable
             style={styles.loginButton}
             onPress={login}
+            disabled={oauthModal.isLoading}
           >
-            <Text style={styles.loginButtonText}>Sign in with SSO</Text>
+            <Text style={styles.loginButtonText}>
+              {oauthModal.isLoading ? 'Signing in...' : 'Sign in with SSO'}
+            </Text>
           </Pressable>
           <Text style={[styles.helpText, { color: textColor }]}>
             Uses your company Keycloak credentials
           </Text>
+          {error && error !== '__NEEDS_OAUTH_MODAL__' && (
+            <Text style={styles.errorText}>{error}</Text>
+          )}
         </View>
+
+        {/* OAuth Modal for Windows localhost */}
+        <OAuthModal
+          visible={oauthModal.visible}
+          authUrl={oauthModal.authUrl}
+          callbackScheme="com.tamshai.ai"
+          onSuccess={oauthModal.handleSuccess}
+          onCancel={oauthModal.handleCancel}
+          onError={oauthModal.handleError}
+        />
       </SafeAreaView>
     );
   }
@@ -173,6 +226,12 @@ const styles = StyleSheet.create({
   helpText: {
     fontSize: 14,
     opacity: 0.6,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#FF3B30',
     marginTop: 16,
     textAlign: 'center',
   },
