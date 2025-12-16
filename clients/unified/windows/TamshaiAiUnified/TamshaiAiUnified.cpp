@@ -156,6 +156,9 @@ struct WebAuthModule {
   // authUrl: The full OAuth authorization URL
   // callbackUrl: The callback URI (must be ms-app:// or https://)
   // Returns the full callback URL with auth code on success
+  //
+  // CRITICAL: WebAuthenticationBroker.AuthenticateAsync MUST run on the UI thread!
+  // Running on React Native's JS thread will cause RPC_E_WRONG_THREAD error.
   REACT_METHOD(authenticate)
   winrt::fire_and_forget authenticate(
       std::wstring authUrl,
@@ -165,6 +168,7 @@ struct WebAuthModule {
     auto capturedPromise = promise;
     auto capturedAuthUrl = authUrl;
     auto capturedCallbackUrl = callbackUrl;
+    auto context = m_reactContext;
 
     OutputDebugStringW(L"[WebAuthModule] authenticate called\n");
     OutputDebugStringW(L"[WebAuthModule] authUrl: ");
@@ -173,6 +177,10 @@ struct WebAuthModule {
     OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
     OutputDebugStringW(capturedCallbackUrl.c_str());
     OutputDebugStringW(L"\n");
+
+    // Switch to UI thread - WebAuthenticationBroker requires it
+    co_await winrt::resume_foreground(context.UIDispatcher());
+    OutputDebugStringW(L"[WebAuthModule] Now on UI thread\n");
 
     try {
       // Create URIs
@@ -187,7 +195,7 @@ struct WebAuthModule {
       OutputDebugStringW(endUri.AbsoluteUri().c_str());
       OutputDebugStringW(L"\n");
 
-      // Call AuthenticateAsync with co_await for proper exception handling
+      // Call AuthenticateAsync - now safe on UI thread
       auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
           winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
           startUri,
