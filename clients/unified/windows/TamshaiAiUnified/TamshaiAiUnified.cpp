@@ -154,8 +154,7 @@ struct WebAuthModule {
 
   // Authenticate using WebAuthenticationBroker (modal dialog)
   // authUrl: The full OAuth authorization URL
-  // useAppCallbackUri: If true, use GetCurrentApplicationCallbackUri() for the callback
-  //                    If false, uses the callbackUrl parameter (must be https:// or ms-app://)
+  // callbackUrl: The callback URI (must be ms-app:// or https://)
   // Returns the full callback URL with auth code on success
   REACT_METHOD(authenticate)
   winrt::fire_and_forget authenticate(
@@ -164,7 +163,6 @@ struct WebAuthModule {
       winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
 
     auto capturedPromise = promise;
-    auto context = m_reactContext;
     auto capturedAuthUrl = authUrl;
     auto capturedCallbackUrl = callbackUrl;
 
@@ -176,118 +174,78 @@ struct WebAuthModule {
     OutputDebugStringW(capturedCallbackUrl.c_str());
     OutputDebugStringW(L"\n");
 
-    // Schedule work on UI thread using ReactContext's dispatcher
-    context.UIDispatcher().Post([capturedPromise, capturedAuthUrl, capturedCallbackUrl]() mutable {
-      OutputDebugStringW(L"[WebAuthModule] Running on UI thread, calling AuthenticateAsync\n");
+    try {
+      // Create URIs
+      winrt::Windows::Foundation::Uri startUri(capturedAuthUrl);
+      winrt::Windows::Foundation::Uri endUri(capturedCallbackUrl);
 
-      try {
-        winrt::Windows::Foundation::Uri startUri(capturedAuthUrl);
+      OutputDebugStringW(L"[WebAuthModule] URIs created, starting AuthenticateAsync\n");
+      OutputDebugStringW(L"[WebAuthModule] startUri: ");
+      OutputDebugStringW(startUri.AbsoluteUri().c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule] endUri: ");
+      OutputDebugStringW(endUri.AbsoluteUri().c_str());
+      OutputDebugStringW(L"\n");
 
-        // Determine callback URI
-        winrt::Windows::Foundation::Uri endUri{nullptr};
-        std::wstring callbackStr(capturedCallbackUrl);
+      // Call AuthenticateAsync with co_await for proper exception handling
+      auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
+          winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
+          startUri,
+          endUri);
 
-        // If callback starts with ms-app:// or https://, use it directly
-        // Otherwise, use the app's default callback URI
-        if (callbackStr.find(L"ms-app://") == 0 || callbackStr.find(L"https://") == 0) {
-          endUri = winrt::Windows::Foundation::Uri(capturedCallbackUrl);
-          OutputDebugStringW(L"[WebAuthModule] Using provided callback URI\n");
-        } else {
-          // Use the app's ms-app:// callback URI
-          endUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
-          OutputDebugStringW(L"[WebAuthModule] Using app callback URI: ");
-          OutputDebugStringW(endUri.AbsoluteUri().c_str());
+      OutputDebugStringW(L"[WebAuthModule] AuthenticateAsync completed\n");
+
+      auto status = result.ResponseStatus();
+      OutputDebugStringW(L"[WebAuthModule] Response status: ");
+      OutputDebugStringW(std::to_wstring(static_cast<int>(status)).c_str());
+      OutputDebugStringW(L"\n");
+
+      switch (status) {
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success: {
+          auto responseData = result.ResponseData();
+          OutputDebugStringW(L"[WebAuthModule] Success! Response: ");
+          OutputDebugStringW(responseData.c_str());
           OutputDebugStringW(L"\n");
+          capturedPromise.Resolve(winrt::hstring(responseData));
+          break;
         }
-
-        OutputDebugStringW(L"[WebAuthModule] URIs created, starting AuthenticateAsync\n");
-
-        // Start the async operation
-        auto asyncOp = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
-            winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
-            startUri,
-            endUri);
-
-        OutputDebugStringW(L"[WebAuthModule] AuthenticateAsync started, setting up completion handler\n");
-
-        // Handle completion
-        asyncOp.Completed([capturedPromise](auto const& asyncInfo, auto const& asyncStatus) mutable {
-          try {
-            if (asyncStatus == winrt::Windows::Foundation::AsyncStatus::Completed) {
-              auto result = asyncInfo.GetResults();
-              auto status = result.ResponseStatus();
-
-              OutputDebugStringW(L"[WebAuthModule] AuthenticateAsync completed with status: ");
-              OutputDebugStringW(std::to_wstring(static_cast<int>(status)).c_str());
-              OutputDebugStringW(L"\n");
-
-              switch (status) {
-                case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success: {
-                  auto responseData = result.ResponseData();
-                  OutputDebugStringW(L"[WebAuthModule] Success! Response: ");
-                  OutputDebugStringW(responseData.c_str());
-                  OutputDebugStringW(L"\n");
-                  capturedPromise.Resolve(winrt::hstring(responseData));
-                  break;
-                }
-                case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
-                  OutputDebugStringW(L"[WebAuthModule] User cancelled\n");
-                  capturedPromise.Reject("User cancelled authentication");
-                  break;
-                case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
-                  auto errorDetail = result.ResponseErrorDetail();
-                  OutputDebugStringW(L"[WebAuthModule] HTTP error: ");
-                  OutputDebugStringW(std::to_wstring(errorDetail).c_str());
-                  OutputDebugStringW(L"\n");
-                  capturedPromise.Reject("HTTP error during authentication");
-                  break;
-                }
-                default:
-                  OutputDebugStringW(L"[WebAuthModule] Unknown error\n");
-                  capturedPromise.Reject("Unknown authentication error");
-                  break;
-              }
-            } else if (asyncStatus == winrt::Windows::Foundation::AsyncStatus::Canceled) {
-              OutputDebugStringW(L"[WebAuthModule] Async operation was cancelled\n");
-              capturedPromise.Reject("Authentication was cancelled");
-            } else if (asyncStatus == winrt::Windows::Foundation::AsyncStatus::Error) {
-              OutputDebugStringW(L"[WebAuthModule] Async operation error\n");
-              try {
-                asyncInfo.GetResults(); // This will throw with the actual error
-              } catch (winrt::hresult_error const& asyncEx) {
-                OutputDebugStringW(L"[WebAuthModule] Async error details: ");
-                OutputDebugStringW(asyncEx.message().c_str());
-                OutputDebugStringW(L"\n");
-                capturedPromise.Reject(winrt::to_string(asyncEx.message()).c_str());
-                return;
-              }
-              capturedPromise.Reject("Authentication failed with error");
-            } else {
-              OutputDebugStringW(L"[WebAuthModule] Unknown async status\n");
-              capturedPromise.Reject("Authentication failed");
-            }
-          } catch (winrt::hresult_error const& completionEx) {
-            OutputDebugStringW(L"[WebAuthModule] Completion handler exception: ");
-            OutputDebugStringW(completionEx.message().c_str());
-            OutputDebugStringW(L"\n");
-            capturedPromise.Reject(winrt::to_string(completionEx.message()).c_str());
-          } catch (...) {
-            OutputDebugStringW(L"[WebAuthModule] Unknown completion handler exception\n");
-            capturedPromise.Reject("Unknown error in authentication completion");
-          }
-        });
-      } catch (winrt::hresult_error const& ex) {
-        OutputDebugStringW(L"[WebAuthModule] Exception starting auth: ");
-        OutputDebugStringW(ex.message().c_str());
-        OutputDebugStringW(L"\n");
-        capturedPromise.Reject(winrt::to_string(ex.message()).c_str());
-      } catch (...) {
-        OutputDebugStringW(L"[WebAuthModule] Unknown exception starting auth\n");
-        capturedPromise.Reject("Unknown error starting authentication");
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
+          OutputDebugStringW(L"[WebAuthModule] User cancelled\n");
+          capturedPromise.Reject("User cancelled authentication");
+          break;
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
+          auto errorDetail = result.ResponseErrorDetail();
+          OutputDebugStringW(L"[WebAuthModule] HTTP error: ");
+          OutputDebugStringW(std::to_wstring(errorDetail).c_str());
+          OutputDebugStringW(L"\n");
+          std::string errorMsg = "HTTP error during authentication: " + std::to_string(errorDetail);
+          capturedPromise.Reject(errorMsg.c_str());
+          break;
+        }
+        default:
+          OutputDebugStringW(L"[WebAuthModule] Unknown response status\n");
+          capturedPromise.Reject("Unknown authentication response status");
+          break;
       }
-    });
-
-    co_return;
+    } catch (winrt::hresult_error const& ex) {
+      OutputDebugStringW(L"[WebAuthModule] Exception: ");
+      OutputDebugStringW(ex.message().c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule] HRESULT: ");
+      OutputDebugStringW(std::to_wstring(static_cast<int32_t>(ex.code())).c_str());
+      OutputDebugStringW(L"\n");
+      std::string errorMsg = "WebAuthenticationBroker error: " + winrt::to_string(ex.message());
+      capturedPromise.Reject(errorMsg.c_str());
+    } catch (std::exception const& ex) {
+      OutputDebugStringW(L"[WebAuthModule] std::exception: ");
+      OutputDebugStringA(ex.what());
+      OutputDebugStringW(L"\n");
+      std::string errorMsg = "Exception: " + std::string(ex.what());
+      capturedPromise.Reject(errorMsg.c_str());
+    } catch (...) {
+      OutputDebugStringW(L"[WebAuthModule] Unknown exception\n");
+      capturedPromise.Reject("Unknown error during authentication");
+    }
   }
 
  private:
