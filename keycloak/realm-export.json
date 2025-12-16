@@ -480,7 +480,8 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "com.tamshai.ai://callback",
-        "com.tamshai.ai.dev://callback"
+        "com.tamshai.ai.dev://callback",
+        "ms-app://*"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"

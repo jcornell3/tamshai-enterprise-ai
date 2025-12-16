@@ -117,6 +117,10 @@ struct DeepLinkModule {
 //
 // CRITICAL: WebAuthenticationBroker.AuthenticateAsync MUST run on UI thread!
 // Running on RN thread will silently fail with UserCancel status.
+//
+// IMPORTANT: WebAuthenticationBroker requires specific callback URI formats:
+// - For packaged apps: use GetCurrentApplicationCallbackUri() which returns ms-app://...
+// - Custom schemes like com.tamshai.ai:// are NOT supported
 // =============================================================================
 REACT_MODULE(WebAuthModule)
 struct WebAuthModule {
@@ -125,7 +129,31 @@ struct WebAuthModule {
     m_reactContext = reactContext;
   }
 
+  // Get the application callback URI for WebAuthenticationBroker
+  // This returns the ms-app:// URI that must be registered with the OAuth provider
+  REACT_METHOD(getCallbackUri)
+  void getCallbackUri(winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
+    try {
+      auto callbackUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri: ");
+      OutputDebugStringW(callbackUri.AbsoluteUri().c_str());
+      OutputDebugStringW(L"\n");
+      promise.Resolve(winrt::hstring(callbackUri.AbsoluteUri()));
+    } catch (winrt::hresult_error const& ex) {
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri error: ");
+      OutputDebugStringW(ex.message().c_str());
+      OutputDebugStringW(L"\n");
+      promise.Reject(winrt::to_string(ex.message()).c_str());
+    } catch (...) {
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri unknown error\n");
+      promise.Reject("Failed to get callback URI");
+    }
+  }
+
   // Authenticate using WebAuthenticationBroker (modal dialog)
+  // authUrl: The full OAuth authorization URL
+  // useAppCallbackUri: If true, use GetCurrentApplicationCallbackUri() for the callback
+  //                    If false, uses the callbackUrl parameter (must be https:// or ms-app://)
   // Returns the full callback URL with auth code on success
   REACT_METHOD(authenticate)
   winrt::fire_and_forget authenticate(
@@ -152,7 +180,23 @@ struct WebAuthModule {
 
       try {
         winrt::Windows::Foundation::Uri startUri(capturedAuthUrl);
-        winrt::Windows::Foundation::Uri endUri(capturedCallbackUrl);
+
+        // Determine callback URI
+        winrt::Windows::Foundation::Uri endUri{nullptr};
+        std::wstring callbackStr(capturedCallbackUrl);
+
+        // If callback starts with ms-app:// or https://, use it directly
+        // Otherwise, use the app's default callback URI
+        if (callbackStr.find(L"ms-app://") == 0 || callbackStr.find(L"https://") == 0) {
+          endUri = winrt::Windows::Foundation::Uri(capturedCallbackUrl);
+          OutputDebugStringW(L"[WebAuthModule] Using provided callback URI\n");
+        } else {
+          // Use the app's ms-app:// callback URI
+          endUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
+          OutputDebugStringW(L"[WebAuthModule] Using app callback URI: ");
+          OutputDebugStringW(endUri.AbsoluteUri().c_str());
+          OutputDebugStringW(L"\n");
+        }
 
         OutputDebugStringW(L"[WebAuthModule] URIs created, starting AuthenticateAsync\n");
 
