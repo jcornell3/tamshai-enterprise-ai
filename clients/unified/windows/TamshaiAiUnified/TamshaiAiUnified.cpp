@@ -331,15 +331,6 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   // Enable per monitor DPI scaling
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-  // Get the Microsoft.UI.Dispatching.DispatcherQueue for UI thread
-  // This is used by WebAuthenticationBroker which must run on UI thread
-  g_uiDispatcherQueue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-  if (g_uiDispatcherQueue) {
-    OutputDebugStringW(L"[Main] Got Microsoft.UI.Dispatching.DispatcherQueue for UI thread\n");
-  } else {
-    OutputDebugStringW(L"[Main] WARNING: No DispatcherQueue available yet (will be created by React Native)\n");
-  }
-
   // Check for protocol activation URL
   // Method 1: Try AppLifecycle API (for packaged apps with protocol activation)
   std::wstring protocolUrl = GetProtocolUrlFromActivation();
@@ -387,6 +378,15 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   // Create a ReactNativeWin32App with the ReactNativeAppBuilder
   auto reactNativeWin32App{winrt::Microsoft::ReactNative::ReactNativeAppBuilder().Build()};
+
+  // Capture DispatcherQueue NOW - after Build() creates the WinUI infrastructure
+  // This is the UI thread's DispatcherQueue needed for WebAuthenticationBroker
+  g_uiDispatcherQueue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+  if (g_uiDispatcherQueue) {
+    OutputDebugStringW(L"[Main] Captured DispatcherQueue after ReactNativeAppBuilder.Build()\n");
+  } else {
+    OutputDebugStringW(L"[Main] ERROR: Still no DispatcherQueue after Build()\n");
+  }
 
   // Configure the initial InstanceSettings for the app's ReactNativeHost
   auto settings{reactNativeWin32App.ReactNativeHost().InstanceSettings()};
