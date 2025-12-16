@@ -398,15 +398,10 @@ export async function login(config: AuthConfig): Promise<Tokens> {
 
   // Try WebAuthModule first (modal dialog - preferred UX)
   // SPEC REQUIREMENT: Must use OS-native secure browser modal, not browser tab
-  // EXCEPTION: WebAuthenticationBroker runs in a sandboxed broker process that cannot
-  // access localhost due to Windows network isolation. For localhost development,
-  // we must use the browser fallback. WAB will work with production HTTPS endpoints.
-  const isLocalhost = config.issuer.includes('localhost') || config.issuer.includes('127.0.0.1');
-
-  if (isLocalhost) {
-    console.log('[Auth:Windows] Localhost detected - WebAuthenticationBroker cannot access localhost due to Windows network isolation');
-    console.log('[Auth:Windows] Using system browser for localhost development. WAB will be used in production with HTTPS.');
-  } else if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
+  // NOTE: WebAuthenticationBroker can access localhost if the app has a loopback exemption:
+  //   CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
+  // This exemption persists across builds and allows WAB to reach localhost Keycloak.
+  if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
     console.log('[Auth:Windows] Using WebAuthenticationBroker (modal dialog)');
     try {
       // Get the ms-app:// callback URI that WAB requires
