@@ -63,10 +63,7 @@
     <ProjectReference Include="..\TamshaiAiUnified\TamshaiAiUnified.vcxproj">
       <SkipGetTargetFrameworkProperties>True</SkipGetTargetFrameworkProperties>
     </ProjectReference>
-    <!-- Autolinked native modules must be referenced here to be included in the package -->
-    <ProjectReference Include="..\..\node_modules\@react-native-async-storage\async-storage\windows\ReactNativeAsyncStorage\ReactNativeAsyncStorage.vcxproj">
-      <SkipGetTargetFrameworkProperties>True</SkipGetTargetFrameworkProperties>
-    </ProjectReference>
+    <!-- Note: @react-native-async-storage removed - not compatible with RN Windows 0.80 Composition -->
   </ItemGroup>
   <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" />
   <ImportGroup Label="ReactNativeWindowsTargets">
