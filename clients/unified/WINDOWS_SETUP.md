@@ -138,7 +138,39 @@ Edit `windows/TamshaiAI/Package.appxmanifest`:
 </Package>
 ```
 
-### Step 3: Configure react-native-keychain for Windows
+### Step 3: Enable Loopback Exemption (Required for Localhost)
+
+MSIX packaged apps (like this React Native Windows app) cannot access localhost by default due to network isolation. For development with Keycloak running on localhost, you must add a loopback exemption.
+
+**Run this command once as Administrator:**
+
+```powershell
+# Open PowerShell as Administrator, then run:
+CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
+```
+
+**How to find your Package Family Name (if different):**
+
+```powershell
+# After building the app at least once, run:
+Get-AppxPackage | Where-Object {$_.Name -like "*Tamshai*"} | Select-Object PackageFamilyName
+```
+
+**Verify the exemption was added:**
+
+```powershell
+CheckNetIsolation.exe LoopbackExempt -s
+# Should show TamshaiAiUnified_mz456f93e3tka in the list
+```
+
+**Note:** This exemption persists across builds and reboots. You only need to run it once per machine.
+
+**Why is this needed?**
+- MSIX apps run in an AppContainer with network isolation
+- Network isolation blocks connections to localhost (127.0.0.1/::1)
+- The loopback exemption allows the app to connect to localhost Keycloak for OAuth
+
+### Step 4: Configure react-native-keychain for Windows
 
 The `react-native-keychain` library uses Windows Credential Manager on Windows. After running `react-native-windows-init`, link the native module:
 
@@ -147,12 +179,19 @@ The `react-native-keychain` library uses Windows Credential Manager on Windows. 
 npx react-native autolink-windows
 ```
 
-### Step 4: Configure react-native-app-auth for Windows
+### Step 5: OAuth Authentication
 
-For OAuth, `react-native-app-auth` on Windows uses WebAuthenticationBroker. The redirect URI must be registered:
+OAuth authentication uses the system browser with a custom protocol callback (`com.tamshai.ai://callback`).
 
-1. In `Package.appxmanifest`, add the redirect capability
-2. The redirect URI format is: `com.tamshai.ai://oauth/callback`
+**How it works:**
+1. App opens system browser to Keycloak login page
+2. User authenticates in browser
+3. Keycloak redirects to `com.tamshai.ai://callback?code=...`
+4. Windows launches the app via protocol activation
+5. App receives the callback URL and exchanges code for tokens
+
+**Note on WebAuthenticationBroker:**
+The Windows `WebAuthenticationBroker` API is **not compatible** with React Native Windows 0.80 Composition/New Architecture apps. WAB requires a classic UWP ASTA thread with CoreWindow, but RN Windows 0.80 uses WinUI 3/Windows App SDK which doesn't provide this. The browser-based OAuth flow with deep linking is used instead.
 
 ---
 
