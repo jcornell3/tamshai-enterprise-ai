@@ -25,6 +25,10 @@ std::wstring g_initialUrl;
 std::atomic<bool> g_hasNewUrl{false};
 std::wstring g_pendingUrl;
 
+// Global UI thread DispatcherQueue - captured at app start on UI thread
+winrt::Windows::System::DispatcherQueue g_uiDispatcherQueue{nullptr};
+winrt::Windows::System::DispatcherQueueController g_dispatcherQueueController{nullptr};
+
 // Mutex name for single-instance detection
 const wchar_t* SINGLE_INSTANCE_MUTEX_NAME = L"TamshaiAiUnified_SingleInstance_Mutex";
 
@@ -179,8 +183,13 @@ struct WebAuthModule {
     OutputDebugStringW(L"\n");
 
     // Switch to UI thread - WebAuthenticationBroker requires it
-    co_await winrt::resume_foreground(context.UIDispatcher());
-    OutputDebugStringW(L"[WebAuthModule] Now on UI thread\n");
+    // Use the global DispatcherQueue captured at app startup (NOT ReactDispatcher which is incompatible with resume_foreground)
+    if (g_uiDispatcherQueue) {
+      co_await winrt::resume_foreground(g_uiDispatcherQueue);
+      OutputDebugStringW(L"[WebAuthModule] Now on UI thread via DispatcherQueue\n");
+    } else {
+      OutputDebugStringW(L"[WebAuthModule] WARNING: No UI DispatcherQueue available, trying on current thread\n");
+    }
 
     try {
       // Create URIs
@@ -310,6 +319,18 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   // Enable per monitor DPI scaling
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+  // Create DispatcherQueue for UI thread - needed for WebAuthenticationBroker
+  // In Win32 apps, we need to create a DispatcherQueueController since there's no existing message loop yet
+  g_uiDispatcherQueue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+  if (!g_uiDispatcherQueue) {
+    // Create a DispatcherQueue on the current thread
+    g_dispatcherQueueController = winrt::Windows::System::DispatcherQueueController::CreateOnCurrentThread();
+    g_uiDispatcherQueue = g_dispatcherQueueController.DispatcherQueue();
+    OutputDebugStringW(L"[Main] Created DispatcherQueueController on UI thread\n");
+  } else {
+    OutputDebugStringW(L"[Main] Using existing DispatcherQueue on UI thread\n");
+  }
 
   // Check for protocol activation URL
   // Method 1: Try AppLifecycle API (for packaged apps with protocol activation)
