@@ -14,6 +14,7 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.ApplicationModel.Activation.h>
 #include <winrt/Microsoft.Windows.AppLifecycle.h>
+#include <DispatcherQueue.h>
 #include <string>
 #include <fstream>
 #include <atomic>
@@ -27,7 +28,8 @@ std::wstring g_pendingUrl;
 
 // Global UI thread DispatcherQueue - captured at app start on UI thread
 winrt::Windows::System::DispatcherQueue g_uiDispatcherQueue{nullptr};
-winrt::Windows::System::DispatcherQueueController g_dispatcherQueueController{nullptr};
+// Controller handle for the DispatcherQueue (must be kept alive)
+ABI::Windows::System::IDispatcherQueueController* g_dispatcherQueueController{nullptr};
 
 // Mutex name for single-instance detection
 const wchar_t* SINGLE_INSTANCE_MUTEX_NAME = L"TamshaiAiUnified_SingleInstance_Mutex";
@@ -324,10 +326,22 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   // In Win32 apps, we need to create a DispatcherQueueController since there's no existing message loop yet
   g_uiDispatcherQueue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
   if (!g_uiDispatcherQueue) {
-    // Create a DispatcherQueue on the current thread
-    g_dispatcherQueueController = winrt::Windows::System::DispatcherQueueController::CreateOnCurrentThread();
-    g_uiDispatcherQueue = g_dispatcherQueueController.DispatcherQueue();
-    OutputDebugStringW(L"[Main] Created DispatcherQueueController on UI thread\n");
+    // Create a DispatcherQueue on the current thread using Win32 API
+    DispatcherQueueOptions options{
+      sizeof(DispatcherQueueOptions),
+      DQTYPE_THREAD_CURRENT,
+      DQTAT_COM_NONE
+    };
+    HRESULT hr = CreateDispatcherQueueController(options, &g_dispatcherQueueController);
+    if (SUCCEEDED(hr) && g_dispatcherQueueController) {
+      // Get the DispatcherQueue from the controller
+      winrt::Windows::System::DispatcherQueueController controller{nullptr};
+      winrt::copy_from_abi(controller, g_dispatcherQueueController);
+      g_uiDispatcherQueue = controller.DispatcherQueue();
+      OutputDebugStringW(L"[Main] Created DispatcherQueueController on UI thread\n");
+    } else {
+      OutputDebugStringW(L"[Main] ERROR: Failed to create DispatcherQueueController\n");
+    }
   } else {
     OutputDebugStringW(L"[Main] Using existing DispatcherQueue on UI thread\n");
   }
