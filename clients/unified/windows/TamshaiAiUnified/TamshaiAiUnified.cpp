@@ -12,6 +12,8 @@
 #include <winrt/Windows.Security.Authentication.Web.h>
 #include <winrt/Windows.System.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
+#include <winrt/Windows.ApplicationModel.Activation.h>
+#include <winrt/Microsoft.Windows.AppLifecycle.h>
 #include <string>
 #include <fstream>
 #include <atomic>
@@ -301,6 +303,40 @@ struct CompReactPackageProvider
   }
 };
 
+// Helper function to extract protocol URL from activation args
+std::wstring GetProtocolUrlFromActivation() {
+  std::wstring protocolUrl;
+
+  try {
+    // Try to get activation args using AppLifecycle API (Windows App SDK / packaged apps)
+    auto args = winrt::Microsoft::Windows::AppLifecycle::AppInstance::GetCurrent().GetActivatedEventArgs();
+    if (args) {
+      OutputDebugStringW(L"[Protocol] Got activation args, kind: ");
+      OutputDebugStringW(std::to_wstring(static_cast<int>(args.Kind())).c_str());
+      OutputDebugStringW(L"\n");
+
+      if (args.Kind() == winrt::Microsoft::Windows::AppLifecycle::ExtendedActivationKind::Protocol) {
+        auto protocolArgs = args.Data().as<winrt::Windows::ApplicationModel::Activation::IProtocolActivatedEventArgs>();
+        if (protocolArgs) {
+          auto uri = protocolArgs.Uri();
+          protocolUrl = std::wstring(uri.AbsoluteUri());
+          OutputDebugStringW(L"[Protocol] URL from AppLifecycle activation: ");
+          OutputDebugStringW(protocolUrl.c_str());
+          OutputDebugStringW(L"\n");
+        }
+      }
+    }
+  } catch (winrt::hresult_error const& ex) {
+    OutputDebugStringW(L"[Protocol] AppLifecycle API not available: ");
+    OutputDebugStringW(ex.message().c_str());
+    OutputDebugStringW(L"\n");
+  } catch (...) {
+    OutputDebugStringW(L"[Protocol] AppLifecycle API error\n");
+  }
+
+  return protocolUrl;
+}
+
 // The entry point of the Win32 application
 _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR commandLine, int showCmd) {
   // Initialize WinRT
@@ -309,10 +345,12 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   // Enable per monitor DPI scaling
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-  // Check for protocol activation URL in command line
-  // When launched via protocol (com.tamshai.ai://...), the URL is passed as command line arg
-  std::wstring protocolUrl;
-  if (commandLine && strlen(commandLine) > 0) {
+  // Check for protocol activation URL
+  // Method 1: Try AppLifecycle API (for packaged apps with protocol activation)
+  std::wstring protocolUrl = GetProtocolUrlFromActivation();
+
+  // Method 2: Fall back to command line check (for unpackaged or direct launch)
+  if (protocolUrl.empty() && commandLine && strlen(commandLine) > 0) {
     std::string cmdLine(commandLine);
     OutputDebugStringA("[Protocol] Command line: ");
     OutputDebugStringA(cmdLine.c_str());
