@@ -389,39 +389,82 @@ std::wstring GetProtocolUrlFromActivation() {
   std::wstring protocolUrl;
 
   try {
-    // Try to get activation args using AppLifecycle API (Windows App SDK / packaged apps)
-    auto args = winrt::Microsoft::Windows::AppLifecycle::AppInstance::GetCurrent().GetActivatedEventArgs();
-    if (args) {
-      OutputDebugStringW(L"[Protocol] Got activation args, kind: ");
-      OutputDebugStringW(std::to_wstring(static_cast<int>(args.Kind())).c_str());
-      OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[Protocol] Checking for protocol activation...\n");
 
-      if (args.Kind() == winrt::Microsoft::Windows::AppLifecycle::ExtendedActivationKind::Protocol) {
-        auto protocolArgs = args.Data().as<winrt::Windows::ApplicationModel::Activation::IProtocolActivatedEventArgs>();
-        if (protocolArgs) {
-          auto uri = protocolArgs.Uri();
+    // Try to get activation args using AppLifecycle API (Windows App SDK / packaged apps)
+    auto appInstance = winrt::Microsoft::Windows::AppLifecycle::AppInstance::GetCurrent();
+    if (!appInstance) {
+      OutputDebugStringW(L"[Protocol] No AppInstance available\n");
+      return protocolUrl;
+    }
+
+    auto args = appInstance.GetActivatedEventArgs();
+    if (!args) {
+      OutputDebugStringW(L"[Protocol] No activation args available\n");
+      return protocolUrl;
+    }
+
+    auto kind = args.Kind();
+    OutputDebugStringW(L"[Protocol] Got activation args, kind: ");
+    OutputDebugStringW(std::to_wstring(static_cast<int>(kind)).c_str());
+    OutputDebugStringW(L"\n");
+
+    // Only process if this is a Protocol activation (kind == 4)
+    if (kind == winrt::Microsoft::Windows::AppLifecycle::ExtendedActivationKind::Protocol) {
+      OutputDebugStringW(L"[Protocol] This is a Protocol activation, extracting URL...\n");
+
+      auto data = args.Data();
+      if (!data) {
+        OutputDebugStringW(L"[Protocol] No Data in activation args\n");
+        return protocolUrl;
+      }
+
+      auto protocolArgs = data.try_as<winrt::Windows::ApplicationModel::Activation::IProtocolActivatedEventArgs>();
+      if (protocolArgs) {
+        auto uri = protocolArgs.Uri();
+        if (uri) {
           protocolUrl = std::wstring(uri.AbsoluteUri());
           OutputDebugStringW(L"[Protocol] URL from AppLifecycle activation: ");
           OutputDebugStringW(protocolUrl.c_str());
           OutputDebugStringW(L"\n");
+        } else {
+          OutputDebugStringW(L"[Protocol] Uri is null\n");
         }
+      } else {
+        OutputDebugStringW(L"[Protocol] Could not cast to IProtocolActivatedEventArgs\n");
       }
+    } else {
+      OutputDebugStringW(L"[Protocol] Not a Protocol activation (kind=");
+      OutputDebugStringW(std::to_wstring(static_cast<int>(kind)).c_str());
+      OutputDebugStringW(L"), skipping URL extraction\n");
     }
   } catch (winrt::hresult_error const& ex) {
-    OutputDebugStringW(L"[Protocol] AppLifecycle API not available: ");
+    OutputDebugStringW(L"[Protocol] WinRT exception: ");
     OutputDebugStringW(ex.message().c_str());
+    OutputDebugStringW(L" (HRESULT: ");
+    OutputDebugStringW(HResultToHexString(ex.code()).c_str());
+    OutputDebugStringW(L")\n");
+  } catch (std::exception const& ex) {
+    OutputDebugStringW(L"[Protocol] std::exception: ");
+    OutputDebugStringA(ex.what());
     OutputDebugStringW(L"\n");
   } catch (...) {
-    OutputDebugStringW(L"[Protocol] AppLifecycle API error\n");
+    OutputDebugStringW(L"[Protocol] Unknown exception\n");
   }
 
+  OutputDebugStringW(L"[Protocol] GetProtocolUrlFromActivation completed\n");
   return protocolUrl;
 }
 
 // The entry point of the Win32 application
 _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR commandLine, int showCmd) {
+  // FIRST THING: Log that we're starting
+  OutputDebugStringW(L"[Main] >>>>>> WinMain ENTRY <<<<<<\n");
+
   // Initialize WinRT
+  OutputDebugStringW(L"[Main] Initializing WinRT apartment...\n");
   winrt::init_apartment(winrt::apartment_type::single_threaded);
+  OutputDebugStringW(L"[Main] WinRT apartment initialized\n");
 
   // Enable per monitor DPI scaling
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -452,7 +495,9 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   // Check for protocol activation URL
   // Method 1: Try AppLifecycle API (for packaged apps with protocol activation)
+  OutputDebugStringW(L"[Main] About to call GetProtocolUrlFromActivation...\n");
   std::wstring protocolUrl = GetProtocolUrlFromActivation();
+  OutputDebugStringW(L"[Main] GetProtocolUrlFromActivation returned\n");
 
   // Method 2: Fall back to command line check (for unpackaged or direct launch)
   if (protocolUrl.empty() && commandLine && strlen(commandLine) > 0) {
