@@ -6,18 +6,13 @@
 // Includes from @react-native-async-storage/async-storage
 #include <winrt/ReactNativeAsyncStorage.h>
 
-// Includes from react-native-webview
-#include <winrt/ReactNativeWebView.h>
-
 namespace winrt::Microsoft::ReactNative
 {
 
 void RegisterAutolinkedNativeModulePackages(winrt::Windows::Foundation::Collections::IVector<winrt::Microsoft::ReactNative::IReactPackageProvider> const& packageProviders)
-{ 
+{
     // IReactPackageProviders from @react-native-async-storage/async-storage
     packageProviders.Append(winrt::ReactNativeAsyncStorage::ReactPackageProvider());
-    // IReactPackageProviders from react-native-webview
-    packageProviders.Append(winrt::ReactNativeWebView::ReactPackageProvider());
 }
 
 }
