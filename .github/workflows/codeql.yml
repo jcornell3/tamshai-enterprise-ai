@@ -11,22 +11,12 @@ on:
 
 jobs:
   analyze:
-    name: Analyze
+    name: Analyze JavaScript/TypeScript
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       security-events: write
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ['javascript-typescript']
-        # Add more languages as needed:
-        # - 'python' for Python code
-        # - 'java' for Java code
-        # - 'csharp' for C# code
-        # - 'cpp' for C/C++ code
 
     steps:
       - name: Checkout repository
@@ -35,15 +25,16 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
-          # Custom queries can be added here
-          # queries: security-extended,security-and-quality
+          # Only analyze JavaScript and TypeScript
+          # Swift/Java/Kotlin are React Native platform code we don't maintain
+          languages: javascript-typescript
+          # Use security-extended for more comprehensive scanning
+          queries: security-extended
 
-      # Autobuild attempts to build any compiled languages
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      # Skip autobuild - JavaScript/TypeScript doesn't need compilation
+      # Autobuild was failing on iOS/Android native code which we don't need to scan
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:javascript-typescript"
