@@ -275,10 +275,26 @@ let pendingAuthState: {
 } | null = null;
 
 /**
+ * Bring the app window to the foreground
+ * Call this after receiving OAuth callback to return focus from browser
+ */
+function bringAppToForeground(): void {
+  if (DeepLinkModule?.bringToForeground) {
+    console.log('[Auth:Windows] Bringing app to foreground...');
+    DeepLinkModule.bringToForeground();
+  } else {
+    console.warn('[Auth:Windows] bringToForeground not available');
+  }
+}
+
+/**
  * Handle OAuth callback URL
  * This should be called when the app receives the OAuth redirect
  */
 export async function handleOAuthCallback(url: string): Promise<void> {
+  // Immediately bring the app to foreground when we receive the callback
+  bringAppToForeground();
+
   if (!pendingAuthState) {
     console.warn('[Auth:Windows] No pending auth state for callback');
     return;

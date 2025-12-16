@@ -24,6 +24,9 @@ std::wstring g_initialUrl;
 std::atomic<bool> g_hasNewUrl{false};
 std::wstring g_pendingUrl;
 
+// Global to store the main window handle for bringing to foreground
+HWND g_mainWindowHandle = nullptr;
+
 // Mutex name for single-instance detection
 const wchar_t* SINGLE_INSTANCE_MUTEX_NAME = L"TamshaiAiUnified_SingleInstance_Mutex";
 
@@ -104,6 +107,57 @@ struct DeepLinkModule {
       promise.Resolve(winrt::hstring(url));
     } else {
       promise.Resolve(winrt::hstring(L""));
+    }
+  }
+
+  // Bring the app window to the foreground
+  // Call this after receiving OAuth callback to return focus to the app
+  REACT_METHOD(bringToForeground)
+  void bringToForeground() noexcept {
+    OutputDebugStringW(L"[DeepLinkModule] bringToForeground called\n");
+
+    if (g_mainWindowHandle != nullptr) {
+      OutputDebugStringW(L"[DeepLinkModule] Bringing window to foreground...\n");
+
+      // First, check if window is minimized and restore it
+      if (IsIconic(g_mainWindowHandle)) {
+        ShowWindow(g_mainWindowHandle, SW_RESTORE);
+      }
+
+      // Bring window to foreground
+      // SetForegroundWindow has restrictions - the calling process must be in foreground
+      // or the window must have been activated recently. We use a workaround:
+
+      // Get the current foreground window's thread
+      DWORD foregroundThreadId = GetWindowThreadProcessId(GetForegroundWindow(), NULL);
+      DWORD currentThreadId = GetCurrentThreadId();
+
+      // Attach input threads to allow SetForegroundWindow to work
+      if (foregroundThreadId != currentThreadId) {
+        AttachThreadInput(foregroundThreadId, currentThreadId, TRUE);
+      }
+
+      // Now bring our window to foreground
+      SetForegroundWindow(g_mainWindowHandle);
+      BringWindowToTop(g_mainWindowHandle);
+
+      // Flash the taskbar button to grab attention (in case SetForegroundWindow fails)
+      FLASHWINFO fi = {};
+      fi.cbSize = sizeof(FLASHWINFO);
+      fi.hwnd = g_mainWindowHandle;
+      fi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;
+      fi.uCount = 3;
+      fi.dwTimeout = 0;
+      FlashWindowEx(&fi);
+
+      // Detach input threads
+      if (foregroundThreadId != currentThreadId) {
+        AttachThreadInput(foregroundThreadId, currentThreadId, FALSE);
+      }
+
+      OutputDebugStringW(L"[DeepLinkModule] Window brought to foreground\n");
+    } else {
+      OutputDebugStringW(L"[DeepLinkModule] No window handle available\n");
     }
   }
 
@@ -303,6 +357,12 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   auto appWindow{reactNativeWin32App.AppWindow()};
   appWindow.Title(L"TamshaiAI");
   appWindow.Resize({1000, 1000});
+
+  // Get the HWND from the AppWindow for use in bringToForeground
+  // AppWindow.Id() returns an AppWindowId which contains the window handle
+  auto windowId = appWindow.Id();
+  g_mainWindowHandle = winrt::Microsoft::UI::GetWindowFromWindowId(windowId);
+  OutputDebugStringW(L"[Main] Captured main window handle for foreground operations\n");
 
   // Get the ReactViewOptions so we can set the initial RN component to load
   auto viewOptions{reactNativeWin32App.ReactViewOptions()};
