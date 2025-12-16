@@ -264,13 +264,62 @@ clients/
 
 ---
 
+## Platform Limitations
+
+This section documents known platform-specific limitations that affect feature parity. **QA should not flag these as bugs** - they are documented technical constraints.
+
+### PL-001: Windows OAuth Uses System Browser (Not Native Modal)
+
+| Attribute | Value |
+|-----------|-------|
+| **Platform** | Windows only |
+| **Feature** | OAuth/OIDC Authentication |
+| **Expected (macOS/iOS/Android)** | Native in-app browser modal |
+| **Actual (Windows)** | Opens system default browser (Chrome/Edge) |
+| **Status** | Accepted Platform Limitation |
+| **Date Documented** | December 16, 2025 |
+
+**Description**:
+On Windows, the OAuth login flow opens the user's default system browser instead of displaying an in-app native modal. After authentication completes, the app brings itself to the foreground, but the browser tab remains open and must be closed manually by the user.
+
+**Root Cause**:
+React Native Windows 0.80 uses WinUI 3/Windows App SDK which lacks `CoreWindow`. The Windows `WebAuthenticationBroker` API requires `CoreWindow` to render its authentication dialog. This is a fundamental architectural incompatibility between RNW 0.80's Composition model and UWP APIs.
+
+**Alternatives Evaluated**:
+| Approach | Result |
+|----------|--------|
+| `WebAuthenticationBroker` | ❌ Requires `CoreWindow` (not available in WinUI 3) |
+| `react-native-webview` | ❌ MSBuild race conditions, incompatible with RNW 0.80 Fabric |
+| `react-native-app-auth` | ❌ No Windows support (iOS/Android only) |
+| Custom C++ WebView2 | ❌ Rejected - violates cross-platform code sharing goal |
+
+**Mitigations Implemented**:
+1. App automatically brings itself to foreground after OAuth callback
+2. Taskbar flashes if foreground activation fails
+3. PKCE security is maintained (browser OAuth is secure)
+
+**UX Impact**:
+- User sees context switch to browser during login
+- User must manually close browser tab after login
+- App returns to foreground automatically
+
+**QA Test Notes**:
+- ✅ Do NOT flag as bug when comparing to macOS behavior
+- ✅ Verify app returns to foreground after OAuth callback
+- ✅ Verify login completes successfully
+- ⚠️ Browser tab remaining open is expected behavior
+
+**Technical Reference**: `clients/unified/docs/WEBVIEW2_INTEGRATION_ISSUES.md`
+
+---
+
 ## References
 
 - **ADR-004**: `.specify/ARCHITECTURE_SPECS.md` - Platform pivot decision
 - **Electron Investigation**: `clients/desktop/ELECTRON_SINGLE_INSTANCE_LOCK_INVESTIGATION.md`
 - **React Native Windows**: https://microsoft.github.io/react-native-windows/
 - **React Native macOS**: https://microsoft.github.io/react-native-windows/docs/rnm-getting-started
-- **react-native-app-auth**: https://github.com/FormidableLabs/react-native-app-auth
+- **react-native-app-auth**: https://github.com/FormidableLabs/react-native-app-auth (iOS/Android only - not used on Windows)
 - **react-native-keychain**: https://github.com/oblador/react-native-keychain
 
 ---

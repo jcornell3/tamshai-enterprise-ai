@@ -4183,4 +4183,83 @@ return {
 
 ---
 
-*Last updated: December 12, 2025*
+## Phase 6: Desktop Client (React Native Windows)
+
+### Lesson 8: React Native Windows 0.80 Composition Architecture Breaks Native OAuth APIs (Dec 2025)
+
+**Issue Discovered**: WebAuthenticationBroker and react-native-webview are incompatible with React Native Windows 0.80's Composition/Fabric architecture.
+
+**What Happened**:
+- Spec required OS-native secure browser modal for OAuth (not opening system browser)
+- Initial implementation attempted `WebAuthenticationBroker` - Windows' standard OAuth API
+- WAB threw `RPC_E_WRONG_THREAD (0x8001010E)` even when marshaled to UI thread
+- Fallback to `react-native-webview` failed with MSBuild race conditions and PDB file locking errors
+- Third-party review incorrectly suggested the issue was localhost network isolation (already resolved via `CheckNetIsolation.exe`)
+
+**Root Cause**:
+- `WebAuthenticationBroker` requires a `CoreWindow` instance to render its authentication dialog
+- React Native Windows 0.80 uses WinUI 3/Windows App SDK which has `AppWindow` - **no `CoreWindow` exists**
+- This is a fundamental architectural incompatibility in COM threading models:
+  - WAB requires: ASTA (Application Single-Threaded Apartment) + CoreWindow
+  - RNW 0.80 provides: MAINSTA (Main Single-Threaded Apartment) + AppWindow
+- `react-native-webview` library has not been updated for RNW 0.80 Fabric/Composition
+
+**Impact**:
+- ~3 days of investigation across multiple approaches
+- Spec requirement for "native modal" OAuth cannot be met on Windows with current RNW version
+- Browser-based OAuth (with deep linking) is the only working solution
+- UX degradation: user must switch context to browser and manually close tab after auth
+
+**What Worked**:
+- Browser-based OAuth with PKCE via `Linking.openURL()` + custom protocol callback (`com.tamshai.ai://callback`)
+- `CheckNetIsolation.exe` loopback exemption for localhost Keycloak access
+- Custom `DeepLinkModule` native module for protocol activation (workaround for RNW bug #6996)
+- `bringToForeground()` native method to return focus to app after OAuth callback
+
+**What Didn't Work**:
+- `WebAuthenticationBroker::AuthenticateAsync` - CoreWindow dependency
+- `react-native-webview` - MSBuild race conditions, PDB locking, path construction bugs
+- `react-native-app-auth` - No Windows support (iOS/Android only)
+- DispatcherQueue marshaling - WAB checks for CoreWindow, not just thread context
+
+**Resolution Implemented**:
+1. **Accepted browser-based OAuth** as Windows platform limitation
+2. **Implemented UX mitigations**:
+   - Added `bringToForeground()` native method using `SetForegroundWindow` + `AttachThreadInput` workaround
+   - Taskbar flashing via `FlashWindowEx` as fallback attention grabber
+3. **Documented as Platform Limitation** in spec for QA (not a bug, expected behavior)
+4. **Created technical analysis** in `clients/unified/docs/WEBVIEW2_INTEGRATION_ISSUES.md` for future reference
+
+**Key Learnings**:
+1. **WinUI 3 ≠ UWP**: Many UWP APIs (like WAB) are not available in WinUI 3 desktop apps. Check Microsoft's Windows App SDK migration docs before assuming API availability.
+2. **Third-party libraries lag behind**: `react-native-webview` and `react-native-app-auth` don't support RNW 0.80 Fabric. Check GitHub issues before depending on them.
+3. **MSBuild parallel compilation is fragile**: RNW 0.80's build system has race conditions with native modules. PDB file locking and path construction bugs are common.
+4. **Platform limitations must be documented for QA**: When cross-platform feature parity can't be achieved, document it as a known limitation to prevent false bug reports.
+
+**Recommendations for Future**:
+1. **Check Windows App SDK API availability** before designing features that require native Windows APIs
+2. **Test native module integration early** in the development cycle
+3. **Monitor react-native-webview** for RNW 0.80 Composition support - it may become viable later
+4. **Consider Electron** for Windows if native API access is critical (different trade-offs)
+5. **Budget extra time** for Windows-specific issues when using React Native Windows
+
+**Files Created/Modified**:
+- `clients/unified/docs/WEBVIEW2_INTEGRATION_ISSUES.md` - Full technical analysis
+- `clients/unified/docs/WINDOWS_BUILD_ISSUES.md` - MSBuild race condition documentation
+- `clients/unified/windows/TamshaiAiUnified/TamshaiAiUnified.cpp` - Added `bringToForeground()` method
+- `clients/unified/src/services/auth/auth.windows.ts` - Browser OAuth with foreground restore
+
+**References**:
+- [RNW Discussion #13538](https://github.com/microsoft/react-native-windows/discussions/13538) - OIDC in RNW
+- [react-native-app-auth Issue #740](https://github.com/FormidableLabs/react-native-app-auth/issues/740) - No Windows support
+- Windows App SDK docs on CoreWindow limitations
+
+---
+
+*Lesson documented: December 16, 2025*
+*Time spent investigating: ~3 days*
+*Resolution: Accept platform limitation, implement UX mitigations*
+
+---
+
+*Last updated: December 16, 2025*
