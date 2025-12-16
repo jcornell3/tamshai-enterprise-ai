@@ -156,6 +156,9 @@ std::wstring GetHResultName(HRESULT hr) {
 // Store main thread ID for comparison
 DWORD g_mainThreadId = 0;
 
+// Global DispatcherQueue captured from main thread for WebAuthenticationBroker calls
+winrt::Microsoft::UI::Dispatching::DispatcherQueue g_mainDispatcherQueue{nullptr};
+
 REACT_MODULE(WebAuthModule)
 struct WebAuthModule {
   REACT_INIT(Initialize)
@@ -200,14 +203,59 @@ struct WebAuthModule {
   // CRITICAL: Must dispatch to UI thread - WebAuthenticationBroker requires main STA thread
   REACT_METHOD(getCallbackUri)
   void getCallbackUri(winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
-    OutputDebugStringW(L"[WebAuthModule] getCallbackUri called on thread: ");
+    OutputDebugStringW(L"[WebAuthModule] ========== getCallbackUri CALLED ==========\n");
+    OutputDebugStringW(L"[WebAuthModule] Caller thread ID: ");
     OutputDebugStringW(std::to_wstring(GetCurrentThreadId()).c_str());
-    OutputDebugStringW(L" (dispatching to UI thread...)\n");
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Main thread ID: ");
+    OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
+    OutputDebugStringW(L"\n");
 
-    // Dispatch to UI thread using ReactContext's UIDispatcher
-    m_reactContext.UIDispatcher().Post([promise]() {
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri executing on UI thread: ");
+    // Check if we have the global dispatcher queue
+    if (!g_mainDispatcherQueue) {
+      OutputDebugStringW(L"[WebAuthModule] ERROR: g_mainDispatcherQueue is null! Trying ReactContext UIDispatcher...\n");
+
+      // Try ReactContext's UIDispatcher as fallback
+      auto uiDispatcher = m_reactContext.UIDispatcher();
+      if (uiDispatcher) {
+        OutputDebugStringW(L"[WebAuthModule] UIDispatcher is available, posting...\n");
+        uiDispatcher.Post([promise]() {
+          OutputDebugStringW(L"[WebAuthModule] getCallbackUri executing via UIDispatcher on thread: ");
+          OutputDebugStringW(std::to_wstring(GetCurrentThreadId()).c_str());
+          OutputDebugStringW(L"\n");
+
+          try {
+            auto callbackUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
+            OutputDebugStringW(L"[WebAuthModule] getCallbackUri SUCCESS: ");
+            OutputDebugStringW(callbackUri.AbsoluteUri().c_str());
+            OutputDebugStringW(L"\n");
+            promise.Resolve(winrt::hstring(callbackUri.AbsoluteUri()));
+          } catch (winrt::hresult_error const& ex) {
+            OutputDebugStringW(L"[WebAuthModule] getCallbackUri FAILED: ");
+            OutputDebugStringW(ex.message().c_str());
+            OutputDebugStringW(L"\n");
+            promise.Reject(winrt::to_string(ex.message()).c_str());
+          } catch (...) {
+            OutputDebugStringW(L"[WebAuthModule] getCallbackUri unknown exception\n");
+            promise.Reject("Failed to get callback URI");
+          }
+        });
+      } else {
+        OutputDebugStringW(L"[WebAuthModule] ERROR: UIDispatcher is also null!\n");
+        promise.Reject("No dispatcher available");
+      }
+      return;
+    }
+
+    OutputDebugStringW(L"[WebAuthModule] Using g_mainDispatcherQueue to dispatch...\n");
+
+    // Dispatch to main thread using the global dispatcher queue
+    bool enqueued = g_mainDispatcherQueue.TryEnqueue([promise]() {
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri executing on main thread: ");
       OutputDebugStringW(std::to_wstring(GetCurrentThreadId()).c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule] Main thread ID expected: ");
+      OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
       OutputDebugStringW(L"\n");
 
       try {
@@ -233,6 +281,13 @@ struct WebAuthModule {
         promise.Reject("Failed to get callback URI");
       }
     });
+
+    if (enqueued) {
+      OutputDebugStringW(L"[WebAuthModule] Successfully enqueued to main dispatcher\n");
+    } else {
+      OutputDebugStringW(L"[WebAuthModule] ERROR: Failed to enqueue to main dispatcher!\n");
+      promise.Reject("Failed to dispatch to main thread");
+    }
   }
 
   // Authenticate using WebAuthenticationBroker (modal dialog)
@@ -248,11 +303,22 @@ struct WebAuthModule {
     OutputDebugStringW(L"[WebAuthModule] ========== AUTHENTICATE CALLED ==========\n");
     OutputDebugStringW(L"[WebAuthModule] Caller thread ID: ");
     OutputDebugStringW(std::to_wstring(callerThreadId).c_str());
-    OutputDebugStringW(L" (dispatching to UI thread...)\n");
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Main thread ID: ");
+    OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
+    OutputDebugStringW(L"\n");
 
-    // Dispatch to UI thread using ReactContext's UIDispatcher
-    // We need to use a lambda that captures what we need and launches a coroutine on the UI thread
-    m_reactContext.UIDispatcher().Post([authUrl, callbackUrl, promise]() -> winrt::fire_and_forget {
+    // Check if we have the global dispatcher queue
+    if (!g_mainDispatcherQueue) {
+      OutputDebugStringW(L"[WebAuthModule] ERROR: g_mainDispatcherQueue is null for authenticate!\n");
+      promise.Reject("No main thread dispatcher available");
+      return;
+    }
+
+    OutputDebugStringW(L"[WebAuthModule] Dispatching to main thread via g_mainDispatcherQueue...\n");
+
+    // Dispatch to main thread using the global dispatcher queue
+    bool enqueued = g_mainDispatcherQueue.TryEnqueue([authUrl, callbackUrl, promise]() -> winrt::fire_and_forget {
       DWORD uiThreadId = GetCurrentThreadId();
 
       OutputDebugStringW(L"[WebAuthModule] Executing on UI thread ID: ");
@@ -390,6 +456,13 @@ struct WebAuthModule {
 
       co_return;
     });
+
+    if (enqueued) {
+      OutputDebugStringW(L"[WebAuthModule] Successfully enqueued authenticate to main dispatcher\n");
+    } else {
+      OutputDebugStringW(L"[WebAuthModule] ERROR: Failed to enqueue authenticate to main dispatcher!\n");
+      promise.Reject("Failed to dispatch authenticate to main thread");
+    }
   }
 
  private:
@@ -563,6 +636,15 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   // Create a ReactNativeWin32App with the ReactNativeAppBuilder
   auto reactNativeWin32App{winrt::Microsoft::ReactNative::ReactNativeAppBuilder().Build()};
+
+  // Capture the DispatcherQueue for the main thread (for WebAuthenticationBroker)
+  // This must be done after ReactNativeAppBuilder().Build() which sets up the dispatcher
+  g_mainDispatcherQueue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+  if (g_mainDispatcherQueue) {
+    OutputDebugStringW(L"[Main] Captured main thread DispatcherQueue successfully\n");
+  } else {
+    OutputDebugStringW(L"[Main] WARNING: Failed to capture main thread DispatcherQueue!\n");
+  }
 
   // Configure the initial InstanceSettings for the app's ReactNativeHost
   auto settings{reactNativeWin32App.ReactNativeHost().InstanceSettings()};
