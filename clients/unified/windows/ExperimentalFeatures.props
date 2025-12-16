@@ -22,6 +22,12 @@
     <UseExperimentalNuget>true</UseExperimentalNuget>
 
     <ReactExperimentalFeaturesSet>true</ReactExperimentalFeaturesSet>
+
+    <!--
+      Required for Fabric/Composition apps (New Architecture).
+      This enables the correct native module configuration for third-party libraries.
+    -->
+    <UseFabric>true</UseFabric>
   </PropertyGroup>
 
 </Project>
