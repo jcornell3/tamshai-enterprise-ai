@@ -325,15 +325,31 @@ async function exchangeCodeForTokens(
   codeVerifier: string,
   config: AuthConfig
 ): Promise<Tokens> {
+  return exchangeCodeForTokensWithUri(code, codeVerifier, config, config.redirectUrl);
+}
+
+/**
+ * Exchange authorization code for tokens with a specific redirect URI
+ * This is needed because WebAuthenticationBroker uses ms-app:// URIs
+ * which differ from the custom scheme used for browser-based auth
+ */
+async function exchangeCodeForTokensWithUri(
+  code: string,
+  codeVerifier: string,
+  config: AuthConfig,
+  redirectUri: string
+): Promise<Tokens> {
   const tokenEndpoint = `${config.issuer}/protocol/openid-connect/token`;
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: config.clientId,
     code,
-    redirect_uri: config.redirectUrl,
+    redirect_uri: redirectUri,
     code_verifier: codeVerifier,
   });
+
+  console.log('[Auth:Windows] Token exchange - redirect_uri:', redirectUri);
 
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
@@ -362,6 +378,11 @@ async function exchangeCodeForTokens(
 /**
  * Perform OIDC login using WebAuthenticationBroker (modal dialog)
  * Falls back to system browser if WebAuthModule is not available
+ *
+ * IMPORTANT: WebAuthenticationBroker requires an ms-app:// callback URI.
+ * The custom scheme com.tamshai.ai:// won't work with WAB.
+ * We get the proper URI via WebAuthModule.getCallbackUri() and use that
+ * for the OAuth flow when using WAB.
  */
 export async function login(config: AuthConfig): Promise<Tokens> {
   console.log('[Auth:Windows] Starting OIDC login flow...');
@@ -375,34 +396,47 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   const state = generateRandomString(32);
   console.log('[Auth:Windows] State generated');
 
-  // Build authorization URL
-  const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
-  const params = new URLSearchParams({
-    client_id: config.clientId,
-    redirect_uri: config.redirectUrl,
-    response_type: 'code',
-    scope: config.scopes.join(' '),
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  });
-
-  const authUrl = `${authEndpoint}?${params.toString()}`;
-  console.log('[Auth:Windows] Auth URL:', authUrl);
-
   // Try WebAuthModule first (modal dialog - preferred UX)
-  if (WebAuthModule?.authenticate) {
+  if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
     console.log('[Auth:Windows] Using WebAuthenticationBroker (modal dialog)');
     try {
+      // Get the ms-app:// callback URI that WAB requires
+      const wabCallbackUri = await WebAuthModule.getCallbackUri();
+      console.log('[Auth:Windows] WAB callback URI:', wabCallbackUri);
+
+      // Build authorization URL with the WAB callback URI
+      const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
+      const params = new URLSearchParams({
+        client_id: config.clientId,
+        redirect_uri: wabCallbackUri,  // Use ms-app:// URI for WAB
+        response_type: 'code',
+        scope: config.scopes.join(' '),
+        state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+      });
+
+      const authUrl = `${authEndpoint}?${params.toString()}`;
+      console.log('[Auth:Windows] Auth URL:', authUrl);
+
       // WebAuthModule.authenticate returns the full callback URL with code
-      const callbackUrl = await WebAuthModule.authenticate(authUrl, config.redirectUrl);
+      const callbackUrl = await WebAuthModule.authenticate(authUrl, wabCallbackUri);
       console.log('[Auth:Windows] WebAuthModule returned:', callbackUrl);
 
-      // Parse the callback URL
-      const urlObj = new URL(callbackUrl);
-      const code = urlObj.searchParams.get('code');
-      const returnedState = urlObj.searchParams.get('state');
-      const error = urlObj.searchParams.get('error');
+      // Parse the callback URL - WAB returns ms-app://...?code=...&state=...
+      // The URL class may not parse ms-app:// correctly, so extract params manually
+      let code: string | null = null;
+      let returnedState: string | null = null;
+      let error: string | null = null;
+
+      const queryStart = callbackUrl.indexOf('?');
+      if (queryStart !== -1) {
+        const queryString = callbackUrl.substring(queryStart + 1);
+        const searchParams = new URLSearchParams(queryString);
+        code = searchParams.get('code');
+        returnedState = searchParams.get('state');
+        error = searchParams.get('error');
+      }
 
       if (error) {
         throw new Error(`OAuth error: ${error}`);
@@ -416,14 +450,14 @@ export async function login(config: AuthConfig): Promise<Tokens> {
         throw new Error('No authorization code received');
       }
 
-      // Exchange code for tokens
-      const tokens = await exchangeCodeForTokens(code, codeVerifier, config);
+      // Exchange code for tokens - use the WAB callback URI as redirect_uri
+      const tokens = await exchangeCodeForTokensWithUri(code, codeVerifier, config, wabCallbackUri);
       await storeTokens(tokens);
       console.log('[Auth:Windows] Login successful via WebAuthenticationBroker');
       return tokens;
     } catch (error: any) {
       // If user cancelled, propagate that specific error
-      if (error?.code === 'USER_CANCELLED') {
+      if (error?.message?.includes('cancelled') || error?.message?.includes('User cancelled')) {
         throw new Error('User cancelled authentication');
       }
       console.error('[Auth:Windows] WebAuthModule error:', error);
@@ -433,6 +467,21 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   } else {
     console.log('[Auth:Windows] WebAuthModule not available, using system browser');
   }
+
+  // Build authorization URL for browser fallback (uses custom scheme)
+  const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUrl,
+    response_type: 'code',
+    scope: config.scopes.join(' '),
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+  });
+
+  const authUrl = `${authEndpoint}?${params.toString()}`;
+  console.log('[Auth:Windows] Auth URL:', authUrl);
 
   // Fallback: Use system browser with deep link callback
   // Set up listener for callback before opening browser
