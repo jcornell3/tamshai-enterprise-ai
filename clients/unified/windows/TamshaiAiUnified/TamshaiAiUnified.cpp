@@ -19,6 +19,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <objbase.h>  // For CoGetApartmentType
 
 // Global to store the initial URL from protocol activation
 std::wstring g_initialUrl;
@@ -126,98 +127,212 @@ struct DeepLinkModule {
 // - For packaged apps: use GetCurrentApplicationCallbackUri() which returns ms-app://...
 // - Custom schemes like com.tamshai.ai:// are NOT supported
 // =============================================================================
+// Helper to convert HRESULT to hex string
+std::wstring HResultToHexString(HRESULT hr) {
+  wchar_t buf[32];
+  swprintf_s(buf, L"0x%08X", static_cast<unsigned int>(hr));
+  return std::wstring(buf);
+}
+
+// Helper to get HRESULT name
+std::wstring GetHResultName(HRESULT hr) {
+  switch (hr) {
+    case 0x80010100: return L"RPC_E_SYS_CALL_FAILED - System call failed";
+    case 0x8001010D: return L"RPC_E_WRONG_THREAD - Wrong thread";
+    case 0x80004005: return L"E_FAIL - Unspecified failure";
+    case 0x80070005: return L"E_ACCESSDENIED - Access denied";
+    case 0x80004001: return L"E_NOTIMPL - Not implemented";
+    case 0x80004002: return L"E_NOINTERFACE - No such interface";
+    case 0x80004003: return L"E_POINTER - Invalid pointer";
+    case 0x80004004: return L"E_ABORT - Operation aborted";
+    case 0x8007000E: return L"E_OUTOFMEMORY - Out of memory";
+    case 0x80070057: return L"E_INVALIDARG - Invalid argument";
+    case 0x80000013: return L"CO_E_NOTINITIALIZED - COM not initialized";
+    case 0x800401F0: return L"CO_E_NOT_SUPPORTED - Not supported";
+    default: return L"Unknown HRESULT";
+  }
+}
+
+// Store main thread ID for comparison
+DWORD g_mainThreadId = 0;
+
 REACT_MODULE(WebAuthModule)
 struct WebAuthModule {
   REACT_INIT(Initialize)
   void Initialize(winrt::Microsoft::ReactNative::ReactContext const &reactContext) noexcept {
     m_reactContext = reactContext;
-    OutputDebugStringW(L"[WebAuthModule] Initialized\n");
+
+    DWORD initThreadId = GetCurrentThreadId();
+    OutputDebugStringW(L"[WebAuthModule] ========== INITIALIZATION ==========\n");
+    OutputDebugStringW(L"[WebAuthModule] Module initialized on thread ID: ");
+    OutputDebugStringW(std::to_wstring(initThreadId).c_str());
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Main thread ID (from WinMain): ");
+    OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Same as main thread: ");
+    OutputDebugStringW((initThreadId == g_mainThreadId) ? L"YES" : L"NO");
+    OutputDebugStringW(L"\n");
+
+    // Check COM apartment type
+    APTTYPE aptType;
+    APTTYPEQUALIFIER aptQualifier;
+    HRESULT hr = CoGetApartmentType(&aptType, &aptQualifier);
+    if (SUCCEEDED(hr)) {
+      OutputDebugStringW(L"[WebAuthModule] COM Apartment Type: ");
+      switch (aptType) {
+        case APTTYPE_STA: OutputDebugStringW(L"STA (Single-Threaded)"); break;
+        case APTTYPE_MTA: OutputDebugStringW(L"MTA (Multi-Threaded)"); break;
+        case APTTYPE_NA: OutputDebugStringW(L"NA (Neutral)"); break;
+        case APTTYPE_MAINSTA: OutputDebugStringW(L"MAINSTA (Main STA)"); break;
+        default: OutputDebugStringW(L"Unknown"); break;
+      }
+      OutputDebugStringW(L"\n");
+    } else {
+      OutputDebugStringW(L"[WebAuthModule] COM Apartment Type: Failed to get - ");
+      OutputDebugStringW(HResultToHexString(hr).c_str());
+      OutputDebugStringW(L"\n");
+    }
+    OutputDebugStringW(L"[WebAuthModule] ====================================\n");
   }
 
   // Get the application callback URI for WebAuthenticationBroker
-  // This returns the ms-app:// URI that must be registered with the OAuth provider
   REACT_METHOD(getCallbackUri)
   void getCallbackUri(winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
+    OutputDebugStringW(L"[WebAuthModule] getCallbackUri called on thread: ");
+    OutputDebugStringW(std::to_wstring(GetCurrentThreadId()).c_str());
+    OutputDebugStringW(L"\n");
+
     try {
       auto callbackUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri: ");
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri SUCCESS: ");
       OutputDebugStringW(callbackUri.AbsoluteUri().c_str());
       OutputDebugStringW(L"\n");
       promise.Resolve(winrt::hstring(callbackUri.AbsoluteUri()));
     } catch (winrt::hresult_error const& ex) {
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri error: ");
+      HRESULT hr = ex.code();
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri FAILED!\n");
+      OutputDebugStringW(L"[WebAuthModule]   Message: ");
       OutputDebugStringW(ex.message().c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule]   HRESULT: ");
+      OutputDebugStringW(HResultToHexString(hr).c_str());
+      OutputDebugStringW(L" - ");
+      OutputDebugStringW(GetHResultName(hr).c_str());
       OutputDebugStringW(L"\n");
       promise.Reject(winrt::to_string(ex.message()).c_str());
     } catch (...) {
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri unknown error\n");
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri unknown exception\n");
       promise.Reject("Failed to get callback URI");
     }
   }
 
   // Authenticate using WebAuthenticationBroker (modal dialog)
-  // authUrl: The full OAuth authorization URL
-  // callbackUrl: The callback URI (must be ms-app:// or https://)
-  // Returns the full callback URL with auth code on success
-  //
-  // NOTE: In React Native Windows Composition apps, native module methods run on the UI thread.
-  // We call WebAuthenticationBroker directly as a coroutine.
   REACT_METHOD(authenticate)
   winrt::fire_and_forget authenticate(
       std::wstring authUrl,
       std::wstring callbackUrl,
       winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
 
-    OutputDebugStringW(L"[WebAuthModule] authenticate called\n");
-    OutputDebugStringW(L"[WebAuthModule] authUrl: ");
-    OutputDebugStringW(authUrl.c_str());
+    DWORD authThreadId = GetCurrentThreadId();
+
+    OutputDebugStringW(L"[WebAuthModule] ========== AUTHENTICATE CALLED ==========\n");
+    OutputDebugStringW(L"[WebAuthModule] Thread ID: ");
+    OutputDebugStringW(std::to_wstring(authThreadId).c_str());
     OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Main thread ID: ");
+    OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Same as main thread: ");
+    OutputDebugStringW((authThreadId == g_mainThreadId) ? L"YES" : L"NO");
+    OutputDebugStringW(L"\n");
+
+    // Check COM apartment type
+    APTTYPE aptType;
+    APTTYPEQUALIFIER aptQualifier;
+    HRESULT aptHr = CoGetApartmentType(&aptType, &aptQualifier);
+    if (SUCCEEDED(aptHr)) {
+      OutputDebugStringW(L"[WebAuthModule] COM Apartment: ");
+      switch (aptType) {
+        case APTTYPE_STA: OutputDebugStringW(L"STA"); break;
+        case APTTYPE_MTA: OutputDebugStringW(L"MTA"); break;
+        case APTTYPE_NA: OutputDebugStringW(L"NA"); break;
+        case APTTYPE_MAINSTA: OutputDebugStringW(L"MAINSTA"); break;
+        default: OutputDebugStringW(L"Unknown"); break;
+      }
+      OutputDebugStringW(L"\n");
+    }
+
+    OutputDebugStringW(L"[WebAuthModule] authUrl: ");
+    OutputDebugStringW(authUrl.substr(0, 100).c_str());
+    OutputDebugStringW(L"...\n");
     OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
     OutputDebugStringW(callbackUrl.c_str());
     OutputDebugStringW(L"\n");
-
-    // Log thread info for debugging
-    DWORD threadId = GetCurrentThreadId();
-    OutputDebugStringW(L"[WebAuthModule] Current thread ID: ");
-    OutputDebugStringW(std::to_wstring(threadId).c_str());
-    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] =========================================\n");
 
     try {
-      // Create URIs
+      OutputDebugStringW(L"[WebAuthModule] Step 1: Creating startUri...\n");
       winrt::Windows::Foundation::Uri startUri(authUrl);
+      OutputDebugStringW(L"[WebAuthModule] Step 1: SUCCESS - startUri created\n");
+
+      OutputDebugStringW(L"[WebAuthModule] Step 2: Creating endUri...\n");
       winrt::Windows::Foundation::Uri endUri(callbackUrl);
+      OutputDebugStringW(L"[WebAuthModule] Step 2: SUCCESS - endUri created\n");
 
-      OutputDebugStringW(L"[WebAuthModule] URIs created, calling AuthenticateAsync directly\n");
+      OutputDebugStringW(L"[WebAuthModule] Step 3: Calling AuthenticateAsync...\n");
+      OutputDebugStringW(L"[WebAuthModule]   startUri.Host: ");
+      OutputDebugStringW(startUri.Host().c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule]   startUri.Port: ");
+      OutputDebugStringW(std::to_wstring(startUri.Port()).c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule]   endUri.SchemeName: ");
+      OutputDebugStringW(endUri.SchemeName().c_str());
+      OutputDebugStringW(L"\n");
 
-      // Call AuthenticateAsync directly - RN Windows Composition runs on UI thread
+      // Call AuthenticateAsync
       auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
           winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
           startUri,
           endUri);
 
-      OutputDebugStringW(L"[WebAuthModule] AuthenticateAsync completed\n");
+      OutputDebugStringW(L"[WebAuthModule] Step 3: SUCCESS - AuthenticateAsync completed\n");
 
       auto status = result.ResponseStatus();
       OutputDebugStringW(L"[WebAuthModule] Response status: ");
       OutputDebugStringW(std::to_wstring(static_cast<int>(status)).c_str());
-      OutputDebugStringW(L"\n");
+      switch (status) {
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success:
+          OutputDebugStringW(L" (Success)\n");
+          break;
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
+          OutputDebugStringW(L" (UserCancel)\n");
+          break;
+        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp:
+          OutputDebugStringW(L" (ErrorHttp)\n");
+          break;
+        default:
+          OutputDebugStringW(L" (Unknown)\n");
+          break;
+      }
 
       switch (status) {
         case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success: {
           auto responseData = result.ResponseData();
-          OutputDebugStringW(L"[WebAuthModule] Success! Response: ");
+          OutputDebugStringW(L"[WebAuthModule] SUCCESS! ResponseData: ");
           OutputDebugStringW(responseData.c_str());
           OutputDebugStringW(L"\n");
           promise.Resolve(winrt::hstring(responseData));
           break;
         }
         case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
-          OutputDebugStringW(L"[WebAuthModule] User cancelled\n");
+          OutputDebugStringW(L"[WebAuthModule] User cancelled authentication\n");
           promise.Reject("User cancelled authentication");
           break;
         case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
           auto errorDetail = result.ResponseErrorDetail();
-          OutputDebugStringW(L"[WebAuthModule] HTTP error: ");
+          OutputDebugStringW(L"[WebAuthModule] HTTP Error code: ");
           OutputDebugStringW(std::to_wstring(errorDetail).c_str());
           OutputDebugStringW(L"\n");
           std::string errorMsg = "HTTP error during authentication: " + std::to_string(errorDetail);
@@ -230,16 +345,28 @@ struct WebAuthModule {
           break;
       }
     } catch (winrt::hresult_error const& ex) {
-      OutputDebugStringW(L"[WebAuthModule] Exception: ");
+      HRESULT hr = ex.code();
+      OutputDebugStringW(L"[WebAuthModule] !!!!! EXCEPTION CAUGHT !!!!!\n");
+      OutputDebugStringW(L"[WebAuthModule]   Message: ");
       OutputDebugStringW(ex.message().c_str());
       OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule] HRESULT: 0x");
-      OutputDebugStringW(std::to_wstring(static_cast<uint32_t>(ex.code())).c_str());
+      OutputDebugStringW(L"[WebAuthModule]   HRESULT: ");
+      OutputDebugStringW(HResultToHexString(hr).c_str());
       OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule]   HRESULT Name: ");
+      OutputDebugStringW(GetHResultName(hr).c_str());
+      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule] !!!!!!!!!!!!!!!!!!!!!!!!!!\n");
       std::string errorMsg = "WebAuthenticationBroker error: " + winrt::to_string(ex.message());
       promise.Reject(errorMsg.c_str());
+    } catch (std::exception const& ex) {
+      OutputDebugStringW(L"[WebAuthModule] !!!!! STD::EXCEPTION !!!!!\n");
+      OutputDebugStringA("[WebAuthModule]   what(): ");
+      OutputDebugStringA(ex.what());
+      OutputDebugStringA("\n");
+      promise.Reject(ex.what());
     } catch (...) {
-      OutputDebugStringW(L"[WebAuthModule] Unknown exception\n");
+      OutputDebugStringW(L"[WebAuthModule] !!!!! UNKNOWN EXCEPTION !!!!!\n");
       promise.Reject("Unknown error during authentication");
     }
   }
@@ -298,6 +425,30 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   // Enable per monitor DPI scaling
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+  // Capture main thread ID for diagnostics
+  g_mainThreadId = GetCurrentThreadId();
+  OutputDebugStringW(L"[Main] ========== APP STARTING ==========\n");
+  OutputDebugStringW(L"[Main] Main thread ID: ");
+  OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
+  OutputDebugStringW(L"\n");
+
+  // Check COM apartment type on main thread
+  APTTYPE aptType;
+  APTTYPEQUALIFIER aptQualifier;
+  HRESULT aptHr = CoGetApartmentType(&aptType, &aptQualifier);
+  if (SUCCEEDED(aptHr)) {
+    OutputDebugStringW(L"[Main] COM Apartment Type: ");
+    switch (aptType) {
+      case APTTYPE_STA: OutputDebugStringW(L"STA"); break;
+      case APTTYPE_MTA: OutputDebugStringW(L"MTA"); break;
+      case APTTYPE_NA: OutputDebugStringW(L"NA"); break;
+      case APTTYPE_MAINSTA: OutputDebugStringW(L"MAINSTA"); break;
+      default: OutputDebugStringW(L"Unknown"); break;
+    }
+    OutputDebugStringW(L"\n");
+  }
+  OutputDebugStringW(L"[Main] =====================================\n");
 
   // Check for protocol activation URL
   // Method 1: Try AppLifecycle API (for packaged apps with protocol activation)
