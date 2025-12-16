@@ -197,178 +197,199 @@ struct WebAuthModule {
   }
 
   // Get the application callback URI for WebAuthenticationBroker
+  // CRITICAL: Must dispatch to UI thread - WebAuthenticationBroker requires main STA thread
   REACT_METHOD(getCallbackUri)
   void getCallbackUri(winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
     OutputDebugStringW(L"[WebAuthModule] getCallbackUri called on thread: ");
     OutputDebugStringW(std::to_wstring(GetCurrentThreadId()).c_str());
-    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L" (dispatching to UI thread...)\n");
 
-    try {
-      auto callbackUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri SUCCESS: ");
-      OutputDebugStringW(callbackUri.AbsoluteUri().c_str());
+    // Dispatch to UI thread using ReactContext's UIDispatcher
+    m_reactContext.UIDispatcher().Post([promise]() {
+      OutputDebugStringW(L"[WebAuthModule] getCallbackUri executing on UI thread: ");
+      OutputDebugStringW(std::to_wstring(GetCurrentThreadId()).c_str());
       OutputDebugStringW(L"\n");
-      promise.Resolve(winrt::hstring(callbackUri.AbsoluteUri()));
-    } catch (winrt::hresult_error const& ex) {
-      HRESULT hr = ex.code();
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri FAILED!\n");
-      OutputDebugStringW(L"[WebAuthModule]   Message: ");
-      OutputDebugStringW(ex.message().c_str());
-      OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule]   HRESULT: ");
-      OutputDebugStringW(HResultToHexString(hr).c_str());
-      OutputDebugStringW(L" - ");
-      OutputDebugStringW(GetHResultName(hr).c_str());
-      OutputDebugStringW(L"\n");
-      promise.Reject(winrt::to_string(ex.message()).c_str());
-    } catch (...) {
-      OutputDebugStringW(L"[WebAuthModule] getCallbackUri unknown exception\n");
-      promise.Reject("Failed to get callback URI");
-    }
+
+      try {
+        auto callbackUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
+        OutputDebugStringW(L"[WebAuthModule] getCallbackUri SUCCESS: ");
+        OutputDebugStringW(callbackUri.AbsoluteUri().c_str());
+        OutputDebugStringW(L"\n");
+        promise.Resolve(winrt::hstring(callbackUri.AbsoluteUri()));
+      } catch (winrt::hresult_error const& ex) {
+        HRESULT hr = ex.code();
+        OutputDebugStringW(L"[WebAuthModule] getCallbackUri FAILED!\n");
+        OutputDebugStringW(L"[WebAuthModule]   Message: ");
+        OutputDebugStringW(ex.message().c_str());
+        OutputDebugStringW(L"\n");
+        OutputDebugStringW(L"[WebAuthModule]   HRESULT: ");
+        OutputDebugStringW(HResultToHexString(hr).c_str());
+        OutputDebugStringW(L" - ");
+        OutputDebugStringW(GetHResultName(hr).c_str());
+        OutputDebugStringW(L"\n");
+        promise.Reject(winrt::to_string(ex.message()).c_str());
+      } catch (...) {
+        OutputDebugStringW(L"[WebAuthModule] getCallbackUri unknown exception\n");
+        promise.Reject("Failed to get callback URI");
+      }
+    });
   }
 
   // Authenticate using WebAuthenticationBroker (modal dialog)
+  // CRITICAL: Must dispatch to UI thread - WebAuthenticationBroker requires main STA thread
   REACT_METHOD(authenticate)
-  winrt::fire_and_forget authenticate(
+  void authenticate(
       std::wstring authUrl,
       std::wstring callbackUrl,
       winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
 
-    DWORD authThreadId = GetCurrentThreadId();
+    DWORD callerThreadId = GetCurrentThreadId();
 
     OutputDebugStringW(L"[WebAuthModule] ========== AUTHENTICATE CALLED ==========\n");
-    OutputDebugStringW(L"[WebAuthModule] Thread ID: ");
-    OutputDebugStringW(std::to_wstring(authThreadId).c_str());
-    OutputDebugStringW(L"\n");
-    OutputDebugStringW(L"[WebAuthModule] Main thread ID: ");
-    OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
-    OutputDebugStringW(L"\n");
-    OutputDebugStringW(L"[WebAuthModule] Same as main thread: ");
-    OutputDebugStringW((authThreadId == g_mainThreadId) ? L"YES" : L"NO");
-    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] Caller thread ID: ");
+    OutputDebugStringW(std::to_wstring(callerThreadId).c_str());
+    OutputDebugStringW(L" (dispatching to UI thread...)\n");
 
-    // Check COM apartment type
-    APTTYPE aptType;
-    APTTYPEQUALIFIER aptQualifier;
-    HRESULT aptHr = CoGetApartmentType(&aptType, &aptQualifier);
-    if (SUCCEEDED(aptHr)) {
-      OutputDebugStringW(L"[WebAuthModule] COM Apartment: ");
-      switch (aptType) {
-        case APTTYPE_STA: OutputDebugStringW(L"STA"); break;
-        case APTTYPE_MTA: OutputDebugStringW(L"MTA"); break;
-        case APTTYPE_NA: OutputDebugStringW(L"NA"); break;
-        case APTTYPE_MAINSTA: OutputDebugStringW(L"MAINSTA"); break;
-        default: OutputDebugStringW(L"Unknown"); break;
-      }
+    // Dispatch to UI thread using ReactContext's UIDispatcher
+    // We need to use a lambda that captures what we need and launches a coroutine on the UI thread
+    m_reactContext.UIDispatcher().Post([authUrl, callbackUrl, promise]() -> winrt::fire_and_forget {
+      DWORD uiThreadId = GetCurrentThreadId();
+
+      OutputDebugStringW(L"[WebAuthModule] Executing on UI thread ID: ");
+      OutputDebugStringW(std::to_wstring(uiThreadId).c_str());
       OutputDebugStringW(L"\n");
-    }
-
-    OutputDebugStringW(L"[WebAuthModule] authUrl: ");
-    OutputDebugStringW(authUrl.substr(0, 100).c_str());
-    OutputDebugStringW(L"...\n");
-    OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
-    OutputDebugStringW(callbackUrl.c_str());
-    OutputDebugStringW(L"\n");
-    OutputDebugStringW(L"[WebAuthModule] =========================================\n");
-
-    try {
-      OutputDebugStringW(L"[WebAuthModule] Step 1: Creating startUri...\n");
-      winrt::Windows::Foundation::Uri startUri(authUrl);
-      OutputDebugStringW(L"[WebAuthModule] Step 1: SUCCESS - startUri created\n");
-
-      OutputDebugStringW(L"[WebAuthModule] Step 2: Creating endUri...\n");
-      winrt::Windows::Foundation::Uri endUri(callbackUrl);
-      OutputDebugStringW(L"[WebAuthModule] Step 2: SUCCESS - endUri created\n");
-
-      OutputDebugStringW(L"[WebAuthModule] Step 3: Calling AuthenticateAsync...\n");
-      OutputDebugStringW(L"[WebAuthModule]   startUri.Host: ");
-      OutputDebugStringW(startUri.Host().c_str());
+      OutputDebugStringW(L"[WebAuthModule] Main thread ID: ");
+      OutputDebugStringW(std::to_wstring(g_mainThreadId).c_str());
       OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule]   startUri.Port: ");
-      OutputDebugStringW(std::to_wstring(startUri.Port()).c_str());
-      OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule]   endUri.SchemeName: ");
-      OutputDebugStringW(endUri.SchemeName().c_str());
+      OutputDebugStringW(L"[WebAuthModule] Same as main thread: ");
+      OutputDebugStringW((uiThreadId == g_mainThreadId) ? L"YES" : L"NO");
       OutputDebugStringW(L"\n");
 
-      // Call AuthenticateAsync
-      auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
-          winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
-          startUri,
-          endUri);
-
-      OutputDebugStringW(L"[WebAuthModule] Step 3: SUCCESS - AuthenticateAsync completed\n");
-
-      auto status = result.ResponseStatus();
-      OutputDebugStringW(L"[WebAuthModule] Response status: ");
-      OutputDebugStringW(std::to_wstring(static_cast<int>(status)).c_str());
-      switch (status) {
-        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success:
-          OutputDebugStringW(L" (Success)\n");
-          break;
-        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
-          OutputDebugStringW(L" (UserCancel)\n");
-          break;
-        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp:
-          OutputDebugStringW(L" (ErrorHttp)\n");
-          break;
-        default:
-          OutputDebugStringW(L" (Unknown)\n");
-          break;
-      }
-
-      switch (status) {
-        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success: {
-          auto responseData = result.ResponseData();
-          OutputDebugStringW(L"[WebAuthModule] SUCCESS! ResponseData: ");
-          OutputDebugStringW(responseData.c_str());
-          OutputDebugStringW(L"\n");
-          promise.Resolve(winrt::hstring(responseData));
-          break;
+      // Check COM apartment type
+      APTTYPE aptType;
+      APTTYPEQUALIFIER aptQualifier;
+      HRESULT aptHr = CoGetApartmentType(&aptType, &aptQualifier);
+      if (SUCCEEDED(aptHr)) {
+        OutputDebugStringW(L"[WebAuthModule] COM Apartment: ");
+        switch (aptType) {
+          case APTTYPE_STA: OutputDebugStringW(L"STA"); break;
+          case APTTYPE_MTA: OutputDebugStringW(L"MTA"); break;
+          case APTTYPE_NA: OutputDebugStringW(L"NA"); break;
+          case APTTYPE_MAINSTA: OutputDebugStringW(L"MAINSTA"); break;
+          default: OutputDebugStringW(L"Unknown"); break;
         }
-        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
-          OutputDebugStringW(L"[WebAuthModule] User cancelled authentication\n");
-          promise.Reject("User cancelled authentication");
-          break;
-        case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
-          auto errorDetail = result.ResponseErrorDetail();
-          OutputDebugStringW(L"[WebAuthModule] HTTP Error code: ");
-          OutputDebugStringW(std::to_wstring(errorDetail).c_str());
-          OutputDebugStringW(L"\n");
-          std::string errorMsg = "HTTP error during authentication: " + std::to_string(errorDetail);
-          promise.Reject(errorMsg.c_str());
-          break;
-        }
-        default:
-          OutputDebugStringW(L"[WebAuthModule] Unknown response status\n");
-          promise.Reject("Unknown authentication response status");
-          break;
+        OutputDebugStringW(L"\n");
       }
-    } catch (winrt::hresult_error const& ex) {
-      HRESULT hr = ex.code();
-      OutputDebugStringW(L"[WebAuthModule] !!!!! EXCEPTION CAUGHT !!!!!\n");
-      OutputDebugStringW(L"[WebAuthModule]   Message: ");
-      OutputDebugStringW(ex.message().c_str());
+
+      OutputDebugStringW(L"[WebAuthModule] authUrl: ");
+      OutputDebugStringW(authUrl.substr(0, 100).c_str());
+      OutputDebugStringW(L"...\n");
+      OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
+      OutputDebugStringW(callbackUrl.c_str());
       OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule]   HRESULT: ");
-      OutputDebugStringW(HResultToHexString(hr).c_str());
-      OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule]   HRESULT Name: ");
-      OutputDebugStringW(GetHResultName(hr).c_str());
-      OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule] !!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-      std::string errorMsg = "WebAuthenticationBroker error: " + winrt::to_string(ex.message());
-      promise.Reject(errorMsg.c_str());
-    } catch (std::exception const& ex) {
-      OutputDebugStringW(L"[WebAuthModule] !!!!! STD::EXCEPTION !!!!!\n");
-      OutputDebugStringA("[WebAuthModule]   what(): ");
-      OutputDebugStringA(ex.what());
-      OutputDebugStringA("\n");
-      promise.Reject(ex.what());
-    } catch (...) {
-      OutputDebugStringW(L"[WebAuthModule] !!!!! UNKNOWN EXCEPTION !!!!!\n");
-      promise.Reject("Unknown error during authentication");
-    }
+      OutputDebugStringW(L"[WebAuthModule] =========================================\n");
+
+      try {
+        OutputDebugStringW(L"[WebAuthModule] Step 1: Creating startUri...\n");
+        winrt::Windows::Foundation::Uri startUri(authUrl);
+        OutputDebugStringW(L"[WebAuthModule] Step 1: SUCCESS - startUri created\n");
+
+        OutputDebugStringW(L"[WebAuthModule] Step 2: Creating endUri...\n");
+        winrt::Windows::Foundation::Uri endUri(callbackUrl);
+        OutputDebugStringW(L"[WebAuthModule] Step 2: SUCCESS - endUri created\n");
+
+        OutputDebugStringW(L"[WebAuthModule] Step 3: Calling AuthenticateAsync...\n");
+        OutputDebugStringW(L"[WebAuthModule]   startUri.Host: ");
+        OutputDebugStringW(startUri.Host().c_str());
+        OutputDebugStringW(L"\n");
+        OutputDebugStringW(L"[WebAuthModule]   startUri.Port: ");
+        OutputDebugStringW(std::to_wstring(startUri.Port()).c_str());
+        OutputDebugStringW(L"\n");
+        OutputDebugStringW(L"[WebAuthModule]   endUri.SchemeName: ");
+        OutputDebugStringW(endUri.SchemeName().c_str());
+        OutputDebugStringW(L"\n");
+
+        // Call AuthenticateAsync on UI thread
+        auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
+            winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
+            startUri,
+            endUri);
+
+        OutputDebugStringW(L"[WebAuthModule] Step 3: SUCCESS - AuthenticateAsync completed\n");
+
+        auto status = result.ResponseStatus();
+        OutputDebugStringW(L"[WebAuthModule] Response status: ");
+        OutputDebugStringW(std::to_wstring(static_cast<int>(status)).c_str());
+        switch (status) {
+          case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success:
+            OutputDebugStringW(L" (Success)\n");
+            break;
+          case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
+            OutputDebugStringW(L" (UserCancel)\n");
+            break;
+          case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp:
+            OutputDebugStringW(L" (ErrorHttp)\n");
+            break;
+          default:
+            OutputDebugStringW(L" (Unknown)\n");
+            break;
+        }
+
+        switch (status) {
+          case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::Success: {
+            auto responseData = result.ResponseData();
+            OutputDebugStringW(L"[WebAuthModule] SUCCESS! ResponseData: ");
+            OutputDebugStringW(responseData.c_str());
+            OutputDebugStringW(L"\n");
+            promise.Resolve(winrt::hstring(responseData));
+            break;
+          }
+          case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
+            OutputDebugStringW(L"[WebAuthModule] User cancelled authentication\n");
+            promise.Reject("User cancelled authentication");
+            break;
+          case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
+            auto errorDetail = result.ResponseErrorDetail();
+            OutputDebugStringW(L"[WebAuthModule] HTTP Error code: ");
+            OutputDebugStringW(std::to_wstring(errorDetail).c_str());
+            OutputDebugStringW(L"\n");
+            std::string errorMsg = "HTTP error during authentication: " + std::to_string(errorDetail);
+            promise.Reject(errorMsg.c_str());
+            break;
+          }
+          default:
+            OutputDebugStringW(L"[WebAuthModule] Unknown response status\n");
+            promise.Reject("Unknown authentication response status");
+            break;
+        }
+      } catch (winrt::hresult_error const& ex) {
+        HRESULT hr = ex.code();
+        OutputDebugStringW(L"[WebAuthModule] !!!!! EXCEPTION CAUGHT !!!!!\n");
+        OutputDebugStringW(L"[WebAuthModule]   Message: ");
+        OutputDebugStringW(ex.message().c_str());
+        OutputDebugStringW(L"\n");
+        OutputDebugStringW(L"[WebAuthModule]   HRESULT: ");
+        OutputDebugStringW(HResultToHexString(hr).c_str());
+        OutputDebugStringW(L"\n");
+        OutputDebugStringW(L"[WebAuthModule]   HRESULT Name: ");
+        OutputDebugStringW(GetHResultName(hr).c_str());
+        OutputDebugStringW(L"\n");
+        OutputDebugStringW(L"[WebAuthModule] !!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+        std::string errorMsg = "WebAuthenticationBroker error: " + winrt::to_string(ex.message());
+        promise.Reject(errorMsg.c_str());
+      } catch (std::exception const& ex) {
+        OutputDebugStringW(L"[WebAuthModule] !!!!! STD::EXCEPTION !!!!!\n");
+        OutputDebugStringA("[WebAuthModule]   what(): ");
+        OutputDebugStringA(ex.what());
+        OutputDebugStringA("\n");
+        promise.Reject(ex.what());
+      } catch (...) {
+        OutputDebugStringW(L"[WebAuthModule] !!!!! UNKNOWN EXCEPTION !!!!!\n");
+        promise.Reject("Unknown error during authentication");
+      }
+
+      co_return;
+    });
   }
 
  private:
