@@ -79,20 +79,6 @@ export async function hasValidStoredTokens(): Promise<boolean> {
 }
 
 /**
- * Store tokens to secure storage
- * Used by modal OAuth flow on Windows localhost
- */
-export async function storeTokens(tokens: Tokens): Promise<void> {
-  const authModule = getAuthModule();
-  if ('storeTokens' in authModule && typeof (authModule as any).storeTokens === 'function') {
-    return (authModule as any).storeTokens(tokens);
-  }
-  // Mobile auth module doesn't export storeTokens directly
-  // but it's called internally by login()
-  console.warn('[Auth] storeTokens not implemented for this platform');
-}
-
-/**
  * Parse user info from ID token (JWT) - shared across platforms
  */
 export function parseUserFromToken(idToken: string): User | null {

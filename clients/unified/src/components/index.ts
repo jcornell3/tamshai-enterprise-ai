@@ -2,4 +2,4 @@
  * Components index - exports all reusable components
  */
 
-export { OAuthModal } from './OAuthModal';
+// Add component exports here as they are created

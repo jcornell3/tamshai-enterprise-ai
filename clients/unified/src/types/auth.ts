@@ -43,15 +43,3 @@ export interface AuthActions {
   refreshTokens: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
-
-// Modal OAuth state for Windows localhost development
-export interface OAuthModalState {
-  visible: boolean;
-  authUrl: string;
-}
-
-export interface OAuthModalActions {
-  showOAuthModal: (authUrl: string) => void;
-  hideOAuthModal: () => void;
-  completeOAuthLogin: (tokens: Tokens) => Promise<void>;
-}
