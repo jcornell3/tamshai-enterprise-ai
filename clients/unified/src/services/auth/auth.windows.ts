@@ -397,11 +397,8 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   console.log('[Auth:Windows] State generated');
 
   // Try WebAuthModule first (modal dialog - preferred UX)
-  // BUT: WebAuthenticationBroker requires HTTPS for the auth endpoint
-  // Skip WAB for localhost development and use browser fallback instead
-  const isLocalhost = config.issuer.includes('localhost') || config.issuer.includes('127.0.0.1');
-
-  if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri && !isLocalhost) {
+  // SPEC REQUIREMENT: Must use OS-native secure browser modal, not browser tab
+  if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
     console.log('[Auth:Windows] Using WebAuthenticationBroker (modal dialog)');
     try {
       // Get the ms-app:// callback URI that WAB requires
@@ -465,12 +462,11 @@ export async function login(config: AuthConfig): Promise<Tokens> {
         throw new Error('User cancelled authentication');
       }
       console.error('[Auth:Windows] WebAuthModule error:', error);
-      // Fall through to browser fallback
-      console.log('[Auth:Windows] Falling back to system browser...');
+      console.error('[Auth:Windows] Error message:', error?.message);
+      console.error('[Auth:Windows] Error code:', error?.code);
+      // SPEC REQUIREMENT: Must use modal dialog, throw error instead of falling back to browser
+      throw new Error(`WebAuthenticationBroker failed: ${error?.message || 'Unknown error'}`);
     }
-  } else if (isLocalhost) {
-    console.log('[Auth:Windows] Localhost detected - skipping WebAuthenticationBroker (requires HTTPS)');
-    console.log('[Auth:Windows] Using system browser for localhost development');
   } else {
     console.log('[Auth:Windows] WebAuthModule not available, using system browser');
   }
