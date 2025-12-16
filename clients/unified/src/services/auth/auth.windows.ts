@@ -12,6 +12,15 @@
  *
  * Note: This is a JavaScript-only implementation that works without native modules.
  * For production, implement a native module for Windows Credential Manager.
+ *
+ * IMPORTANT: For localhost development (Keycloak on localhost:8180), the MSIX app
+ * needs a loopback exemption. Run this command once as Administrator:
+ *   CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
+ *
+ * Note on WebAuthenticationBroker: This Windows API is incompatible with React Native
+ * Windows 0.80 Composition/New Architecture apps. WAB requires an ASTA thread with
+ * CoreWindow (classic UWP model), but RN Windows 0.80 uses WinUI 3/Windows App SDK
+ * which has MAINSTA without CoreWindow. Browser-based OAuth with deep linking is used instead.
  */
 
 import { Linking, NativeModules } from 'react-native';
@@ -20,8 +29,7 @@ import { Tokens, AuthConfig } from '../../types';
 // Native modules for Windows authentication
 // DeepLinkModule - Custom native module for Windows protocol activation
 // Works around: https://github.com/microsoft/react-native-windows/issues/6996
-// WebAuthModule - Uses WebAuthenticationBroker for modal auth dialog (not browser tab)
-const { DeepLinkModule, WebAuthModule } = NativeModules;
+const { DeepLinkModule } = NativeModules;
 
 const STORAGE_KEY = '@tamshai_tokens';
 
@@ -330,8 +338,6 @@ async function exchangeCodeForTokens(
 
 /**
  * Exchange authorization code for tokens with a specific redirect URI
- * This is needed because WebAuthenticationBroker uses ms-app:// URIs
- * which differ from the custom scheme used for browser-based auth
  */
 async function exchangeCodeForTokensWithUri(
   code: string,
@@ -376,13 +382,14 @@ async function exchangeCodeForTokensWithUri(
 }
 
 /**
- * Perform OIDC login using WebAuthenticationBroker (modal dialog)
- * Falls back to system browser if WebAuthModule is not available
+ * Perform OIDC login using system browser with deep link callback
  *
- * IMPORTANT: WebAuthenticationBroker requires an ms-app:// callback URI.
- * The custom scheme com.tamshai.ai:// won't work with WAB.
- * We get the proper URI via WebAuthModule.getCallbackUri() and use that
- * for the OAuth flow when using WAB.
+ * Opens the default browser to the OAuth authorization endpoint.
+ * After user authenticates, Keycloak redirects to com.tamshai.ai://callback
+ * which opens the app via protocol activation (deep link).
+ *
+ * IMPORTANT: For localhost Keycloak, run this once as Administrator:
+ *   CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
  */
 export async function login(config: AuthConfig): Promise<Tokens> {
   console.log('[Auth:Windows] Starting OIDC login flow...');
@@ -396,85 +403,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   const state = generateRandomString(32);
   console.log('[Auth:Windows] State generated');
 
-  // Try WebAuthModule first (modal dialog - preferred UX)
-  // SPEC REQUIREMENT: Must use OS-native secure browser modal, not browser tab
-  // NOTE: WebAuthenticationBroker can access localhost if the app has a loopback exemption:
-  //   CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
-  // This exemption persists across builds and allows WAB to reach localhost Keycloak.
-  if (WebAuthModule?.authenticate && WebAuthModule?.getCallbackUri) {
-    console.log('[Auth:Windows] Using WebAuthenticationBroker (modal dialog)');
-    try {
-      // Get the ms-app:// callback URI that WAB requires
-      const wabCallbackUri = await WebAuthModule.getCallbackUri();
-      console.log('[Auth:Windows] WAB callback URI:', wabCallbackUri);
-
-      // Build authorization URL with the WAB callback URI
-      const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
-      const params = new URLSearchParams({
-        client_id: config.clientId,
-        redirect_uri: wabCallbackUri,  // Use ms-app:// URI for WAB
-        response_type: 'code',
-        scope: config.scopes.join(' '),
-        state,
-        code_challenge: codeChallenge,
-        code_challenge_method: 'S256',
-      });
-
-      const authUrl = `${authEndpoint}?${params.toString()}`;
-      console.log('[Auth:Windows] Auth URL:', authUrl);
-
-      // WebAuthModule.authenticate returns the full callback URL with code
-      const callbackUrl = await WebAuthModule.authenticate(authUrl, wabCallbackUri);
-      console.log('[Auth:Windows] WebAuthModule returned:', callbackUrl);
-
-      // Parse the callback URL - WAB returns ms-app://...?code=...&state=...
-      // The URL class may not parse ms-app:// correctly, so extract params manually
-      let code: string | null = null;
-      let returnedState: string | null = null;
-      let error: string | null = null;
-
-      const queryStart = callbackUrl.indexOf('?');
-      if (queryStart !== -1) {
-        const queryString = callbackUrl.substring(queryStart + 1);
-        const searchParams = new URLSearchParams(queryString);
-        code = searchParams.get('code');
-        returnedState = searchParams.get('state');
-        error = searchParams.get('error');
-      }
-
-      if (error) {
-        throw new Error(`OAuth error: ${error}`);
-      }
-
-      if (returnedState !== state) {
-        throw new Error('State mismatch - possible CSRF attack');
-      }
-
-      if (!code) {
-        throw new Error('No authorization code received');
-      }
-
-      // Exchange code for tokens - use the WAB callback URI as redirect_uri
-      const tokens = await exchangeCodeForTokensWithUri(code, codeVerifier, config, wabCallbackUri);
-      await storeTokens(tokens);
-      console.log('[Auth:Windows] Login successful via WebAuthenticationBroker');
-      return tokens;
-    } catch (error: any) {
-      // If user cancelled, propagate that specific error
-      if (error?.message?.includes('cancelled') || error?.message?.includes('User cancelled')) {
-        throw new Error('User cancelled authentication');
-      }
-      console.error('[Auth:Windows] WebAuthModule error:', error);
-      console.error('[Auth:Windows] Error message:', error?.message);
-      console.error('[Auth:Windows] Error code:', error?.code);
-      // SPEC REQUIREMENT: Must use modal dialog, throw error instead of falling back to browser
-      throw new Error(`WebAuthenticationBroker failed: ${error?.message || 'Unknown error'}`);
-    }
-  } else {
-    console.log('[Auth:Windows] WebAuthModule not available, using system browser');
-  }
-
-  // Build authorization URL for browser fallback (uses custom scheme)
+  // Build authorization URL with custom scheme callback
   const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
   const params = new URLSearchParams({
     client_id: config.clientId,
@@ -489,7 +418,6 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   const authUrl = `${authEndpoint}?${params.toString()}`;
   console.log('[Auth:Windows] Auth URL:', authUrl);
 
-  // Fallback: Use system browser with deep link callback
   // Set up listener for callback before opening browser
   const setupListener = (): Promise<Tokens> => {
     return new Promise((resolve, reject) => {
@@ -540,7 +468,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   // Store tokens
   await storeTokens(tokens);
 
-  console.log('[Auth:Windows] Login successful via system browser');
+  console.log('[Auth:Windows] Login successful');
   return tokens;
 }
 
