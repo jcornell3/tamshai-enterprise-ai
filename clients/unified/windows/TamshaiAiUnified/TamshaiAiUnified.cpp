@@ -14,10 +14,11 @@
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.ApplicationModel.Activation.h>
 #include <winrt/Microsoft.Windows.AppLifecycle.h>
-#include <DispatcherQueue.h>
 #include <string>
 #include <fstream>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 // Global to store the initial URL from protocol activation
 std::wstring g_initialUrl;
@@ -26,10 +27,8 @@ std::wstring g_initialUrl;
 std::atomic<bool> g_hasNewUrl{false};
 std::wstring g_pendingUrl;
 
-// Global UI thread DispatcherQueue - captured at app start on UI thread
-winrt::Windows::System::DispatcherQueue g_uiDispatcherQueue{nullptr};
-// Controller handle for the DispatcherQueue (must be kept alive)
-ABI::Windows::System::IDispatcherQueueController* g_dispatcherQueueController{nullptr};
+// Global UI thread DispatcherQueue - captured after React Native app starts
+winrt::Microsoft::UI::Dispatching::DispatcherQueue g_uiDispatcherQueue{nullptr};
 
 // Mutex name for single-instance detection
 const wchar_t* SINGLE_INSTANCE_MUTEX_NAME = L"TamshaiAiUnified_SingleInstance_Mutex";
@@ -135,6 +134,15 @@ struct WebAuthModule {
   REACT_INIT(Initialize)
   void Initialize(winrt::Microsoft::ReactNative::ReactContext const &reactContext) noexcept {
     m_reactContext = reactContext;
+
+    // Capture the UI DispatcherQueue if not already set
+    // This runs after React Native has set up its dispatcher
+    if (!g_uiDispatcherQueue) {
+      g_uiDispatcherQueue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+      if (g_uiDispatcherQueue) {
+        OutputDebugStringW(L"[WebAuthModule] Captured DispatcherQueue during module initialization\n");
+      }
+    }
   }
 
   // Get the application callback URI for WebAuthenticationBroker
@@ -158,55 +166,20 @@ struct WebAuthModule {
     }
   }
 
-  // Authenticate using WebAuthenticationBroker (modal dialog)
-  // authUrl: The full OAuth authorization URL
-  // callbackUrl: The callback URI (must be ms-app:// or https://)
-  // Returns the full callback URL with auth code on success
-  //
-  // CRITICAL: WebAuthenticationBroker.AuthenticateAsync MUST run on the UI thread!
-  // Running on React Native's JS thread will cause RPC_E_WRONG_THREAD error.
-  REACT_METHOD(authenticate)
-  winrt::fire_and_forget authenticate(
+  // Helper coroutine to run WebAuthenticationBroker (must be called on UI thread)
+  static winrt::fire_and_forget RunWebAuthOnUIThread(
       std::wstring authUrl,
       std::wstring callbackUrl,
-      winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
-
-    auto capturedPromise = promise;
-    auto capturedAuthUrl = authUrl;
-    auto capturedCallbackUrl = callbackUrl;
-    auto context = m_reactContext;
-
-    OutputDebugStringW(L"[WebAuthModule] authenticate called\n");
-    OutputDebugStringW(L"[WebAuthModule] authUrl: ");
-    OutputDebugStringW(capturedAuthUrl.c_str());
-    OutputDebugStringW(L"\n");
-    OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
-    OutputDebugStringW(capturedCallbackUrl.c_str());
-    OutputDebugStringW(L"\n");
-
-    // Switch to UI thread - WebAuthenticationBroker requires it
-    // Use the global DispatcherQueue captured at app startup (NOT ReactDispatcher which is incompatible with resume_foreground)
-    if (g_uiDispatcherQueue) {
-      co_await winrt::resume_foreground(g_uiDispatcherQueue);
-      OutputDebugStringW(L"[WebAuthModule] Now on UI thread via DispatcherQueue\n");
-    } else {
-      OutputDebugStringW(L"[WebAuthModule] WARNING: No UI DispatcherQueue available, trying on current thread\n");
-    }
+      winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) {
 
     try {
       // Create URIs
-      winrt::Windows::Foundation::Uri startUri(capturedAuthUrl);
-      winrt::Windows::Foundation::Uri endUri(capturedCallbackUrl);
+      winrt::Windows::Foundation::Uri startUri(authUrl);
+      winrt::Windows::Foundation::Uri endUri(callbackUrl);
 
-      OutputDebugStringW(L"[WebAuthModule] URIs created, starting AuthenticateAsync\n");
-      OutputDebugStringW(L"[WebAuthModule] startUri: ");
-      OutputDebugStringW(startUri.AbsoluteUri().c_str());
-      OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule] endUri: ");
-      OutputDebugStringW(endUri.AbsoluteUri().c_str());
-      OutputDebugStringW(L"\n");
+      OutputDebugStringW(L"[WebAuthModule] URIs created, starting AuthenticateAsync on UI thread\n");
 
-      // Call AuthenticateAsync - now safe on UI thread
+      // Call AuthenticateAsync - safe on UI thread
       auto result = co_await winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::AuthenticateAsync(
           winrt::Windows::Security::Authentication::Web::WebAuthenticationOptions::None,
           startUri,
@@ -225,12 +198,12 @@ struct WebAuthModule {
           OutputDebugStringW(L"[WebAuthModule] Success! Response: ");
           OutputDebugStringW(responseData.c_str());
           OutputDebugStringW(L"\n");
-          capturedPromise.Resolve(winrt::hstring(responseData));
+          promise.Resolve(winrt::hstring(responseData));
           break;
         }
         case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::UserCancel:
           OutputDebugStringW(L"[WebAuthModule] User cancelled\n");
-          capturedPromise.Reject("User cancelled authentication");
+          promise.Reject("User cancelled authentication");
           break;
         case winrt::Windows::Security::Authentication::Web::WebAuthenticationStatus::ErrorHttp: {
           auto errorDetail = result.ResponseErrorDetail();
@@ -238,32 +211,68 @@ struct WebAuthModule {
           OutputDebugStringW(std::to_wstring(errorDetail).c_str());
           OutputDebugStringW(L"\n");
           std::string errorMsg = "HTTP error during authentication: " + std::to_string(errorDetail);
-          capturedPromise.Reject(errorMsg.c_str());
+          promise.Reject(errorMsg.c_str());
           break;
         }
         default:
           OutputDebugStringW(L"[WebAuthModule] Unknown response status\n");
-          capturedPromise.Reject("Unknown authentication response status");
+          promise.Reject("Unknown authentication response status");
           break;
       }
     } catch (winrt::hresult_error const& ex) {
       OutputDebugStringW(L"[WebAuthModule] Exception: ");
       OutputDebugStringW(ex.message().c_str());
       OutputDebugStringW(L"\n");
-      OutputDebugStringW(L"[WebAuthModule] HRESULT: ");
-      OutputDebugStringW(std::to_wstring(static_cast<int32_t>(ex.code())).c_str());
-      OutputDebugStringW(L"\n");
       std::string errorMsg = "WebAuthenticationBroker error: " + winrt::to_string(ex.message());
-      capturedPromise.Reject(errorMsg.c_str());
-    } catch (std::exception const& ex) {
-      OutputDebugStringW(L"[WebAuthModule] std::exception: ");
-      OutputDebugStringA(ex.what());
-      OutputDebugStringW(L"\n");
-      std::string errorMsg = "Exception: " + std::string(ex.what());
-      capturedPromise.Reject(errorMsg.c_str());
+      promise.Reject(errorMsg.c_str());
     } catch (...) {
       OutputDebugStringW(L"[WebAuthModule] Unknown exception\n");
-      capturedPromise.Reject("Unknown error during authentication");
+      promise.Reject("Unknown error during authentication");
+    }
+  }
+
+  // Authenticate using WebAuthenticationBroker (modal dialog)
+  // authUrl: The full OAuth authorization URL
+  // callbackUrl: The callback URI (must be ms-app:// or https://)
+  // Returns the full callback URL with auth code on success
+  //
+  // CRITICAL: WebAuthenticationBroker.AuthenticateAsync MUST run on the UI thread!
+  // Running on React Native's JS thread will cause RPC_E_WRONG_THREAD error.
+  REACT_METHOD(authenticate)
+  void authenticate(
+      std::wstring authUrl,
+      std::wstring callbackUrl,
+      winrt::Microsoft::ReactNative::ReactPromise<winrt::hstring> promise) noexcept {
+
+    OutputDebugStringW(L"[WebAuthModule] authenticate called\n");
+    OutputDebugStringW(L"[WebAuthModule] authUrl: ");
+    OutputDebugStringW(authUrl.c_str());
+    OutputDebugStringW(L"\n");
+    OutputDebugStringW(L"[WebAuthModule] callbackUrl: ");
+    OutputDebugStringW(callbackUrl.c_str());
+    OutputDebugStringW(L"\n");
+
+    // Dispatch to UI thread using TryEnqueue
+    if (g_uiDispatcherQueue) {
+      OutputDebugStringW(L"[WebAuthModule] Dispatching to UI thread via DispatcherQueue.TryEnqueue\n");
+
+      // Capture values for the lambda
+      auto capturedAuthUrl = authUrl;
+      auto capturedCallbackUrl = callbackUrl;
+      auto capturedPromise = promise;
+
+      bool enqueued = g_uiDispatcherQueue.TryEnqueue([capturedAuthUrl, capturedCallbackUrl, capturedPromise]() {
+        OutputDebugStringW(L"[WebAuthModule] Now executing on UI thread\n");
+        RunWebAuthOnUIThread(capturedAuthUrl, capturedCallbackUrl, capturedPromise);
+      });
+
+      if (!enqueued) {
+        OutputDebugStringW(L"[WebAuthModule] ERROR: Failed to enqueue to UI thread\n");
+        promise.Reject("Failed to dispatch to UI thread");
+      }
+    } else {
+      OutputDebugStringW(L"[WebAuthModule] ERROR: No UI DispatcherQueue available\n");
+      promise.Reject("UI DispatcherQueue not available - app may not be fully initialized");
     }
   }
 
@@ -322,28 +331,13 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   // Enable per monitor DPI scaling
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-  // Create DispatcherQueue for UI thread - needed for WebAuthenticationBroker
-  // In Win32 apps, we need to create a DispatcherQueueController since there's no existing message loop yet
-  g_uiDispatcherQueue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-  if (!g_uiDispatcherQueue) {
-    // Create a DispatcherQueue on the current thread using Win32 API
-    DispatcherQueueOptions options{
-      sizeof(DispatcherQueueOptions),
-      DQTYPE_THREAD_CURRENT,
-      DQTAT_COM_NONE
-    };
-    HRESULT hr = CreateDispatcherQueueController(options, &g_dispatcherQueueController);
-    if (SUCCEEDED(hr) && g_dispatcherQueueController) {
-      // Get the DispatcherQueue from the controller
-      winrt::Windows::System::DispatcherQueueController controller{nullptr};
-      winrt::copy_from_abi(controller, g_dispatcherQueueController);
-      g_uiDispatcherQueue = controller.DispatcherQueue();
-      OutputDebugStringW(L"[Main] Created DispatcherQueueController on UI thread\n");
-    } else {
-      OutputDebugStringW(L"[Main] ERROR: Failed to create DispatcherQueueController\n");
-    }
+  // Get the Microsoft.UI.Dispatching.DispatcherQueue for UI thread
+  // This is used by WebAuthenticationBroker which must run on UI thread
+  g_uiDispatcherQueue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+  if (g_uiDispatcherQueue) {
+    OutputDebugStringW(L"[Main] Got Microsoft.UI.Dispatching.DispatcherQueue for UI thread\n");
   } else {
-    OutputDebugStringW(L"[Main] Using existing DispatcherQueue on UI thread\n");
+    OutputDebugStringW(L"[Main] WARNING: No DispatcherQueue available yet (will be created by React Native)\n");
   }
 
   // Check for protocol activation URL
