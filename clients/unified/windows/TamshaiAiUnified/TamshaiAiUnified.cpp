@@ -646,6 +646,24 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
     OutputDebugStringW(L"[Main] WARNING: Failed to capture main thread DispatcherQueue!\n");
   }
 
+  // TEST: Try calling GetCurrentApplicationCallbackUri on main thread directly
+  // This verifies WebAuthenticationBroker works on the main thread before any dispatch
+  OutputDebugStringW(L"[Main] Testing WebAuthenticationBroker on main thread...\n");
+  try {
+    auto testCallbackUri = winrt::Windows::Security::Authentication::Web::WebAuthenticationBroker::GetCurrentApplicationCallbackUri();
+    OutputDebugStringW(L"[Main] TEST SUCCESS! Callback URI: ");
+    OutputDebugStringW(testCallbackUri.AbsoluteUri().c_str());
+    OutputDebugStringW(L"\n");
+  } catch (winrt::hresult_error const& ex) {
+    OutputDebugStringW(L"[Main] TEST FAILED on main thread! Error: ");
+    OutputDebugStringW(ex.message().c_str());
+    OutputDebugStringW(L" HRESULT: ");
+    OutputDebugStringW(HResultToHexString(ex.code()).c_str());
+    OutputDebugStringW(L"\n");
+  } catch (...) {
+    OutputDebugStringW(L"[Main] TEST FAILED with unknown exception\n");
+  }
+
   // Configure the initial InstanceSettings for the app's ReactNativeHost
   auto settings{reactNativeWin32App.ReactNativeHost().InstanceSettings()};
   // Register any autolinked native modules
