@@ -360,4 +360,68 @@ For questions about this analysis, contact the development team or refer to the 
 
 ---
 
+## Appendix A: Response to Third-Party Review (December 16, 2025)
+
+### Review Summary
+
+A third-party reviewer suggested:
+
+> **Option C: Solve the WebAuthenticationBroker Localhost Issue (Best Path)**
+> The only reason WebAuthenticationBroker was rejected is the localhost restriction.
+> Use `react-native-app-auth` which wraps WebAuthenticationBroker correctly.
+> Apply the Loopback Exemption via `CheckNetIsolation.exe`.
+
+### Correction: The Actual Blocker
+
+**The reviewer's assessment is factually incorrect.** The localhost/loopback issue was already resolved. The actual blocker is the **COM apartment threading model incompatibility**, not network isolation.
+
+The loopback exemption was applied successfully:
+```powershell
+CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
+```
+
+The error we encounter is:
+```
+RPC_E_WRONG_THREAD (0x8001010E): The application called an interface
+that was marshalled for a different thread.
+```
+
+This occurs because **WebAuthenticationBroker requires a CoreWindow** (classic UWP window model), but React Native Windows 0.80 Composition uses **WinUI 3 AppWindow** (no CoreWindow exists). This is an architectural incompatibility, not a threading marshaling issue that can be fixed with DispatcherQueue.
+
+### react-native-app-auth Does Not Support Windows
+
+The reviewer suggested using `react-native-app-auth`. Research confirms:
+
+1. **No Windows support exists** - The library only supports iOS and Android
+   - Source: [GitHub Issue #740](https://github.com/FormidableLabs/react-native-app-auth/issues/740) - closed with no Windows implementation
+   - Source: [npm package](https://www.npmjs.com/package/react-native-app-auth) - only documents iOS/Android
+
+2. **Community discussion confirms the gap** - [RNW Discussion #13538](https://github.com/microsoft/react-native-windows/discussions/13538) shows developers must build custom native modules
+
+3. **Even if it existed**, it would wrap WebAuthenticationBroker and encounter the same CoreWindow incompatibility
+
+### Why "Fix the Environment Configuration" Won't Work
+
+The reviewer states:
+> "We should fix the environment configuration rather than adding broken libraries."
+
+This misunderstands the issue. The problem is not configuration - it's that **CoreWindow does not exist in WinUI 3/Windows App SDK applications**. You cannot configure something into existence that the framework explicitly does not provide.
+
+From Microsoft's Windows App SDK documentation: Certain UWP APIs that depend on CoreWindow are not available in WinUI 3 desktop applications. WebAuthenticationBroker is one such API.
+
+### Revised Options
+
+Given the reviewer's suggestions have been evaluated and found inapplicable:
+
+1. **Browser OAuth with deep linking** - Current working solution (violates spec)
+2. **Custom WebView2 native module** - Windows-specific but would work
+3. **Wait for RNW ecosystem maturity** - react-native-webview or similar may add Composition support
+4. **Relax specification requirement** - Accept browser-based OAuth for Windows
+
+### Conclusion
+
+The third-party review provided a reasonable hypothesis based on common Windows OAuth patterns. However, React Native Windows 0.80's Composition architecture introduces unique constraints that make standard solutions (WebAuthenticationBroker, react-native-app-auth) inapplicable. The CoreWindow dependency is the fundamental blocker, not network isolation or library availability.
+
+---
+
 *Document prepared for third-party technical review*
