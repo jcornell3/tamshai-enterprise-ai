@@ -457,16 +457,17 @@ async function exchangeCodeForTokensWithUri(
  *   CheckNetIsolation.exe LoopbackExempt -a -n="TamshaiAiUnified_mz456f93e3tka"
  */
 export async function login(config: AuthConfig): Promise<Tokens> {
-  console.log('[Auth:Windows] Starting OIDC login flow...');
+  debugLog('[Auth:Windows] ========== Starting PKCE OAuth login flow ==========');
+
+  // Ensure IPC polling is running (may have been stopped after previous login)
+  startIpcPolling();
 
   // Generate PKCE values
-  console.log('[Auth:Windows] Generating PKCE code verifier...');
+  debugLog('[Auth:Windows] Generating PKCE code verifier...');
   const codeVerifier = generateRandomString(64);
-  console.log('[Auth:Windows] Code verifier generated, generating challenge...');
   const codeChallenge = await generateCodeChallenge(codeVerifier);
-  console.log('[Auth:Windows] Code challenge generated:', codeChallenge.substring(0, 10) + '...');
   const state = generateRandomString(32);
-  console.log('[Auth:Windows] State generated');
+  debugLog('[Auth:Windows] PKCE values generated');
 
   // Build authorization URL with custom scheme callback
   const authEndpoint = `${config.issuer}/protocol/openid-connect/auth`;
@@ -481,7 +482,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   });
 
   const authUrl = `${authEndpoint}?${params.toString()}`;
-  console.log('[Auth:Windows] Auth URL:', authUrl);
+  debugLog('[Auth:Windows] Auth URL: ' + authUrl.substring(0, 60) + '...');
 
   // Set up listener for callback before opening browser
   const setupListener = (): Promise<Tokens> => {
@@ -497,7 +498,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
       // Set a timeout
       setTimeout(() => {
         if (pendingAuthState) {
-          console.log('[Auth:Windows] Login timeout - clearing pending state');
+          debugLog('[Auth:Windows] Login timeout - clearing pending state');
           pendingAuthState.reject(new Error('Login timeout'));
           pendingAuthState = null;
         }
@@ -510,23 +511,21 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   // Open system browser
   try {
     const canOpen = await Linking.canOpenURL(authUrl);
-    console.log('[Auth:Windows] canOpenURL result:', canOpen);
+    debugLog('[Auth:Windows] canOpenURL result: ' + canOpen);
 
     if (!canOpen) {
       pendingAuthState = null;
       throw new Error('Cannot open authentication URL');
     }
 
-    console.log('[Auth:Windows] Calling Linking.openURL...');
+    debugLog('[Auth:Windows] Opening browser for OAuth authorization...');
     await Linking.openURL(authUrl);
-    console.log('[Auth:Windows] Linking.openURL completed');
+    debugLog('[Auth:Windows] Browser opened, waiting for callback via protocol activation');
   } catch (error) {
-    console.error('[Auth:Windows] Error opening URL:', error);
+    debugLog('[Auth:Windows] Error opening URL: ' + (error instanceof Error ? error.message : String(error)));
     pendingAuthState = null;
     throw error;
   }
-
-  console.log('[Auth:Windows] Opened browser for authentication');
 
   // Wait for callback
   const tokens = await tokenPromise;
@@ -534,7 +533,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
   // Store tokens
   await storeTokens(tokens);
 
-  console.log('[Auth:Windows] Login successful');
+  debugLog('[Auth:Windows] ========== Login flow complete ==========');
   return tokens;
 }
 
