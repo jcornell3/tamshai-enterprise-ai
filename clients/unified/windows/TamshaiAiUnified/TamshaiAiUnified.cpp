@@ -141,6 +141,15 @@ struct DeepLinkModule {
     }
   }
 
+  // Debug log from JavaScript - outputs to Windows debug console
+  // This allows JS logs to appear in VS2022 Output window
+  REACT_METHOD(debugLog)
+  void debugLog(std::wstring message) noexcept {
+    OutputDebugStringW(L"[JS] ");
+    OutputDebugStringW(message.c_str());
+    OutputDebugStringW(L"\n");
+  }
+
   // Bring the app window to the foreground
   // Call this after receiving OAuth callback to return focus to the app
   REACT_METHOD(bringToForeground)
