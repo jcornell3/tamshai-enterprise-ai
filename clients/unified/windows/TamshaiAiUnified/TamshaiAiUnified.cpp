@@ -78,8 +78,20 @@ std::wstring ReadUrlFromIpcFile() {
 // Clear any stale IPC file on startup
 void ClearStaleIpcFile() {
     std::wstring ipcPath = GetIpcFilePath();
+    OutputDebugStringW(L"[IPC] Checking for stale IPC file: ");
+    OutputDebugStringW(ipcPath.c_str());
+    OutputDebugStringW(L"\n");
     if (DeleteFileW(ipcPath.c_str())) {
-        OutputDebugStringW(L"[IPC] Cleared stale IPC file on startup\n");
+        OutputDebugStringW(L"[IPC] SUCCESS - Cleared stale IPC file on startup\n");
+    } else {
+        DWORD err = GetLastError();
+        if (err == ERROR_FILE_NOT_FOUND) {
+            OutputDebugStringW(L"[IPC] No stale IPC file found (good)\n");
+        } else {
+            OutputDebugStringW(L"[IPC] Failed to delete IPC file, error: ");
+            OutputDebugStringW(std::to_wstring(err).c_str());
+            OutputDebugStringW(L"\n");
+        }
     }
 }
 
