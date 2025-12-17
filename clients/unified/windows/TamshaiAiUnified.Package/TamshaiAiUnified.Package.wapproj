@@ -51,17 +51,24 @@
     </AppxManifest>
   </ItemGroup>
   <ItemGroup>
+    <!-- Base images (referenced by Package.appxmanifest) -->
+    <Content Include="Images\SplashScreen.png" />
+    <Content Include="Images\Square150x150Logo.png" />
+    <Content Include="Images\Square44x44Logo.png" />
+    <Content Include="Images\Wide310x150Logo.png" />
+    <Content Include="Images\StoreLogo.png" />
+    <!-- Scaled images (auto-selected by Windows) -->
     <Content Include="Images\SplashScreen.scale-200.png" />
     <Content Include="Images\LockScreenLogo.scale-200.png" />
     <Content Include="Images\Square150x150Logo.scale-200.png" />
     <Content Include="Images\Square44x44Logo.scale-200.png" />
+    <Content Include="Images\Wide310x150Logo.scale-200.png" />
+    <!-- Taskbar icons (unplated for transparency) -->
     <Content Include="Images\Square44x44Logo.targetsize-16_altform-unplated.png" />
     <Content Include="Images\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Images\Square44x44Logo.targetsize-32_altform-unplated.png" />
     <Content Include="Images\Square44x44Logo.targetsize-48_altform-unplated.png" />
     <Content Include="Images\Square44x44Logo.targetsize-256_altform-unplated.png" />
-    <Content Include="Images\StoreLogo.png" />
-    <Content Include="Images\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TamshaiAiUnified\TamshaiAiUnified.vcxproj">
