@@ -20,10 +20,11 @@ RUN npm install
 WORKDIR /app/apps/finance
 RUN npm run build
 
-# Stage 2: Production with Nginx
-FROM nginx:alpine
+# Stage 2: Production with Nginx (unprivileged)
+FROM nginxinc/nginx-unprivileged:alpine
 
-# Install wget for healthcheck
+# Install wget for healthcheck (as root before switching)
+USER root
 RUN apk add --no-cache wget
 
 # Copy built assets
@@ -32,12 +33,18 @@ COPY --from=builder /app/apps/finance/dist /usr/share/nginx/html
 # Copy Nginx configuration
 COPY apps/finance/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 80
-EXPOSE 80
+# Fix permissions for nginx user
+RUN chown -R nginx:nginx /usr/share/nginx/html
+
+# Switch to non-root nginx user
+USER nginx
+
+# Expose port 8080 (unprivileged nginx uses 8080 by default)
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
