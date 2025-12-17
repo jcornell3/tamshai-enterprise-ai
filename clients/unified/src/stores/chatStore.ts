@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand';
-import { ChatMessage, PendingConfirmation } from '../types';
+import { ChatMessage } from '../types';
 import * as apiService from '../services/api';
 import { getAccessToken } from './authStore';
 
@@ -29,7 +29,7 @@ interface ChatStore extends ChatState, ChatActions {}
 // AbortController for cancelling streams
 let streamAbortController: AbortController | null = null;
 
-export const useChatStore = create<ChatStore>((set, get) => ({
+export const useChatStore = create<ChatStore>((set, _get) => ({
   // Initial state
   messages: [],
   isStreaming: false,

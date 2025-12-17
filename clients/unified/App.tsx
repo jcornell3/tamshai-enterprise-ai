@@ -26,7 +26,6 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 import { useAuthStore } from './src/stores';
-import { DEFAULT_CONFIG } from './src/services/auth';
 
 // Initialize Windows OAuth listener (for browser-based callback handling)
 if (Platform.OS === 'windows') {
@@ -64,7 +63,7 @@ function AppContent({ isDarkMode }: AppContentProps) {
   // Check for existing auth on mount
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
   const backgroundColor = isDarkMode ? '#1a1a2e' : '#ffffff';
   const textColor = isDarkMode ? '#ffffff' : '#1a1a2e';

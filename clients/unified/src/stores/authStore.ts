@@ -14,7 +14,7 @@
  */
 
 import { create } from 'zustand';
-import { AuthState, Tokens, User, AuthActions } from '../types';
+import { AuthState, AuthActions } from '../types';
 import * as authService from '../services/auth/index';
 
 interface AuthStore extends AuthState, AuthActions {}
@@ -72,8 +72,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   refreshTokens: async () => {
-    const { tokens } = get();
-
     try {
       const newTokens = await authService.refreshTokens();
       const user = newTokens.idToken ? authService.parseUserFromToken(newTokens.idToken) : get().user;
