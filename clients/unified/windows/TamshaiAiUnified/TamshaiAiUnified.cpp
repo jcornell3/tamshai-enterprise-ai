@@ -40,13 +40,19 @@ std::wstring GetIpcFilePath() {
 // Write URL to IPC file for running instance to pick up
 void WriteUrlToIpcFile(const std::wstring& url) {
     std::wstring ipcPath = GetIpcFilePath();
+    OutputDebugStringW(L"[IPC] IPC file path: ");
+    OutputDebugStringW(ipcPath.c_str());
+    OutputDebugStringW(L"\n");
+
     std::wofstream file(ipcPath, std::ios::trunc);
     if (file.is_open()) {
         file << url;
         file.close();
-        OutputDebugStringW(L"[IPC] Wrote URL to IPC file: ");
+        OutputDebugStringW(L"[IPC] SUCCESS - Wrote URL to IPC file: ");
         OutputDebugStringW(url.c_str());
         OutputDebugStringW(L"\n");
+    } else {
+        OutputDebugStringW(L"[IPC] ERROR - Failed to open IPC file for writing!\n");
     }
 }
 
@@ -60,6 +66,11 @@ std::wstring ReadUrlFromIpcFile() {
         file.close();
         // Delete the file after reading
         DeleteFileW(ipcPath.c_str());
+        if (!url.empty()) {
+            OutputDebugStringW(L"[IPC] Read URL from IPC file: ");
+            OutputDebugStringW(url.c_str());
+            OutputDebugStringW(L"\n");
+        }
     }
     return url;
 }
@@ -294,19 +305,38 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
   }
 
   // Single-instance check using mutex
+  OutputDebugStringW(L"[SingleInstance] Creating mutex for single-instance check...\n");
   HANDLE hMutex = CreateMutexW(NULL, TRUE, SINGLE_INSTANCE_MUTEX_NAME);
-  bool isFirstInstance = (GetLastError() != ERROR_ALREADY_EXISTS);
+  DWORD lastError = GetLastError();
+  bool isFirstInstance = (lastError != ERROR_ALREADY_EXISTS);
+
+  OutputDebugStringW(L"[SingleInstance] Mutex result - isFirstInstance: ");
+  OutputDebugStringW(isFirstInstance ? L"YES" : L"NO");
+  OutputDebugStringW(L", lastError: ");
+  OutputDebugStringW(std::to_wstring(lastError).c_str());
+  OutputDebugStringW(L", protocolUrl empty: ");
+  OutputDebugStringW(protocolUrl.empty() ? L"YES" : L"NO");
+  OutputDebugStringW(L"\n");
 
   if (!isFirstInstance && !protocolUrl.empty()) {
     // Another instance is already running - pass the URL via IPC file and exit
-    OutputDebugStringW(L"[SingleInstance] Another instance running. Passing URL via IPC file.\n");
+    OutputDebugStringW(L"[SingleInstance] >>>>>> SECOND INSTANCE DETECTED <<<<<<\n");
+    OutputDebugStringW(L"[SingleInstance] Writing URL to IPC file and exiting...\n");
     WriteUrlToIpcFile(protocolUrl);
     CloseHandle(hMutex);
+    OutputDebugStringW(L"[SingleInstance] Exiting second instance now.\n");
     return 0;  // Exit this instance
+  }
+
+  if (isFirstInstance) {
+    OutputDebugStringW(L"[SingleInstance] This is the FIRST instance - continuing startup\n");
+  } else {
+    OutputDebugStringW(L"[SingleInstance] Not first instance but no protocol URL - continuing anyway\n");
   }
 
   // If we have a protocol URL on first launch, store it
   if (!protocolUrl.empty()) {
+    OutputDebugStringW(L"[SingleInstance] Storing protocol URL in g_initialUrl for JS to retrieve\n");
     g_initialUrl = protocolUrl;
   }
 

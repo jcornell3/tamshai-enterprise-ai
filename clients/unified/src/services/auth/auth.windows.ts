@@ -265,7 +265,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
   }
 }
 
-// Store for pending auth state
+// Store for pending auth state (in-memory only - no file persistence for security)
 let pendingAuthState: {
   codeVerifier: string;
   state: string;
@@ -292,13 +292,28 @@ function bringAppToForeground(): void {
  * This should be called when the app receives the OAuth redirect
  */
 export async function handleOAuthCallback(url: string): Promise<void> {
+  console.log('[Auth:Windows] ========== handleOAuthCallback ENTRY ==========');
+  console.log('[Auth:Windows] Callback URL:', url);
+  console.log('[Auth:Windows] pendingAuthState exists:', !!pendingAuthState);
+
   // Immediately bring the app to foreground when we receive the callback
+  console.log('[Auth:Windows] Calling bringAppToForeground...');
   bringAppToForeground();
+  console.log('[Auth:Windows] bringAppToForeground returned');
 
   if (!pendingAuthState) {
-    console.warn('[Auth:Windows] No pending auth state for callback');
+    // This happens when:
+    // 1. App was restarted during OAuth (pendingAuthState lost)
+    // 2. Callback arrived before login() was called
+    // 3. Single-instance IPC failed and a new instance started
+    console.error('[Auth:Windows] ERROR: No pending auth state for callback!');
+    console.error('[Auth:Windows] This indicates the OAuth callback arrived at a fresh app instance.');
+    console.error('[Auth:Windows] The single-instance mechanism may have failed.');
+    console.warn('[Auth:Windows] User will need to retry login.');
     return;
   }
+
+  console.log('[Auth:Windows] pendingAuthState found, processing callback...');
 
   try {
     const urlObj = new URL(url);
@@ -306,23 +321,30 @@ export async function handleOAuthCallback(url: string): Promise<void> {
     const state = urlObj.searchParams.get('state');
     const error = urlObj.searchParams.get('error');
 
+    console.log('[Auth:Windows] Parsed callback - code:', code ? 'present' : 'missing', ', state:', state ? 'present' : 'missing', ', error:', error);
+
     if (error) {
+      console.error('[Auth:Windows] OAuth error from callback:', error);
       pendingAuthState.reject(new Error(`OAuth error: ${error}`));
       pendingAuthState = null;
       return;
     }
 
     if (state !== pendingAuthState.state) {
+      console.error('[Auth:Windows] State mismatch - expected:', pendingAuthState.state?.substring(0, 10), ', got:', state?.substring(0, 10));
       pendingAuthState.reject(new Error('State mismatch'));
       pendingAuthState = null;
       return;
     }
 
     if (!code) {
+      console.error('[Auth:Windows] No authorization code in callback');
       pendingAuthState.reject(new Error('No authorization code received'));
       pendingAuthState = null;
       return;
     }
+
+    console.log('[Auth:Windows] Callback validated, exchanging code for tokens...');
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(
@@ -331,9 +353,12 @@ export async function handleOAuthCallback(url: string): Promise<void> {
       pendingAuthState.config
     );
 
+    console.log('[Auth:Windows] Token exchange successful!');
     pendingAuthState.resolve(tokens);
     pendingAuthState = null;
+    console.log('[Auth:Windows] ========== handleOAuthCallback SUCCESS ==========');
   } catch (error) {
+    console.error('[Auth:Windows] handleOAuthCallback error:', error);
     if (pendingAuthState) {
       pendingAuthState.reject(error instanceof Error ? error : new Error('Unknown error'));
       pendingAuthState = null;
@@ -363,6 +388,11 @@ async function exchangeCodeForTokensWithUri(
 ): Promise<Tokens> {
   const tokenEndpoint = `${config.issuer}/protocol/openid-connect/token`;
 
+  console.log('[Auth:Windows] ========== Token Exchange ==========');
+  console.log('[Auth:Windows] Token endpoint:', tokenEndpoint);
+  console.log('[Auth:Windows] Redirect URI:', redirectUri);
+  console.log('[Auth:Windows] Code (first 20 chars):', code.substring(0, 20) + '...');
+
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: config.clientId,
@@ -371,30 +401,39 @@ async function exchangeCodeForTokensWithUri(
     code_verifier: codeVerifier,
   });
 
-  console.log('[Auth:Windows] Token exchange - redirect_uri:', redirectUri);
+  console.log('[Auth:Windows] Sending token request...');
 
-  const response = await fetch(tokenEndpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
+  try {
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
+    console.log('[Auth:Windows] Token response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Auth:Windows] Token exchange failed:', response.status, errorText);
+      throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('[Auth:Windows] Token exchange successful - got access_token:', !!data.access_token, ', refresh_token:', !!data.refresh_token, ', id_token:', !!data.id_token);
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      idToken: data.id_token,
+      accessTokenExpirationDate: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+      tokenType: data.token_type || 'Bearer',
+    };
+  } catch (error) {
+    console.error('[Auth:Windows] Token exchange exception:', error);
+    throw error;
   }
-
-  const data = await response.json();
-
-  return {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    idToken: data.id_token,
-    accessTokenExpirationDate: new Date(Date.now() + data.expires_in * 1000).toISOString(),
-    tokenType: data.token_type || 'Bearer',
-  };
 }
 
 /**
@@ -448,6 +487,7 @@ export async function login(config: AuthConfig): Promise<Tokens> {
       // Set a timeout
       setTimeout(() => {
         if (pendingAuthState) {
+          console.log('[Auth:Windows] Login timeout - clearing pending state');
           pendingAuthState.reject(new Error('Login timeout'));
           pendingAuthState = null;
         }
@@ -632,6 +672,7 @@ let ipcPollingInterval: ReturnType<typeof setInterval> | null = null;
  */
 function startIpcPolling(): void {
   if (ipcPollingInterval) {
+    console.log('[Auth:Windows] IPC polling already running, skipping');
     return; // Already polling
   }
 
@@ -640,18 +681,33 @@ function startIpcPolling(): void {
     return;
   }
 
-  console.log('[Auth:Windows] Starting IPC file polling for callback URL');
+  console.log('[Auth:Windows] ========== Starting IPC file polling ==========');
 
+  let pollCount = 0;
   ipcPollingInterval = setInterval(async () => {
+    pollCount++;
+    // Log every 10th poll to avoid flooding logs
+    if (pollCount % 10 === 0) {
+      console.log('[Auth:Windows] IPC polling... (poll #' + pollCount + ')');
+    }
     try {
       const url = await DeepLinkModule.checkForCallbackUrl();
-      if (url && url.startsWith('com.tamshai.ai://callback')) {
-        console.log('[Auth:Windows] Received callback URL from IPC:', url);
-        stopIpcPolling();
-        handleOAuthCallback(url);
+      if (url) {
+        console.log('[Auth:Windows] ========== IPC RECEIVED URL ==========');
+        console.log('[Auth:Windows] IPC URL:', url);
+        if (url.startsWith('com.tamshai.ai://callback')) {
+          console.log('[Auth:Windows] URL is valid callback, processing...');
+          stopIpcPolling();
+          handleOAuthCallback(url);
+        } else {
+          console.log('[Auth:Windows] URL is not a callback, ignoring');
+        }
       }
     } catch (err) {
-      // Silently ignore polling errors
+      // Log errors occasionally
+      if (pollCount % 20 === 0) {
+        console.warn('[Auth:Windows] IPC poll error:', err);
+      }
     }
   }, 500); // Poll every 500ms
 }
@@ -672,44 +728,63 @@ function stopIpcPolling(): void {
  * Call this early in app startup
  */
 export function initializeOAuthListener(): void {
+  console.log('[Auth:Windows] ========== initializeOAuthListener ENTRY ==========');
+
   // Handle URL when app is already running
-  Linking.addEventListener('url', ({ url }) => {
-    console.log('[Auth:Windows] URL event received:', url);
-    if (url.startsWith('com.tamshai.ai://callback')) {
-      handleOAuthCallback(url);
-    }
-  });
+  try {
+    Linking.addEventListener('url', ({ url }) => {
+      console.log('[Auth:Windows] URL event received:', url);
+      if (url.startsWith('com.tamshai.ai://callback')) {
+        handleOAuthCallback(url);
+      }
+    });
+    console.log('[Auth:Windows] Linking.addEventListener registered');
+  } catch (err) {
+    console.error('[Auth:Windows] Failed to add URL listener:', err);
+  }
 
   // Handle URL that opened the app - try both methods
   // Method 1: React Native's Linking.getInitialURL (may return null due to RNW bug #6996)
-  Linking.getInitialURL().then((url) => {
-    console.log('[Auth:Windows] Linking.getInitialURL:', url);
-    if (url && url.startsWith('com.tamshai.ai://callback')) {
-      handleOAuthCallback(url);
-    }
-  });
+  Linking.getInitialURL()
+    .then((url) => {
+      console.log('[Auth:Windows] Linking.getInitialURL result:', url);
+      if (url && url.startsWith('com.tamshai.ai://callback')) {
+        handleOAuthCallback(url);
+      }
+    })
+    .catch((err) => {
+      console.error('[Auth:Windows] Linking.getInitialURL failed:', err);
+    });
 
   // Method 2: Our custom DeepLinkModule (workaround for RNW bug #6996)
   // This captures the URL from command line args when app is launched via protocol
+  console.log('[Auth:Windows] DeepLinkModule available:', !!DeepLinkModule);
+  console.log('[Auth:Windows] DeepLinkModule methods:', DeepLinkModule ? Object.keys(DeepLinkModule) : 'N/A');
+
   if (DeepLinkModule) {
-    DeepLinkModule.getInitialURL()
-      .then((url: string) => {
-        console.log('[Auth:Windows] DeepLinkModule.getInitialURL:', url);
-        if (url && url.startsWith('com.tamshai.ai://callback')) {
-          handleOAuthCallback(url);
-          // Clear it so it's not processed again
-          DeepLinkModule.clearInitialURL();
-        }
-      })
-      .catch((err: Error) => {
-        console.warn('[Auth:Windows] DeepLinkModule.getInitialURL failed:', err);
-      });
+    if (DeepLinkModule.getInitialURL) {
+      DeepLinkModule.getInitialURL()
+        .then((url: string) => {
+          console.log('[Auth:Windows] DeepLinkModule.getInitialURL result:', url);
+          if (url && url.startsWith('com.tamshai.ai://callback')) {
+            handleOAuthCallback(url);
+            // Clear it so it's not processed again
+            DeepLinkModule.clearInitialURL();
+          }
+        })
+        .catch((err: Error) => {
+          console.warn('[Auth:Windows] DeepLinkModule.getInitialURL failed:', err);
+        });
+    } else {
+      console.warn('[Auth:Windows] DeepLinkModule.getInitialURL method not found');
+    }
 
     // Start polling for IPC file (for single-instance URL passing)
+    // ALWAYS start polling, even if getInitialURL isn't available
     startIpcPolling();
   } else {
-    console.warn('[Auth:Windows] DeepLinkModule not available');
+    console.warn('[Auth:Windows] DeepLinkModule not available - OAuth callbacks may not work');
   }
 
-  console.log('[Auth:Windows] OAuth listener initialized');
+  console.log('[Auth:Windows] ========== initializeOAuthListener COMPLETE ==========');
 }
