@@ -75,6 +75,14 @@ std::wstring ReadUrlFromIpcFile() {
     return url;
 }
 
+// Clear any stale IPC file on startup
+void ClearStaleIpcFile() {
+    std::wstring ipcPath = GetIpcFilePath();
+    if (DeleteFileW(ipcPath.c_str())) {
+        OutputDebugStringW(L"[IPC] Cleared stale IPC file on startup\n");
+    }
+}
+
 // =============================================================================
 // DeepLinkModule - Native module to expose protocol activation URL to JS
 // This works around a known issue in React Native Windows where getInitialURL()
@@ -330,6 +338,9 @@ _Use_decl_annotations_ int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, PSTR 
 
   if (isFirstInstance) {
     OutputDebugStringW(L"[SingleInstance] This is the FIRST instance - continuing startup\n");
+    // Clear any stale IPC file from previous failed attempts
+    // This prevents processing old callbacks before user initiates login
+    ClearStaleIpcFile();
   } else {
     OutputDebugStringW(L"[SingleInstance] Not first instance but no protocol URL - continuing anyway\n");
   }

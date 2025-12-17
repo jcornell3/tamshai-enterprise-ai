@@ -697,8 +697,18 @@ function startIpcPolling(): void {
         console.log('[Auth:Windows] IPC URL:', url);
         if (url.startsWith('com.tamshai.ai://callback')) {
           console.log('[Auth:Windows] URL is valid callback, processing...');
-          stopIpcPolling();
-          handleOAuthCallback(url);
+          console.log('[Auth:Windows] pendingAuthState exists:', !!pendingAuthState);
+
+          // Only stop polling if we have pending auth state to process
+          // Otherwise keep polling for the real callback after user logs in
+          if (pendingAuthState) {
+            stopIpcPolling();
+            handleOAuthCallback(url);
+          } else {
+            console.warn('[Auth:Windows] No pendingAuthState - ignoring stale callback URL');
+            console.warn('[Auth:Windows] This was likely from a previous failed login attempt');
+            // Don't stop polling - wait for user to initiate login
+          }
         } else {
           console.log('[Auth:Windows] URL is not a callback, ignoring');
         }
