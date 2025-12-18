@@ -39,10 +39,18 @@ function makeRequest(
   body: string | null
 ): Promise<{ status: number; responseText: string }> {
   return new Promise((resolve, reject) => {
-    console.log('[API] XMLHttpRequest starting:', method, url);
+    console.log('[API] ====== makeRequest ENTRY ======');
+    console.log('[API] method:', method);
+    console.log('[API] url:', url);
+    console.log('[API] body length:', body ? body.length : 0);
 
+    console.log('[API] Creating XMLHttpRequest...');
     const xhr = new XMLHttpRequest();
+    console.log('[API] XMLHttpRequest created');
+
+    console.log('[API] Calling xhr.open...');
     xhr.open(method, url, true);
+    console.log('[API] xhr.open complete');
 
     // Set headers
     Object.keys(headers).forEach((key) => {
@@ -70,9 +78,16 @@ function makeRequest(
     };
 
     xhr.timeout = API_CONFIG.timeout;
+    console.log('[API] timeout set to:', API_CONFIG.timeout);
 
-    console.log('[API] XMLHttpRequest sending...');
-    xhr.send(body);
+    console.log('[API] ====== ABOUT TO CALL xhr.send ======');
+    try {
+      xhr.send(body);
+      console.log('[API] xhr.send returned (async request started)');
+    } catch (sendError) {
+      console.log('[API] xhr.send threw synchronously:', sendError);
+      reject(new Error('Failed to send request'));
+    }
   });
 }
 
