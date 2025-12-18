@@ -23,11 +23,12 @@ function generateId(): string {
 
 // API configuration
 // Note: For Windows UWP apps, localhost may not work due to network isolation.
-// If running MCP Gateway in WSL/Docker, use the WSL IP or host.docker.internal
+// When MCP Gateway runs in WSL/Docker, Windows apps need the WSL IP address.
+// The WSL IP can be found with: wsl hostname -I
 const API_CONFIG = {
-  // Try host.docker.internal first (works when Docker Desktop exposes ports to Windows)
-  // Fall back to localhost for native Windows or when ports are forwarded
-  baseUrl: 'http://localhost:3100', // MCP Gateway
+  // For Windows UWP development with WSL backend, use the WSL IP
+  // TODO: Make this configurable via environment or settings
+  baseUrl: 'http://172.28.131.70:3100', // MCP Gateway (WSL IP)
   timeout: 60000, // 60s timeout for AI responses
 };
 
