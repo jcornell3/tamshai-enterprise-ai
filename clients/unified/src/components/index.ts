@@ -2,4 +2,7 @@
  * Components index - exports all reusable components
  */
 
-// Add component exports here as they are created
+export { ChatScreen } from './ChatScreen';
+export { MessageBubble } from './MessageBubble';
+export { MessageInput } from './MessageInput';
+export { ApprovalCard } from './ApprovalCard';

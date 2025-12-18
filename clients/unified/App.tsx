@@ -26,6 +26,7 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 import { useAuthStore } from './src/stores';
+import { ChatScreen } from './src/components';
 
 // Initialize Windows OAuth listener (for browser-based callback handling)
 if (Platform.OS === 'windows') {
@@ -116,34 +117,21 @@ function AppContent({ isDarkMode }: AppContentProps) {
   // Authenticated - show chat interface
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: isDarkMode ? '#3d3d54' : '#e0e0e0' }]}>
         <Text style={[styles.headerTitle, { color: textColor }]}>
           Tamshai AI
         </Text>
-        <Pressable onPress={logout}>
-          <Text style={styles.logoutButton}>Logout</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.userInfo}>
-        <Text style={[styles.userName, { color: textColor }]}>
-          Welcome, {user?.name || 'User'}
-        </Text>
-        {user?.roles && user.roles.length > 0 && (
-          <Text style={[styles.userRoles, { color: textColor }]}>
-            Roles: {user.roles.join(', ')}
+        <View style={styles.headerRight}>
+          <Text style={[styles.userName, { color: textColor }]}>
+            {user?.name || 'User'}
           </Text>
-        )}
+          <Pressable onPress={logout}>
+            <Text style={styles.logoutButton}>Logout</Text>
+          </Pressable>
+        </View>
       </View>
 
-      <View style={styles.chatPlaceholder}>
-        <Text style={[styles.placeholderText, { color: textColor }]}>
-          Chat interface coming soon...
-        </Text>
-        <Text style={[styles.helpText, { color: textColor }]}>
-          Ask questions about HR, Finance, Sales, or Support data
-        </Text>
-      </View>
+      <ChatScreen isDarkMode={isDarkMode} />
     </SafeAreaView>
   );
 }
@@ -212,33 +200,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
   logoutButton: {
     color: '#007AFF',
     fontSize: 16,
   },
-  userInfo: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
   userName: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  userRoles: {
     fontSize: 14,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  chatPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  placeholderText: {
-    fontSize: 18,
-    opacity: 0.5,
+    opacity: 0.8,
   },
 });
 
