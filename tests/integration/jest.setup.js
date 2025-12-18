@@ -9,6 +9,7 @@ const axios = require('axios');
 
 const CONFIG = {
   keycloakUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
+  gatewayUrl: process.env.GATEWAY_URL || 'http://localhost:3100',
   mcpHrUrl: process.env.MCP_HR_URL || 'http://localhost:3101',
   mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://localhost:3102',
   mcpSalesUrl: process.env.MCP_SALES_URL || 'http://localhost:3103',
@@ -57,6 +58,7 @@ beforeAll(async () => {
 
   const checks = await Promise.all([
     checkKeycloakHealth(),
+    checkServiceHealth('MCP Gateway', CONFIG.gatewayUrl),
     checkServiceHealth('MCP HR', CONFIG.mcpHrUrl),
     checkServiceHealth('MCP Finance', CONFIG.mcpFinanceUrl),
     checkServiceHealth('MCP Sales', CONFIG.mcpSalesUrl),

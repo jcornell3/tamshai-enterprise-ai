@@ -8,6 +8,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:rbac": "jest rbac.test.ts",
+    "test:sse": "jest sse-streaming.test.ts",
     "test:mcp": "jest mcp-tools.test.ts",
     "test:verbose": "jest --verbose",
     "test:debug": "DEBUG=* jest --verbose"

@@ -1,0 +1,409 @@
+/**
+ * Tamshai Corp - SSE Streaming Integration Tests
+ *
+ * These tests simulate the TamshaiAI Windows app behavior by:
+ * 1. Authenticating via Keycloak (like the PKCE flow)
+ * 2. Calling POST /api/query with JWT token
+ * 3. Processing SSE streaming responses
+ * 4. Verifying error handling for connection failures
+ *
+ * Run with: npm run test:integration
+ * Requires: MCP Gateway, Keycloak, and MCP servers running
+ */
+
+import axios from 'axios';
+import http from 'http';
+
+// Test configuration - matches the TamshaiAI app configuration
+const CONFIG = {
+  keycloakUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
+  keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
+  gatewayUrl: process.env.GATEWAY_URL || 'http://localhost:3100',
+  clientId: 'ai-desktop',
+};
+
+// Test users
+const TEST_USERS = {
+  executive: { username: 'eve.thompson', password: 'password123' },
+  hrUser: { username: 'alice.chen', password: 'password123' },
+  intern: { username: 'frank.davis', password: 'password123' },
+};
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+interface SSEEvent {
+  type: 'text' | 'error' | 'pagination';
+  text?: string;
+  message?: string;
+  hasMore?: boolean;
+  cursors?: Array<{ server: string; cursor: string }>;
+  hint?: string;
+}
+
+/**
+ * Get access token from Keycloak using Resource Owner Password Grant
+ * Note: This is only for testing - real apps use Authorization Code + PKCE
+ */
+async function getAccessToken(username: string, password: string): Promise<string> {
+  const tokenUrl = `${CONFIG.keycloakUrl}/realms/${CONFIG.keycloakRealm}/protocol/openid-connect/token`;
+
+  const params = new URLSearchParams({
+    grant_type: 'password',
+    client_id: CONFIG.clientId,
+    username,
+    password,
+    scope: 'openid profile email roles',
+  });
+
+  const response = await axios.post<TokenResponse>(tokenUrl, params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+
+  return response.data.access_token;
+}
+
+/**
+ * Stream SSE response using raw HTTP request (simulates XMLHttpRequest behavior)
+ * This closely matches what the TamshaiAI Windows app does
+ */
+function streamSSEQuery(
+  query: string,
+  accessToken: string
+): Promise<{
+  chunks: string[];
+  fullContent: string;
+  events: SSEEvent[];
+  error?: string;
+}> {
+  return new Promise((resolve) => {
+    const url = new URL(`${CONFIG.gatewayUrl}/api/query`);
+    const chunks: string[] = [];
+    const events: SSEEvent[] = [];
+    let fullContent = '';
+    let rawData = '';
+
+    const postData = JSON.stringify({ query });
+
+    const options: http.RequestOptions = {
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'text/event-stream',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      res.setEncoding('utf8');
+
+      res.on('data', (chunk: string) => {
+        rawData += chunk;
+
+        // Process SSE events in the raw data
+        const lines = rawData.split('\n');
+        rawData = lines.pop() || ''; // Keep incomplete line
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+
+            if (data === '[DONE]') {
+              // Stream complete
+              resolve({ chunks, fullContent, events });
+              return;
+            }
+
+            if (data) {
+              try {
+                const event: SSEEvent = JSON.parse(data);
+                events.push(event);
+
+                if (event.type === 'text' && event.text) {
+                  chunks.push(event.text);
+                  fullContent += event.text;
+                } else if (event.type === 'error') {
+                  resolve({
+                    chunks,
+                    fullContent,
+                    events,
+                    error: event.message || 'Stream error',
+                  });
+                  return;
+                }
+              } catch {
+                // Ignore parse errors for partial data
+              }
+            }
+          }
+        }
+      });
+
+      res.on('end', () => {
+        resolve({ chunks, fullContent, events });
+      });
+
+      res.on('error', (err) => {
+        resolve({ chunks, fullContent, events, error: err.message });
+      });
+    });
+
+    req.on('error', (err) => {
+      resolve({ chunks: [], fullContent: '', events: [], error: err.message });
+    });
+
+    req.setTimeout(60000, () => {
+      req.destroy();
+      resolve({ chunks, fullContent, events, error: 'Request timed out' });
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
+  describe('POST /api/query Endpoint', () => {
+    test('Executive user can stream AI query about reports', async () => {
+      const token = await getAccessToken(
+        TEST_USERS.executive.username,
+        TEST_USERS.executive.password
+      );
+
+      const result = await streamSSEQuery(
+        'How many people report to me?',
+        token
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.fullContent.length).toBeGreaterThan(0);
+      expect(result.events.length).toBeGreaterThan(0);
+
+      // Verify we received text chunks
+      const textEvents = result.events.filter((e) => e.type === 'text');
+      expect(textEvents.length).toBeGreaterThan(0);
+    }, 90000); // 90 second timeout for Claude response
+
+    test('HR user can query employee data via SSE', async () => {
+      const token = await getAccessToken(
+        TEST_USERS.hrUser.username,
+        TEST_USERS.hrUser.password
+      );
+
+      const result = await streamSSEQuery(
+        'List the departments in the company',
+        token
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.fullContent.length).toBeGreaterThan(0);
+    }, 90000);
+
+    test('Intern receives response but with limited data access', async () => {
+      const token = await getAccessToken(
+        TEST_USERS.intern.username,
+        TEST_USERS.intern.password
+      );
+
+      const result = await streamSSEQuery(
+        'What data can I access?',
+        token
+      );
+
+      expect(result.error).toBeUndefined();
+      // Intern should still get a response, but with no data access
+      expect(result.fullContent.length).toBeGreaterThan(0);
+    }, 90000);
+
+    test('Invalid token returns 401 error', async () => {
+      const invalidToken = 'invalid.jwt.token';
+
+      const result = await streamSSEQuery('Test query', invalidToken);
+
+      // Should receive an error, not a crash
+      expect(
+        result.error !== undefined || result.fullContent.includes('error')
+      ).toBe(true);
+    });
+
+    test('Chunks are received progressively during streaming', async () => {
+      const token = await getAccessToken(
+        TEST_USERS.executive.username,
+        TEST_USERS.executive.password
+      );
+
+      const result = await streamSSEQuery(
+        'Write a short paragraph about enterprise AI.',
+        token
+      );
+
+      expect(result.error).toBeUndefined();
+      // Should receive multiple text chunks
+      expect(result.chunks.length).toBeGreaterThan(1);
+
+      // Full content should be the concatenation of all chunks
+      const reconstructed = result.chunks.join('');
+      expect(reconstructed).toBe(result.fullContent);
+    }, 90000);
+  });
+
+  describe('Error Handling', () => {
+    test('Connection to non-existent server returns error gracefully', async () => {
+      // Temporarily use a bad gateway URL
+      const badUrl = 'http://localhost:9999';
+
+      const result = await new Promise<{ error?: string }>((resolve) => {
+        const postData = JSON.stringify({ query: 'test' });
+
+        const req = http.request(
+          {
+            hostname: 'localhost',
+            port: 9999,
+            path: '/api/query',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer test',
+            },
+          },
+          () => {
+            resolve({});
+          }
+        );
+
+        req.on('error', (err) => {
+          resolve({ error: err.message });
+        });
+
+        req.write(postData);
+        req.end();
+      });
+
+      // Should get a connection error, not a crash
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('ECONNREFUSED');
+    });
+
+    test('Request with missing query returns 400', async () => {
+      const token = await getAccessToken(
+        TEST_USERS.executive.username,
+        TEST_USERS.executive.password
+      );
+
+      try {
+        await axios.post(
+          `${CONFIG.gatewayUrl}/api/query`,
+          {}, // Missing query field
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.response.status).toBe(400);
+        expect(error.response.data.error).toContain('query');
+      }
+    });
+  });
+
+  describe('GET /api/query Endpoint (EventSource compatible)', () => {
+    test('GET endpoint works with query parameter', async () => {
+      const token = await getAccessToken(
+        TEST_USERS.executive.username,
+        TEST_USERS.executive.password
+      );
+
+      const query = encodeURIComponent('Hello');
+
+      const result = await new Promise<{ fullContent: string; error?: string }>(
+        (resolve) => {
+          let fullContent = '';
+          let rawData = '';
+
+          const url = new URL(`${CONFIG.gatewayUrl}/api/query`);
+          url.searchParams.set('q', 'Hello');
+          url.searchParams.set('token', token);
+
+          const req = http.request(
+            {
+              hostname: url.hostname,
+              port: url.port,
+              path: `${url.pathname}${url.search}`,
+              method: 'GET',
+              headers: {
+                Accept: 'text/event-stream',
+              },
+            },
+            (res) => {
+              res.setEncoding('utf8');
+
+              res.on('data', (chunk: string) => {
+                rawData += chunk;
+
+                const lines = rawData.split('\n');
+                rawData = lines.pop() || '';
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') {
+                      resolve({ fullContent });
+                      return;
+                    }
+                    try {
+                      const event = JSON.parse(data);
+                      if (event.type === 'text' && event.text) {
+                        fullContent += event.text;
+                      }
+                    } catch {
+                      // Ignore parse errors
+                    }
+                  }
+                }
+              });
+
+              res.on('end', () => {
+                resolve({ fullContent });
+              });
+            }
+          );
+
+          req.on('error', (err) => {
+            resolve({ fullContent: '', error: err.message });
+          });
+
+          req.end();
+        }
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.fullContent.length).toBeGreaterThan(0);
+    }, 90000);
+  });
+});
+
+describe('Health Check', () => {
+  test('Gateway health endpoint is accessible', async () => {
+    const response = await axios.get(`${CONFIG.gatewayUrl}/health`);
+    expect(response.status).toBe(200);
+    expect(response.data.status).toBe('healthy');
+  });
+
+  test('Keycloak is accessible', async () => {
+    const response = await axios.get(
+      `${CONFIG.keycloakUrl}/realms/${CONFIG.keycloakRealm}/.well-known/openid-configuration`
+    );
+    expect(response.status).toBe(200);
+    expect(response.data.issuer).toContain(CONFIG.keycloakRealm);
+  });
+});
