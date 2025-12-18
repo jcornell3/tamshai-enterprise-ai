@@ -508,22 +508,21 @@ app.post('/internal/audit', express.json(), (req: Request, res: Response) => {
 // =============================================================================
 
 /**
- * v1.4 SSE Streaming Query Endpoint (Section 6.1)
+ * v1.4 SSE Streaming Query Handler (Section 6.1)
  *
+ * Shared handler for both GET and POST streaming endpoints.
  * Streams Claude responses using Server-Sent Events to prevent timeouts
  * during long-running queries (30-60 seconds).
  */
-app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
+async function handleStreamingQuery(
+  req: Request,
+  res: Response,
+  query: string,
+  cursor?: string
+): Promise<void> {
   const startTime = Date.now();
   const requestId = req.headers['x-request-id'] as string;
   const userContext: UserContext = (req as any).userContext;
-  const query = req.query.q as string;
-  const cursor = req.query.cursor as string | undefined;  // Pagination cursor
-
-  if (!query || typeof query !== 'string') {
-    res.status(400).json({ error: 'Query parameter "q" is required' });
-    return;
-  }
 
   logger.info(`SSE Query from ${userContext.username}:`, {
     requestId,
@@ -648,6 +647,41 @@ ${dataContext || 'No relevant data available for this query.'}`;
     res.write('data: [DONE]\n\n');
     res.end();
   }
+}
+
+/**
+ * v1.4 SSE Streaming Query Endpoint - GET (Section 6.1)
+ *
+ * Supports EventSource API which requires GET with query params.
+ * Token can be passed via query param since EventSource doesn't support headers.
+ */
+app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
+  const query = req.query.q as string;
+  const cursor = req.query.cursor as string | undefined;
+
+  if (!query || typeof query !== 'string') {
+    res.status(400).json({ error: 'Query parameter "q" is required' });
+    return;
+  }
+
+  await handleStreamingQuery(req, res, query, cursor);
+});
+
+/**
+ * v1.4 SSE Streaming Query Endpoint - POST (Section 6.1)
+ *
+ * Supports fetch API with proper Authorization headers and JSON body.
+ * Better for clients that can't use EventSource (like React Native).
+ */
+app.post('/api/query', authMiddleware, async (req: Request, res: Response) => {
+  const { query, cursor } = req.body;
+
+  if (!query || typeof query !== 'string') {
+    res.status(400).json({ error: 'Field "query" is required' });
+    return;
+  }
+
+  await handleStreamingQuery(req, res, query, cursor);
 });
 
 /**
