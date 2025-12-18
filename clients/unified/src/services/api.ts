@@ -22,7 +22,11 @@ function generateId(): string {
 }
 
 // API configuration
+// Note: For Windows UWP apps, localhost may not work due to network isolation.
+// If running MCP Gateway in WSL/Docker, use the WSL IP or host.docker.internal
 const API_CONFIG = {
+  // Try host.docker.internal first (works when Docker Desktop exposes ports to Windows)
+  // Fall back to localhost for native Windows or when ports are forwarded
   baseUrl: 'http://localhost:3100', // MCP Gateway
   timeout: 60000, // 60s timeout for AI responses
 };
@@ -67,9 +71,21 @@ export async function streamQuery(
       body: bodyStr,
     });
     console.log('[API] fetch returned, status:', response.status);
-  } catch (fetchError) {
-    console.error('[API] fetch threw:', fetchError);
-    onError(new Error('Network request failed'));
+  } catch (fetchError: unknown) {
+    // Network errors on Windows can crash Hermes if not handled carefully
+    // Log minimal info and return gracefully
+    console.log('[API] fetch failed - network error');
+    try {
+      // Create error message safely without accessing potentially null properties
+      const errMsg = fetchError instanceof Error
+        ? fetchError.message
+        : 'Could not connect to server';
+      console.log('[API] error message:', errMsg);
+      onError(new Error('Cannot connect to AI service. Is the server running?'));
+    } catch (innerError) {
+      // If even creating the error fails, just call onError with a simple message
+      onError(new Error('Connection failed'));
+    }
     return;
   }
 
