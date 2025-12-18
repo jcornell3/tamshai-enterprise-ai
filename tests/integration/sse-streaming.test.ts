@@ -14,12 +14,14 @@
 import axios from 'axios';
 import http from 'http';
 
-// Test configuration - matches the TamshaiAI app configuration
+// Test configuration
+// Uses mcp-gateway client which has directAccessGrantsEnabled=true
 const CONFIG = {
   keycloakUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
   keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
   gatewayUrl: process.env.GATEWAY_URL || 'http://localhost:3100',
-  clientId: 'ai-desktop',
+  clientId: 'mcp-gateway',
+  clientSecret: 'mcp-gateway-secret',
 };
 
 // Test users
@@ -54,6 +56,7 @@ async function getAccessToken(username: string, password: string): Promise<strin
   const params = new URLSearchParams({
     grant_type: 'password',
     client_id: CONFIG.clientId,
+    client_secret: CONFIG.clientSecret,
     username,
     password,
     scope: 'openid profile email roles',
@@ -225,12 +228,23 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
     test('Invalid token returns 401 error', async () => {
       const invalidToken = 'invalid.jwt.token';
 
-      const result = await streamSSEQuery('Test query', invalidToken);
-
-      // Should receive an error, not a crash
-      expect(
-        result.error !== undefined || result.fullContent.includes('error')
-      ).toBe(true);
+      // Use axios directly to check HTTP response
+      try {
+        await axios.post(
+          `${CONFIG.gatewayUrl}/api/query`,
+          { query: 'Test query' },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${invalidToken}`,
+            },
+          }
+        );
+        fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.response.status).toBe(401);
+        expect(error.response.data.error).toContain('Invalid');
+      }
     });
 
     test('Chunks are received progressively during streaming', async () => {
@@ -323,12 +337,11 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
         TEST_USERS.executive.password
       );
 
-      const query = encodeURIComponent('Hello');
-
       const result = await new Promise<{ fullContent: string; error?: string }>(
         (resolve) => {
           let fullContent = '';
           let rawData = '';
+          let resolved = false;
 
           const url = new URL(`${CONFIG.gatewayUrl}/api/query`);
           url.searchParams.set('q', 'Hello');
@@ -357,7 +370,10 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
                   if (line.startsWith('data: ')) {
                     const data = line.slice(6).trim();
                     if (data === '[DONE]') {
-                      resolve({ fullContent });
+                      if (!resolved) {
+                        resolved = true;
+                        resolve({ fullContent });
+                      }
                       return;
                     }
                     try {
@@ -373,13 +389,35 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
               });
 
               res.on('end', () => {
-                resolve({ fullContent });
+                if (!resolved) {
+                  resolved = true;
+                  resolve({ fullContent });
+                }
+              });
+
+              res.on('error', (err) => {
+                if (!resolved) {
+                  resolved = true;
+                  resolve({ fullContent: '', error: err.message });
+                }
               });
             }
           );
 
           req.on('error', (err) => {
-            resolve({ fullContent: '', error: err.message });
+            if (!resolved) {
+              resolved = true;
+              resolve({ fullContent: '', error: err.message });
+            }
+          });
+
+          // Add timeout to prevent hanging
+          req.setTimeout(60000, () => {
+            if (!resolved) {
+              resolved = true;
+              req.destroy();
+              resolve({ fullContent, error: 'Request timed out' });
+            }
           });
 
           req.end();
