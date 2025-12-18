@@ -11,7 +11,7 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  testTimeout: 30000, // 30 seconds for integration tests
+  testTimeout: 120000, // 120 seconds for SSE streaming tests with Claude
   verbose: true,
   bail: false, // Continue running tests after first failure
   maxWorkers: 1, // Run tests sequentially to avoid race conditions
