@@ -39,121 +39,131 @@ export async function streamQuery(
   onChunk: (text: string) => void,
   onComplete: (message: ChatMessage) => void,
   onError: (error: Error) => void,
-  abortSignal?: AbortSignal
+  _abortSignal?: AbortSignal
 ): Promise<void> {
   const url = `${API_CONFIG.baseUrl}/api/query`;
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify({ query } as QueryRequest),
-      signal: abortSignal,
-    });
+  console.log('[API] Starting streamQuery to:', url);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP ${response.status}`);
-    }
-
-    // Check if response is SSE stream
-    const contentType = response.headers.get('Content-Type');
-    if (!contentType?.includes('text/event-stream')) {
-      // Fallback: Non-streaming response
-      const data = await response.json();
-      onComplete({
-        id: generateId(),
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date(),
-        citations: data.citations,
-        pendingConfirmation: data.pendingConfirmation,
-      });
-      return;
-    }
-
-    // Process SSE stream
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Response body is not readable');
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
+  // Use XMLHttpRequest for better Windows compatibility
+  // React Native Windows fetch can crash on network errors
+  return new Promise<void>((resolve) => {
+    const xhr = new XMLHttpRequest();
     let fullContent = '';
-    let citations: ChatMessage['citations'] = [];
-    let pendingConfirmation: PendingConfirmation | undefined;
+    let lastProcessedIndex = 0;
 
-    while (true) {
-      const { done, value } = await reader.read();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
+    xhr.setRequestHeader('Accept', 'text/event-stream');
 
-      if (done) {
-        break;
-      }
+    xhr.onreadystatechange = () => {
+      // Process partial response as it arrives (streaming)
+      if (xhr.readyState >= 3 && xhr.status === 200) {
+        const newData = xhr.responseText.substring(lastProcessedIndex);
+        lastProcessedIndex = xhr.responseText.length;
 
-      buffer += decoder.decode(value, { stream: true });
+        // Process SSE events in the new data
+        const lines = newData.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
 
-      // Process complete SSE events in buffer
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-
-          if (data === '[DONE]') {
-            // Stream complete
-            onComplete({
-              id: generateId(),
-              role: 'assistant',
-              content: fullContent,
-              timestamp: new Date(),
-              citations,
-              pendingConfirmation,
-            });
-            return;
-          }
-
-          try {
-            const event: SSEEvent = JSON.parse(data);
-
-            if (event.type === 'text' && event.text) {
-              // Text chunk from Claude
-              fullContent += event.text;
-              onChunk(event.text);
-            } else if (event.type === 'error') {
-              throw new Error(event.message || 'Stream error');
-            } else if (event.type === 'pagination') {
-              // Pagination info - could store for "load more" functionality
-              console.log('[API] Pagination available:', event.hint);
+            if (data === '[DONE]') {
+              console.log('[API] Stream complete');
+              onComplete({
+                id: generateId(),
+                role: 'assistant',
+                content: fullContent,
+                timestamp: new Date(),
+              });
+              resolve();
+              return;
             }
-          } catch (parseError) {
-            console.warn('[API] Failed to parse SSE event:', data);
+
+            if (data) {
+              try {
+                const event: SSEEvent = JSON.parse(data);
+
+                if (event.type === 'text' && event.text) {
+                  fullContent += event.text;
+                  onChunk(event.text);
+                } else if (event.type === 'error') {
+                  console.error('[API] SSE error:', event.message);
+                  onError(new Error(event.message || 'Stream error'));
+                  resolve();
+                  return;
+                } else if (event.type === 'pagination') {
+                  console.log('[API] Pagination available:', event.hint);
+                }
+              } catch (parseError) {
+                // Ignore parse errors for partial data
+                if (data.length > 2) {
+                  console.warn('[API] Failed to parse SSE event:', data);
+                }
+              }
+            }
           }
         }
       }
-    }
+    };
 
-    // If we get here without [DONE], complete with what we have
-    onComplete({
-      id: generateId(),
-      role: 'assistant',
-      content: fullContent,
-      timestamp: new Date(),
-      citations,
-      pendingConfirmation,
-    });
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.log('[API] Request aborted');
-      return;
+    xhr.onload = () => {
+      console.log('[API] XHR onload, status:', xhr.status);
+      if (xhr.status !== 200) {
+        let errorMessage = `HTTP ${xhr.status}`;
+        try {
+          const errorData = JSON.parse(xhr.responseText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // Use default error message
+        }
+        onError(new Error(errorMessage));
+      } else if (!fullContent) {
+        // Non-streaming response
+        try {
+          const data = JSON.parse(xhr.responseText);
+          onComplete({
+            id: generateId(),
+            role: 'assistant',
+            content: data.response || 'No response received',
+            timestamp: new Date(),
+          });
+        } catch {
+          onComplete({
+            id: generateId(),
+            role: 'assistant',
+            content: fullContent || 'Response received',
+            timestamp: new Date(),
+          });
+        }
+      }
+      resolve();
+    };
+
+    xhr.onerror = () => {
+      console.error('[API] XHR network error');
+      onError(new Error('Network error - could not connect to AI service'));
+      resolve();
+    };
+
+    xhr.ontimeout = () => {
+      console.error('[API] XHR timeout');
+      onError(new Error('Request timed out'));
+      resolve();
+    };
+
+    xhr.timeout = API_CONFIG.timeout;
+
+    try {
+      xhr.send(JSON.stringify({ query } as QueryRequest));
+      console.log('[API] XHR request sent');
+    } catch (sendError) {
+      console.error('[API] XHR send error:', sendError);
+      onError(new Error('Failed to send request'));
+      resolve();
     }
-    onError(error instanceof Error ? error : new Error(String(error)));
-  }
+  });
 }
 
 /**
