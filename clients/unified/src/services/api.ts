@@ -22,20 +22,65 @@ function generateId(): string {
 }
 
 // API configuration
-// Note: For Windows UWP apps, localhost may not work due to network isolation.
-// When MCP Gateway runs in WSL/Docker, Windows apps need the WSL IP address.
-// The WSL IP can be found with: wsl hostname -I
 const API_CONFIG = {
-  // For Windows UWP development with WSL backend, use the WSL IP
-  // TODO: Make this configurable via environment or settings
-  baseUrl: 'http://172.28.131.70:3100', // MCP Gateway (WSL IP)
+  baseUrl: 'http://localhost:3100', // MCP Gateway
   timeout: 60000, // 60s timeout for AI responses
 };
 
 /**
+ * Make HTTP request using XMLHttpRequest
+ * This avoids Hermes crashes on Windows that occur with fetch() network errors.
+ * XMLHttpRequest has more reliable error handling in React Native Windows.
+ */
+function makeRequest(
+  method: string,
+  url: string,
+  headers: Record<string, string>,
+  body: string | null
+): Promise<{ status: number; responseText: string }> {
+  return new Promise((resolve, reject) => {
+    console.log('[API] XMLHttpRequest starting:', method, url);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+
+    // Set headers
+    Object.keys(headers).forEach((key) => {
+      xhr.setRequestHeader(key, headers[key]);
+    });
+
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        console.log('[API] XMLHttpRequest complete, status:', xhr.status);
+        resolve({
+          status: xhr.status,
+          responseText: xhr.responseText,
+        });
+      }
+    };
+
+    xhr.onerror = function () {
+      console.log('[API] XMLHttpRequest error event');
+      reject(new Error('Network request failed'));
+    };
+
+    xhr.ontimeout = function () {
+      console.log('[API] XMLHttpRequest timeout');
+      reject(new Error('Request timeout'));
+    };
+
+    xhr.timeout = API_CONFIG.timeout;
+
+    console.log('[API] XMLHttpRequest sending...');
+    xhr.send(body);
+  });
+}
+
+/**
  * Send a query to MCP Gateway
  *
- * Note: Uses simple fetch without AbortController to avoid Hermes crashes on Windows.
+ * Note: Uses XMLHttpRequest instead of fetch to avoid Hermes crashes on Windows.
+ * The Hermes JS engine crashes when fetch() throws network errors on Windows UWP.
  */
 export async function streamQuery(
   query: string,
@@ -61,51 +106,28 @@ export async function streamQuery(
     'Content-Type': 'application/json',
     'Authorization': 'Bearer ' + accessToken,
   };
-  console.log('[API] headers prepared');
 
-  let response: Response;
+  let response: { status: number; responseText: string };
   try {
-    console.log('[API] calling fetch...');
-    response = await fetch(url, {
-      method: 'POST',
-      headers: headersObj,
-      body: bodyStr,
-    });
-    console.log('[API] fetch returned, status:', response.status);
-  } catch (fetchError: unknown) {
-    // Network errors on Windows can crash Hermes if not handled carefully
-    // Log minimal info and return gracefully
-    console.log('[API] fetch failed - network error');
-    try {
-      // Create error message safely without accessing potentially null properties
-      const errMsg = fetchError instanceof Error
-        ? fetchError.message
-        : 'Could not connect to server';
-      console.log('[API] error message:', errMsg);
-      onError(new Error('Cannot connect to AI service. Is the server running?'));
-    } catch (innerError) {
-      // If even creating the error fails, just call onError with a simple message
-      onError(new Error('Connection failed'));
-    }
+    response = await makeRequest('POST', url, headersObj, bodyStr);
+    console.log('[API] request returned, status:', response.status);
+  } catch (reqError: unknown) {
+    console.log('[API] request failed');
+    const errMsg = reqError instanceof Error ? reqError.message : 'Connection failed';
+    console.log('[API] error:', errMsg);
+    onError(new Error('Cannot connect to AI service. Is the server running?'));
     return;
   }
 
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     console.log('[API] response not ok:', response.status);
     onError(new Error('HTTP ' + response.status));
     return;
   }
 
-  let responseText: string;
-  try {
-    console.log('[API] reading response text...');
-    responseText = await response.text();
-    console.log('[API] response text length:', responseText.length);
-  } catch (textError) {
-    console.error('[API] text() threw:', textError);
-    onError(new Error('Failed to read response'));
-    return;
-  }
+  // responseText is already available from XMLHttpRequest
+  const responseText = response.responseText;
+  console.log('[API] response text length:', responseText.length);
 
   // Parse SSE events from response
   let fullContent = '';
