@@ -47,12 +47,16 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
 
   // Actions
   sendMessage: async (content: string) => {
+    console.log('[ChatStore] sendMessage called');
+
     const accessToken = await getAccessToken();
 
     if (!accessToken) {
       set({ error: 'Not authenticated. Please log in.' });
       return;
     }
+
+    console.log('[ChatStore] Got token, calling API...');
 
     // Add user message
     const userMessage: ChatMessage = {
