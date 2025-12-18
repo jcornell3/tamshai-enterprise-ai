@@ -333,4 +333,38 @@ React Native Windows 0.80 uses WinUI 3/Windows App SDK which lacks `CoreWindow`.
 
 ---
 
+## Backlog / Future Enhancements
+
+### BL-001: SSO Backend Unavailable Handling
+
+| Attribute | Value |
+|-----------|-------|
+| **Priority** | Medium |
+| **Affected Flow** | Login |
+| **Status** | TODO |
+| **Date Added** | December 17, 2024 |
+
+**Problem**:
+When Keycloak is unavailable during login, the app shows a permanent loading spinner. The user must force-quit and restart the app to retry.
+
+**Expected Behavior**:
+1. Login attempt should timeout after 30 seconds
+2. Display user-friendly error: "SSO service is unavailable. Please try again later."
+3. Return user to login screen with "Sign in with SSO" button active
+4. User can retry without restarting the app
+
+**Implementation Notes**:
+- Add timeout to browser launch + callback wait in `auth.windows.ts`
+- Add `AbortController` or timer-based cancellation
+- Update `authStore` to handle timeout error state
+- Consider adding a "Cancel" button during login flow
+
+**Acceptance Criteria**:
+- [ ] Login times out after 30 seconds if Keycloak unreachable
+- [ ] Error message displayed to user
+- [ ] User returned to login screen
+- [ ] Retry works without app restart
+
+---
+
 *This specification replaces 006-ai-desktop (Electron) and partially supersedes 007-mobile by providing a unified codebase.*
