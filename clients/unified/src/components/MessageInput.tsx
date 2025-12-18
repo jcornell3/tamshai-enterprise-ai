@@ -4,6 +4,9 @@
  * Text input for sending messages to the AI assistant.
  */
 
+// This log should appear when the bundle loads - confirms fresh code
+console.log('[MessageInput] ====== MODULE LOADED ======');
+
 import React, { useState } from 'react';
 import {
   View,
@@ -25,11 +28,18 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
   const [text, setText] = useState('');
 
   const handleSend = () => {
+    console.log('[MessageInput] ====== handleSend ENTRY ======');
     const trimmed = text.trim();
+    console.log('[MessageInput] trimmed:', trimmed);
+    console.log('[MessageInput] isLoading:', isLoading);
     if (trimmed && !isLoading) {
+      console.log('[MessageInput] Calling onSend...');
       onSend(trimmed);
+      console.log('[MessageInput] onSend returned');
       setText('');
+      console.log('[MessageInput] setText done');
     }
+    console.log('[MessageInput] handleSend EXIT');
   };
 
   const handleKeyPress = (e: { nativeEvent: { key: string } }) => {
