@@ -12,6 +12,15 @@
 
 import { QueryRequest, SSEEvent, ChatMessage, PendingConfirmation } from '../types';
 
+// Simple UUID generator (crypto.randomUUID not available in all RN environments)
+function generateId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // API configuration
 const API_CONFIG = {
   baseUrl: 'http://localhost:3100', // MCP Gateway
@@ -57,7 +66,7 @@ export async function streamQuery(
       // Fallback: Non-streaming response
       const data = await response.json();
       onComplete({
-        id: crypto.randomUUID(),
+        id: generateId(),
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
@@ -99,7 +108,7 @@ export async function streamQuery(
           if (data === '[DONE]') {
             // Stream complete
             onComplete({
-              id: crypto.randomUUID(),
+              id: generateId(),
               role: 'assistant',
               content: fullContent,
               timestamp: new Date(),
@@ -127,7 +136,7 @@ export async function streamQuery(
 
     // If we get here without [DONE], complete with what we have
     onComplete({
-      id: crypto.randomUUID(),
+      id: generateId(),
       role: 'assistant',
       content: fullContent,
       timestamp: new Date(),

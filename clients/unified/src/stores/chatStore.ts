@@ -10,6 +10,15 @@ import { ChatMessage } from '../types';
 import * as apiService from '../services/api';
 import { getAccessToken } from './authStore';
 
+// Simple UUID generator (crypto.randomUUID not available in all RN environments)
+function generateId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -47,14 +56,14 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
 
     // Add user message
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       role: 'user',
       content,
       timestamp: new Date(),
     };
 
     // Create placeholder for assistant response
-    const assistantId = crypto.randomUUID();
+    const assistantId = generateId();
     const assistantMessage: ChatMessage = {
       id: assistantId,
       role: 'assistant',
@@ -73,56 +82,76 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
     // Setup abort controller
     streamAbortController = new AbortController();
 
-    await apiService.streamQuery(
-      content,
-      accessToken,
-      // onChunk - update streaming message
-      (text: string) => {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, content: msg.content + text }
-              : msg
-          ),
-        }));
-      },
-      // onComplete - finalize message
-      (completeMessage: ChatMessage) => {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg.id === assistantId
-              ? {
-                  ...completeMessage,
-                  id: assistantId,
-                  isStreaming: false,
-                }
-              : msg
-          ),
-          isStreaming: false,
-          currentStreamingId: null,
-        }));
-        streamAbortController = null;
-      },
-      // onError
-      (error: Error) => {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg.id === assistantId
-              ? {
-                  ...msg,
-                  content: msg.content || 'Sorry, an error occurred.',
-                  isStreaming: false,
-                }
-              : msg
-          ),
-          isStreaming: false,
-          error: error.message,
-          currentStreamingId: null,
-        }));
-        streamAbortController = null;
-      },
-      streamAbortController.signal
-    );
+    try {
+      await apiService.streamQuery(
+        content,
+        accessToken,
+        // onChunk - update streaming message
+        (text: string) => {
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, content: msg.content + text }
+                : msg
+            ),
+          }));
+        },
+        // onComplete - finalize message
+        (completeMessage: ChatMessage) => {
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...completeMessage,
+                    id: assistantId,
+                    isStreaming: false,
+                  }
+                : msg
+            ),
+            isStreaming: false,
+            currentStreamingId: null,
+          }));
+          streamAbortController = null;
+        },
+        // onError
+        (error: Error) => {
+          set((state) => ({
+            messages: state.messages.map((msg) =>
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    content: msg.content || 'Sorry, an error occurred.',
+                    isStreaming: false,
+                  }
+                : msg
+            ),
+            isStreaming: false,
+            error: error.message,
+            currentStreamingId: null,
+          }));
+          streamAbortController = null;
+        },
+        streamAbortController.signal
+      );
+    } catch (error) {
+      // Handle any uncaught errors from streamQuery
+      console.error('[ChatStore] streamQuery error:', error);
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.id === assistantId
+            ? {
+                ...msg,
+                content: msg.content || 'Failed to connect to AI service.',
+                isStreaming: false,
+              }
+            : msg
+        ),
+        isStreaming: false,
+        error: error instanceof Error ? error.message : 'Connection failed',
+        currentStreamingId: null,
+      }));
+      streamAbortController = null;
+    }
   },
 
   confirmAction: async (confirmationId: string, approved: boolean) => {
