@@ -28,12 +28,9 @@ const API_CONFIG = {
 };
 
 /**
- * Send a query to MCP Gateway with SSE streaming
+ * Send a query to MCP Gateway
  *
- * v1.4 Pattern: Server-Sent Events for streaming AI responses.
- * This prevents HTTP timeout issues during Claude's 30-60s reasoning.
- *
- * Note: Uses non-streaming fetch on Windows to avoid Hermes crashes.
+ * Note: Uses simple fetch without AbortController to avoid Hermes crashes on Windows.
  */
 export async function streamQuery(
   query: string,
@@ -43,128 +40,111 @@ export async function streamQuery(
   onError: (error: Error) => void,
   _abortSignal?: AbortSignal
 ): Promise<void> {
-  const url = `${API_CONFIG.baseUrl}/api/query`;
+  const url = API_CONFIG.baseUrl + '/api/query';
 
-  console.log('[API] Starting streamQuery to:', url);
+  console.log('[API] streamQuery called, url:', url);
+  console.log('[API] query:', query);
+  console.log('[API] token length:', accessToken ? accessToken.length : 0);
 
-  // On Windows, use non-streaming POST to avoid Hermes/XMLHttpRequest crashes
-  // The response will come back as complete JSON instead of SSE stream
+  // Build request body
+  const bodyObj = { query: query };
+  const bodyStr = JSON.stringify(bodyObj);
+  console.log('[API] body:', bodyStr);
+
+  // Build headers object
+  const headersObj: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + accessToken,
+  };
+  console.log('[API] headers prepared');
+
+  let response: Response;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
-
-    console.log('[API] Sending fetch request...');
-
-    const response = await fetch(url, {
+    console.log('[API] calling fetch...');
+    response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        // Don't request SSE - get buffered response instead
-      },
-      body: JSON.stringify({ query } as QueryRequest),
-      signal: controller.signal,
+      headers: headersObj,
+      body: bodyStr,
     });
+    console.log('[API] fetch returned, status:', response.status);
+  } catch (fetchError) {
+    console.error('[API] fetch threw:', fetchError);
+    onError(new Error('Network request failed'));
+    return;
+  }
 
-    clearTimeout(timeoutId);
+  if (!response.ok) {
+    console.log('[API] response not ok:', response.status);
+    onError(new Error('HTTP ' + response.status));
+    return;
+  }
 
-    console.log('[API] Response status:', response.status);
+  let responseText: string;
+  try {
+    console.log('[API] reading response text...');
+    responseText = await response.text();
+    console.log('[API] response text length:', responseText.length);
+  } catch (textError) {
+    console.error('[API] text() threw:', textError);
+    onError(new Error('Failed to read response'));
+    return;
+  }
 
-    if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch {
-        // Use status code as error
+  // Parse SSE events from response
+  let fullContent = '';
+  const lines = responseText.split('\n');
+  console.log('[API] parsing', lines.length, 'lines');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.indexOf('data: ') === 0) {
+      const data = line.substring(6).trim();
+      if (data === '[DONE]') {
+        continue;
       }
-      onError(new Error(errorMessage));
-      return;
-    }
-
-    // Read the full response body as text
-    const responseText = await response.text();
-    console.log('[API] Response length:', responseText.length);
-
-    // Parse SSE events from the buffered response
-    let fullContent = '';
-    const lines = responseText.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6).trim();
-
-        if (data === '[DONE]') {
-          continue; // End marker
-        }
-
-        if (data) {
-          try {
-            const event: SSEEvent = JSON.parse(data);
-
-            if (event.type === 'text' && event.text) {
-              fullContent += event.text;
-              // Send chunks to UI for progressive display
-              onChunk(event.text);
-            } else if (event.type === 'error') {
-              console.error('[API] SSE error event:', event.message);
-              onError(new Error(event.message || 'Stream error'));
-              return;
-            } else if (event.type === 'pagination') {
-              console.log('[API] Pagination available:', event.hint);
-            }
-          } catch (parseError) {
-            // Ignore parse errors for partial/malformed data
-            if (data.length > 2) {
-              console.warn('[API] Failed to parse SSE event:', data.substring(0, 100));
-            }
+      if (data.length > 0) {
+        try {
+          const event = JSON.parse(data) as SSEEvent;
+          if (event.type === 'text' && event.text) {
+            fullContent = fullContent + event.text;
+            onChunk(event.text);
+          } else if (event.type === 'error') {
+            onError(new Error(event.message || 'Stream error'));
+            return;
           }
+        } catch (parseErr) {
+          // Ignore parse errors
         }
       }
     }
+  }
 
-    // If we got content from SSE parsing, use it
-    if (fullContent) {
-      console.log('[API] Parsed SSE content, length:', fullContent.length);
-      onComplete({
-        id: generateId(),
-        role: 'assistant',
-        content: fullContent,
-        timestamp: new Date(),
-      });
-      return;
-    }
+  console.log('[API] parsed content length:', fullContent.length);
 
-    // Fallback: try to parse as JSON response
+  if (fullContent.length > 0) {
+    onComplete({
+      id: generateId(),
+      role: 'assistant',
+      content: fullContent,
+      timestamp: new Date(),
+    });
+  } else {
+    // Try JSON fallback
     try {
       const jsonData = JSON.parse(responseText);
-      const content = jsonData.response || jsonData.content || responseText;
       onComplete({
         id: generateId(),
         role: 'assistant',
-        content,
+        content: jsonData.response || jsonData.content || responseText,
         timestamp: new Date(),
       });
     } catch {
-      // Last resort: use raw text
       onComplete({
         id: generateId(),
         role: 'assistant',
-        content: responseText || 'No response received',
+        content: responseText || 'No response',
         timestamp: new Date(),
       });
-    }
-  } catch (error) {
-    console.error('[API] Fetch error:', error);
-
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        onError(new Error('Request timed out'));
-      } else {
-        onError(new Error(error.message || 'Network error'));
-      }
-    } else {
-      onError(new Error('Failed to connect to AI service'));
     }
   }
 }
