@@ -32,6 +32,8 @@ const API_CONFIG = {
  *
  * v1.4 Pattern: Server-Sent Events for streaming AI responses.
  * This prevents HTTP timeout issues during Claude's 30-60s reasoning.
+ *
+ * Note: Uses non-streaming fetch on Windows to avoid Hermes crashes.
  */
 export async function streamQuery(
   query: string,
@@ -45,125 +47,126 @@ export async function streamQuery(
 
   console.log('[API] Starting streamQuery to:', url);
 
-  // Use XMLHttpRequest for better Windows compatibility
-  // React Native Windows fetch can crash on network errors
-  return new Promise<void>((resolve) => {
-    const xhr = new XMLHttpRequest();
+  // On Windows, use non-streaming POST to avoid Hermes/XMLHttpRequest crashes
+  // The response will come back as complete JSON instead of SSE stream
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+
+    console.log('[API] Sending fetch request...');
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        // Don't request SSE - get buffered response instead
+      },
+      body: JSON.stringify({ query } as QueryRequest),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    console.log('[API] Response status:', response.status);
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch {
+        // Use status code as error
+      }
+      onError(new Error(errorMessage));
+      return;
+    }
+
+    // Read the full response body as text
+    const responseText = await response.text();
+    console.log('[API] Response length:', responseText.length);
+
+    // Parse SSE events from the buffered response
     let fullContent = '';
-    let lastProcessedIndex = 0;
+    const lines = responseText.split('\n');
 
-    xhr.open('POST', url, true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
-    xhr.setRequestHeader('Accept', 'text/event-stream');
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6).trim();
 
-    xhr.onreadystatechange = () => {
-      // Process partial response as it arrives (streaming)
-      if (xhr.readyState >= 3 && xhr.status === 200) {
-        const newData = xhr.responseText.substring(lastProcessedIndex);
-        lastProcessedIndex = xhr.responseText.length;
+        if (data === '[DONE]') {
+          continue; // End marker
+        }
 
-        // Process SSE events in the new data
-        const lines = newData.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
+        if (data) {
+          try {
+            const event: SSEEvent = JSON.parse(data);
 
-            if (data === '[DONE]') {
-              console.log('[API] Stream complete');
-              onComplete({
-                id: generateId(),
-                role: 'assistant',
-                content: fullContent,
-                timestamp: new Date(),
-              });
-              resolve();
+            if (event.type === 'text' && event.text) {
+              fullContent += event.text;
+              // Send chunks to UI for progressive display
+              onChunk(event.text);
+            } else if (event.type === 'error') {
+              console.error('[API] SSE error event:', event.message);
+              onError(new Error(event.message || 'Stream error'));
               return;
+            } else if (event.type === 'pagination') {
+              console.log('[API] Pagination available:', event.hint);
             }
-
-            if (data) {
-              try {
-                const event: SSEEvent = JSON.parse(data);
-
-                if (event.type === 'text' && event.text) {
-                  fullContent += event.text;
-                  onChunk(event.text);
-                } else if (event.type === 'error') {
-                  console.error('[API] SSE error:', event.message);
-                  onError(new Error(event.message || 'Stream error'));
-                  resolve();
-                  return;
-                } else if (event.type === 'pagination') {
-                  console.log('[API] Pagination available:', event.hint);
-                }
-              } catch (parseError) {
-                // Ignore parse errors for partial data
-                if (data.length > 2) {
-                  console.warn('[API] Failed to parse SSE event:', data);
-                }
-              }
+          } catch (parseError) {
+            // Ignore parse errors for partial/malformed data
+            if (data.length > 2) {
+              console.warn('[API] Failed to parse SSE event:', data.substring(0, 100));
             }
           }
         }
       }
-    };
-
-    xhr.onload = () => {
-      console.log('[API] XHR onload, status:', xhr.status);
-      if (xhr.status !== 200) {
-        let errorMessage = `HTTP ${xhr.status}`;
-        try {
-          const errorData = JSON.parse(xhr.responseText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          // Use default error message
-        }
-        onError(new Error(errorMessage));
-      } else if (!fullContent) {
-        // Non-streaming response
-        try {
-          const data = JSON.parse(xhr.responseText);
-          onComplete({
-            id: generateId(),
-            role: 'assistant',
-            content: data.response || 'No response received',
-            timestamp: new Date(),
-          });
-        } catch {
-          onComplete({
-            id: generateId(),
-            role: 'assistant',
-            content: fullContent || 'Response received',
-            timestamp: new Date(),
-          });
-        }
-      }
-      resolve();
-    };
-
-    xhr.onerror = () => {
-      console.error('[API] XHR network error');
-      onError(new Error('Network error - could not connect to AI service'));
-      resolve();
-    };
-
-    xhr.ontimeout = () => {
-      console.error('[API] XHR timeout');
-      onError(new Error('Request timed out'));
-      resolve();
-    };
-
-    xhr.timeout = API_CONFIG.timeout;
-
-    try {
-      xhr.send(JSON.stringify({ query } as QueryRequest));
-      console.log('[API] XHR request sent');
-    } catch (sendError) {
-      console.error('[API] XHR send error:', sendError);
-      onError(new Error('Failed to send request'));
-      resolve();
     }
-  });
+
+    // If we got content from SSE parsing, use it
+    if (fullContent) {
+      console.log('[API] Parsed SSE content, length:', fullContent.length);
+      onComplete({
+        id: generateId(),
+        role: 'assistant',
+        content: fullContent,
+        timestamp: new Date(),
+      });
+      return;
+    }
+
+    // Fallback: try to parse as JSON response
+    try {
+      const jsonData = JSON.parse(responseText);
+      const content = jsonData.response || jsonData.content || responseText;
+      onComplete({
+        id: generateId(),
+        role: 'assistant',
+        content,
+        timestamp: new Date(),
+      });
+    } catch {
+      // Last resort: use raw text
+      onComplete({
+        id: generateId(),
+        role: 'assistant',
+        content: responseText || 'No response received',
+        timestamp: new Date(),
+      });
+    }
+  } catch (error) {
+    console.error('[API] Fetch error:', error);
+
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        onError(new Error('Request timed out'));
+      } else {
+        onError(new Error(error.message || 'Network error'));
+      }
+    } else {
+      onError(new Error('Failed to connect to AI service'));
+    }
+  }
 }
 
 /**
