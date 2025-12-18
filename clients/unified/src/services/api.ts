@@ -121,11 +121,15 @@ export async function streamQuery(
           try {
             const event: SSEEvent = JSON.parse(data);
 
-            if (event.type === 'content_block_delta' && event.delta?.text) {
-              fullContent += event.delta.text;
-              onChunk(event.delta.text);
+            if (event.type === 'text' && event.text) {
+              // Text chunk from Claude
+              fullContent += event.text;
+              onChunk(event.text);
             } else if (event.type === 'error') {
-              throw new Error(event.error?.message || 'Stream error');
+              throw new Error(event.message || 'Stream error');
+            } else if (event.type === 'pagination') {
+              // Pagination info - could store for "load more" functionality
+              console.log('[API] Pagination available:', event.hint);
             }
           } catch (parseError) {
             console.warn('[API] Failed to parse SSE event:', data);

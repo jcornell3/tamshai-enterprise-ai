@@ -59,15 +59,15 @@ export interface PendingConfirmation {
 }
 
 // SSE streaming types (v1.4)
+// Gateway sends: { type: 'text', text: '...' } or { type: 'error', message: '...' }
 export interface SSEEvent {
-  type: 'content_block_delta' | 'message_stop' | 'error';
-  delta?: {
-    type: string;
-    text?: string;
-  };
-  error?: {
-    message: string;
-  };
+  type: 'text' | 'error' | 'pagination';
+  text?: string;
+  message?: string;
+  // Pagination metadata
+  hasMore?: boolean;
+  cursors?: Array<{ server: string; cursor: string }>;
+  hint?: string;
 }
 
 // Query request/response

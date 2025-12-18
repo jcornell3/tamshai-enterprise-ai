@@ -21,6 +21,11 @@ import { ChatMessage } from '../types';
 import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 
+// KeyboardAvoidingView doesn't work well on Windows/macOS - use plain View
+const Container = Platform.OS === 'ios' || Platform.OS === 'android'
+  ? KeyboardAvoidingView
+  : View;
+
 interface ChatScreenProps {
   isDarkMode: boolean;
 }
@@ -48,11 +53,18 @@ export function ChatScreen({ isDarkMode }: ChatScreenProps) {
 
   const backgroundColor = isDarkMode ? '#1a1a2e' : '#f5f5f5';
 
+  // Props for KeyboardAvoidingView (only on mobile)
+  const containerProps = Platform.OS === 'ios' || Platform.OS === 'android'
+    ? {
+        behavior: Platform.OS === 'ios' ? 'padding' as const : 'height' as const,
+        keyboardVerticalOffset: Platform.OS === 'ios' ? 90 : 0,
+      }
+    : {};
+
   return (
-    <KeyboardAvoidingView
+    <Container
       style={[styles.container, { backgroundColor }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      {...containerProps}
     >
       <FlatList
         ref={flatListRef}
@@ -68,7 +80,7 @@ export function ChatScreen({ isDarkMode }: ChatScreenProps) {
         isDarkMode={isDarkMode}
         error={error}
       />
-    </KeyboardAvoidingView>
+    </Container>
   );
 }
 
