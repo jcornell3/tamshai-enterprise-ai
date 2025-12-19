@@ -10,9 +10,6 @@
  * - V.3: PKCE authentication via system browser (WebAuthenticationBroker on Windows)
  */
 
-// DEBUG: This should appear immediately when bundle loads
-console.log('[App] ====== APP MODULE LOADED ======');
-
 import React, { useEffect } from 'react';
 import {
   StatusBar,
