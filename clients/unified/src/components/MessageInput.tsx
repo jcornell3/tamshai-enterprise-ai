@@ -15,6 +15,7 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 
 interface MessageInputProps {
@@ -63,19 +64,29 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
       )}
       <View style={[styles.inputRow, { backgroundColor }]}>
         <TextInput
-          style={[styles.input, { color: textColor, backgroundColor }]}
+          style={[
+            styles.input,
+            { color: textColor, backgroundColor },
+            // Fixed height on Windows to avoid Fabric+Hermes layout crash
+            Platform.OS === 'windows' && styles.inputWindows,
+          ]}
           placeholder="Ask about HR, Finance, Sales, or Support..."
           placeholderTextColor={placeholderColor}
           value={text}
           onChangeText={setText}
-          onKeyPress={handleKeyPress}
-          multiline
+          // onKeyPress causes crashes on Windows with Fabric+Hermes - use button only
+          onKeyPress={Platform.OS === 'windows' ? undefined : handleKeyPress}
+          // multiline causes layout measurement crashes on Windows with Fabric+Hermes
+          multiline={Platform.OS !== 'windows'}
           maxLength={2000}
           editable={!isLoading}
-          // Disable spell check and autocorrect - may cause Hermes crash on Windows
+          // Disable spell check and autocorrect to reduce crash risk
           spellCheck={false}
           autoCorrect={false}
           autoCapitalize="none"
+          // Submit on Enter for single-line mode (Windows)
+          onSubmitEditing={Platform.OS === 'windows' ? handleSend : undefined}
+          returnKeyType={Platform.OS === 'windows' ? 'send' : undefined}
         />
         <Pressable
           style={[
@@ -124,6 +135,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     maxHeight: 120,
     paddingVertical: 8,
+  },
+  // Fixed height for Windows to avoid Fabric+Hermes layout measurement crash
+  inputWindows: {
+    height: 40,
+    maxHeight: 40,
   },
   sendButton: {
     backgroundColor: '#007AFF',
