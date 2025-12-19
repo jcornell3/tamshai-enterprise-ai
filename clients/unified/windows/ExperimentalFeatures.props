@@ -14,7 +14,7 @@
       
       See https://microsoft.github.io/react-native-windows/docs/hermes
     -->
-    <UseHermes>true</UseHermes>
+    <UseHermes>false</UseHermes>
 
     <!--
       Changes compilation to assume use of Microsoft.ReactNative NuGet packages
