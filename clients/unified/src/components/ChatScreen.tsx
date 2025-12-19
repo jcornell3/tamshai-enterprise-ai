@@ -8,6 +8,9 @@
  * - V.1: No authorization logic - backend handles all access control
  */
 
+// DEBUG: Module load confirmation
+console.log('[ChatScreen] ====== MODULE LOADED ======');
+
 import React, { useRef, useEffect } from 'react';
 import {
   View,
@@ -44,7 +47,16 @@ export function ChatScreen({ isDarkMode }: ChatScreenProps) {
   }, [messages]);
 
   const handleSend = async (text: string) => {
-    await sendMessage(text);
+    console.log('[ChatScreen] ====== handleSend ENTRY ======');
+    console.log('[ChatScreen] text:', text);
+    console.log('[ChatScreen] About to call sendMessage...');
+    try {
+      await sendMessage(text);
+      console.log('[ChatScreen] sendMessage completed');
+    } catch (err) {
+      console.log('[ChatScreen] sendMessage threw:', err);
+    }
+    console.log('[ChatScreen] handleSend EXIT');
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => (
