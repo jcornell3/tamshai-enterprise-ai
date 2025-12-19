@@ -1,37 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
+  <!--
+    This file contains some important settings that will apply globally for
+    your app and *all* native modules your app consumes. These values were
+    set when you created the app project, and in some cases cannot be
+    simply changed here without recreating a new project.
+  -->
+
   <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
     <!--
-      Required for Composition architecture (WinAppSDK/WinUI 3).
-      Cannot be disabled when using Microsoft.ReactNative.Composition packages.
-
-      See https://microsoft.github.io/react-native-windows/docs/new-architecture
+      Enables default usage of Hermes.
+      
+      See https://microsoft.github.io/react-native-windows/docs/hermes
     -->
-    <RnwNewArch>true</RnwNewArch>
+    <UseHermes>true</UseHermes>
 
     <!--
       Changes compilation to assume use of Microsoft.ReactNative NuGet packages
-      instead of building the framework from source. Defaults to true.
-
-      This is set during app project creation and should not be changed.
+      instead of building the framework from source.
+      Requires creation of new project.
 
       See https://microsoft.github.io/react-native-windows/docs/nuget
     -->
-    <UseExperimentalNuget>true</UseExperimentalNuget>
+    <UseExperimentalNuget>false</UseExperimentalNuget>
 
     <ReactExperimentalFeaturesSet>true</ReactExperimentalFeaturesSet>
-
-    <!--
-      Disable Hermes JS engine to fix TextInput multiline crash.
-
-      The Fabric (New Architecture) + Hermes combination causes access violations
-      (0xC0000005) in multiline TextInput due to layout measurement race conditions.
-      Chakra is more forgiving with memory access patterns in the hybrid Fabric code.
-
-      See: microsoft/react-native-windows #14357
-    -->
-    <UseHermes>false</UseHermes>
+  
   </PropertyGroup>
 
 </Project>
