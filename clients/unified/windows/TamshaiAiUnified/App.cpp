@@ -4,6 +4,7 @@
 
 #include "AutolinkedNativeModules.g.h"
 #include "ReactPackageProvider.h"
+#include <fstream>
 
 using namespace winrt;
 using namespace xaml;
@@ -11,6 +12,42 @@ using namespace xaml::Controls;
 using namespace xaml::Navigation;
 
 using namespace Windows::ApplicationModel;
+
+// Global to store the initial URL from protocol activation (used by DeepLinkModule)
+std::wstring g_initialUrl;
+
+// IPC file path for single-instance URL passing
+std::wstring GetAppIpcFilePath() {
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    return std::wstring(tempPath) + L"tamshai_ai_callback_url.txt";
+}
+
+// Write URL to IPC file for running instance to pick up
+void WriteUrlToIpcFile(const std::wstring& url) {
+    std::wstring ipcPath = GetAppIpcFilePath();
+    OutputDebugStringW(L"[IPC] Writing URL to IPC file: ");
+    OutputDebugStringW(url.c_str());
+    OutputDebugStringW(L"\n");
+
+    std::wofstream file(ipcPath, std::ios::trunc);
+    if (file.is_open()) {
+        file << url;
+        file.close();
+        OutputDebugStringW(L"[IPC] SUCCESS - Wrote URL to IPC file\n");
+    } else {
+        OutputDebugStringW(L"[IPC] ERROR - Failed to open IPC file for writing\n");
+    }
+}
+
+// Clear stale IPC file on startup
+void ClearStaleIpcFile() {
+    std::wstring ipcPath = GetAppIpcFilePath();
+    if (DeleteFileW(ipcPath.c_str())) {
+        OutputDebugStringW(L"[IPC] Cleared stale IPC file on startup\n");
+    }
+}
+
 namespace winrt::TamshaiAiUnified::implementation
 {
 /// <summary>
@@ -58,8 +95,38 @@ void App::OnLaunched(activation::LaunchActivatedEventArgs const& e)
 
 /// <summary>
 /// Invoked when the application is activated by some means other than normal launching.
+/// This handles protocol activation (com.tamshai.ai://) for OAuth callbacks.
 /// </summary>
 void App::OnActivated(Activation::IActivatedEventArgs const &e) {
+  OutputDebugStringW(L"[App] OnActivated called\n");
+
+  // Check if this is a protocol activation
+  if (e.Kind() == Activation::ActivationKind::Protocol) {
+    OutputDebugStringW(L"[App] Protocol activation detected\n");
+    auto protocolArgs = e.as<Activation::ProtocolActivatedEventArgs>();
+    if (protocolArgs) {
+      auto uri = protocolArgs.Uri();
+      if (uri) {
+        std::wstring url = std::wstring(uri.AbsoluteUri());
+        OutputDebugStringW(L"[App] Protocol URL: ");
+        OutputDebugStringW(url.c_str());
+        OutputDebugStringW(L"\n");
+
+        // Check if app is already running (has content)
+        auto preActivationContent = Window::Current().Content();
+        if (preActivationContent) {
+          // App is already running - write URL to IPC file for JS to poll
+          OutputDebugStringW(L"[App] App already running - writing to IPC file\n");
+          WriteUrlToIpcFile(url);
+        } else {
+          // App is starting fresh - store URL globally for DeepLinkModule
+          OutputDebugStringW(L"[App] App starting fresh - storing in g_initialUrl\n");
+          g_initialUrl = url;
+        }
+      }
+    }
+  }
+
   auto preActivationContent = Window::Current().Content();
   super::OnActivated(e);
   if (!preActivationContent && Window::Current()) {
