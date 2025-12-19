@@ -22,6 +22,17 @@
     <UseExperimentalNuget>true</UseExperimentalNuget>
 
     <ReactExperimentalFeaturesSet>true</ReactExperimentalFeaturesSet>
+
+    <!--
+      Disable Hermes JS engine to fix TextInput multiline crash.
+
+      The Fabric (New Architecture) + Hermes combination causes access violations
+      (0xC0000005) in multiline TextInput due to layout measurement race conditions.
+      Chakra is more forgiving with memory access patterns in the hybrid Fabric code.
+
+      See: microsoft/react-native-windows #14357
+    -->
+    <UseHermes>false</UseHermes>
   </PropertyGroup>
 
 </Project>

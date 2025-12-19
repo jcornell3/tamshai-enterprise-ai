@@ -54,8 +54,6 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
   const borderColor = isDarkMode ? '#3d3d54' : '#e0e0e0';
   const placeholderColor = isDarkMode ? '#888' : '#999';
 
-  // DEBUG: Temporarily remove TextInput to test if it's causing the Hermes crash
-  // The crash happens when TextInput component initializes on Windows (msftedit.dll loads)
   return (
     <View style={[styles.container, { borderTopColor: borderColor }]}>
       {error && (
@@ -64,12 +62,21 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
         </View>
       )}
       <View style={[styles.inputRow, { backgroundColor }]}>
-        {/* TextInput temporarily replaced with Text to test crash */}
-        <View style={[styles.input, { backgroundColor }]}>
-          <Text style={{ color: textColor }}>
-            [TextInput disabled for crash testing]
-          </Text>
-        </View>
+        <TextInput
+          style={[styles.input, { color: textColor, backgroundColor }]}
+          placeholder="Ask about HR, Finance, Sales, or Support..."
+          placeholderTextColor={placeholderColor}
+          value={text}
+          onChangeText={setText}
+          onKeyPress={handleKeyPress}
+          multiline
+          maxLength={2000}
+          editable={!isLoading}
+          // Disable spell check and autocorrect - may cause Hermes crash on Windows
+          spellCheck={false}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
         <Pressable
           style={[
             styles.sendButton,
