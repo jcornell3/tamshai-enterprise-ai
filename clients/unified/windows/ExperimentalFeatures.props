@@ -3,13 +3,15 @@
 
   <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
     <!--
-      Required for building a New Architecture project.
+      Disable New Architecture (Fabric) to use stable Legacy TextInput.
 
-      App projects should not change this value.
+      The Fabric TextInput in RNW 0.80 has known stability issues with
+      multiline text measurement that cause access violations (0xC0000005).
+      The legacy Bridge architecture TextInput is mature and stable.
 
-      See https://microsoft.github.io/react-native-windows/docs/new-architecture
+      See: microsoft/react-native-windows #14357
     -->
-    <RnwNewArch>true</RnwNewArch>
+    <RnwNewArch>false</RnwNewArch>
 
     <!--
       Changes compilation to assume use of Microsoft.ReactNative NuGet packages
