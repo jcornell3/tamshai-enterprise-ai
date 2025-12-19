@@ -10,12 +10,13 @@
 
   <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
     <!--
-      Enables Hermes JavaScript engine.
-      REQUIRED for modern ES2018+ syntax (React 19, zustand, etc.)
+      Disable Hermes to use Chakra JavaScript engine.
+      Hermes crashes with access violation on RN Windows 0.80.
+      Chakra requires Babel regex transpilation for ES2018+ features.
 
       See https://microsoft.github.io/react-native-windows/docs/hermes
     -->
-    <UseHermes>true</UseHermes>
+    <UseHermes>false</UseHermes>
 
     <!--
       CRITICAL: Disable New Architecture (Fabric) to use stable Legacy TextInput.
