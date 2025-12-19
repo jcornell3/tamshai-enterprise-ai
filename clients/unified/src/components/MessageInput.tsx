@@ -27,6 +27,16 @@ interface MessageInputProps {
 
 export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageInputProps) {
   const [text, setText] = useState('');
+  // Defer TextInput rendering on Windows to avoid Hermes crash during initial mount
+  const [isReady, setIsReady] = useState(Platform.OS !== 'windows');
+
+  // On Windows, delay TextInput mount to avoid Fabric+Hermes initialization crash
+  React.useEffect(() => {
+    if (Platform.OS === 'windows') {
+      const timer = setTimeout(() => setIsReady(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const handleSend = () => {
     console.log('[MessageInput] ====== handleSend ENTRY ======');
@@ -63,31 +73,38 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
         </View>
       )}
       <View style={[styles.inputRow, { backgroundColor }]}>
-        <TextInput
-          style={[
-            styles.input,
-            { color: textColor, backgroundColor },
-            // Fixed height on Windows to avoid Fabric+Hermes layout crash
-            Platform.OS === 'windows' && styles.inputWindows,
-          ]}
-          placeholder="Ask about HR, Finance, Sales, or Support..."
-          placeholderTextColor={placeholderColor}
-          value={text}
-          onChangeText={setText}
-          // onKeyPress causes crashes on Windows with Fabric+Hermes - use button only
-          onKeyPress={Platform.OS === 'windows' ? undefined : handleKeyPress}
-          // multiline causes layout measurement crashes on Windows with Fabric+Hermes
-          multiline={Platform.OS !== 'windows'}
-          maxLength={2000}
-          editable={!isLoading}
-          // Disable spell check and autocorrect to reduce crash risk
-          spellCheck={false}
-          autoCorrect={false}
-          autoCapitalize="none"
-          // Submit on Enter for single-line mode (Windows)
-          onSubmitEditing={Platform.OS === 'windows' ? handleSend : undefined}
-          returnKeyType={Platform.OS === 'windows' ? 'send' : undefined}
-        />
+        {/* On Windows, defer TextInput mount to avoid Fabric+Hermes crash */}
+        {isReady ? (
+          <TextInput
+            style={[
+              styles.input,
+              { color: textColor, backgroundColor },
+              // Fixed height on Windows to avoid Fabric+Hermes layout crash
+              Platform.OS === 'windows' && styles.inputWindows,
+            ]}
+            placeholder="Ask about HR, Finance, Sales, or Support..."
+            placeholderTextColor={placeholderColor}
+            value={text}
+            onChangeText={setText}
+            // onKeyPress causes crashes on Windows with Fabric+Hermes - use button only
+            onKeyPress={Platform.OS === 'windows' ? undefined : handleKeyPress}
+            // multiline causes layout measurement crashes on Windows with Fabric+Hermes
+            multiline={Platform.OS !== 'windows'}
+            maxLength={2000}
+            editable={!isLoading}
+            // Disable spell check and autocorrect to reduce crash risk
+            spellCheck={false}
+            autoCorrect={false}
+            autoCapitalize="none"
+            // Submit on Enter for single-line mode (Windows)
+            onSubmitEditing={Platform.OS === 'windows' ? handleSend : undefined}
+            returnKeyType={Platform.OS === 'windows' ? 'send' : undefined}
+          />
+        ) : (
+          <View style={[styles.input, styles.inputWindows, { backgroundColor }]}>
+            <Text style={{ color: placeholderColor }}>Loading...</Text>
+          </View>
+        )}
         <Pressable
           style={[
             styles.sendButton,
