@@ -5,6 +5,9 @@
  * Handles SSE streaming, confirmations, and message history.
  */
 
+// DEBUG: Module load confirmation
+console.log('[ChatStore] ====== MODULE LOADED ======');
+
 import { create } from 'zustand';
 import { ChatMessage } from '../types';
 import * as apiService from '../services/api';
