@@ -3,15 +3,12 @@
 
   <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
     <!--
-      Disable New Architecture (Fabric) to use stable Legacy TextInput.
+      Required for Composition architecture (WinAppSDK/WinUI 3).
+      Cannot be disabled when using Microsoft.ReactNative.Composition packages.
 
-      The Fabric TextInput in RNW 0.80 has known stability issues with
-      multiline text measurement that cause access violations (0xC0000005).
-      The legacy Bridge architecture TextInput is mature and stable.
-
-      See: microsoft/react-native-windows #14357
+      See https://microsoft.github.io/react-native-windows/docs/new-architecture
     -->
-    <RnwNewArch>false</RnwNewArch>
+    <RnwNewArch>true</RnwNewArch>
 
     <!--
       Changes compilation to assume use of Microsoft.ReactNative NuGet packages

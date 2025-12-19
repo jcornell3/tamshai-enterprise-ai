@@ -44,11 +44,23 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
     console.log('[MessageInput] trimmed:', trimmed);
     console.log('[MessageInput] isLoading:', isLoading);
     if (trimmed && !isLoading) {
-      console.log('[MessageInput] Calling onSend...');
-      onSend(trimmed);
-      console.log('[MessageInput] onSend returned');
-      setText('');
-      console.log('[MessageInput] setText done');
+      // On Windows, defer state changes to next frame to avoid Fabric event race condition.
+      // The native C++ event dispatcher can crash if we modify state during its callback.
+      if (Platform.OS === 'windows') {
+        console.log('[MessageInput] Windows: deferring to next frame...');
+        setTimeout(() => {
+          console.log('[MessageInput] Deferred: calling onSend...');
+          onSend(trimmed);
+          setText('');
+          console.log('[MessageInput] Deferred: done');
+        }, 0);
+      } else {
+        console.log('[MessageInput] Calling onSend...');
+        onSend(trimmed);
+        console.log('[MessageInput] onSend returned');
+        setText('');
+        console.log('[MessageInput] setText done');
+      }
     }
     console.log('[MessageInput] handleSend EXIT');
   };
@@ -99,6 +111,8 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
             // Submit on Enter for single-line mode (Windows)
             onSubmitEditing={Platform.OS === 'windows' ? handleSend : undefined}
             returnKeyType={Platform.OS === 'windows' ? 'send' : undefined}
+            // Prevent native auto-blur on submit which causes Fabric race condition crash
+            blurOnSubmit={Platform.OS === 'windows' ? false : true}
           />
         ) : (
           <View style={[styles.input, styles.inputWindows, { backgroundColor }]}>
