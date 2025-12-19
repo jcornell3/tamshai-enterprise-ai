@@ -4,9 +4,6 @@
  * Text input for sending messages to the AI assistant.
  */
 
-// This log should appear when the bundle loads - confirms fresh code
-console.log('[MessageInput] ====== MODULE LOADED ======');
-
 import React, { useState } from 'react';
 import {
   View,
@@ -15,7 +12,6 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 
 interface MessageInputProps {
@@ -27,42 +23,13 @@ interface MessageInputProps {
 
 export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageInputProps) {
   const [text, setText] = useState('');
-  // Defer TextInput rendering on Windows to avoid Hermes crash during initial mount
-  const [isReady, setIsReady] = useState(Platform.OS !== 'windows');
-
-  // On Windows, delay TextInput mount to avoid Fabric+Hermes initialization crash
-  React.useEffect(() => {
-    if (Platform.OS === 'windows') {
-      const timer = setTimeout(() => setIsReady(true), 500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
 
   const handleSend = () => {
-    console.log('[MessageInput] ====== handleSend ENTRY ======');
     const trimmed = text.trim();
-    console.log('[MessageInput] trimmed:', trimmed);
-    console.log('[MessageInput] isLoading:', isLoading);
     if (trimmed && !isLoading) {
-      // On Windows, defer state changes to next frame to avoid Fabric event race condition.
-      // The native C++ event dispatcher can crash if we modify state during its callback.
-      if (Platform.OS === 'windows') {
-        console.log('[MessageInput] Windows: deferring to next frame...');
-        setTimeout(() => {
-          console.log('[MessageInput] Deferred: calling onSend...');
-          onSend(trimmed);
-          setText('');
-          console.log('[MessageInput] Deferred: done');
-        }, 0);
-      } else {
-        console.log('[MessageInput] Calling onSend...');
-        onSend(trimmed);
-        console.log('[MessageInput] onSend returned');
-        setText('');
-        console.log('[MessageInput] setText done');
-      }
+      onSend(trimmed);
+      setText('');
     }
-    console.log('[MessageInput] handleSend EXIT');
   };
 
   const handleKeyPress = (e: { nativeEvent: { key: string } }) => {
@@ -85,40 +52,19 @@ export function MessageInput({ onSend, isLoading, isDarkMode, error }: MessageIn
         </View>
       )}
       <View style={[styles.inputRow, { backgroundColor }]}>
-        {/* On Windows, defer TextInput mount to avoid Fabric+Hermes crash */}
-        {isReady ? (
-          <TextInput
-            style={[
-              styles.input,
-              { color: textColor, backgroundColor },
-              // Fixed height on Windows to avoid Fabric+Hermes layout crash
-              Platform.OS === 'windows' && styles.inputWindows,
-            ]}
-            placeholder="Ask about HR, Finance, Sales, or Support..."
-            placeholderTextColor={placeholderColor}
-            value={text}
-            onChangeText={setText}
-            // onKeyPress causes crashes on Windows with Fabric+Hermes - use button only
-            onKeyPress={Platform.OS === 'windows' ? undefined : handleKeyPress}
-            // multiline causes layout measurement crashes on Windows with Fabric+Hermes
-            multiline={Platform.OS !== 'windows'}
-            maxLength={2000}
-            editable={!isLoading}
-            // Disable spell check and autocorrect to reduce crash risk
-            spellCheck={false}
-            autoCorrect={false}
-            autoCapitalize="none"
-            // Submit on Enter for single-line mode (Windows)
-            onSubmitEditing={Platform.OS === 'windows' ? handleSend : undefined}
-            returnKeyType={Platform.OS === 'windows' ? 'send' : undefined}
-            // Prevent native auto-blur on submit which causes Fabric race condition crash
-            blurOnSubmit={Platform.OS === 'windows' ? false : true}
-          />
-        ) : (
-          <View style={[styles.input, styles.inputWindows, { backgroundColor }]}>
-            <Text style={{ color: placeholderColor }}>Loading...</Text>
-          </View>
-        )}
+        <TextInput
+          style={[styles.input, { color: textColor, backgroundColor }]}
+          placeholder="Ask about HR, Finance, Sales, or Support..."
+          placeholderTextColor={placeholderColor}
+          value={text}
+          onChangeText={setText}
+          onKeyPress={handleKeyPress}
+          multiline
+          maxLength={2000}
+          editable={!isLoading}
+          onSubmitEditing={handleSend}
+          blurOnSubmit={false}
+        />
         <Pressable
           style={[
             styles.sendButton,
@@ -166,11 +112,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     maxHeight: 120,
     paddingVertical: 8,
-  },
-  // Fixed height for Windows to avoid Fabric+Hermes layout measurement crash
-  inputWindows: {
-    height: 40,
-    maxHeight: 40,
   },
   sendButton: {
     backgroundColor: '#007AFF',

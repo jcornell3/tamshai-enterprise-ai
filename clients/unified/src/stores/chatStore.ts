@@ -5,9 +5,6 @@
  * Handles SSE streaming, confirmations, and message history.
  */
 
-// DEBUG: Module load confirmation
-console.log('[ChatStore] ====== MODULE LOADED ======');
-
 import { create } from 'zustand';
 import { ChatMessage } from '../types';
 import * as apiService from '../services/api';
@@ -50,28 +47,18 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
 
   // Actions
   sendMessage: async (content: string) => {
-    console.log('[ChatStore] ====== sendMessage ENTRY ======');
-    console.log('[ChatStore] content:', content);
-    console.log('[ChatStore] content length:', content ? content.length : 0);
-
-    console.log('[ChatStore] Calling getAccessToken...');
     let accessToken: string | null = null;
     try {
       accessToken = await getAccessToken();
-      console.log('[ChatStore] getAccessToken returned, token length:', accessToken ? accessToken.length : 0);
     } catch (tokenError) {
-      console.log('[ChatStore] getAccessToken threw:', tokenError);
       set({ error: 'Failed to get access token' });
       return;
     }
 
     if (!accessToken) {
-      console.log('[ChatStore] No access token, returning');
       set({ error: 'Not authenticated. Please log in.' });
       return;
     }
-
-    console.log('[ChatStore] Got token, building messages...');
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -91,21 +78,16 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
       isStreaming: true,
     };
 
-    console.log('[ChatStore] Calling set() to add messages...');
     set((state) => ({
       messages: [...state.messages, userMessage, assistantMessage],
       isStreaming: true,
       error: null,
       currentStreamingId: assistantId,
     }));
-    console.log('[ChatStore] set() returned');
 
     // Setup abort controller
-    console.log('[ChatStore] Creating AbortController...');
     streamAbortController = new AbortController();
-    console.log('[ChatStore] AbortController created');
 
-    console.log('[ChatStore] ====== ABOUT TO CALL apiService.streamQuery ======');
     try {
       await apiService.streamQuery(
         content,
@@ -158,8 +140,6 @@ export const useChatStore = create<ChatStore>((set, _get) => ({
         streamAbortController.signal
       );
     } catch (error) {
-      // Handle any uncaught errors from streamQuery
-      console.error('[ChatStore] streamQuery error:', error);
       set((state) => ({
         messages: state.messages.map((msg) =>
           msg.id === assistantId

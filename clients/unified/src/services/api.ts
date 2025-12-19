@@ -10,9 +10,6 @@
  * - V.1: No authorization logic - backend handles all access control
  */
 
-// DEBUG: Module load confirmation
-console.log('[API] ====== MODULE LOADED ======');
-
 import { QueryRequest, SSEEvent, ChatMessage, PendingConfirmation } from '../types';
 
 // Simple UUID generator (crypto.randomUUID not available in all RN environments)
