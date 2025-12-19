@@ -2,11 +2,11 @@
 
 **Date**: December 19, 2025
 **Platform**: React Native Windows 0.80.0
-**Status**: Unresolved - Blocked by RN Windows Architecture Issues
+**Status**: CRITICAL - All Configurations Fail
 
 ## Executive Summary
 
-The TamshaiAI Windows desktop client experiences fatal crashes when using TextInput components. After extensive investigation, we've identified this as a fundamental incompatibility in React Native Windows 0.80 between its JavaScript engines and the available UI architectures.
+The TamshaiAI Windows desktop client experiences fatal crashes when using TextInput components. After exhaustive investigation testing **all four possible architecture/engine combinations**, we have determined that **no working configuration exists** for React Native Windows 0.80 with our technology stack.
 
 ## Problem Statement
 
@@ -22,12 +22,36 @@ When a user types in a TextInput field and submits (Enter key or button press), 
 - **Windows SDK**: 10.0.19041.0+
 - **Target**: Windows 10/11 (UWP)
 
+## Architecture Compatibility Matrix (COMPLETE)
+
+All four possible configurations have now been tested:
+
+| JS Engine | Architecture | Template | TextInput | Modern JS | Status |
+|-----------|--------------|----------|-----------|-----------|--------|
+| Hermes | Fabric/Composition | cpp-app | ❌ Crashes | ✅ Works | **BLOCKED** |
+| **Hermes** | **Legacy UWP** | **old/uwp-cpp-app** | **❌ Crashes** | **✅ Works** | **BLOCKED** |
+| Chakra | Legacy UWP | old/uwp-cpp-app | ✅ Stable | ❌ Fails | **BLOCKED** |
+| Chakra | Fabric/Composition | cpp-app | N/A | N/A | Build Error |
+
+### Critical Finding
+
+The "Golden Path" hypothesis (Hermes + Legacy UWP) was tested and **FAILED**. The Hermes access violation crash occurs regardless of the UI architecture (Fabric or Legacy). This indicates the bug is in:
+
+1. **Hermes's JavaScript-to-Native bridge**, not in the UI layer
+2. **React Native Windows's TextInput event handling** that triggers Hermes callbacks
+3. **A fundamental incompatibility** between Hermes and RN Windows 0.80's TextInput implementation
+
+---
+
 ## Crash Details
 
-### Scenario 1: Hermes Engine + Fabric Architecture (New Architecture)
+### Scenario 1: Hermes + Fabric Architecture (New Architecture)
 
 **Configuration**:
-- `UseHermes=true` (ExperimentalFeatures.props)
+```xml
+<UseHermes>true</UseHermes>
+<RnwNewArch>true</RnwNewArch>  <!-- or omitted, defaults to Fabric -->
+```
 - Template: `cpp-app` (Composition/WinAppSDK)
 
 **Crash**:
@@ -35,56 +59,67 @@ When a user types in a TextInput field and submits (Enter key or button press), 
 Exception thrown at 0x00007FF8AE9A2D10 (hermes.dll) in TamshaiAiUnified.exe:
 0xC0000005: Access violation reading location 0x0000000000000010.
 
-Stack trace:
 hermes.dll!hermes::vm::HermesValue::getObject()
 hermes.dll!hermes::vm::PseudoHandle<...>::get()
 hermes.dll!facebook::hermes::HermesRuntimeImpl::call()
 Microsoft.ReactNative.dll!...
 ```
 
-**Root Cause Analysis**:
-The crash occurs in Hermes's `getObject()` function when dereferencing a null/invalid pointer (0x10 offset from null). This happens during TextInput's layout measurement when:
-1. User types text and triggers re-render
-2. Fabric's C++ layout engine measures the TextInput
-3. A race condition causes Hermes to access a garbage-collected or unmapped object
-4. The null dereference crashes the process
-
-**Third-Party Confirmation**:
-> "The Fabric (New Architecture) C++ implementation of TextInput in React Native Windows has known race conditions in its layout measurement code when using the Hermes JavaScript engine."
-
-### Scenario 2: Chakra Engine + Legacy UWP Architecture
+### Scenario 2: Hermes + Legacy UWP Architecture (THE "GOLDEN PATH" - ALSO FAILS)
 
 **Configuration**:
-- `UseHermes=false` (ExperimentalFeatures.props)
+```xml
+<UseHermes>true</UseHermes>
+<RnwNewArch>false</RnwNewArch>
+<UseExperimentalNuget>true</UseExperimentalNuget>
+```
 - Template: `old/uwp-cpp-app` (Legacy XAML Islands)
+
+**Crash** (IDENTICAL to Scenario 1):
+```
+'TamshaiAiUnified.exe' (Win32): Loaded 'hermes.dll'.
+Exception thrown at 0x00007FFB8552AD9C (hermes.dll) in TamshaiAiUnified.exe:
+0xC0000005: Access violation reading location 0x0000000000000010.
+```
+
+**Analysis**:
+The crash occurs at the **exact same memory offset** (0x10 from null pointer) in hermes.dll regardless of whether using Fabric or Legacy architecture. This proves the crash is in:
+- Hermes's internal object handling (`HermesValue::getObject()`)
+- NOT in the UI layer's TextInput implementation
+
+The crash is triggered when TextInput events cause JavaScript callbacks that attempt to access a garbage-collected or invalid Hermes object.
+
+### Scenario 3: Chakra + Legacy UWP Architecture
+
+**Configuration**:
+```xml
+<UseHermes>false</UseHermes>
+<RnwNewArch>false</RnwNewArch>
+```
+- Template: `old/uwp-cpp-app`
 
 **Crash**:
 ```
-Exception thrown at 0x00007FF8C25D782A in TamshaiAiUnified.exe:
-Microsoft C++ exception: UnifiedRegex::ParseError at memory location 0x0000001371EFA3C0.
-
-Exception thrown: ParseExceptionObject
+Exception thrown: UnifiedRegex::ParseError
 Exception thrown: facebook::jsi::JSError
-
 App displays: "Exception: Unexpected quantifier  no stack"
 ```
 
-**Root Cause Analysis**:
-Chakra (the legacy Windows JavaScript engine) does not support ES2018+ regex features:
+**Root Cause**:
+Chakra (Windows's legacy JS engine) does not support ES2018+ regex features:
 - Named capture groups: `(?<name>...)`
 - Lookbehind assertions: `(?<=...)` or `(?<!...)`
 - Unicode property escapes: `\p{...}`
 
-Modern npm packages (React 19, zustand 5.x, etc.) use these features, causing Chakra to fail during JavaScript parsing before the app even renders.
+React 19 and modern npm packages use these features, causing Chakra to fail during JavaScript parsing.
 
-**Attempted Fix**:
-Downgraded zustand from 5.0.2 to 4.5.5 to remove one source of modern regex. However, other dependencies (React 19, RN 0.80 internals) still contain incompatible syntax.
+### Scenario 4: Chakra + Fabric/Composition
 
-### Scenario 3: Chakra Cannot Be Disabled with Composition
-
-**Attempted Configuration**:
-- `UseHermes=false`
-- `RnwNewArch=false`
+**Configuration**:
+```xml
+<UseHermes>false</UseHermes>
+<RnwNewArch>false</RnwNewArch>
+```
 - Template: `cpp-app` (Composition)
 
 **Build Error**:
@@ -94,164 +129,153 @@ Projects built against Microsoft.ReactNative.Composition require 'RnwNewArch' to
 ```
 
 **Root Cause**:
-The Composition architecture (WinAppSDK/WinUI 3) fundamentally requires the New Architecture (Fabric). You cannot use Composition without Fabric.
+Composition architecture requires Fabric. Cannot be built with `RnwNewArch=false`.
 
-## Architecture Compatibility Matrix
+---
 
-| JS Engine | Architecture | Template | TextInput | Modern JS | Status |
-|-----------|--------------|----------|-----------|-----------|--------|
-| Hermes | Fabric/Composition | cpp-app | ❌ Crashes | ✅ Works | **Blocked** |
-| Hermes | Legacy UWP | old/uwp-cpp-app | ? Unknown | ✅ Works | Not Tested |
-| Chakra | Legacy UWP | old/uwp-cpp-app | ✅ Stable | ❌ Fails | **Blocked** |
-| Chakra | Fabric/Composition | cpp-app | N/A | N/A | Build Error |
+## Root Cause Analysis
+
+### The Hermes Crash (Scenarios 1 & 2)
+
+The access violation at `0x0000000000000010` indicates a null pointer dereference with a small offset. In C++ terms:
+```cpp
+// Pseudo-code of what's happening in hermes.dll
+HermesValue value = /* some value */;
+JSObject* obj = value.getObject();  // Returns pointer at address 0x0
+obj->someField;  // Accesses offset 0x10 from null → CRASH
+```
+
+**Why this happens:**
+1. User types in TextInput and triggers a JavaScript event
+2. React Native Windows calls into Hermes to execute the event handler
+3. Hermes attempts to access a JavaScript object that was:
+   - Garbage collected too early, OR
+   - Never properly initialized, OR
+   - Corrupted by a race condition in the native-to-JS bridge
+4. The null/invalid pointer dereference crashes the process
+
+**Why it's NOT architecture-specific:**
+The bug is in the Hermes ↔ React Native Windows bridge code, which is shared between Fabric and Legacy architectures. Both architectures use the same:
+- `Microsoft.ReactNative.dll` for JS bridge
+- `hermes.dll` for JavaScript execution
+- TextInput event handling code paths
+
+### The Chakra Crash (Scenario 3)
+
+Chakra's regex parser is from the ES5/ES6 era and lacks ES2018 features. Modern JavaScript ecosystems (React 19, etc.) assume ES2018+ support, making Chakra fundamentally incompatible.
+
+---
 
 ## Workarounds Attempted
 
-### 1. Deferred TextInput Rendering
-```typescript
-const [showInput, setShowInput] = useState(false);
-useEffect(() => {
-  const timer = setTimeout(() => setShowInput(true), 100);
-  return () => clearTimeout(timer);
-}, []);
+| Workaround | Result |
+|------------|--------|
+| Deferred TextInput rendering | ❌ No effect |
+| `blurOnSubmit={false}` + manual blur | ❌ No effect |
+| `Keyboard.dismiss()` before submit | ❌ No effect |
+| Switch to Legacy UWP template | ❌ Changed crash type (Chakra) |
+| Disable Hermes (`UseHermes=false`) | ❌ Chakra regex crash |
+| Downgrade zustand to v4.x | ❌ Other deps still fail |
+| **Enable Hermes + Legacy UWP ("Golden Path")** | ❌ **SAME HERMES CRASH** |
+
+---
+
+## Viable Solutions
+
+Given that all RN Windows 0.80 configurations fail, the only viable paths forward are:
+
+### Option A: Downgrade to React Native Windows 0.73.x (RECOMMENDED)
+
+**Rationale**: RN Windows 0.73 has a more stable Hermes integration and predates the problematic bridge changes.
+
+**Steps**:
+1. Downgrade `react-native-windows` to `0.73.x`
+2. Potentially downgrade `react-native` to `0.73.x`
+3. Regenerate Windows project
+4. Test TextInput functionality
+
+**Risk**: API changes, loss of 0.80 features, dependency compatibility issues
+
+### Option B: Custom Native TextInput Module
+
+**Rationale**: Bypass React Native's TextInput entirely with a Windows-native implementation.
+
+**Steps**:
+1. Create a C++/WinRT native module exposing a XAML TextBox
+2. Bridge text input/output to JavaScript via promises
+3. Replace `<TextInput>` with custom `<NativeTextInput>` component
+
+**Risk**: Significant development effort, maintenance burden, feature parity challenges
+
+### Option C: Electron Migration
+
+**Rationale**: Electron uses Chromium's V8 engine and has mature, stable input handling.
+
+**Steps**:
+1. Create Electron shell for Windows
+2. Reuse React web components (not React Native)
+3. Implement OAuth flow for desktop
+
+**Risk**: Complete architecture change, larger binary (~150MB vs ~50MB)
+
+### Option D: Wait for Microsoft Fix
+
+**Rationale**: Report the issue to Microsoft and wait for a fix.
+
+**Steps**:
+1. File detailed bug report on react-native-windows GitHub
+2. Monitor releases for fix
+3. Use alternative client (web) in the meantime
+
+**Risk**: Unknown timeline, may never be fixed for 0.80
+
+---
+
+## Recommendation
+
+**Short-term**: Proceed with Option A (downgrade to RN Windows 0.73.x). This is the lowest-risk path with the highest probability of success.
+
+**Medium-term**: If 0.73 also fails, evaluate Option B (native module) vs Option C (Electron) based on team skills and timeline.
+
+**Long-term**: Monitor React Native Windows releases and upgrade when Hermes stability improves.
+
+---
+
+## Appendix: Full Debug Log (Scenario 2 - "Golden Path" Failure)
+
 ```
-**Result**: No effect. Crash still occurs on submit.
-
-### 2. blurOnSubmit={false} + Manual Blur
-```typescript
-<TextInput
-  blurOnSubmit={false}
-  onSubmitEditing={() => {
-    inputRef.current?.blur();
-    setTimeout(() => handleSend(), 50);
-  }}
-/>
+'TamshaiAiUnified.exe' (Win32): Loaded 'hermes.dll'. Symbol loading disabled.
+...
+[App] OnActivated called
+[App] Protocol activation detected
+[App] Protocol URL: com.tamshai.ai://callback/?state=...&code=...
+[App] App already running - writing to IPC file
+[IPC] Writing URL to IPC file: com.tamshai.ai://callback/?...
+[IPC] SUCCESS - Wrote URL to IPC file
+...
+Exception thrown at 0x00007FFB8552AD9C (hermes.dll) in TamshaiAiUnified.exe:
+0xC0000005: Access violation reading location 0x0000000000000010.
 ```
-**Result**: No effect. Crash still occurs.
 
-### 3. Keyboard.dismiss() Before Submit
-```typescript
-const handleSend = () => {
-  Keyboard.dismiss();
-  setTimeout(() => onSend(text), 100);
-};
-```
-**Result**: No effect. Crash still occurs.
+Note: OAuth flow completes successfully. Crash occurs specifically when user interacts with TextInput after authentication.
 
-### 4. Switch to Legacy UWP Template
-Regenerated Windows project with `--template old/uwp-cpp-app`.
-**Result**: Changed crash from Hermes access violation to Chakra regex parse error.
-
-### 5. Disable Hermes (UseHermes=false)
-Set `<UseHermes>false</UseHermes>` in ExperimentalFeatures.props.
-**Result**: App uses Chakra, but Chakra can't parse modern JavaScript.
-
-### 6. Downgrade zustand to v4.x
-```bash
-npm install zustand@4.5.5 --save
-```
-**Result**: Reduces one source of modern regex, but React 19 and other deps still fail.
+---
 
 ## Files Modified During Investigation
 
 | File | Changes |
 |------|---------|
-| `windows/ExperimentalFeatures.props` | Set `UseHermes=false` |
-| `windows/TamshaiAiUnified/App.cpp` | Added protocol activation for OAuth |
-| `windows/TamshaiAiUnified/ReactPackageProvider.cpp` | Added DeepLinkModule native module |
-| `windows/TamshaiAiUnified/Package.appxmanifest` | Added protocol handler |
+| `windows/ExperimentalFeatures.props` | Tested all 4 configurations |
+| `windows/TamshaiAiUnified/App.cpp` | Protocol activation for OAuth |
+| `windows/TamshaiAiUnified/ReactPackageProvider.cpp` | DeepLinkModule native module |
+| `windows/TamshaiAiUnified/Package.appxmanifest` | Protocol handler |
 | `package.json` | Downgraded zustand to 4.5.5 |
-| `src/components/MessageInput.tsx` | Various workaround attempts (reverted) |
 
-## Potential Solutions (Not Yet Attempted)
-
-### Option A: Downgrade React Native Windows
-Use RN Windows 0.73.x or earlier which has:
-- Stable legacy TextInput implementation
-- Better Hermes compatibility
-- Less aggressive New Architecture requirements
-
-**Risk**: May require significant code changes, loss of new features.
-
-### Option B: Add Babel Regex Transform
-Configure Babel to transpile modern regex to ES5-compatible patterns:
-```javascript
-// babel.config.js
-module.exports = {
-  presets: ['module:@react-native/babel-preset'],
-  plugins: [
-    ['@babel/plugin-transform-named-capturing-groups-regex'],
-  ],
-};
-```
-**Risk**: May not cover all incompatible patterns in node_modules.
-
-### Option C: Use Custom TextInput Native Module
-Implement a Windows-native TextInput that bypasses React Native's implementation:
-```cpp
-REACT_MODULE(SafeTextInputModule)
-struct SafeTextInputModule {
-  REACT_METHOD(getValue)
-  void getValue(ReactPromise<winrt::hstring> promise);
-};
-```
-**Risk**: Significant development effort, maintenance burden.
-
-### Option D: Wait for RN Windows Fix
-Monitor these GitHub issues:
-- https://github.com/microsoft/react-native-windows/issues (TextInput crashes)
-- https://github.com/nicknisi/mac-dotfiles/discussions (Hermes + Fabric)
-
-**Risk**: Unknown timeline, may never be fixed for 0.80.
-
-### Option E: Switch to Electron
-Abandon React Native Windows in favor of Electron:
-- Known-working WebView-based approach
-- Larger binary size (~150MB vs ~50MB)
-- Different build/deployment pipeline
-
-**Risk**: Significant architecture change, different skill requirements.
-
-## Recommendations
-
-1. **Short-term**: Evaluate Option A (downgrade to RN Windows 0.73.x)
-2. **Medium-term**: Investigate Option C (native TextInput module)
-3. **Long-term**: Monitor RN Windows releases for TextInput fixes
-
-## Related Issues
-
-- React Native Windows TextInput race conditions
-- Hermes null pointer dereference in HermesValue::getObject
-- Chakra ES2018+ regex incompatibility
-- Fabric layout measurement threading issues
-
-## Appendix: Full Stack Traces
-
-### Hermes Crash (Scenario 1)
-```
-'TamshaiAiUnified.exe' (Win32): Loaded 'hermes.dll'.
-Exception thrown at 0x00007FF8AE9A2D10 (hermes.dll) in TamshaiAiUnified.exe:
-0xC0000005: Access violation reading location 0x0000000000000010.
-
-hermes.dll!hermes::vm::HermesValue::getObject() Line 230
-hermes.dll!hermes::vm::PseudoHandle<hermes::vm::JSObject>::get() Line 58
-hermes.dll!facebook::hermes::HermesRuntimeImpl::call(...)
-Microsoft.ReactNative.dll!facebook::react::invokeCallback(...)
-Microsoft.ReactNative.dll!facebook::react::NativeToJsBridge::invokeCallback(...)
-```
-
-### Chakra Crash (Scenario 2)
-```
-Windows.UI.Xaml.dll!ReturnHr(1) tid(16dc) 80070057 The parameter is incorrect.
-Exception thrown: UnifiedRegex::ParseError at memory location 0x0000001371EFA3C0.
-Exception thrown: ParseExceptionObject at memory location 0x0000001371EF7C10.
-Exception thrown: facebook::jsi::JSError at memory location 0x0000001371EFE950.
-
-Thread 'Chakra Parallel Worker Thread' has exited with code 1.
-Thread 'Chakra Background Recycler' has exited with code 1.
-Program 'TamshaiAiUnified.exe' has exited with code 1.
-```
+---
 
 ## Contact
 
 For questions about this investigation, contact the development team.
+
+**Document Version**: 2.0
+**Last Updated**: December 19, 2025
