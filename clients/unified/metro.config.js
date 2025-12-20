@@ -40,10 +40,8 @@ const config = {
     // Inject globalThis polyfill at the very beginning of the bundle
     // This runs BEFORE any other code, fixing Chakra's lack of ES2020 globalThis
     getPolyfills: () => {
-      const defaultPolyfills = require('@react-native/js-polyfills/polyfills');
       return [
         path.resolve(__dirname, 'src/polyfills/globalThis.js'),
-        ...defaultPolyfills,
       ];
     },
   },
