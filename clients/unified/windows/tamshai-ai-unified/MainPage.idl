@@ -1,0 +1,10 @@
+#include "NamespaceRedirect.h"
+
+namespace tamshai-ai-unified
+{
+    [default_interface]
+    runtimeclass MainPage : XAML_NAMESPACE.Controls.Page
+    {
+        MainPage();
+    }
+}

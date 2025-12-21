@@ -18,11 +18,11 @@ const rnwPath = fs.realpathSync(
 const config = {
   resolver: {
     blockList: exclusionList([
-      // This stops "npx @react-native-community/cli run-windows" from causing the metro server to crash if its already running
+      // This stops "react-native run-windows" from causing the metro server to crash if its already running
       new RegExp(
         `${path.resolve(__dirname, 'windows').replace(/[/\\]/g, '/')}.*`,
       ),
-      // This prevents "npx @react-native-community/cli run-windows" from hitting: EBUSY: resource busy or locked, open msbuild.ProjectImports.zip or other files produced by msbuild
+      // This prevents "react-native run-windows" from hitting: EBUSY: resource busy or locked, open msbuild.ProjectImports.zip or other files produced by msbuild
       new RegExp(`${rnwPath}/build/.*`),
       new RegExp(`${rnwPath}/target/.*`),
       /.*\.ProjectImports\.zip/,
@@ -35,15 +35,8 @@ const config = {
         inlineRequires: true,
       },
     }),
-  },
-  serializer: {
-    // Inject globalThis polyfill at the very beginning of the bundle
-    // This runs BEFORE any other code, fixing Chakra's lack of ES2020 globalThis
-    getPolyfills: () => {
-      return [
-        path.resolve(__dirname, 'src/polyfills/globalThis.js'),
-      ];
-    },
+    // This fixes the 'missing-asset-registry-path` error (see https://github.com/microsoft/react-native-windows/issues/11437)
+    assetRegistryPath: 'react-native/Libraries/Image/AssetRegistry',
   },
 };
 
