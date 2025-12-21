@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- This project was created with react-native-windows 0.80.0 -->
+<!-- This project was created with react-native-windows 0.73.22 -->
 <Project ToolsVersion="Current" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(SolutionDir)\ExperimentalFeatures.props" Condition="Exists('$(SolutionDir)\ExperimentalFeatures.props')" />
   <PropertyGroup Label="Globals">
     <CppWinRTOptimized>true</CppWinRTOptimized>
     <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
     <MinimalCoreWin>true</MinimalCoreWin>
-    <ProjectGuid>{3965751b-365e-4c18-a97f-9ba4709fb7df}</ProjectGuid>
-    <ProjectName>TamshaiAiUnified</ProjectName>
-    <RootNamespace>TamshaiAiUnified</RootNamespace>
+    <ProjectGuid>{64b3f0f1-6bc1-461d-a70b-32e105c09efe}</ProjectGuid>
+    <ProjectName>tamshai-ai-unified</ProjectName>
+    <RootNamespace>tamshai-ai-unified</RootNamespace>
     <DefaultLanguage>en-US</DefaultLanguage>
     <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
     <AppContainerApplication>true</AppContainerApplication>
