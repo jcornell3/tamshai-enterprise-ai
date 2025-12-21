@@ -10,6 +10,12 @@
 
   <PropertyGroup Label="Microsoft.ReactNative Experimental Features">
     <!--
+      Override NuGet package version to use 0.73.21 (latest available on NuGet.org).
+      The npm package is 0.73.22, but NuGet packages only go up to 0.73.21.
+    -->
+    <ReactNativeWindowsVersion>0.73.21</ReactNativeWindowsVersion>
+
+    <!--
       Enables default usage of Hermes.
 
       See https://microsoft.github.io/react-native-windows/docs/hermes
