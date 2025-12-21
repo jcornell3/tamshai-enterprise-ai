@@ -9,7 +9,7 @@
 using namespace winrt;
 using namespace xaml;
 
-namespace winrt::tamshai-ai-unified::implementation
+namespace winrt::tamshai_ai_unified::implementation
 {
     MainPage::MainPage()
     {
