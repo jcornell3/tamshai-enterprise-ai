@@ -6,7 +6,7 @@
 
 namespace activation = winrt::Windows::ApplicationModel::Activation;
 
-namespace winrt::tamshai-ai-unified::implementation
+namespace winrt::tamshai_ai_unified::implementation
 {
     struct App : AppT<App>
     {
@@ -18,4 +18,4 @@ namespace winrt::tamshai-ai-unified::implementation
       private:
         using super = AppT<App>;
     };
-} // namespace winrt::tamshai-ai-unified::implementation
+} // namespace winrt::tamshai_ai_unified::implementation

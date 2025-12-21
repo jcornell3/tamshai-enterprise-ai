@@ -2,7 +2,7 @@
 #include "MainPage.g.h"
 #include <winrt/Microsoft.ReactNative.h>
 
-namespace winrt::tamshai-ai-unified::implementation
+namespace winrt::tamshai_ai_unified::implementation
 {
     struct MainPage : MainPageT<MainPage>
     {
@@ -10,7 +10,7 @@ namespace winrt::tamshai-ai-unified::implementation
     };
 }
 
-namespace winrt::tamshai-ai-unified::factory_implementation
+namespace winrt::tamshai_ai_unified::factory_implementation
 {
     struct MainPage : MainPageT<MainPage, implementation::MainPage>
     {
