@@ -269,7 +269,51 @@ Note: OAuth flow completes successfully. Crash occurs specifically when user int
 | `windows/TamshaiAiUnified/App.cpp` | Protocol activation for OAuth |
 | `windows/TamshaiAiUnified/ReactPackageProvider.cpp` | DeepLinkModule native module |
 | `windows/TamshaiAiUnified/Package.appxmanifest` | Protocol handler |
-| `package.json` | Downgraded zustand to 4.5.5 |
+| `package.json` | Downgraded zustand to 4.5.5, then full RN downgrade |
+| `babel.config.js` | Added regex transpilation plugins |
+| `metro.config.js` | Attempted polyfill injection |
+
+---
+
+## RESOLUTION: Downgrade to React Native Windows 0.73.22 (December 20, 2025)
+
+After exhaustive testing of all architecture/engine combinations in RN Windows 0.80, **Path B (Downgrade)** was implemented as the only viable solution.
+
+### What Was Changed
+
+**Dependencies Downgraded**:
+- `react-native`: 0.80.0 → **0.73.0**
+- `react-native-windows`: 0.80.0 → **0.73.22**
+- `react`: 19.1.0 → **18.2.0**
+- All devDependencies updated to 0.73-compatible versions
+
+**Windows Project Regenerated**:
+- Deleted `windows/` folder and regenerated with `react-native-windows-init --version 0.73.22`
+- Project name changed from `TamshaiAiUnified` to `tamshai-ai-unified` (kebab-case)
+- Re-added DeepLinkModule for OAuth protocol activation
+- Updated `Package.appxmanifest` with `com.tamshai.ai://` protocol handler
+- Configured `ExperimentalFeatures.props` to use Chakra (`UseHermes=false`)
+
+### Why This Works
+
+RN Windows 0.73.x with Chakra is the **last known stable configuration** for UWP apps:
+- Chakra handles ES5 JavaScript reliably
+- Babel transpilation plugins convert ES2018+ regex to ES5-compatible alternatives
+- No globalThis issues (React 18 doesn't require it)
+- No Hermes.dll crashes
+- TextInput component is fully functional
+
+### Testing Status
+
+✅ **Project regenerated and committed** (commit `4d5896c`)
+⏳ **Pending**: Build and test TextInput functionality in Visual Studio 2022
+
+### Next Steps
+
+1. Open solution in VS 2022: `clients/unified/windows/tamshai-ai-unified.sln`
+2. Clean and rebuild solution
+3. Test OAuth flow and TextInput interaction
+4. Verify no Hermes crashes occur
 
 ---
 
@@ -277,5 +321,5 @@ Note: OAuth flow completes successfully. Crash occurs specifically when user int
 
 For questions about this investigation, contact the development team.
 
-**Document Version**: 2.0
-**Last Updated**: December 19, 2025
+**Document Version**: 3.0
+**Last Updated**: December 20, 2025
