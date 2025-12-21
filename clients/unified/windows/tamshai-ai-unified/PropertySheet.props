@@ -11,6 +11,9 @@
     For more advanced scenarios, and complete documentation, please see:
     https://github.com/Microsoft/xlang/tree/master/src/package/cppwinrt/nuget
     -->
-  <PropertyGroup />
+  <PropertyGroup>
+    <!-- Override NuGet package version to use 0.73.21 (latest available) instead of 0.73.22 (doesn't exist) -->
+    <ReactNativeWindowsVersion>0.73.21</ReactNativeWindowsVersion>
+  </PropertyGroup>
   <ItemDefinitionGroup />
 </Project>
