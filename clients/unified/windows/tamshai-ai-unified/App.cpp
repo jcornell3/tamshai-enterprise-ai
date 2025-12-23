@@ -87,10 +87,11 @@ App::App() noexcept
 /// <param name="e">Details about the launch request and process.</param>
 void App::OnLaunched(activation::LaunchActivatedEventArgs const& e)
 {
-    super::OnLaunched(e);
+    // Clear any stale IPC files from previous sessions
+    ClearStaleIpcFile();
 
-    Frame rootFrame = Window::Current().Content().as<Frame>();
-    rootFrame.Navigate(xaml_typename<MainPage>(), box_value(e.Arguments()));
+    // React Native base class handles Frame creation and MainPage navigation
+    super::OnLaunched(e);
 }
 
 /// <summary>
@@ -127,12 +128,9 @@ void App::OnActivated(Activation::IActivatedEventArgs const &e) {
     }
   }
 
-  auto preActivationContent = Window::Current().Content();
+
+  // Let React Native base class handle Frame creation and navigation
   super::OnActivated(e);
-  if (!preActivationContent && Window::Current()) {
-    Frame rootFrame = Window::Current().Content().as<Frame>();
-    rootFrame.Navigate(xaml_typename<MainPage>(), nullptr);
-  }
 }
 
 /// <summary>
