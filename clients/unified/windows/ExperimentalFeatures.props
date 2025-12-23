@@ -16,10 +16,10 @@
     <ReactNativeWindowsVersion>0.73.21</ReactNativeWindowsVersion>
 
     <!--
-      Disable version check because we intentionally have a minor version mismatch.
+      Allow NuGet/npm version mismatch because we intentionally have a minor version mismatch.
       npm: 0.73.22, NuGet: 0.73.21 (0.73.22 doesn't exist on NuGet.org)
     -->
-    <DisableReactNativeVersionCheck>true</DisableReactNativeVersionCheck>
+    <ReactNativeWindowsAllowNugetNpmMismatch>true</ReactNativeWindowsAllowNugetNpmMismatch>
 
     <!--
       Enables default usage of Hermes.
