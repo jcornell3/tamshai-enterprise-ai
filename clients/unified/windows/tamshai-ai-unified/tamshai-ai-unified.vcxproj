@@ -8,7 +8,7 @@
     <MinimalCoreWin>true</MinimalCoreWin>
     <ProjectGuid>{64b3f0f1-6bc1-461d-a70b-32e105c09efe}</ProjectGuid>
     <ProjectName>tamshai-ai-unified</ProjectName>
-    <RootNamespace>tamshai-ai-unified</RootNamespace>
+    <RootNamespace>TamshaiAiUnified</RootNamespace>
     <DefaultLanguage>en-US</DefaultLanguage>
     <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
     <AppContainerApplication>true</AppContainerApplication>
