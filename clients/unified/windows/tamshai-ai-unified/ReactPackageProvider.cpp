@@ -103,7 +103,7 @@ private:
     winrt::Microsoft::ReactNative::ReactContext m_reactContext;
 };
 
-namespace winrt::tamshai_ai_unified::implementation
+namespace winrt::TamshaiAiUnified::implementation
 {
 
 void ReactPackageProvider::CreatePackage(IReactPackageBuilder const &packageBuilder) noexcept
@@ -111,4 +111,4 @@ void ReactPackageProvider::CreatePackage(IReactPackageBuilder const &packageBuil
     AddAttributedModules(packageBuilder, true);
 }
 
-} // namespace winrt::tamshai_ai_unified::implementation
+} // namespace winrt::TamshaiAiUnified::implementation
