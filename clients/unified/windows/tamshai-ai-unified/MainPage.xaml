@@ -8,7 +8,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="White">
-    <react:ReactRootView
-        x:Name="ReactRootView"
-        ComponentName="TamshaiAI"/>
+    <Grid>
+        <TextBlock Text="Hello from Tamshai AI"
+                   FontSize="48"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"/>
+    </Grid>
 </Page>
