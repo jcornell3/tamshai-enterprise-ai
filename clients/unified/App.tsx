@@ -29,11 +29,11 @@ import { useAuthStore } from './src/stores';
 import { ChatScreen } from './src/components';
 
 // Initialize Windows OAuth listener (for browser-based callback handling)
-// TEMP DISABLED: if (Platform.OS === 'windows') {
-// TEMP DISABLED:   // Lazy import to avoid bundling on other platforms
-// TEMP DISABLED:   const { initializeOAuthListener } = require('./src/services/auth/auth.windows');
-// TEMP DISABLED:   initializeOAuthListener();
-// TEMP DISABLED: }
+if (Platform.OS === 'windows') {
+  // Lazy import to avoid bundling on other platforms
+  const { initializeOAuthListener } = require('./src/services/auth/auth.windows');
+  initializeOAuthListener();
+}
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
