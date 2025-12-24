@@ -14,7 +14,8 @@ namespace winrt::TamshaiAiUnified::implementation
     MainPage::MainPage()
     {
         InitializeComponent();
-        auto app = Application::Current().as<App>();
-        ReactRootView().ReactNativeHost(app->Host());
+        // TEMP DISABLED: Isolating crash
+        // auto app = Application::Current().as<App>();
+        // ReactRootView().ReactNativeHost(app->Host());
     }
 }
