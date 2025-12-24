@@ -158,8 +158,7 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.ReactNative" Version="0.73.21" />
-    <PackageReference Include="Microsoft.ReactNative.Cxx" Version="0.73.21" />
+    <!-- Microsoft.ReactNative and Microsoft.ReactNative.Cxx are automatically included via PropertySheets -->
     <PackageReference Include="Microsoft.UI.Xaml" Version="2.8.0" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
