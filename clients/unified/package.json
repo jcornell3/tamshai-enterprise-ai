@@ -20,7 +20,7 @@
     "react-native-app-auth": "^8.0.0",
     "react-native-keychain": "^9.2.2",
     "react-native-safe-area-context": "^5.4.0",
-    "react-native-windows": "0.73.22",
+    "react-native-windows": "0.73.21",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
