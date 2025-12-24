@@ -63,7 +63,7 @@ App::App() noexcept
     InstanceSettings().UseFastRefresh(false);
 #else
     JavaScriptBundleFile(L"index");
-    InstanceSettings().UseWebDebugger(true);
+    InstanceSettings().UseWebDebugger(false);  // Disabled - deprecated in RN 0.73
     InstanceSettings().UseFastRefresh(true);
 #endif
 
