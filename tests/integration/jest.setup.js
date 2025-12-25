@@ -25,8 +25,17 @@ const CONFIG = {
   mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
 };
 
-// Test users that need TOTP handling
-const TEST_USERNAMES = ['eve.thompson', 'alice.chen', 'frank.davis'];
+// All test users - TOTP should be required for all of them
+const TEST_USERNAMES = [
+  'eve.thompson',   // Executive
+  'alice.chen',     // HR Manager
+  'bob.martinez',   // Finance
+  'carol.johnson',  // Sales
+  'dan.williams',   // Support
+  'frank.davis',    // Intern
+  'nina.patel',     // Manager
+  'marcus.johnson', // Engineer
+];
 
 // Storage for user state to restore after tests
 let savedUserState = {};
@@ -153,13 +162,14 @@ async function prepareTestUsers() {
 }
 
 /**
- * Restore test users to their original state
+ * Restore TOTP requirement for all test users
  *
- * IMPORTANT: Only add CONFIGURE_TOTP if user doesn't have an OTP credential.
- * Users with existing OTP credentials should NOT be forced to re-register.
+ * After QA testing, TOTP should be re-enabled for all users:
+ * - If user has OTP credential: No action needed (they can use their authenticator)
+ * - If user has no OTP credential: Add CONFIGURE_TOTP (they'll be prompted on next login)
  */
 async function restoreTestUsers() {
-  console.log('\n🔐 Restoring test users to original state...');
+  console.log('\n🔐 Re-enabling TOTP requirement for all test users...');
 
   // Refresh admin token in case it expired during long tests
   try {
@@ -177,38 +187,40 @@ async function restoreTestUsers() {
         continue;
       }
 
-      const { userId, requiredActions, hasOtpCredential } = saved;
+      const { userId } = saved;
 
-      // Check current OTP credential status (may have changed during tests)
+      // Check current OTP credential status
       const currentCredentials = await getUserCredentials(userId);
-      const currentlyHasOtp = currentCredentials.some((c) => c.type === 'otp');
+      const hasOtpCredential = currentCredentials.some((c) => c.type === 'otp');
 
-      // Determine what required actions to restore
-      let actionsToRestore = [...requiredActions];
+      // Get current user state
+      const user = await getUser(userId);
+      const currentActions = user.requiredActions || [];
 
-      // If user has OTP credential, remove CONFIGURE_TOTP from restoration
-      // (they don't need to re-register - they can just use their existing authenticator)
-      if (currentlyHasOtp && actionsToRestore.includes('CONFIGURE_TOTP')) {
-        actionsToRestore = actionsToRestore.filter((a) => a !== 'CONFIGURE_TOTP');
-        console.log(`   📱 ${username}: Has OTP credential, skipping CONFIGURE_TOTP restoration`);
-      }
-
-      // Restore required actions
-      await updateUserRequiredActions(userId, actionsToRestore);
-
-      if (actionsToRestore.includes('CONFIGURE_TOTP')) {
-        console.log(`   ✅ ${username}: Restored CONFIGURE_TOTP requirement (no OTP credential)`);
-      } else if (requiredActions.includes('CONFIGURE_TOTP') && currentlyHasOtp) {
-        console.log(`   ✅ ${username}: OTP already configured, no re-registration needed`);
+      if (hasOtpCredential) {
+        // User has OTP credential - they don't need CONFIGURE_TOTP
+        // Remove it if present (they can just use their existing authenticator)
+        if (currentActions.includes('CONFIGURE_TOTP')) {
+          const newActions = currentActions.filter((a) => a !== 'CONFIGURE_TOTP');
+          await updateUserRequiredActions(userId, newActions);
+        }
+        console.log(`   ✅ ${username}: Has OTP credential, TOTP ready to use`);
       } else {
-        console.log(`   ℹ️  ${username}: No CONFIGURE_TOTP needed`);
+        // User has no OTP credential - add CONFIGURE_TOTP so they're prompted
+        if (!currentActions.includes('CONFIGURE_TOTP')) {
+          const newActions = [...currentActions, 'CONFIGURE_TOTP'];
+          await updateUserRequiredActions(userId, newActions);
+          console.log(`   🔒 ${username}: Added CONFIGURE_TOTP (will be prompted on next login)`);
+        } else {
+          console.log(`   🔒 ${username}: CONFIGURE_TOTP already required`);
+        }
       }
     } catch (error) {
       console.error(`   ❌ Error restoring ${username}: ${error.message}`);
     }
   }
 
-  console.log('\n   ✅ All user states restored');
+  console.log('\n   ✅ TOTP requirement restored for all users');
 }
 
 /**
