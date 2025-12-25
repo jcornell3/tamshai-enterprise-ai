@@ -618,6 +618,44 @@
         "email",
         "roles"
       ]
+    },
+    {
+      "clientId": "tamshai-flutter-client",
+      "name": "Tamshai Flutter Application",
+      "description": "Cross-platform Flutter application for AI assistant (Windows, macOS, iOS, Android)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:*/callback",
+        "http://127.0.0.1:*/callback",
+        "com.tamshai.ai://callback",
+        "com.tamshai.unifiedflutter://callback"
+      ],
+      "postLogoutRedirectUris": [
+        "http://localhost:*/logout",
+        "http://127.0.0.1:*/logout",
+        "com.tamshai.ai://logout",
+        "com.tamshai.unifiedflutter://logout"
+      ],
+      "webOrigins": [
+        "http://localhost",
+        "http://127.0.0.1"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles",
+        "offline_access"
+      ]
     }
   ],
   "clientScopes": [
