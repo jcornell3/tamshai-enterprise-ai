@@ -4262,4 +4262,115 @@ return {
 
 ---
 
-*Last updated: December 16, 2025*
+### Lesson 9: React Native Windows Platform Instability Forces Flutter Migration (Dec 2025)
+
+**Issue Discovered**: React Native Windows exhibited fundamental instability across multiple versions (0.80.0 and 0.73.22), with crashes that could not be resolved locally due to precompiled native dependencies.
+
+**What Happened**:
+
+**Phase 1 - RN Windows 0.80.0**:
+- Hermes engine crashed with access violation (0xC0000005) on TextInput events
+- Crash occurred in `hermes.dll!hermes::vm::HermesValue::getObject()`
+- All four architecture combinations tested (Hermes/Chakra × Fabric/Legacy) - all failed
+- Full investigation documented in `clients/unified/docs/WINDOWS_CRASH_INVESTIGATION.md`
+
+**Phase 2 - RN Windows 0.73.22 Downgrade**:
+- Downgraded to 0.73.22 as "last known stable configuration"
+- Encountered npm/NuGet version mismatch: npm had 0.73.22, NuGet resolved to 0.74.0
+- Further downgraded to 0.73.21 to align versions
+- New crash emerged: `std::mutex` bug in VS 2022 17.10+ (0x0000000000000000 access violation)
+- XAML initialization errors: "Windows.UI.Xaml.dll: The parameter is incorrect" (0x80070057)
+
+**Root Cause**:
+
+1. **Hermes Crash (0.80)**: Bug in Hermes's JavaScript-to-Native bridge, not in UI layer. Crash at offset 0x10 from null indicates garbage collection or initialization issue in Hermes itself.
+
+2. **Version Mismatch (0.73.x)**: react-native-windows publishes npm packages that don't have corresponding NuGet packages. 0.73.22 exists on npm but not on NuGet.org.
+
+3. **std::mutex Crash (0.73.21)**: VS 2022 17.10+ changed `std::mutex` ABI. The fix (`_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR`) requires recompiling code, but `Microsoft.ReactNative.dll` is a **precompiled NuGet package** - impossible to fix locally.
+
+4. **XAML Init Crash**: ReactApplication base class initialization fails with null pointer execution. Root cause unknown but likely related to #3.
+
+**Impact**:
+- ~5 days of investigation across two major RN Windows versions
+- Complete development blockage - no viable RN Windows configuration existed
+- Decision made to migrate to Flutter
+
+**What Worked** (in Flutter migration):
+- Flutter Windows builds successfully (single `flutter build windows` command)
+- flutter_appauth handles OAuth/PKCE correctly
+- flutter_secure_storage uses Windows Credential Manager
+- No version conflicts between Dart packages
+- AOT compilation eliminates JavaScript runtime issues
+
+**What Didn't Work** (in React Native):
+- Hermes + any architecture (0.80)
+- Chakra + modern JavaScript (ES2018+ regex)
+- Precompiled NuGet package fixes
+- std::mutex workaround for precompiled DLLs
+- npm/NuGet version synchronization
+
+**Resolution Implemented**:
+1. **Migrated to Flutter 3.38.5** with Dart 3.10.4
+2. **Created new project**: `clients/unified_flutter/`
+3. **Implemented authentication scaffold**:
+   - Keycloak OIDC with PKCE (flutter_appauth)
+   - Secure token storage (flutter_secure_storage)
+   - State management (Riverpod)
+   - Navigation with auth guards (go_router)
+   - Immutable models (Freezed)
+4. **Verified build**: Windows exe generated successfully
+
+**Key Learnings**:
+
+1. **Precompiled Dependencies Are a Risk**: When native code is distributed as precompiled binaries (NuGet packages), you cannot fix bugs locally. This is a fundamental architectural weakness for development-time debugging.
+
+2. **Version Synchronization Across Package Managers**: React Native Windows requires npm, NuGet, and Visual Studio versions to align. When any link in this chain breaks, the entire platform becomes unusable.
+
+3. **Platform Maturity Matters More Than Feature Parity**: Flutter's Windows support is more mature than React Native Windows despite having fewer native integrations. A stable platform with workarounds beats an unstable platform with features.
+
+4. **Authentication Architecture Portability**: OAuth/OIDC with PKCE is platform-agnostic. The Keycloak configuration remained identical between React Native and Flutter.
+
+5. **State Management Concepts Transfer**: Zustand → Riverpod migration preserved identical patterns. Investing in understanding patterns (not just libraries) enables faster framework switches.
+
+**Recommendations for Future**:
+
+1. **Evaluate platform stability before committing**: Run "hello world" with the actual feature set needed (TextInput, OAuth, etc.) before starting development.
+
+2. **Prefer self-contained build systems**: Flutter/Electron have single-command builds. React Native Windows requires MSBuild + NuGet + npm orchestration.
+
+3. **Check NuGet package availability**: Verify npm package versions exist on NuGet.org before selecting a version.
+
+4. **Budget for framework migration**: When adopting experimental platforms, allocate time for potential migration.
+
+5. **Document blocked paths thoroughly**: The `WINDOWS_CRASH_INVESTIGATION.md` document prevented repeating failed experiments.
+
+**Files Created/Modified**:
+
+| File | Purpose |
+|------|---------|
+| `clients/unified_flutter/` | Complete Flutter project (1,400+ lines) |
+| `docs/development/REACT_NATIVE_TO_FLUTTER_MIGRATION.md` | Migration documentation |
+| `clients/unified/docs/WINDOWS_CRASH_INVESTIGATION.md` | RN Windows debugging history |
+
+**Migration Summary**:
+
+| Aspect | React Native Windows | Flutter |
+|--------|---------------------|---------|
+| Build system | MSBuild + NuGet + npm | `flutter build` |
+| Build time | 5-10 minutes | 1-2 minutes |
+| JS Runtime | Hermes (crashes) / Chakra (ES2018 fail) | N/A (AOT native) |
+| OAuth | Broken (multiple approaches failed) | flutter_appauth works |
+| Secure storage | react-native-keychain (untested) | flutter_secure_storage works |
+| Binary size | ~50MB | ~25MB |
+| Platform support | Windows only (unstable) | Windows/macOS/iOS/Android |
+
+---
+
+*Lesson documented: December 24, 2025*
+*Time spent investigating: ~5 days (RN Windows) + 1 day (Flutter migration)*
+*Resolution: Complete framework migration to Flutter*
+
+---
+
+*Last updated: December 24, 2025*
