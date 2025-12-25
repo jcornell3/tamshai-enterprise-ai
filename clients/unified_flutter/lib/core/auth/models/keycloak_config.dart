@@ -34,10 +34,11 @@ class KeycloakConfigProvider {
     return const KeycloakConfig(
       // Local Keycloak instance (Docker)
       // See: infrastructure/docker/docker-compose.yml
-      issuer: 'http://localhost:8180/realms/tamshai',
+      // Realm name is 'tamshai-corp' (from keycloak/realm-export.json)
+      issuer: 'http://localhost:8180/realms/tamshai-corp',
 
       // Public client for Flutter app (PKCE enabled)
-      // Must be created in Keycloak admin console
+      // Configured in keycloak/realm-export.json
       clientId: 'tamshai-flutter-client',
 
       // For Windows desktop - flutter_appauth handles the port dynamically
@@ -47,18 +48,19 @@ class KeycloakConfigProvider {
       endSessionRedirectUrl: 'http://localhost:0/logout',
 
       // Scopes: offline_access needed for refresh tokens
-      scopes: ['openid', 'profile', 'email', 'offline_access'],
+      // 'roles' scope added for role-based access control
+      scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
     );
   }
 
   static KeycloakConfig getProductionConfig() {
     return const KeycloakConfig(
       // Production Keycloak URL
-      issuer: 'https://auth.tamshai.com/realms/tamshai',
+      issuer: 'https://auth.tamshai.com/realms/tamshai-corp',
       clientId: 'tamshai-flutter-client',
-      redirectUrl: 'http://localhost:0/callback',
-      endSessionRedirectUrl: 'http://localhost:0/logout',
-      scopes: ['openid', 'profile', 'email', 'offline_access'],
+      redirectUrl: 'com.tamshai.ai://callback',
+      endSessionRedirectUrl: 'com.tamshai.ai://logout',
+      scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
     );
   }
 }
