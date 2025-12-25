@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/models/auth_state.dart';
 
 /// Secure storage service for authentication tokens and user data
@@ -165,13 +164,3 @@ class SecureStorageService {
     }
   }
 }
-
-/// Logger provider
-final loggerProvider = Provider<Logger>((ref) => Logger());
-
-/// Secure storage provider
-final secureStorageProvider = Provider<SecureStorageService>((ref) {
-  return SecureStorageService(
-    logger: ref.watch(loggerProvider),
-  );
-});

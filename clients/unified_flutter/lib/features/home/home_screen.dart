@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/auth/providers/auth_provider.dart';
 
 /// Home screen shown after successful authentication
@@ -122,24 +123,73 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   const SizedBox(height: 32),
 
-                  // Placeholder for app content
+                  // AI Assistant quick action
+                  Card(
+                    color: Theme.of(context).primaryColor,
+                    child: InkWell(
+                      onTap: () => context.go('/chat'),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.smart_toy,
+                                size: 32,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'AI Assistant',
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Ask questions about your enterprise data',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: Colors.white.withOpacity(0.9),
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_ios,
+                              color: Colors.white,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Status indicator
                   Center(
                     child: Column(
                       children: [
                         Icon(
                           Icons.check_circle_outline,
-                          size: 80,
+                          size: 48,
                           color: Colors.green[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Authentication Successful!',
-                          style: Theme.of(context).textTheme.titleLarge,
-                          textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Replace this screen with your app content',
+                          'Connected to MCP Gateway',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: Colors.grey[600],
                               ),

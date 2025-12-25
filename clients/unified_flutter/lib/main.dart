@@ -5,6 +5,7 @@ import 'core/auth/providers/auth_provider.dart';
 import 'core/auth/models/auth_state.dart';
 import 'features/authentication/login_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/chat/chat_screen.dart';
 
 void main() {
   runApp(
@@ -94,6 +95,10 @@ class _TamshaiAppState extends ConsumerState<TamshaiApp> {
         GoRoute(
           path: '/login',
           builder: (context, state) => const LoginScreen(),
+        ),
+        GoRoute(
+          path: '/chat',
+          builder: (context, state) => const ChatScreen(),
         ),
       ],
       errorBuilder: (context, state) => Scaffold(
