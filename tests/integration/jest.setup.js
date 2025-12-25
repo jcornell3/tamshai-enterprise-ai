@@ -5,9 +5,10 @@
  * Verifies all services are healthy before running tests.
  *
  * TOTP Handling:
- * - Before tests: Temporarily removes TOTP credentials and required actions
- * - After tests: Restores TOTP credentials for users who had them, ensures
- *   TOTP is required for all test users (they'll be prompted on next login)
+ * - Uses direct access grants which bypass OTP requirement
+ * - Does NOT delete any user credentials
+ * - Temporarily removes CONFIGURE_TOTP required action (if present)
+ * - Restores required actions after tests
  */
 
 const axios = require('axios');
@@ -27,9 +28,20 @@ const CONFIG = {
 // Test users that need TOTP handling
 const TEST_USERNAMES = ['eve.thompson', 'alice.chen', 'frank.davis'];
 
-// Storage for TOTP credentials to restore after tests
-let savedTotpCredentials = {};
+// Storage for user state to restore after tests
+let savedUserState = {};
 let adminToken = null;
+
+/**
+ * Get user's credentials
+ */
+async function getUserCredentials(userId) {
+  const response = await axios.get(
+    `${CONFIG.keycloakUrl}/admin/realms/${CONFIG.keycloakRealm}/users/${userId}/credentials`,
+    { headers: { Authorization: `Bearer ${adminToken}` } }
+  );
+  return response.data;
+}
 
 /**
  * Get admin token from Keycloak master realm
@@ -63,28 +75,7 @@ async function getUserId(username) {
 }
 
 /**
- * Get user's credentials
- */
-async function getUserCredentials(userId) {
-  const response = await axios.get(
-    `${CONFIG.keycloakUrl}/admin/realms/${CONFIG.keycloakRealm}/users/${userId}/credentials`,
-    { headers: { Authorization: `Bearer ${adminToken}` } }
-  );
-  return response.data;
-}
-
-/**
- * Delete a credential by ID
- */
-async function deleteCredential(userId, credentialId) {
-  await axios.delete(
-    `${CONFIG.keycloakUrl}/admin/realms/${CONFIG.keycloakRealm}/users/${userId}/credentials/${credentialId}`,
-    { headers: { Authorization: `Bearer ${adminToken}` } }
-  );
-}
-
-/**
- * Get user's required actions
+ * Get user details
  */
 async function getUser(userId) {
   const response = await axios.get(
@@ -111,11 +102,15 @@ async function updateUserRequiredActions(userId, requiredActions) {
 }
 
 /**
- * Disable TOTP for test users before tests run
- * Saves existing TOTP credentials so they can be restored later
+ * Prepare test users for automated testing
+ *
+ * IMPORTANT: We do NOT delete OTP credentials!
+ * We only temporarily remove CONFIGURE_TOTP from required actions.
+ * The mcp-gateway client uses direct access grants which bypass OTP.
  */
-async function disableTotpForTestUsers() {
-  console.log('\n🔐 Preparing TOTP settings for test users...');
+async function prepareTestUsers() {
+  console.log('\n🔐 Preparing test users for automated testing...');
+  console.log('   (OTP credentials are preserved - only required actions are modified)\n');
 
   for (const username of TEST_USERNAMES) {
     try {
@@ -125,62 +120,46 @@ async function disableTotpForTestUsers() {
         continue;
       }
 
-      // Get current credentials
-      const credentials = await getUserCredentials(userId);
-      const otpCredentials = credentials.filter((c) => c.type === 'otp');
-
-      // Save OTP credentials for this user (to restore later)
-      if (otpCredentials.length > 0) {
-        savedTotpCredentials[username] = {
-          userId,
-          credentials: otpCredentials,
-          hadTotp: true,
-        };
-        console.log(`   📦 Saved TOTP credential for ${username}`);
-
-        // Delete OTP credentials temporarily
-        for (const cred of otpCredentials) {
-          await deleteCredential(userId, cred.id);
-        }
-        console.log(`   🔓 Temporarily disabled TOTP for ${username}`);
-      } else {
-        // User doesn't have TOTP set up yet
-        savedTotpCredentials[username] = {
-          userId,
-          credentials: [],
-          hadTotp: false,
-        };
-        console.log(`   ℹ️  ${username} has no TOTP configured`);
-      }
-
-      // Remove CONFIGURE_TOTP from required actions temporarily
       const user = await getUser(userId);
       const currentActions = user.requiredActions || [];
+
+      // Check if user has existing OTP credential
+      const credentials = await getUserCredentials(userId);
+      const hasOtpCredential = credentials.some((c) => c.type === 'otp');
+
+      // Save current state for restoration
+      savedUserState[username] = {
+        userId,
+        requiredActions: [...currentActions],
+        hasOtpCredential,
+      };
+
+      // Remove CONFIGURE_TOTP from required actions if present
       if (currentActions.includes('CONFIGURE_TOTP')) {
         const newActions = currentActions.filter((a) => a !== 'CONFIGURE_TOTP');
         await updateUserRequiredActions(userId, newActions);
-        savedTotpCredentials[username].hadRequiredAction = true;
+        console.log(`   ✅ ${username}: Temporarily removed CONFIGURE_TOTP requirement`);
       } else {
-        savedTotpCredentials[username].hadRequiredAction = false;
+        console.log(`   ℹ️  ${username}: No CONFIGURE_TOTP requirement to remove`);
+      }
+
+      if (hasOtpCredential) {
+        console.log(`   📱 ${username}: Has existing OTP credential (will be preserved)`);
       }
     } catch (error) {
-      console.error(`   ❌ Error handling TOTP for ${username}: ${error.message}`);
+      console.error(`   ❌ Error preparing ${username}: ${error.message}`);
     }
   }
 }
 
 /**
- * Restore TOTP settings after tests complete
- * - Users who had TOTP: Add CONFIGURE_TOTP required action (they'll need to re-register)
- * - Users who didn't have TOTP: Add CONFIGURE_TOTP required action (enforces TOTP requirement)
+ * Restore test users to their original state
  *
- * Note: We can't restore the actual TOTP secret programmatically since Keycloak
- * stores them hashed. Instead, we ensure TOTP is required so users will be
- * prompted to set it up on next login. For eve.thompson who had TOTP,
- * she'll need to re-register her authenticator app.
+ * IMPORTANT: Only add CONFIGURE_TOTP if user doesn't have an OTP credential.
+ * Users with existing OTP credentials should NOT be forced to re-register.
  */
-async function restoreTotpForTestUsers() {
-  console.log('\n🔐 Restoring TOTP requirements for test users...');
+async function restoreTestUsers() {
+  console.log('\n🔐 Restoring test users to original state...');
 
   // Refresh admin token in case it expired during long tests
   try {
@@ -192,40 +171,44 @@ async function restoreTotpForTestUsers() {
 
   for (const username of TEST_USERNAMES) {
     try {
-      const saved = savedTotpCredentials[username];
+      const saved = savedUserState[username];
       if (!saved) {
         console.log(`   ⚠️  No saved state for ${username}, skipping`);
         continue;
       }
 
-      const { userId, hadTotp } = saved;
+      const { userId, requiredActions, hasOtpCredential } = saved;
 
-      // Only restore TOTP requirement for users who actually had TOTP before
-      // Don't force TOTP on users who never set it up
-      if (hadTotp) {
-        const user = await getUser(userId);
-        const currentActions = user.requiredActions || [];
+      // Check current OTP credential status (may have changed during tests)
+      const currentCredentials = await getUserCredentials(userId);
+      const currentlyHasOtp = currentCredentials.some((c) => c.type === 'otp');
 
-        if (!currentActions.includes('CONFIGURE_TOTP')) {
-          const newActions = [...currentActions, 'CONFIGURE_TOTP'];
-          await updateUserRequiredActions(userId, newActions);
-          console.log(
-            `   🔄 ${username}: TOTP re-registration required (had TOTP before)`
-          );
-        } else {
-          console.log(`   ✅ ${username}: TOTP already required`);
-        }
+      // Determine what required actions to restore
+      let actionsToRestore = [...requiredActions];
+
+      // If user has OTP credential, remove CONFIGURE_TOTP from restoration
+      // (they don't need to re-register - they can just use their existing authenticator)
+      if (currentlyHasOtp && actionsToRestore.includes('CONFIGURE_TOTP')) {
+        actionsToRestore = actionsToRestore.filter((a) => a !== 'CONFIGURE_TOTP');
+        console.log(`   📱 ${username}: Has OTP credential, skipping CONFIGURE_TOTP restoration`);
+      }
+
+      // Restore required actions
+      await updateUserRequiredActions(userId, actionsToRestore);
+
+      if (actionsToRestore.includes('CONFIGURE_TOTP')) {
+        console.log(`   ✅ ${username}: Restored CONFIGURE_TOTP requirement (no OTP credential)`);
+      } else if (requiredActions.includes('CONFIGURE_TOTP') && currentlyHasOtp) {
+        console.log(`   ✅ ${username}: OTP already configured, no re-registration needed`);
       } else {
-        console.log(`   ℹ️  ${username}: No TOTP restoration needed (never had TOTP)`);
+        console.log(`   ℹ️  ${username}: No CONFIGURE_TOTP needed`);
       }
     } catch (error) {
-      console.error(
-        `   ❌ Error restoring TOTP for ${username}: ${error.message}`
-      );
+      console.error(`   ❌ Error restoring ${username}: ${error.message}`);
     }
   }
 
-  console.log('\n   ℹ️  Note: Users with prior TOTP will need to re-register their authenticator app');
+  console.log('\n   ✅ All user states restored');
 }
 
 /**
@@ -289,24 +272,24 @@ beforeAll(async () => {
 
   console.log('\n✅ All services are healthy.');
 
-  // Get admin token and disable TOTP for test users
+  // Get admin token and prepare test users
   try {
     adminToken = await getAdminToken();
-    await disableTotpForTestUsers();
+    await prepareTestUsers();
   } catch (error) {
-    console.error('\n❌ Failed to prepare TOTP settings:', error.message);
+    console.error('\n❌ Failed to prepare test users:', error.message);
     throw new Error('Failed to prepare test environment');
   }
 
   console.log('\n✅ Starting tests...\n');
-}, 60000); // 60 second timeout for health checks + TOTP setup
+}, 60000); // 60 second timeout for health checks + user preparation
 
 /**
  * Global teardown - runs once after all tests
  */
 afterAll(async () => {
-  // Restore TOTP requirements for all test users
-  await restoreTotpForTestUsers();
+  // Restore test users to their original state
+  await restoreTestUsers();
 
   console.log('\n✅ All integration tests complete');
-}, 30000); // 30 second timeout for TOTP restoration
+}, 30000); // 30 second timeout for user restoration
