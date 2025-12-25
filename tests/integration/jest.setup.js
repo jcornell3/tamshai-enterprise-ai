@@ -13,13 +13,15 @@
 const axios = require('axios');
 
 const CONFIG = {
-  keycloakUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
+  // Use 127.0.0.1 instead of localhost for Windows compatibility
+  // (localhost can have DNS resolution issues on Windows with Docker)
+  keycloakUrl: process.env.KEYCLOAK_URL || 'http://127.0.0.1:8180',
   keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-  gatewayUrl: process.env.GATEWAY_URL || 'http://localhost:3100',
-  mcpHrUrl: process.env.MCP_HR_URL || 'http://localhost:3101',
-  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://localhost:3102',
-  mcpSalesUrl: process.env.MCP_SALES_URL || 'http://localhost:3103',
-  mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://localhost:3104',
+  gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:3100',
+  mcpHrUrl: process.env.MCP_HR_URL || 'http://127.0.0.1:3101',
+  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
+  mcpSalesUrl: process.env.MCP_SALES_URL || 'http://127.0.0.1:3103',
+  mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
 };
 
 // Test users that need TOTP handling
@@ -198,27 +200,23 @@ async function restoreTotpForTestUsers() {
 
       const { userId, hadTotp } = saved;
 
-      // Get current required actions
-      const user = await getUser(userId);
-      const currentActions = user.requiredActions || [];
+      // Only restore TOTP requirement for users who actually had TOTP before
+      // Don't force TOTP on users who never set it up
+      if (hadTotp) {
+        const user = await getUser(userId);
+        const currentActions = user.requiredActions || [];
 
-      // Always ensure CONFIGURE_TOTP is in required actions
-      // This ensures TOTP remains mandatory for all test users
-      if (!currentActions.includes('CONFIGURE_TOTP')) {
-        const newActions = [...currentActions, 'CONFIGURE_TOTP'];
-        await updateUserRequiredActions(userId, newActions);
-
-        if (hadTotp) {
+        if (!currentActions.includes('CONFIGURE_TOTP')) {
+          const newActions = [...currentActions, 'CONFIGURE_TOTP'];
+          await updateUserRequiredActions(userId, newActions);
           console.log(
             `   🔄 ${username}: TOTP re-registration required (had TOTP before)`
           );
         } else {
-          console.log(
-            `   🔒 ${username}: TOTP setup required on next login`
-          );
+          console.log(`   ✅ ${username}: TOTP already required`);
         }
       } else {
-        console.log(`   ✅ ${username}: TOTP already required`);
+        console.log(`   ℹ️  ${username}: No TOTP restoration needed (never had TOTP)`);
       }
     } catch (error) {
       console.error(

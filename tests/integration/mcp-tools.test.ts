@@ -12,15 +12,18 @@
 import axios, { AxiosInstance } from 'axios';
 
 // Test configuration
+// Use 127.0.0.1 instead of localhost for Windows compatibility
+// Use mcp-gateway client which has directAccessGrantsEnabled=true
 const CONFIG = {
-  keycloakUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
+  keycloakUrl: process.env.KEYCLOAK_URL || 'http://127.0.0.1:8180',
   keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-  mcpHrUrl: process.env.MCP_HR_URL || 'http://localhost:3101',
-  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://localhost:3102',
-  mcpSalesUrl: process.env.MCP_SALES_URL || 'http://localhost:3103',
-  mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://localhost:3104',
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
-  clientId: 'ai-desktop',
+  mcpHrUrl: process.env.MCP_HR_URL || 'http://127.0.0.1:3101',
+  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
+  mcpSalesUrl: process.env.MCP_SALES_URL || 'http://127.0.0.1:3103',
+  mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
+  redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6380',
+  clientId: 'mcp-gateway',
+  clientSecret: 'mcp-gateway-secret',
 };
 
 // Test users with role assignments
@@ -99,6 +102,7 @@ async function getAccessToken(username: string, password: string): Promise<strin
   const params = new URLSearchParams({
     grant_type: 'password',
     client_id: CONFIG.clientId,
+    client_secret: CONFIG.clientSecret,
     username,
     password,
     scope: 'openid profile email roles',
