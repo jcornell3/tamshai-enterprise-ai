@@ -4,15 +4,18 @@ import 'package:logger/logger.dart';
 import '../models/auth_state.dart';
 import '../models/keycloak_config.dart';
 import '../../storage/secure_storage_service.dart';
+import 'auth_service.dart';
 
 /// Keycloak authentication service using OAuth 2.0 / OIDC
-/// 
+///
+/// For mobile platforms (iOS/Android) using flutter_appauth.
+///
 /// Handles:
 /// - Login with Authorization Code Flow + PKCE
 /// - Token refresh
 /// - Logout (local and Keycloak session)
 /// - TOTP is handled by Keycloak in the browser flow
-class KeycloakAuthService {
+class KeycloakAuthService implements AuthService {
   final FlutterAppAuth _appAuth;
   final SecureStorageService _storage;
   final KeycloakConfig _config;
@@ -28,16 +31,7 @@ class KeycloakAuthService {
         _appAuth = appAuth ?? const FlutterAppAuth(),
         _logger = logger ?? Logger();
 
-  /// Initiate login flow
-  /// 
-  /// Opens browser/WebView to Keycloak login page.
-  /// User enters credentials and TOTP code (if required).
-  /// Returns user profile on success.
-  /// 
-  /// Throws:
-  /// - [LoginCancelledException] if user cancels
-  /// - [NetworkAuthException] on network errors
-  /// - [AuthException] for other errors
+  @override
   Future<AuthUser> login() async {
     try {
       _logger.i('Starting Keycloak login flow');
@@ -103,12 +97,7 @@ class KeycloakAuthService {
     }
   }
 
-  /// Refresh access token using refresh token
-  /// 
-  /// Automatically called when access token expires.
-  /// Returns new user profile with updated tokens.
-  /// 
-  /// Throws [TokenRefreshException] if refresh fails
+  @override
   Future<AuthUser> refreshToken() async {
     try {
       _logger.i('Refreshing access token');
@@ -171,13 +160,7 @@ class KeycloakAuthService {
     }
   }
 
-  /// Logout user
-  /// 
-  /// Performs:
-  /// 1. End session with Keycloak (if configured)
-  /// 2. Clear local tokens and user data
-  /// 
-  /// [endKeycloakSession] - if true, also terminates session on Keycloak server
+  @override
   Future<void> logout({bool endKeycloakSession = true}) async {
     try {
       _logger.i('Logging out (endKeycloakSession: $endKeycloakSession)');
@@ -214,12 +197,12 @@ class KeycloakAuthService {
     }
   }
 
-  /// Check if user has a valid session
+  @override
   Future<bool> hasValidSession() async {
     return await _storage.hasValidSession();
   }
 
-  /// Get current user from storage
+  @override
   Future<AuthUser?> getCurrentUser() async {
     return await _storage.getUserProfile();
   }

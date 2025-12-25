@@ -35,17 +35,19 @@ class KeycloakConfigProvider {
       // Local Keycloak instance (Docker)
       // See: infrastructure/docker/docker-compose.yml
       // Realm name is 'tamshai-corp' (from keycloak/realm-export.json)
-      issuer: 'http://localhost:8180/realms/tamshai-corp',
+      // Use 127.0.0.1 instead of localhost for Windows compatibility
+      issuer: 'http://127.0.0.1:8180/realms/tamshai-corp',
 
       // Public client for Flutter app (PKCE enabled)
       // Configured in keycloak/realm-export.json
       clientId: 'tamshai-flutter-client',
 
-      // For Windows desktop - flutter_appauth handles the port dynamically
-      redirectUrl: 'http://localhost:0/callback',
+      // For desktop - redirect URI is built dynamically with available port
+      // This is a placeholder that won't be used by DesktopOAuthService
+      redirectUrl: 'http://127.0.0.1/callback',
 
       // End session redirect
-      endSessionRedirectUrl: 'http://localhost:0/logout',
+      endSessionRedirectUrl: 'http://127.0.0.1/logout',
 
       // Scopes: offline_access needed for refresh tokens
       // 'roles' scope added for role-based access control

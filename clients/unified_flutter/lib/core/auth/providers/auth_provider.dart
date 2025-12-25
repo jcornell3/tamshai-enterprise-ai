@@ -1,8 +1,12 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 import '../models/auth_state.dart';
 import '../models/keycloak_config.dart';
+import '../services/auth_service.dart';
 import '../services/keycloak_auth_service.dart';
+import '../services/desktop_oauth_service.dart';
 import '../../storage/secure_storage_service.dart';
 
 /// Logger provider
@@ -19,22 +23,50 @@ final keycloakConfigProvider = Provider<KeycloakConfig>((ref) {
   return KeycloakConfigProvider.getDevelopmentConfig();
 });
 
-/// Keycloak auth service provider
-final keycloakAuthServiceProvider = Provider<KeycloakAuthService>((ref) {
-  return KeycloakAuthService(
-    config: ref.watch(keycloakConfigProvider),
-    storage: ref.watch(secureStorageProvider),
-    logger: ref.watch(loggerProvider),
-  );
+/// Check if running on desktop platform
+bool get isDesktopPlatform {
+  return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+}
+
+/// Auth service provider - automatically selects the right implementation
+///
+/// - Desktop (Windows/macOS/Linux): Uses DesktopOAuthService with browser + local HTTP server
+/// - Mobile (iOS/Android): Uses KeycloakAuthService with flutter_appauth
+final authServiceProvider = Provider<AuthService>((ref) {
+  final config = ref.watch(keycloakConfigProvider);
+  final storage = ref.watch(secureStorageProvider);
+  final logger = ref.watch(loggerProvider);
+
+  if (isDesktopPlatform) {
+    logger.i('Using DesktopOAuthService for ${Platform.operatingSystem}');
+    return DesktopOAuthService(
+      config: config,
+      storage: storage,
+      logger: logger,
+    );
+  } else {
+    logger.i('Using KeycloakAuthService for ${Platform.operatingSystem}');
+    return KeycloakAuthService(
+      config: config,
+      storage: storage,
+      logger: logger,
+    );
+  }
+});
+
+/// Keycloak auth service provider (for backwards compatibility)
+/// @deprecated Use authServiceProvider instead
+final keycloakAuthServiceProvider = Provider<AuthService>((ref) {
+  return ref.watch(authServiceProvider);
 });
 
 /// Authentication state notifier
 class AuthNotifier extends StateNotifier<AuthState> {
-  final KeycloakAuthService _authService;
+  final AuthService _authService;
   final Logger _logger;
 
   AuthNotifier({
-    required KeycloakAuthService authService,
+    required AuthService authService,
     required Logger logger,
   })  : _authService = authService,
         _logger = logger,
@@ -165,7 +197,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(
-    authService: ref.watch(keycloakAuthServiceProvider),
+    authService: ref.watch(authServiceProvider),
     logger: ref.watch(loggerProvider),
   );
 });
