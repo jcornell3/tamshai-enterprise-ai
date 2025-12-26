@@ -1,8 +1,21 @@
 /**
  * Tamshai Corp - Role-Based Access Control Integration Tests
- * 
+ *
  * These tests verify that the MCP Gateway correctly enforces role-based
  * access controls for different user types.
+ *
+ * IMPORTANT: TOTP Configuration for Testing
+ * ==========================================
+ * These tests use Resource Owner Password Grant which does not support TOTP.
+ * Before running tests, temporarily disable TOTP in Keycloak:
+ *   1. Login to Keycloak Admin Console (http://127.0.0.1:8180/admin)
+ *   2. Select realm 'tamshai-corp'
+ *   3. Go to Authentication > Required Actions
+ *   4. Disable "Configure OTP" required action
+ *   5. Run tests
+ *   6. RE-ENABLE "Configure OTP" after tests complete
+ *
+ * WARNING: Do NOT delete existing TOTP registrations for real users!
  */
 
 import axios, { AxiosInstance } from 'axios';
