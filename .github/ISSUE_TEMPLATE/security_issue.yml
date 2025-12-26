@@ -1,0 +1,68 @@
+name: Security Issue
+description: Report a non-critical security concern (for vulnerabilities, use Security Advisories)
+title: "[Security]: "
+labels: ["security", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **For critical security vulnerabilities, please use [GitHub Security Advisories](https://github.com/jcornell3/tamshai-enterprise-ai/security/advisories/new) instead.**
+
+        This template is for non-critical security concerns, hardening suggestions, or security improvements.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Security Concern
+      description: Describe the security issue or improvement
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Authentication/Authorization
+        - Input Validation
+        - Data Exposure
+        - Configuration
+        - Dependencies
+        - Logging/Audit
+        - Network Security
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity Assessment
+      options:
+        - Low - Hardening suggestion
+        - Medium - Should be addressed
+        - High - Needs prompt attention
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommended Fix
+      description: How should this be addressed?
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to relevant security guidelines, CVEs, or documentation
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: This is NOT a critical vulnerability (those should go to Security Advisories)
+          required: true
+        - label: I have searched existing issues
+          required: true
