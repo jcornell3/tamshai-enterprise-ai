@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/jcornell3/tamshai-enterprise-ai/security/advisories/new
+    about: Report security vulnerabilities privately via GitHub Security Advisories
+  - name: Documentation
+    url: https://github.com/jcornell3/tamshai-enterprise-ai/blob/main/CLAUDE.md
+    about: Check the documentation before opening an issue
+  - name: Discussions
+    url: https://github.com/jcornell3/tamshai-enterprise-ai/discussions
+    about: Ask questions and discuss ideas

@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =============================================================================
+  # MCP Gateway (Node.js/TypeScript)
+  # =============================================================================
+  gateway-lint-test:
+    name: Gateway - Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/mcp-gateway
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/mcp-gateway/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test -- --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: services/mcp-gateway/coverage/lcov.info
+          flags: gateway
+          fail_ci_if_error: false
+
+  # =============================================================================
+  # Flutter Client
+  # =============================================================================
+  flutter-analyze-test:
+    name: Flutter - Analyze & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/unified_flutter
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: clients/unified_flutter/coverage/lcov.info
+          flags: flutter
+          fail_ci_if_error: false
+
+  # =============================================================================
+  # Terraform Validation
+  # =============================================================================
+  terraform-validate:
+    name: Terraform - Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.5'
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive infrastructure/terraform
+
+      - name: Terraform Init (VPS)
+        working-directory: infrastructure/terraform/vps
+        run: terraform init -backend=false
+
+      - name: Terraform Validate (VPS)
+        working-directory: infrastructure/terraform/vps
+        run: terraform validate
+
+      - name: Terraform Init (Main)
+        working-directory: infrastructure/terraform
+        run: terraform init -backend=false
+        continue-on-error: true
+
+      - name: Terraform Validate (Main)
+        working-directory: infrastructure/terraform
+        run: terraform validate
+        continue-on-error: true
+
+  # =============================================================================
+  # Docker Build Validation
+  # =============================================================================
+  docker-build:
+    name: Docker - Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build MCP Gateway
+        uses: docker/build-action@v5
+        with:
+          context: services/mcp-gateway
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+        continue-on-error: true
+
+  # =============================================================================
+  # Security Scanning
+  # =============================================================================
+  security-scan:
+    name: Security - Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Audit MCP Gateway
+        working-directory: services/mcp-gateway
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Audit Integration Tests
+        working-directory: tests/integration
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  # =============================================================================
+  # Integration Tests (requires services)
+  # =============================================================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [gateway-lint-test]
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tests/integration/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests/integration
+        run: npm ci
+
+      - name: Run integration tests
+        working-directory: tests/integration
+        run: npm test
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        continue-on-error: true
