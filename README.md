@@ -183,6 +183,8 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
