@@ -258,7 +258,204 @@ WHERE is_confidential = false AND status = 'FINAL';
 CREATE INDEX IF NOT EXISTS idx_budgets_dept_year ON finance.department_budgets(department_code, fiscal_year);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON finance.invoices(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON finance.invoices(vendor_name);
+CREATE INDEX IF NOT EXISTS idx_invoices_date ON finance.invoices(invoice_date);
 CREATE INDEX IF NOT EXISTS idx_reports_type_year ON finance.financial_reports(report_type, fiscal_year);
 
+-- =============================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- =============================================================================
+
+-- Helper function: Set session context from JWT (matches HR pattern)
+-- Called by MCP Finance server at the start of each request
+CREATE OR REPLACE FUNCTION finance.set_user_context(
+    p_user_id VARCHAR,
+    p_user_email VARCHAR,
+    p_user_roles VARCHAR,
+    p_user_department VARCHAR DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM set_config('app.current_user_id', p_user_id, true);
+    PERFORM set_config('app.current_user_email', p_user_email, true);
+    PERFORM set_config('app.current_user_roles', p_user_roles, true);
+    PERFORM set_config('app.current_user_department', COALESCE(p_user_department, ''), true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- -----------------------------------------------------------------------------
+-- DEPARTMENT BUDGETS RLS
+-- -----------------------------------------------------------------------------
+ALTER TABLE finance.department_budgets ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Finance role can see all budgets
+CREATE POLICY budget_finance_access ON finance.department_budgets
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 2: Executive role can see all budgets
+CREATE POLICY budget_executive_access ON finance.department_budgets
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%executive%'
+    );
+
+-- Policy 3: Department heads can see their own department's budget
+CREATE POLICY budget_department_access ON finance.department_budgets
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND department_code = current_setting('app.current_user_department', true)
+    );
+
+-- Policy 4: Finance-write can modify budgets
+CREATE POLICY budget_finance_modify ON finance.department_budgets
+    FOR ALL
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- -----------------------------------------------------------------------------
+-- INVOICES RLS (Confidential - stricter access)
+-- -----------------------------------------------------------------------------
+ALTER TABLE finance.invoices ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Finance role can see all invoices
+CREATE POLICY invoice_finance_access ON finance.invoices
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 2: Executive role can see all invoices
+CREATE POLICY invoice_executive_access ON finance.invoices
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%executive%'
+    );
+
+-- Policy 3: Department managers can see invoices for their department only
+CREATE POLICY invoice_department_access ON finance.invoices
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND department_code = current_setting('app.current_user_department', true)
+    );
+
+-- Policy 4: Finance-write can modify invoices
+CREATE POLICY invoice_finance_modify ON finance.invoices
+    FOR ALL
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- -----------------------------------------------------------------------------
+-- FINANCIAL REPORTS RLS
+-- -----------------------------------------------------------------------------
+ALTER TABLE finance.financial_reports ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Anyone can see non-confidential published reports
+CREATE POLICY report_public_access ON finance.financial_reports
+    FOR SELECT
+    USING (
+        is_confidential = false AND status = 'FINAL'
+    );
+
+-- Policy 2: Finance role can see all reports (including drafts)
+CREATE POLICY report_finance_access ON finance.financial_reports
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 3: Executive role can see all reports (including confidential)
+CREATE POLICY report_executive_access ON finance.financial_reports
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%executive%'
+    );
+
+-- Policy 4: Report creators can see their own reports
+CREATE POLICY report_creator_access ON finance.financial_reports
+    FOR SELECT
+    USING (
+        created_by = current_setting('app.current_user_email', true)
+    );
+
+-- Policy 5: Finance-write can modify reports
+CREATE POLICY report_finance_modify ON finance.financial_reports
+    FOR ALL
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- -----------------------------------------------------------------------------
+-- REVENUE SUMMARY RLS
+-- -----------------------------------------------------------------------------
+ALTER TABLE finance.revenue_summary ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Finance role can see all revenue data
+CREATE POLICY revenue_finance_access ON finance.revenue_summary
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 2: Executive role can see all revenue data
+CREATE POLICY revenue_executive_access ON finance.revenue_summary
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%executive%'
+    );
+
+-- Policy 3: Sales leadership can see revenue data (read-only)
+CREATE POLICY revenue_sales_access ON finance.revenue_summary
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%sales-read%'
+    );
+
+-- =============================================================================
+-- AUDIT LOGGING (matches HR pattern)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS finance.access_audit_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMP DEFAULT NOW(),
+    user_id VARCHAR(100),
+    user_email VARCHAR(200),
+    user_roles TEXT,
+    action VARCHAR(50),  -- SELECT, INSERT, UPDATE, DELETE
+    table_name VARCHAR(100),
+    record_id UUID,
+    query_summary TEXT,
+    ip_address VARCHAR(45),
+    success BOOLEAN DEFAULT true,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON finance.access_audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON finance.access_audit_log(user_email);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON finance.access_audit_log(action);
+
+-- =============================================================================
+-- GRANTS
+-- =============================================================================
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA finance TO tamshai;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO tamshai;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO tamshai;
+GRANT EXECUTE ON FUNCTION finance.set_user_context TO tamshai;

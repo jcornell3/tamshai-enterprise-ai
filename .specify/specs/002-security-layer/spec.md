@@ -34,8 +34,14 @@ No MCP tools are directly exposed in this phase. This phase enhances security in
 - [x] RLS policies correctly handle composite roles (executive sees all data)
 - [x] Manager hierarchy access via `is_manager_of()` function with SECURITY DEFINER
 
-### Finance Schema RLS (GAP - NOT IMPLEMENTED)
-- [ ] Finance tables have appropriate RLS policies for budget/invoice data
+### Finance Schema RLS (COMPLETE)
+- [x] Finance tables have appropriate RLS policies for budget/invoice data
+- [x] `finance.department_budgets` - 4 policies (finance-read, executive, department manager, finance-write)
+- [x] `finance.invoices` - 4 policies (finance-read, executive, department manager, finance-write)
+- [x] `finance.financial_reports` - 5 policies (public, finance-read, executive, creator, finance-write)
+- [x] `finance.revenue_summary` - 3 policies (finance-read, executive, sales-read)
+- [x] `finance.set_user_context()` helper function for session variables
+- [x] `finance.access_audit_log` table for audit trail
 
 ### MongoDB/Elasticsearch (Application-Level)
 - [x] MongoDB query filters are implemented for sales data access control (MCP Sales)
@@ -91,19 +97,19 @@ No MCP tools are directly exposed in this phase. This phase enhances security in
   - Rotation: Automated with 30-day warning alerts
 
 ## Status
-**PARTIAL ⚡** - HR RLS complete, Finance RLS pending, mTLS deferred to production.
+**COMPLETE ✅** - HR and Finance RLS complete, mTLS deferred to production.
 
 ### Implementation Summary
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | **HR RLS** | ✅ Complete | 7 policies on `hr.employees` and `hr.performance_reviews` |
-| **Finance RLS** | ❌ Gap | No RLS policies in `sample-data/finance-data.sql` |
+| **Finance RLS** | ✅ Complete | 16 policies across 4 tables with audit logging |
 | **MongoDB Filters** | ✅ Complete | Application-level in MCP Sales |
 | **Elasticsearch Filters** | ✅ Complete | Role-based in MCP Support |
 | **mTLS** | ⏳ Deferred | Production only; dev uses HTTP |
-| **Session Variables** | ✅ Complete | `set_user_context()` function in HR |
-| **Audit Logging** | ✅ Complete | `access_audit_log` table in HR schema |
+| **Session Variables** | ✅ Complete | `set_user_context()` in both HR and Finance |
+| **Audit Logging** | ✅ Complete | `access_audit_log` in both HR and Finance schemas |
 
 ### HR RLS Implementation Details
 - File: `sample-data/hr-data.sql`
@@ -111,10 +117,14 @@ No MCP tools are directly exposed in this phase. This phase enhances security in
 - Policies: Self-access, HR staff, Executive, Manager hierarchy
 - Special: `is_manager_of()` with SECURITY DEFINER to avoid RLS recursion bug
 
+### Finance RLS Implementation Details
+- File: `sample-data/finance-data.sql`
+- Tables protected: `finance.department_budgets`, `finance.invoices`, `finance.financial_reports`, `finance.revenue_summary`
+- Policies: Finance role, Executive, Department manager, Self-created reports
+- Special: Department-based filtering via `app.current_user_department` session variable
+
 ### Known Gaps
-1. **Finance RLS**: `sample-data/finance-data.sql` has no RLS policies
-2. **mTLS**: Not implemented in development (uses HTTP)
-3. **Audit logging**: Only in HR schema, not Finance
+1. **mTLS**: Not implemented in development (uses HTTP)
 
 ### Architecture Version
 **Updated for**: v1.4 (December 2025)

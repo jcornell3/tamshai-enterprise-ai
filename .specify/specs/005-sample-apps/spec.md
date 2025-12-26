@@ -264,7 +264,577 @@ if (response.status === 'pending_confirmation') {
 - Timeout handling (5-minute TTL)
 - Success/error messaging
 
-## 9. Constitution Compliance
+## 9. Turbo Monorepo Structure
+
+### 9.1 Directory Layout
+
+```
+apps/web/
+├── turbo.json                      # Turbo pipeline configuration
+├── package.json                    # Root workspace package
+├── packages/
+│   ├── auth/                       # @tamshai/auth - Authentication utilities
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src/
+│   │       ├── index.ts            # Public exports
+│   │       ├── AuthProvider.tsx    # OIDC context provider
+│   │       ├── PrivateRoute.tsx    # Route guard component
+│   │       ├── useAuth.ts          # Authentication hook
+│   │       └── types.ts            # Auth types (AuthUser, AuthState)
+│   │
+│   ├── ui/                         # @tamshai/ui - Shared UI components
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── src/
+│   │       ├── index.ts
+│   │       ├── SSEQueryClient.tsx  # Server-Sent Events client (251 lines)
+│   │       ├── ApprovalCard.tsx    # Human-in-the-loop confirmation (205 lines)
+│   │       ├── TruncationBadge.tsx # Truncation warning display
+│   │       ├── LoadingSpinner.tsx
+│   │       └── ErrorBoundary.tsx
+│   │
+│   ├── tailwind-config/            # @tamshai/tailwind-config - Shared styles
+│   │   ├── package.json
+│   │   └── tailwind.config.js
+│   │
+│   └── typescript-config/          # @tamshai/typescript-config
+│       ├── package.json
+│       ├── base.json               # Base TypeScript settings
+│       └── react.json              # React-specific settings
+│
+└── apps/
+    ├── portal/                     # Main launchpad app (port 4000)
+    │   ├── package.json
+    │   ├── vite.config.ts
+    │   ├── tsconfig.json
+    │   ├── index.html
+    │   └── src/
+    │       ├── main.tsx
+    │       ├── App.tsx
+    │       ├── pages/
+    │       │   ├── HomePage.tsx
+    │       │   ├── LoginPage.tsx
+    │       │   └── UnauthorizedPage.tsx
+    │       └── components/
+    │           └── AppCard.tsx
+    │
+    ├── hr/                         # HR Employee Directory (port 4001)
+    │   ├── package.json
+    │   ├── vite.config.ts
+    │   ├── tsconfig.json
+    │   ├── index.html
+    │   └── src/
+    │       ├── main.tsx
+    │       ├── App.tsx
+    │       ├── pages/
+    │       │   ├── EmployeeDirectory.tsx
+    │       │   ├── EmployeeDetail.tsx
+    │       │   └── AIQueryPage.tsx
+    │       └── components/
+    │           ├── EmployeeTable.tsx
+    │           └── SalaryCell.tsx    # Renders masked or visible salary
+    │
+    ├── finance/                    # Budget Dashboard (port 4002)
+    │   ├── package.json
+    │   ├── vite.config.ts
+    │   ├── tsconfig.json
+    │   ├── index.html
+    │   └── src/
+    │       ├── main.tsx
+    │       ├── App.tsx
+    │       ├── pages/
+    │       │   ├── BudgetDashboard.tsx
+    │       │   ├── InvoiceList.tsx
+    │       │   └── AIQueryPage.tsx
+    │       └── components/
+    │           ├── BudgetChart.tsx
+    │           └── InvoiceTable.tsx
+    │
+    ├── sales/                      # CRM Dashboard (port 4003)
+    │   ├── package.json
+    │   ├── vite.config.ts
+    │   ├── tsconfig.json
+    │   ├── index.html
+    │   └── src/
+    │       ├── main.tsx
+    │       ├── App.tsx
+    │       ├── pages/
+    │       │   ├── PipelineDashboard.tsx
+    │       │   ├── OpportunitiesList.tsx
+    │       │   ├── CustomerDetail.tsx
+    │       │   └── AIQueryPage.tsx
+    │       └── components/
+    │           ├── PipelineChart.tsx
+    │           └── OpportunityCard.tsx
+    │
+    └── support/                    # Support Dashboard (port 4004)
+        ├── package.json
+        ├── vite.config.ts
+        ├── tsconfig.json
+        ├── index.html
+        └── src/
+            ├── main.tsx
+            ├── App.tsx
+            ├── pages/
+            │   ├── TicketsDashboard.tsx
+            │   ├── KnowledgeBase.tsx
+            │   └── AIQueryPage.tsx
+            └── components/
+                ├── TicketTable.tsx
+                └── ArticleCard.tsx
+```
+
+### 9.2 Turbo Pipeline Configuration
+
+```json
+// turbo.json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local"],
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    }
+  }
+}
+```
+
+### 9.3 Root Package.json
+
+```json
+// package.json
+{
+  "name": "tamshai-web-apps",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "dev:portal": "turbo run dev --filter=portal",
+    "dev:hr": "turbo run dev --filter=hr",
+    "dev:finance": "turbo run dev --filter=finance",
+    "dev:sales": "turbo run dev --filter=sales",
+    "dev:support": "turbo run dev --filter=support",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+```
+
+### 9.4 Package Dependencies
+
+```json
+// packages/auth/package.json
+{
+  "name": "@tamshai/auth",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-oidc-context": "^3.0.0"
+  }
+}
+```
+
+```json
+// apps/hr/package.json
+{
+  "name": "hr",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4001",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tamshai/auth": "*",
+    "@tamshai/ui": "*",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0"
+  },
+  "devDependencies": {
+    "@tamshai/tailwind-config": "*",
+    "@tamshai/typescript-config": "*",
+    "@vitejs/plugin-react": "^4.2.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0",
+    "vite": "^6.2.0"
+  }
+}
+```
+
+---
+
+## 10. Finance App Specification (Stub → Full)
+
+### 10.1 Required Pages
+
+| Page | Route | Description | MCP Tools Used |
+|------|-------|-------------|----------------|
+| Budget Dashboard | `/` | Department budget overview | `get_budget`, `list_budgets` |
+| Invoice List | `/invoices` | Paginated invoice list | `list_invoices` |
+| Invoice Detail | `/invoices/:id` | Single invoice view | `get_invoice` |
+| AI Query | `/query` | Natural language interface | All finance tools |
+
+### 10.2 Budget Dashboard Components
+
+```typescript
+// apps/finance/src/pages/BudgetDashboard.tsx
+
+interface BudgetDashboardProps {}
+
+export const BudgetDashboard: React.FC = () => {
+  const { data: budgets, isLoading } = useQuery({
+    queryKey: ['budgets', selectedYear],
+    queryFn: () => fetchBudgets(selectedYear)
+  });
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Department Budgets - FY {selectedYear}</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {budgets?.map(budget => (
+          <BudgetCard
+            key={budget.budget_id}
+            department={budget.department}
+            allocated={budget.allocated_amount}
+            spent={budget.spent_amount}
+            remaining={budget.remaining_amount}
+            status={budget.status}
+          />
+        ))}
+      </div>
+
+      <BudgetChart budgets={budgets} />
+    </div>
+  );
+};
+```
+
+### 10.3 Invoice List with Pagination
+
+```typescript
+// apps/finance/src/pages/InvoiceList.tsx
+
+export const InvoiceList: React.FC = () => {
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const { data, isLoading, hasMore } = useInvoices({ status: statusFilter, cursor });
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Invoices</h1>
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} />
+      </div>
+
+      {data?.metadata?.truncated && (
+        <TruncationBadge
+          message={`Showing ${data.data.length} of ${data.metadata.totalCount} invoices`}
+          hint="Use status filter to narrow results"
+        />
+      )}
+
+      <InvoiceTable invoices={data?.data || []} />
+
+      {data?.metadata?.hasMore && (
+        <button
+          onClick={() => setCursor(data.metadata.nextCursor)}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Load More
+        </button>
+      )}
+    </div>
+  );
+};
+```
+
+### 10.4 Access Control (Article V.1 Compliant)
+
+```typescript
+// apps/finance/src/App.tsx
+
+// CORRECT: Route-level guard only, no data-level checks
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route element={<PrivateRoute requiredRoles={['finance-read', 'executive']} />}>
+          <Route path="/" element={<BudgetDashboard />} />
+          <Route path="/invoices" element={<InvoiceList />} />
+          <Route path="/query" element={<AIQueryPage />} />
+        </Route>
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
+      </Routes>
+    </AuthProvider>
+  );
+}
+
+// WRONG: Data-level filtering in client (violates Article V.1)
+// const filteredInvoices = invoices.filter(i => userRoles.includes('finance-write'));
+```
+
+---
+
+## 11. Sales App Specification (Stub → Full)
+
+### 11.1 Required Pages
+
+| Page | Route | Description | MCP Tools Used |
+|------|-------|-------------|----------------|
+| Pipeline Dashboard | `/` | Sales pipeline visualization | `get_pipeline` |
+| Opportunities | `/opportunities` | Deal list with filters | `list_opportunities` |
+| Customer Detail | `/customers/:id` | Single customer view | `get_customer` |
+| AI Query | `/query` | Natural language interface | All sales tools |
+
+### 11.2 Pipeline Dashboard
+
+```typescript
+// apps/sales/src/pages/PipelineDashboard.tsx
+
+export const PipelineDashboard: React.FC = () => {
+  const { data: pipeline } = useQuery({
+    queryKey: ['pipeline', quarter],
+    queryFn: () => fetchPipeline(quarter)
+  });
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Sales Pipeline - Q{quarter}</h1>
+
+      <div className="grid grid-cols-6 gap-4 mb-8">
+        {STAGES.map(stage => (
+          <StageColumn
+            key={stage}
+            stage={stage}
+            opportunities={pipeline?.stages[stage] || []}
+            totalValue={pipeline?.totals[stage] || 0}
+          />
+        ))}
+      </div>
+
+      <PipelineChart data={pipeline} />
+    </div>
+  );
+};
+
+const STAGES = ['prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost'];
+```
+
+### 11.3 Opportunities with Cursor Pagination
+
+```typescript
+// apps/sales/src/pages/OpportunitiesList.tsx
+
+export const OpportunitiesList: React.FC = () => {
+  const [stageFilter, setStageFilter] = useState<string>('all');
+  const [cursor, setCursor] = useState<string | undefined>();
+
+  const { data, isLoading } = useOpportunities({ stage: stageFilter, cursor });
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Opportunities</h1>
+        <StageFilter value={stageFilter} onChange={setStageFilter} />
+      </div>
+
+      {data?.metadata?.truncated && (
+        <TruncationBadge
+          message={data.metadata.warning || `Showing first ${data.data.length} opportunities`}
+          hint={data.metadata.hint}
+        />
+      )}
+
+      <div className="grid gap-4">
+        {data?.data.map(opp => (
+          <OpportunityCard
+            key={opp._id}
+            opportunity={opp}
+            onClose={(id, outcome) => handleCloseOpportunity(id, outcome)}
+          />
+        ))}
+      </div>
+
+      {data?.metadata?.hasMore && (
+        <button onClick={() => setCursor(data.metadata.nextCursor)}>
+          Load More
+        </button>
+      )}
+    </div>
+  );
+};
+```
+
+---
+
+## 12. Support App Specification (Stub → Full)
+
+### 12.1 Required Pages
+
+| Page | Route | Description | MCP Tools Used |
+|------|-------|-------------|----------------|
+| Tickets Dashboard | `/` | Open tickets summary | `search_tickets` |
+| Ticket Search | `/tickets` | Full-text ticket search | `search_tickets` |
+| Knowledge Base | `/kb` | Article search | `search_knowledge_base` |
+| Article Detail | `/kb/:id` | Single KB article | `get_knowledge_article` |
+| AI Query | `/query` | Natural language interface | All support tools |
+
+### 12.2 Tickets Dashboard
+
+```typescript
+// apps/support/src/pages/TicketsDashboard.tsx
+
+export const TicketsDashboard: React.FC = () => {
+  const { data: openTickets } = useQuery({
+    queryKey: ['tickets', 'open'],
+    queryFn: () => searchTickets({ status: 'open' })
+  });
+
+  const { data: criticalTickets } = useQuery({
+    queryKey: ['tickets', 'critical'],
+    queryFn: () => searchTickets({ priority: 'critical', status: 'open' })
+  });
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Support Dashboard</h1>
+
+      <div className="grid grid-cols-4 gap-4 mb-8">
+        <StatCard title="Open Tickets" value={openTickets?.data.length || 0} />
+        <StatCard title="Critical" value={criticalTickets?.data.length || 0} color="red" />
+        <StatCard title="Pending" value={pendingCount} color="yellow" />
+        <StatCard title="Avg Resolution" value="4.2h" />
+      </div>
+
+      <h2 className="text-xl font-semibold mb-4">Critical Tickets</h2>
+      <TicketTable tickets={criticalTickets?.data || []} />
+    </div>
+  );
+};
+```
+
+### 12.3 Knowledge Base Search
+
+```typescript
+// apps/support/src/pages/KnowledgeBase.tsx
+
+export const KnowledgeBase: React.FC = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery] = useDebounce(searchQuery, 300);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['kb', debouncedQuery],
+    queryFn: () => searchKnowledgeBase(debouncedQuery),
+    enabled: debouncedQuery.length >= 2
+  });
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Knowledge Base</h1>
+
+      <SearchInput
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search articles..."
+      />
+
+      {data?.metadata?.truncated && (
+        <TruncationBadge message={data.metadata.warning} />
+      )}
+
+      <div className="grid gap-4 mt-6">
+        {data?.data.map(article => (
+          <ArticleCard
+            key={article.article_id}
+            article={article}
+            relevanceScore={article._score}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+```
+
+### 12.4 Close Ticket with Confirmation
+
+```typescript
+// apps/support/src/components/TicketActions.tsx
+
+export const CloseTicketButton: React.FC<{ ticketId: string }> = ({ ticketId }) => {
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+
+  const handleClose = async (resolution: string) => {
+    const response = await closeTicket({ ticket_id: ticketId, resolution });
+
+    if (response.status === 'pending_confirmation') {
+      setPendingConfirmation({
+        confirmationId: response.confirmationId,
+        message: response.message,
+        confirmationData: response.confirmationData
+      });
+      setShowConfirmation(true);
+    }
+  };
+
+  return (
+    <>
+      <button onClick={() => setShowResolutionModal(true)}>
+        Close Ticket
+      </button>
+
+      {showConfirmation && pendingConfirmation && (
+        <ApprovalCard
+          confirmationId={pendingConfirmation.confirmationId}
+          message={pendingConfirmation.message}
+          confirmationData={pendingConfirmation.confirmationData}
+          onComplete={(success) => {
+            setShowConfirmation(false);
+            if (success) {
+              refetchTickets();
+            }
+          }}
+        />
+      )}
+    </>
+  );
+};
+```
+
+---
+
+## 13. Constitution Compliance
 * **Article V.1:** No authorization logic in client - All data filtering happens at MCP/API layer
 * **Article V.2:** Tokens stored in memory only (not localStorage)
 * **Article V.3:** OIDC with PKCE flow (no implicit flow)

@@ -380,6 +380,270 @@ app.post('/api/confirm/:confirmationId', async (req, res) => {
 5. Frontend calls `POST /api/confirm/:id`
 6. Gateway executes or cancels action
 
+## API Reference
+
+### POST /api/query - AI Query with SSE Streaming
+
+Main endpoint for AI-powered queries with Claude integration.
+
+**Request:**
+```http
+POST /api/query HTTP/1.1
+Host: localhost:3100
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "query": "List all employees in Engineering department"
+}
+```
+
+**Response:** Server-Sent Events stream
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+
+data: {"type":"text","text":"I'll help you find "}
+
+data: {"type":"text","text":"employees in Engineering."}
+
+data: {"type":"tool_use","tool":"list_employees","input":{"department":"Engineering"}}
+
+data: {"type":"tool_result","data":[...employees...],"metadata":{"hasMore":true,"nextCursor":"..."}}
+
+data: {"type":"pagination","hasMore":true,"cursors":[{"server":"hr","cursor":"..."}]}
+
+data: {"type":"text","text":"Here are 50 employees in Engineering..."}
+
+data: [DONE]
+```
+
+**Error Responses:**
+| Status | Code | Message |
+|--------|------|---------|
+| 401 | `UNAUTHORIZED` | Missing or invalid authorization header |
+| 403 | `FORBIDDEN` | Token revoked or insufficient permissions |
+| 429 | `RATE_LIMITED` | Too many requests (60/min, 500/hour) |
+| 500 | `INTERNAL_ERROR` | Server error (check logs) |
+
+---
+
+### GET /api/query - AI Query with SSE (EventSource)
+
+Same as POST but accepts query via query parameter. Required for browser EventSource API which doesn't support custom headers.
+
+**Request:**
+```http
+GET /api/query?q=List%20employees&token=<jwt_token> HTTP/1.1
+Host: localhost:3100
+Accept: text/event-stream
+```
+
+**Parameters:**
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `q` | string | Yes | URL-encoded query text |
+| `token` | string | Yes | JWT access token (EventSource can't use headers) |
+| `cursor` | string | No | Base64-encoded pagination cursor from previous response |
+
+**Security Note:** Token in query string is logged in access logs. Configure log scrubbing in production.
+
+---
+
+### GET /api/mcp/:serverName/:toolName - Direct Tool Access (Read)
+
+Directly call MCP server tools without AI orchestration. Used by web apps for data fetching.
+
+**Request:**
+```http
+GET /api/mcp/hr/list_employees?department=Engineering&limit=50 HTTP/1.1
+Host: localhost:3100
+Authorization: Bearer <jwt_token>
+```
+
+**Path Parameters:**
+| Param | Values | Description |
+|-------|--------|-------------|
+| `serverName` | `hr`, `finance`, `sales`, `support` | Target MCP server |
+| `toolName` | Tool-specific | Tool to invoke |
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": [...],
+  "metadata": {
+    "hasMore": true,
+    "nextCursor": "eyJsYXN0TmFtZSI6...",
+    "returnedCount": 50,
+    "totalEstimate": "50+"
+  }
+}
+```
+
+**Error Responses:**
+| Status | Code | Message |
+|--------|------|---------|
+| 401 | `UNAUTHORIZED` | Missing or invalid token |
+| 403 | `ACCESS_DENIED` | User lacks required role for this MCP server |
+| 404 | `SERVER_NOT_FOUND` | Invalid MCP server name |
+| 404 | `TOOL_NOT_FOUND` | Invalid tool name for this server |
+
+---
+
+### POST /api/mcp/:serverName/:toolName - Direct Tool Access (Write)
+
+Directly call MCP server write tools. May return `pending_confirmation` for destructive operations.
+
+**Request:**
+```http
+POST /api/mcp/hr/delete_employee HTTP/1.1
+Host: localhost:3100
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "employeeId": "e1000000-0000-0000-0000-000000000021"
+}
+```
+
+**Response (Confirmation Required):**
+```json
+{
+  "status": "pending_confirmation",
+  "confirmationId": "bc482353-28be-4b02-b3a3-376cf5de86e7",
+  "message": "⚠️ Delete employee Lisa Anderson (lisa.a@tamshai.local)?...",
+  "confirmationData": {
+    "action": "delete_employee",
+    "employeeId": "e1000000-0000-0000-0000-000000000021",
+    "employeeName": "Lisa Anderson"
+  }
+}
+```
+
+---
+
+### POST /api/confirm/:confirmationId - Execute Pending Action
+
+Approve or reject a pending write operation.
+
+**Request:**
+```http
+POST /api/confirm/bc482353-28be-4b02-b3a3-376cf5de86e7 HTTP/1.1
+Host: localhost:3100
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "approved": true
+}
+```
+
+**Response (Approved):**
+```json
+{
+  "status": "success",
+  "result": {
+    "deleted": true,
+    "employeeId": "e1000000-0000-0000-0000-000000000021",
+    "employeeName": "Lisa Anderson",
+    "message": "Employee Lisa Anderson has been permanently deleted."
+  }
+}
+```
+
+**Response (Rejected):**
+```json
+{
+  "status": "cancelled",
+  "message": "Action cancelled by user"
+}
+```
+
+**Error Responses:**
+| Status | Code | Message |
+|--------|------|---------|
+| 401 | `UNAUTHORIZED` | Missing or invalid token |
+| 403 | `FORBIDDEN` | Confirmation belongs to different user |
+| 404 | `CONFIRMATION_EXPIRED` | TTL expired (5 minutes) or invalid ID |
+
+---
+
+### GET /health - Health Check
+
+**Request:**
+```http
+GET /health HTTP/1.1
+Host: localhost:3100
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-12-26T10:30:00Z",
+  "services": {
+    "redis": "connected",
+    "keycloak": "connected",
+    "mcp-hr": "healthy",
+    "mcp-finance": "healthy",
+    "mcp-sales": "healthy",
+    "mcp-support": "healthy"
+  }
+}
+```
+
+---
+
+### POST /api/revoke - Token Revocation (Admin)
+
+Revoke a JWT token before expiration. Requires admin role.
+
+**Request:**
+```http
+POST /api/revoke HTTP/1.1
+Host: localhost:3100
+Authorization: Bearer <admin_jwt_token>
+Content-Type: application/json
+
+{
+  "jti": "token-unique-id"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Token revoked"
+}
+```
+
+## CORS Configuration
+
+Required headers for cross-origin requests (web apps, desktop apps):
+
+```typescript
+app.use(cors({
+  origin: [
+    'http://localhost:4000',  // Portal
+    'http://localhost:4001',  // HR App
+    'http://localhost:4002',  // Finance App
+    'http://localhost:4003',  // Sales App
+    'http://localhost:4004',  // Support App
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID']
+}));
+
+// SSE-specific: No buffering, no caching
+res.setHeader('X-Accel-Buffering', 'no');
+res.setHeader('Cache-Control', 'no-cache');
+```
+
 ## Status
 **COMPLETE ✅** - Full v1.4 implementation (1,170 lines in `services/mcp-gateway/src/index.ts`). All features implemented: JWT validation, token revocation, role-based routing, SSE streaming (GET + POST), truncation warning injection, human-in-the-loop confirmations, and comprehensive integration tests.
 
