@@ -39,6 +39,8 @@ coverage/
 *.tfstate.*
 *.tfplan
 .terraform.lock.hcl
+terraform.tfvars
+infrastructure/terraform/vps/.keys/
 
 # Docker
 docker-compose.override.yml
