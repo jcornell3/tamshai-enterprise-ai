@@ -1,0 +1,84 @@
+name: QA / Test Debt
+description: Track testing gaps, missing coverage, or QA improvements needed
+title: "[QA]: "
+labels: ["testing", "tech-debt"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to track testing debt, coverage gaps, or QA improvements.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What testing or QA improvement is needed?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type of Debt
+      options:
+        - Missing unit tests
+        - Missing integration tests
+        - Missing E2E tests
+        - Low code coverage
+        - Flaky tests
+        - Test infrastructure
+        - Documentation gaps
+        - Performance testing
+        - Security testing
+        - Accessibility testing
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      options:
+        - MCP Gateway
+        - Flutter Client
+        - Web Client
+        - Integration Tests
+        - Infrastructure
+        - Multiple components
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current State
+      description: What is the current coverage or testing situation?
+      placeholder: |
+        - Current coverage: X%
+        - Missing tests for: ...
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How should this be addressed?
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low - Nice to have
+        - Medium - Should address soon
+        - High - Blocking quality
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know this is done?
+      placeholder: |
+        - [ ] Coverage increased to X%
+        - [ ] Tests added for ...
