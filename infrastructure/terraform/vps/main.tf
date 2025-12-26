@@ -381,12 +381,12 @@ output "app_url" {
 
 output "keycloak_url" {
   description = "Keycloak admin URL"
-  value       = "https://auth.${var.domain}"
+  value       = "https://${var.domain}/auth"
 }
 
 output "api_url" {
   description = "MCP Gateway API URL"
-  value       = "https://api.${var.domain}"
+  value       = "https://${var.domain}/api"
 }
 
 output "keycloak_admin_password" {
@@ -408,12 +408,18 @@ output "emergency_ssh" {
 output "dns_records" {
   description = "DNS records to create"
   value       = <<-EOT
-    Create these DNS records pointing to ${local.vps_ip}:
+    Create this DNS record pointing to ${local.vps_ip}:
 
     Type  Name              Value
-    A     ${var.domain}              ${local.vps_ip}
-    A     auth.${var.domain}         ${local.vps_ip}
-    A     api.${var.domain}          ${local.vps_ip}
-    A     app.${var.domain}          ${local.vps_ip}
+    A     ${var.domain}     ${local.vps_ip}
+
+    All services are path-based (no subdomains required):
+    - ${var.domain}/        Main portal
+    - ${var.domain}/auth    Keycloak
+    - ${var.domain}/api     MCP Gateway
+    - ${var.domain}/hr      HR App
+    - ${var.domain}/finance Finance App
+    - ${var.domain}/sales   Sales App
+    - ${var.domain}/support Support App
   EOT
 }

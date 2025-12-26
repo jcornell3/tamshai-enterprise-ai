@@ -39,8 +39,9 @@ write_files:
       # Keycloak
       KEYCLOAK_ADMIN=admin
       KEYCLOAK_ADMIN_PASSWORD=${keycloak_admin_pass}
-      KC_HOSTNAME=auth.${domain}
-      KC_HOSTNAME_STRICT=true
+      KC_HOSTNAME=${domain}
+      KC_HOSTNAME_STRICT=false
+      KC_HTTP_RELATIVE_PATH=/auth
       KC_PROXY=edge
       KC_DB=postgres
       KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
@@ -65,15 +66,15 @@ write_files:
       # MCP Gateway
       CLAUDE_API_KEY=${claude_api_key}
       JWT_SECRET=${jwt_secret}
-      KEYCLOAK_URL=https://auth.${domain}
-      KEYCLOAK_ISSUER=https://auth.${domain}/realms/tamshai
-      JWKS_URI=http://keycloak:8080/realms/tamshai/protocol/openid-connect/certs
+      KEYCLOAK_URL=https://${domain}/auth
+      KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai
+      JWKS_URI=http://keycloak:8080/auth/realms/tamshai/protocol/openid-connect/certs
       KEYCLOAK_REALM=tamshai
 
       # Web Apps
-      VITE_KEYCLOAK_URL=https://auth.${domain}
+      VITE_KEYCLOAK_URL=https://${domain}/auth
       VITE_KEYCLOAK_CLIENT_ID=mcp-gateway
-      VITE_MCP_GATEWAY_URL=https://api.${domain}
+      VITE_MCP_GATEWAY_URL=https://${domain}/api
 
       # Logging
       LOG_LEVEL=info
@@ -87,6 +88,7 @@ write_files:
     permissions: '0644'
     content: |
       # Tamshai Enterprise AI - Caddy Reverse Proxy
+      # Path-based routing (no subdomains required)
       # Automatic HTTPS with Let's Encrypt
 
       {
@@ -94,80 +96,69 @@ write_files:
         acme_ca https://acme-v02.api.letsencrypt.org/directory
       }
 
-      # Main application portal
-      ${domain}, app.${domain} {
-        reverse_proxy web-portal:80
+      ${domain} {
         encode gzip
 
         header {
           X-Content-Type-Options nosniff
-          X-Frame-Options DENY
+          X-Frame-Options SAMEORIGIN
           Referrer-Policy strict-origin-when-cross-origin
           -Server
         }
-      }
 
-      # Keycloak authentication
-      auth.${domain} {
-        reverse_proxy keycloak:8080
-        encode gzip
-
-        header {
-          X-Content-Type-Options nosniff
-          -Server
-        }
-      }
-
-      # MCP Gateway API
-      api.${domain} {
-        reverse_proxy mcp-gateway:3100
-        encode gzip
-
-        # SSE streaming support
-        header {
-          Access-Control-Allow-Origin *
-          Access-Control-Allow-Methods "GET, POST, OPTIONS"
-          Access-Control-Allow-Headers "Authorization, Content-Type"
-          X-Content-Type-Options nosniff
-          -Server
+        # Keycloak authentication (/auth/*)
+        handle_path /auth/* {
+          reverse_proxy keycloak:8080
         }
 
-        # Handle SSE connections (long-lived)
-        @sse {
-          path /api/query*
-          header Accept text/event-stream
-        }
-        reverse_proxy @sse mcp-gateway:3100 {
-          flush_interval -1
-          transport http {
-            read_timeout 120s
-            write_timeout 120s
+        # MCP Gateway API (/api/*)
+        handle /api/* {
+          header {
+            Access-Control-Allow-Origin *
+            Access-Control-Allow-Methods "GET, POST, OPTIONS"
+            Access-Control-Allow-Headers "Authorization, Content-Type"
           }
+
+          # SSE streaming support
+          @sse {
+            path /api/query*
+            header Accept text/event-stream
+          }
+          reverse_proxy @sse mcp-gateway:3100 {
+            flush_interval -1
+            transport http {
+              read_timeout 120s
+              write_timeout 120s
+            }
+          }
+
+          reverse_proxy mcp-gateway:3100
         }
-      }
 
-      # HR App
-      hr.${domain} {
-        reverse_proxy web-hr:80
-        encode gzip
-      }
+        # HR App (/hr/*)
+        handle_path /hr/* {
+          reverse_proxy web-hr:80
+        }
 
-      # Finance App
-      finance.${domain} {
-        reverse_proxy web-finance:80
-        encode gzip
-      }
+        # Finance App (/finance/*)
+        handle_path /finance/* {
+          reverse_proxy web-finance:80
+        }
 
-      # Sales App
-      sales.${domain} {
-        reverse_proxy web-sales:80
-        encode gzip
-      }
+        # Sales App (/sales/*)
+        handle_path /sales/* {
+          reverse_proxy web-sales:80
+        }
 
-      # Support App
-      support.${domain} {
-        reverse_proxy web-support:80
-        encode gzip
+        # Support App (/support/*)
+        handle_path /support/* {
+          reverse_proxy web-support:80
+        }
+
+        # Main portal (default - must be last)
+        handle {
+          reverse_proxy web-portal:80
+        }
       }
 
   # Deploy script for remote updates
@@ -237,7 +228,7 @@ write_files:
       # Check key services
       echo "Checking service health..."
       curl -sf http://localhost:3100/health > /dev/null && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
-      curl -sf http://localhost:8080/health/ready > /dev/null && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+      curl -sf http://localhost:8080/auth/health/ready > /dev/null && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
 
       echo "=== Deployment complete ==="
 

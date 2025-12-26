@@ -190,7 +190,7 @@ jobs:
 
           echo "=== Health check ==="
           curl -sf http://localhost:3100/health && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
-          curl -sf http://localhost:8080/health/ready && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+          curl -sf http://localhost:8080/auth/health/ready && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
@@ -203,9 +203,9 @@ jobs:
           # Wait for services to be fully ready
           sleep 10
 
-          # Check main endpoints
-          for endpoint in "" "auth." "api."; do
-            url="https://${endpoint}${DOMAIN}"
+          # Check main endpoints (path-based routing)
+          for path in "" "/auth" "/api"; do
+            url="https://${DOMAIN}${path}"
             if curl -sf -o /dev/null --max-time 30 "$url"; then
               echo "✅ $url - OK"
             else
