@@ -37,6 +37,7 @@ const CONFIG = {
   keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
   gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:3100',
   mcpHrUrl: process.env.MCP_HR_URL || 'http://127.0.0.1:3101',
+  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
   clientId: 'mcp-gateway',
   clientSecret: 'mcp-gateway-secret',
 };
@@ -74,6 +75,12 @@ const TEST_USERS = {
     roles: [],
     // Frank is an intern with no direct reports
     expectedDirectReports: [],
+  },
+  financeUser: {
+    username: 'bob.martinez',
+    password: 'password123',
+    email: 'bob@tamshai.local',
+    roles: ['finance-read', 'finance-write'],
   },
 };
 
@@ -126,6 +133,20 @@ async function getAccessToken(username: string, password: string): Promise<strin
 function createMcpHrClient(token: string): AxiosInstance {
   return axios.create({
     baseURL: CONFIG.mcpHrUrl,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    timeout: 30000,
+  });
+}
+
+/**
+ * Create authenticated MCP Finance client
+ */
+function createMcpFinanceClient(token: string): AxiosInstance {
+  return axios.create({
+    baseURL: CONFIG.mcpFinanceUrl,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -494,6 +515,177 @@ describe('Query Routing', () => {
 });
 
 // =============================================================================
+// BUDGET QUERY TESTS
+// =============================================================================
+
+describe('Budget Status Query', () => {
+  describe('Via MCP Finance Server', () => {
+    let token: string;
+    let financeClient: AxiosInstance;
+
+    beforeAll(async () => {
+      token = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
+      financeClient = createMcpFinanceClient(token);
+    });
+
+    test('Returns budget summary with status breakdown', async () => {
+      const response = await financeClient.post<MCPQueryResponse>('/query', {
+        query: "what's the budget status",
+        userContext: {
+          userId: '7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e', // Bob's Keycloak ID
+          username: TEST_USERS.financeUser.username,
+          email: TEST_USERS.financeUser.email,
+          roles: TEST_USERS.financeUser.roles,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.data.status).toBe('success');
+      expect(response.data.data).toBeDefined();
+      expect(Array.isArray(response.data.data)).toBe(true);
+
+      // Verify budget data structure
+      if (response.data.data.length > 0) {
+        const budget = response.data.data[0];
+        expect(budget).toHaveProperty('department_code');
+        expect(budget).toHaveProperty('fiscal_year');
+        expect(budget).toHaveProperty('budgeted_amount');
+        expect(budget).toHaveProperty('actual_amount');
+        expect(budget).toHaveProperty('utilization_pct');
+        expect(budget).toHaveProperty('remaining_amount');
+        expect(budget).toHaveProperty('status');
+      }
+    });
+
+    test('Detects various budget query phrasings', async () => {
+      const budgetQueries = [
+        "what's the budget status",
+        'show budget summary',
+        'budget overview',
+        'spending report',
+        'budget allocation',
+      ];
+
+      for (const query of budgetQueries) {
+        const response = await financeClient.post<MCPQueryResponse>('/query', {
+          query,
+          userContext: {
+            userId: '7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e',
+            username: TEST_USERS.financeUser.username,
+            email: TEST_USERS.financeUser.email,
+            roles: TEST_USERS.financeUser.roles,
+          },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.data.status).toBe('success');
+        expect(Array.isArray(response.data.data)).toBe(true);
+      }
+    });
+
+    test('Filters by department correctly', async () => {
+      const response = await financeClient.post<MCPQueryResponse>('/query', {
+        query: 'budget for Engineering department',
+        userContext: {
+          userId: '7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e',
+          username: TEST_USERS.financeUser.username,
+          email: TEST_USERS.financeUser.email,
+          roles: TEST_USERS.financeUser.roles,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.data.status).toBe('success');
+
+      // All returned budgets should be for Engineering
+      const budgets = response.data.data || [];
+      budgets.forEach((budget: any) => {
+        expect(budget.department_code?.toUpperCase()).toBe('ENGINEERING');
+      });
+    });
+
+    test('Filters by fiscal year correctly', async () => {
+      const response = await financeClient.post<MCPQueryResponse>('/query', {
+        query: 'budget for 2024',
+        userContext: {
+          userId: '7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e',
+          username: TEST_USERS.financeUser.username,
+          email: TEST_USERS.financeUser.email,
+          roles: TEST_USERS.financeUser.roles,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.data.status).toBe('success');
+
+      // All returned budgets should be for 2024
+      const budgets = response.data.data || [];
+      budgets.forEach((budget: any) => {
+        expect(budget.fiscal_year).toBe(2024);
+      });
+    });
+
+    test('Returns metadata with summary totals', async () => {
+      const response = await financeClient.post<MCPQueryResponse>('/query', {
+        query: 'budget status',
+        userContext: {
+          userId: '7b8c9d0e-1f2a-3b4c-5d6e-7f8a9b0c1d2e',
+          username: TEST_USERS.financeUser.username,
+          email: TEST_USERS.financeUser.email,
+          roles: TEST_USERS.financeUser.roles,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.data.status).toBe('success');
+      expect(response.data.metadata).toBeDefined();
+
+      // Check for summary in metadata
+      const metadata = response.data.metadata as any;
+      if (metadata.summary) {
+        expect(metadata.summary).toHaveProperty('totalBudgeted');
+        expect(metadata.summary).toHaveProperty('totalActual');
+        expect(metadata.summary).toHaveProperty('totalRemaining');
+        expect(metadata.summary).toHaveProperty('overallUtilization');
+      }
+    });
+  });
+
+  describe('Executive Access to Budget Data', () => {
+    let token: string;
+    let financeClient: AxiosInstance;
+
+    beforeAll(async () => {
+      token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
+      financeClient = createMcpFinanceClient(token);
+    });
+
+    test('Executive can view all department budgets', async () => {
+      const response = await financeClient.post<MCPQueryResponse>('/query', {
+        query: 'show all budgets',
+        userContext: {
+          userId: '4d712a0b-21d0-46ec-99ea-89cf960bc679',
+          username: TEST_USERS.executive.username,
+          email: TEST_USERS.executive.email,
+          roles: TEST_USERS.executive.roles,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.data.status).toBe('success');
+      expect(response.data.data).toBeDefined();
+      expect(Array.isArray(response.data.data)).toBe(true);
+
+      // Executive should see budgets from multiple departments
+      const departments = new Set(
+        (response.data.data || []).map((b: any) => b.department_code)
+      );
+      expect(departments.size).toBeGreaterThan(1);
+    });
+  });
+});
+
+// =============================================================================
 // ERROR HANDLING TESTS
 // =============================================================================
 
@@ -534,6 +726,12 @@ describe('Query Error Handling', () => {
 describe('Query Scenarios - Health Check', () => {
   test('MCP HR server is accessible', async () => {
     const response = await axios.get(`${CONFIG.mcpHrUrl}/health`);
+    expect(response.status).toBe(200);
+    expect(response.data.status).toBe('healthy');
+  });
+
+  test('MCP Finance server is accessible', async () => {
+    const response = await axios.get(`${CONFIG.mcpFinanceUrl}/health`);
     expect(response.status).toBe(200);
     expect(response.data.status).toBe('healthy');
   });

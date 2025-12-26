@@ -15,6 +15,7 @@ import dotenv from 'dotenv';
 import winston from 'winston';
 import { UserContext, checkConnection, closePool } from './database/connection';
 import { getBudget, GetBudgetInputSchema } from './tools/get-budget';
+import { listBudgets, ListBudgetsInputSchema } from './tools/list-budgets';
 import { listInvoices, ListInvoicesInputSchema } from './tools/list-invoices';
 import { getExpenseReport, GetExpenseReportInputSchema } from './tools/get-expense-report';
 import {
@@ -125,16 +126,37 @@ app.post('/query', async (req: Request, res: Response) => {
 
     // Check for pagination requests
     const isPaginationRequest = queryLower.includes('next page') ||
-      queryLower.includes('more invoices') ||
+      queryLower.includes('more') ||
       queryLower.includes('show more') ||
       queryLower.includes('continue') ||
       !!cursor;
 
+    // Check if this is a budget query
+    const isBudgetQuery = queryLower.includes('budget') ||
+      queryLower.includes('spending') ||
+      queryLower.includes('allocation');
+
     // Check if this is a list invoices query
-    const isListInvoicesQuery = queryLower.includes('list') ||
-      queryLower.includes('show') ||
-      queryLower.includes('invoices') ||
-      isPaginationRequest;
+    const isListInvoicesQuery = queryLower.includes('invoice');
+
+    // Route to appropriate handler
+    if (isBudgetQuery) {
+      // Extract department filter if mentioned
+      const deptMatch = queryLower.match(/(?:for|in)\s+(\w+)\s+(?:department|dept)?/);
+      const yearMatch = queryLower.match(/(\d{4})/);
+
+      const input: any = { limit: 50 };
+      if (deptMatch) {
+        input.department = deptMatch[1].toUpperCase();
+      }
+      if (yearMatch) {
+        input.fiscalYear = parseInt(yearMatch[1]);
+      }
+
+      const result = await listBudgets(input, userContext);
+      res.json(result);
+      return;
+    }
 
     if (isListInvoicesQuery || isPaginationRequest) {
       const input: any = { limit: 50 };
@@ -147,14 +169,9 @@ app.post('/query', async (req: Request, res: Response) => {
       return;
     }
 
-    // For other queries, return a simple response indicating the tools are available
-    // The Gateway will call specific tools based on Claude's tool use
-    res.json({
-      status: 'success',
-      message: 'MCP Finance Server ready',
-      availableTools: ['get_budget', 'list_invoices', 'get_expense_report', 'delete_invoice', 'approve_budget'],
-      userRoles: userContext.roles,
-    });
+    // Default: Return budget summary as it's the most commonly requested
+    const result = await listBudgets({ limit: 50 }, userContext);
+    res.json(result);
   } catch (error) {
     logger.error('Query error:', error);
     res.status(500).json({
@@ -222,6 +239,34 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
       status: 'error',
       code: 'INTERNAL_ERROR',
       message: 'Failed to list invoices',
+    });
+  }
+});
+
+/**
+ * List Budgets Tool (v1.4 with truncation detection)
+ */
+app.post('/tools/list_budgets', async (req: Request, res: Response) => {
+  try {
+    const { input, userContext } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await listBudgets(input || {}, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('list_budgets error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to list budgets',
     });
   }
 });
