@@ -1,0 +1,521 @@
+openapi: 3.0.3
+info:
+  title: Tamshai MCP Gateway API
+  description: |
+    AI Gateway service for Tamshai Corp Enterprise AI system.
+    Routes AI queries to appropriate MCP servers based on user roles.
+
+    ## Authentication
+    All authenticated endpoints require a JWT Bearer token from Keycloak.
+
+    ## v1.4 Features
+    - SSE Streaming for long-running queries
+    - Human-in-the-loop confirmations
+    - Truncation warnings for large datasets
+  version: 1.4.0
+  contact:
+    name: Tamshai Corp
+    url: https://github.com/jcornell3/tamshai-enterprise-ai
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3100
+    description: Local development
+  - url: https://vps.tamshai.com/api
+    description: Production
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: User
+    description: User information
+  - name: AI
+    description: AI query endpoints
+  - name: MCP
+    description: MCP tool proxy endpoints
+  - name: Confirmation
+    description: Human-in-the-loop confirmations
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the gateway is healthy
+      tags: [Health]
+      responses:
+        '200':
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/health:
+    get:
+      summary: API health check
+      description: Check if the API is healthy
+      tags: [Health]
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/user:
+    get:
+      summary: Get current user
+      description: Get information about the authenticated user
+      tags: [User]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/mcp/tools:
+    get:
+      summary: Get available MCP tools
+      description: List MCP data sources accessible to the current user
+      tags: [MCP]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available tools
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPToolsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/ai/query:
+    post:
+      summary: AI query (non-streaming)
+      description: Send a query to Claude with MCP data context
+      tags: [AI]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIQueryRequest'
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIQueryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/query:
+    get:
+      summary: SSE streaming query (GET)
+      description: |
+        Stream AI responses using Server-Sent Events.
+        Use for EventSource API which requires GET.
+        Token can be passed via query param.
+      tags: [AI]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The query string
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          description: Pagination cursor for subsequent pages
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: false
+          description: JWT token (alternative to Authorization header for EventSource)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: SSE streaming query (POST)
+      description: |
+        Stream AI responses using Server-Sent Events.
+        Use for fetch API with proper Authorization headers.
+      tags: [AI]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  description: The query string
+                cursor:
+                  type: string
+                  description: Pagination cursor
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/confirm/{confirmationId}:
+    post:
+      summary: Confirm or reject action
+      description: |
+        Handle human-in-the-loop confirmations for write operations.
+        v1.4 feature for destructive action approval.
+      tags: [Confirmation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: confirmationId
+          in: path
+          required: true
+          description: The confirmation ID from pending action
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved]
+              properties:
+                approved:
+                  type: boolean
+                  description: Whether to approve or reject the action
+      responses:
+        '200':
+          description: Confirmation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: User mismatch - only initiating user can confirm
+        '404':
+          description: Confirmation not found or expired
+
+  /api/mcp/{serverName}/{toolName}:
+    get:
+      summary: Call MCP tool (GET)
+      description: Proxy request to MCP server tool
+      tags: [MCP]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          description: MCP server name (hr, finance, sales, support)
+          schema:
+            type: string
+            enum: [hr, finance, sales, support]
+        - name: toolName
+          in: path
+          required: true
+          description: Tool name to call
+          schema:
+            type: string
+            pattern: '^[a-zA-Z][a-zA-Z0-9_-]{0,63}$'
+      responses:
+        '200':
+          description: Tool response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPToolResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Access denied to this MCP server
+        '404':
+          description: Server or tool not found
+        '503':
+          description: MCP server unavailable
+
+    post:
+      summary: Call MCP tool (POST)
+      description: Proxy request to MCP server tool for write operations
+      tags: [MCP]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serverName
+          in: path
+          required: true
+          description: MCP server name
+          schema:
+            type: string
+            enum: [hr, finance, sales, support]
+        - name: toolName
+          in: path
+          required: true
+          description: Tool name to call
+          schema:
+            type: string
+            pattern: '^[a-zA-Z][a-zA-Z0-9_-]{0,63}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Tool response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPToolResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Access denied
+        '503':
+          description: MCP server unavailable
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Keycloak JWT token
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: "0.1.0"
+
+    UserInfo:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        roles:
+          type: array
+          items:
+            type: string
+        groups:
+          type: array
+          items:
+            type: string
+
+    MCPToolsResponse:
+      type: object
+      properties:
+        user:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        accessibleDataSources:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+
+    AIQueryRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: Natural language query
+        conversationId:
+          type: string
+          format: uuid
+          description: Optional conversation ID for context
+        context:
+          type: object
+          description: Additional context
+
+    AIQueryResponse:
+      type: object
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        response:
+          type: string
+          description: AI-generated response
+        metadata:
+          type: object
+          properties:
+            dataSourcesQueried:
+              type: array
+              items:
+                type: string
+            processingTimeMs:
+              type: integer
+
+    MCPToolResponse:
+      oneOf:
+        - $ref: '#/components/schemas/MCPSuccessResponse'
+        - $ref: '#/components/schemas/MCPErrorResponse'
+        - $ref: '#/components/schemas/MCPPendingConfirmation'
+
+    MCPSuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+        metadata:
+          type: object
+          properties:
+            truncated:
+              type: boolean
+            returnedCount:
+              type: integer
+            totalCount:
+              type: string
+            hasMore:
+              type: boolean
+            nextCursor:
+              type: string
+
+    MCPErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        code:
+          type: string
+        message:
+          type: string
+        suggestedAction:
+          type: string
+
+    MCPPendingConfirmation:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending_confirmation]
+        confirmationId:
+          type: string
+          format: uuid
+        message:
+          type: string
+        confirmationData:
+          type: object
+
+    ConfirmationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success, cancelled]
+        message:
+          type: string
+        result:
+          type: object
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        requestId:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid authorization
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

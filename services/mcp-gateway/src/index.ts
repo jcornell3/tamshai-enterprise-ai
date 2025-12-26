@@ -25,6 +25,10 @@ import winston from 'winston';
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yaml';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   MCPToolResponse,
   isSuccessResponse,
@@ -433,6 +437,36 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Request-ID', req.headers['x-request-id'] as string);
   next();
 });
+
+// =============================================================================
+// OPENAPI DOCUMENTATION
+// =============================================================================
+
+// Load and serve OpenAPI documentation
+try {
+  const openApiPath = path.join(__dirname, 'openapi.yaml');
+  const openApiContent = fs.readFileSync(openApiPath, 'utf8');
+  const openApiDocument = YAML.parse(openApiContent);
+
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiDocument, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Tamshai MCP Gateway API',
+  }));
+
+  // Serve raw OpenAPI spec
+  app.get('/api-docs.yaml', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/yaml');
+    res.send(openApiContent);
+  });
+
+  app.get('/api-docs.json', (req: Request, res: Response) => {
+    res.json(openApiDocument);
+  });
+
+  logger.info('OpenAPI documentation available at /api-docs');
+} catch (error) {
+  logger.warn('OpenAPI documentation not loaded:', error);
+}
 
 // =============================================================================
 // ROUTES
