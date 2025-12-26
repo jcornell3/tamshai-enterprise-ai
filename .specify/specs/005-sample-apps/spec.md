@@ -122,13 +122,14 @@ We will build a **Single Monorepo** containing these lightweight React applicati
 ```typescript
 // src/services/ai-query.ts
 
-async function streamAIQuery(query: string, token: string): Promise<void> {
-  const eventSource = new EventSource(
-    `http://localhost:3100/api/query?q=${encodeURIComponent(query)}`,
-    {
-      headers: { Authorization: `Bearer ${token}` }
-    }
-  );
+function streamAIQuery(query: string, token: string): EventSource {
+  // IMPORTANT: EventSource does NOT support custom headers (browser API limitation)
+  // Token must be passed via query parameter
+  const url = new URL('http://localhost:3100/api/query');
+  url.searchParams.append('q', query);
+  url.searchParams.append('token', token);  // Required for authentication
+
+  const eventSource = new EventSource(url.toString());
 
   eventSource.onmessage = (event) => {
     if (event.data === '[DONE]') {
@@ -146,11 +147,14 @@ async function streamAIQuery(query: string, token: string): Promise<void> {
     eventSource.close();
     showError('Connection lost. Please retry your query.');
   };
+
+  return eventSource;
 }
 ```
 
 **Key Points**:
 - Use browser's native `EventSource` API (NOT WebSockets)
+- **CRITICAL**: EventSource does NOT support custom headers - pass token via query param
 - Handle [DONE] message to close connection
 - Display spinner during streaming (30-60 second queries)
 - Graceful error handling for connection failures

@@ -55,6 +55,9 @@ The Gateway itself doesn't expose tools. It orchestrates calls to downstream MCP
   - Error handling with fail-secure defaults
 * **API Endpoints:**
   - `POST /api/query` - Main AI query endpoint (SSE streaming)
+  - `GET /api/query` - SSE query with token in query param (for EventSource)
+  - `GET /api/mcp/:server/:tool` - Direct MCP tool access (read operations)
+  - `POST /api/mcp/:server/:tool` - Direct MCP tool access (write operations)
   - `GET /health` - Health check endpoint
   - `POST /api/revoke` - Token revocation endpoint (admin only)
   - `POST /api/confirm/:id` - Human-in-the-loop confirmation endpoint (v1.4)
@@ -163,6 +166,113 @@ app.post('/api/query', async (req, res) => {
 - Works through HTTP proxies/firewalls
 - Simpler than WebSockets (no handshake)
 - Prevents timeouts during Claude's multi-step reasoning (30-60 seconds)
+
+### SSE Authentication (CRITICAL)
+
+**Browser EventSource API Limitation**: The browser's `EventSource` API does NOT support custom headers. Token must be passed via query parameter.
+
+```typescript
+// Gateway auth middleware accepts token from EITHER:
+// 1. Authorization header (for fetch/axios)
+// 2. Query parameter (for EventSource)
+
+async function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const tokenFromQuery = req.query.token;
+
+  let token: string;
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (tokenFromQuery) {
+    // EventSource doesn't support custom headers
+    token = tokenFromQuery;
+  } else {
+    return res.status(401).json({ error: 'Missing authorization' });
+  }
+
+  // Validate token...
+}
+```
+
+**Security Note**: Query param tokens are logged in server access logs. Configure log scrubbing in production.
+
+### MCP Tool Proxy Endpoints
+
+Direct tool access without Claude AI orchestration. Used by web apps for data fetching.
+
+```typescript
+// GET /api/mcp/:serverName/:toolName - Read operations
+app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req, res) => {
+  const { serverName, toolName } = req.params;
+
+  // 1. Find server config
+  const server = mcpServerConfigs.find(s => s.name === serverName);
+  if (!server) {
+    return res.status(404).json({
+      status: 'error',
+      code: 'SERVER_NOT_FOUND',
+      message: `MCP server '${serverName}' not found`,
+      suggestedAction: `Available servers: hr, finance, sales, support`
+    });
+  }
+
+  // 2. Check authorization
+  const accessibleServers = getAccessibleMCPServers(userContext.roles);
+  if (!accessibleServers.some(s => s.name === serverName)) {
+    return res.status(403).json({
+      status: 'error',
+      code: 'ACCESS_DENIED',
+      message: `You do not have access to '${serverName}'`,
+      suggestedAction: `Required roles: ${server.requiredRoles.join(' or ')}`
+    });
+  }
+
+  // 3. Forward to MCP server
+  const response = await axios.get(`${server.url}/tools/${toolName}`, {
+    params: req.query,
+    headers: {
+      'X-User-ID': userContext.userId,
+      'X-User-Roles': userContext.roles.join(',')
+    }
+  });
+
+  res.json(response.data);
+});
+
+// POST /api/mcp/:serverName/:toolName - Write operations (may return pending_confirmation)
+```
+
+### Cursor-Based Pagination (v1.4)
+
+MCP servers return cursor-based pagination metadata. Gateway forwards and optionally sends SSE pagination events.
+
+```typescript
+// Response from MCP server
+interface PaginationMetadata {
+  hasMore: boolean;           // More records available
+  nextCursor?: string;        // Base64-encoded cursor for next page
+  returnedCount: number;      // Records in this response
+  totalEstimate?: string;     // e.g., "50+" when truncated
+  hint?: string;              // AI-friendly message
+}
+
+// Gateway SSE pagination event
+res.write(`data: ${JSON.stringify({
+  type: 'pagination',
+  hasMore: true,
+  cursors: [{ server: 'mcp-hr', cursor: 'eyJsYXN0TmFtZSI6...' }],
+  hint: 'More data available. Request next page to continue.'
+})}\n\n`);
+```
+
+**Pagination Flow**:
+1. User queries "List all employees"
+2. MCP HR returns 50 records + `hasMore: true` + `nextCursor`
+3. Gateway sends pagination SSE event
+4. AI tells user "Showing 50 of 59 employees. Say 'show more' for next page"
+5. User says "show more"
+6. Gateway passes cursor to MCP server
+7. MCP returns remaining 9 records with `hasMore: false`
 
 ### Truncation Warning Injection (v1.4 - Section 5.3)
 ```typescript
@@ -280,6 +390,11 @@ app.post('/api/confirm/:confirmationId', async (req, res) => {
 - ✅ Section 5.3: Truncation warning injection specified
 - ✅ Section 5.6: Human-in-the-loop confirmation flow documented
 - ✅ Section 7.4: LLM-friendly error handling (ref: Spec 004)
+
+**v1.4.1 Changes (Lessons Learned)**:
+- ✅ SSE authentication via query parameter (EventSource limitation)
+- ✅ MCP tool proxy endpoints for direct tool access
+- ✅ Cursor-based pagination handling and SSE events
 
 ## Keycloak Client Configuration
 

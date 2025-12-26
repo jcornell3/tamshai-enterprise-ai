@@ -22,7 +22,7 @@
 ## Group 5: v1.4 - SSE Streaming Client (Section 6.1)
 - [ ] **[v1.4] Create `src/services/ai-query.ts`** with streamAIQuery function. [P]
 - [ ] **[v1.4] Use EventSource API** (NOT WebSockets) for SSE connection. [P]
-- [ ] **[v1.4] Set Authorization header** with Bearer token in EventSource. [P]
+- [ ] **[v1.4] Pass token via query parameter** (EventSource does NOT support custom headers). [P]
 - [ ] **[v1.4] Create `AIQueryInput` component** with text input and submit button. [P]
 - [ ] **[v1.4] Create `StreamingResponse` component** for real-time updates. [P]
 - [ ] **[v1.4] Display "Thinking..." spinner** during query processing. [P]

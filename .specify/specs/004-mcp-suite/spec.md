@@ -17,9 +17,24 @@
 
 ```typescript
 type MCPToolResponse =
-  | { status: 'success', data: any, metadata?: { truncated?: boolean, totalCount?: string, warning?: string } }
+  | { status: 'success', data: any, metadata?: PaginationMetadata }
   | { status: 'error', code: string, message: string, suggestedAction?: string }
   | { status: 'pending_confirmation', confirmationId: string, message: string, confirmationData: any };
+
+// Pagination metadata for list operations (v1.4.1)
+interface PaginationMetadata {
+  // Cursor-based pagination (preferred)
+  hasMore: boolean;           // More records available
+  nextCursor?: string;        // Base64-encoded cursor for next page
+  returnedCount: number;      // Records in this response
+  totalEstimate?: string;     // e.g., "50+" when count exceeds limit
+  hint?: string;              // AI-friendly message for user
+
+  // Legacy truncation fields (backward compatibility)
+  truncated?: boolean;        // Alias for hasMore
+  totalCount?: string;        // Alias for totalEstimate
+  warning?: string;           // Alias for hint
+}
 ```
 
 ### MCP HR Server (Port 3101)
@@ -384,6 +399,105 @@ async function listEmployees(
 }
 ```
 
+### Cursor-Based Pagination Pattern (v1.4.1 - Lessons Learned)
+
+Replaces simple truncation with full data retrieval across multiple requests.
+
+```typescript
+// Cursor encoding/decoding
+interface PaginationCursor {
+  lastName: string;
+  firstName: string;
+  id: string;  // Tie-breaker for identical names
+}
+
+function encodeCursor(cursor: PaginationCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64');
+}
+
+function decodeCursor(encoded: string): PaginationCursor | null {
+  try {
+    return JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'));
+  } catch { return null; }
+}
+
+async function listEmployees(
+  params: { department?: string; limit?: number; cursor?: string },
+  userContext: UserContext
+): Promise<MCPToolResponse> {
+  const limit = Math.min(params.limit || 50, 50);  // Article III.2 max
+  const queryLimit = limit + 1;  // Detect if more exist
+  const cursorData = params.cursor ? decodeCursor(params.cursor) : null;
+
+  // Build keyset WHERE clause for efficient pagination
+  let whereClauses = ['active = true'];
+  let values: any[] = [];
+
+  if (params.department) {
+    whereClauses.push(`department = $${values.length + 1}`);
+    values.push(params.department);
+  }
+
+  if (cursorData) {
+    // Multi-column keyset pagination (preserves sort order)
+    whereClauses.push(`(
+      (last_name > $${values.length + 1}) OR
+      (last_name = $${values.length + 1} AND first_name > $${values.length + 2}) OR
+      (last_name = $${values.length + 1} AND first_name = $${values.length + 2} AND id > $${values.length + 3})
+    )`);
+    values.push(cursorData.lastName, cursorData.firstName, cursorData.id);
+  }
+
+  const result = await db.query(`
+    SELECT * FROM hr.employees
+    WHERE ${whereClauses.join(' AND ')}
+    ORDER BY last_name, first_name, id
+    LIMIT $${values.length + 1}
+  `, [...values, queryLimit]);
+
+  const hasMore = result.rows.length > limit;
+  const records = result.rows.slice(0, limit);
+
+  // Build pagination metadata
+  let metadata: PaginationMetadata = {
+    hasMore,
+    returnedCount: records.length,
+    // Legacy fields for backward compatibility
+    truncated: hasMore,
+    totalCount: hasMore ? `${limit}+` : records.length.toString()
+  };
+
+  if (hasMore && records.length > 0) {
+    const lastRecord = records[records.length - 1];
+    metadata.nextCursor = encodeCursor({
+      lastName: lastRecord.last_name,
+      firstName: lastRecord.first_name,
+      id: lastRecord.id
+    });
+    metadata.hint = "To see more employees, say 'show next page' or 'get more employees'.";
+  }
+
+  return {
+    status: 'success',
+    data: records.map(emp => maskSalary(emp, userContext.roles)),
+    metadata
+  };
+}
+```
+
+**Database-Specific Pagination Strategies:**
+
+| Database | Strategy | Cursor Fields |
+|----------|----------|---------------|
+| PostgreSQL (HR, Finance) | Multi-column keyset WHERE | `(lastName, firstName, id)` or `(date, createdAt, id)` |
+| MongoDB (Sales) | `_id` with `$lt` operator | `{ _id: ObjectId }` |
+| Elasticsearch (Support) | `search_after` with sort values | `{ sort: [timestamp, _id] }` |
+
+**Why Cursor over Offset?**
+- **Offset**: `SELECT * OFFSET 1000` scans 1000 rows just to skip them
+- **Cursor**: Uses index directly, constant time regardless of page number
+- **Stability**: Results don't shift if data is added/deleted between requests
+
 ### Pending Confirmation Pattern (v1.4 - Section 5.6)
 ```typescript
 async function deleteEmployee(
@@ -515,6 +629,12 @@ async function executeDeleteEmployee(
 - ✅ Section 7.4: LLM-friendly error schema pattern (Article II.3 compliance)
 - ✅ Section 5.3: Truncation warning pattern (Article III.2 enforcement)
 - ✅ Section 5.6: Human-in-the-loop confirmation pattern with Redis TTL
+
+**v1.4.1 Changes (Lessons Learned)**:
+- ✅ PaginationMetadata type with cursor-based fields (hasMore, nextCursor, hint)
+- ✅ Cursor-based pagination pattern for all list operations
+- ✅ Database-specific pagination strategies (PostgreSQL keyset, MongoDB $lt, ES search_after)
+- ✅ Backward compatibility with truncation fields
 
 **Constitutional Compliance**:
 - Article II.3 (Error Schemas): ✅ **FULFILLED** by LLM-friendly error responses
