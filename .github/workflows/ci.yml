@@ -170,6 +170,41 @@ jobs:
         continue-on-error: true
 
   # =============================================================================
+  # Terraform Security (tfsec)
+  # =============================================================================
+  terraform-security:
+    name: Terraform - Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infrastructure/terraform
+          soft_fail: true
+
+  # =============================================================================
+  # Static Analysis (qlty)
+  # =============================================================================
+  qlty-check:
+    name: qlty - Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install qlty
+        run: |
+          curl -fsSL https://qlty.sh/install.sh | bash
+          echo "$HOME/.qlty/bin" >> $GITHUB_PATH
+
+      - name: Run qlty check
+        run: qlty check --no-progress
+        continue-on-error: true
+
+  # =============================================================================
   # Integration Tests (requires services)
   # =============================================================================
   integration-tests:
