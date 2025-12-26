@@ -152,6 +152,13 @@ class ChatService {
             error: json['error']?['message'] as String? ?? 'Unknown error',
           );
 
+        // MCP Gateway simplified text events
+        case 'text':
+          return SSEChunk(
+            type: SSEEventType.contentBlockDelta,
+            text: json['text'] as String?,
+          );
+
         default:
           // Handle custom MCP Gateway events
           if (json.containsKey('truncated') && json['truncated'] == true) {
