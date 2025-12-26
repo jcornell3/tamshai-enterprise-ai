@@ -371,3 +371,66 @@ jobs:
           name: playwright-report
           path: tests/e2e/playwright-report/
           retention-days: 7
+
+  # =============================================================================
+  # Performance Tests (k6)
+  # =============================================================================
+  performance-tests:
+    name: Performance Tests (k6)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [gateway-lint-test]
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build MCP Gateway
+        working-directory: services/mcp-gateway
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start MCP Gateway
+        working-directory: services/mcp-gateway
+        run: |
+          npm start &
+          sleep 5
+        env:
+          PORT: 3100
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          KEYCLOAK_URL: http://localhost:8180
+          LOG_LEVEL: warn
+
+      - name: Run k6 Smoke Test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/performance/scenarios/gateway-load.js
+          flags: --vus 3 --duration 15s
+        env:
+          GATEWAY_URL: http://localhost:3100
+        continue-on-error: true
+
+      - name: Upload k6 results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-results
+          path: tests/performance/summary.json
+          retention-days: 7
