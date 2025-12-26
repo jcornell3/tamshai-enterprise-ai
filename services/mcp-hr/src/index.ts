@@ -13,7 +13,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import winston from 'winston';
-import { UserContext, checkConnection, closePool } from './database/connection';
+import pool, { UserContext, checkConnection, closePool } from './database/connection';
 import { getEmployee, GetEmployeeInputSchema } from './tools/get-employee';
 import { listEmployees, ListEmployeesInputSchema } from './tools/list-employees';
 import {
@@ -125,6 +125,15 @@ app.post('/query', async (req: Request, res: Response) => {
       queryLower.includes('next batch') ||
       !!cursor;  // If cursor is provided, it's a pagination request
 
+    // Check for "my team" / "direct reports" queries
+    const isMyTeamQuery = queryLower.includes('my team') ||
+      queryLower.includes('team members') ||
+      queryLower.includes('my direct reports') ||
+      queryLower.includes('direct reports') ||
+      queryLower.includes('who reports to me') ||
+      queryLower.includes('my employees') ||
+      queryLower.includes('people who report');
+
     // Check for employee listing queries
     const isListQuery = queryLower.includes('list') ||
       queryLower.includes('all employees') ||
@@ -150,6 +159,47 @@ app.post('/query', async (req: Request, res: Response) => {
       // Get specific employee by ID
       const employeeId = query.match(uuidPattern)?.[0];
       result = await getEmployee({ employeeId: employeeId! }, userContext);
+    } else if (isMyTeamQuery && !isPaginationRequest) {
+      // Query for the current user's direct reports
+      // First, find the user's employee ID by their email
+      logger.info('Looking up user employee ID for team query', { email: userContext.email });
+
+      try {
+        const userLookupResult = await pool.query(
+          'SELECT id FROM hr.employees WHERE work_email = $1 OR personal_email = $1',
+          [userContext.email]
+        );
+
+        if (userLookupResult.rows.length === 0) {
+          // User not found in employee database
+          result = {
+            status: 'error',
+            code: 'USER_NOT_FOUND',
+            message: `Could not find your employee record (${userContext.email})`,
+            suggestedAction: 'Ensure your Keycloak email matches your employee record in the HR database',
+          };
+        } else {
+          const managerId = userLookupResult.rows[0].id;
+          logger.info('Found user employee ID, querying direct reports', { managerId });
+
+          // Query for employees who report to this manager
+          result = await listEmployees({ managerId, limit: 50 }, userContext);
+
+          // Add context to the response for clarity
+          if (result.status === 'success') {
+            const directReports = result.data as any[];
+            logger.info('Found direct reports', { count: directReports.length });
+          }
+        }
+      } catch (dbError) {
+        logger.error('Database error looking up user', dbError);
+        result = {
+          status: 'error',
+          code: 'DATABASE_ERROR',
+          message: 'Failed to look up your employee record',
+          suggestedAction: 'Please try again or contact support',
+        };
+      }
     } else if (isListQuery || isPaginationRequest) {
       // List employees with optional filters and pagination
       const input: any = { limit: 50 };

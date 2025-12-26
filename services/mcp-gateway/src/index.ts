@@ -250,33 +250,96 @@ async function queryMCPServer(
   server: MCPServerConfig,
   query: string,
   userContext: UserContext,
-  cursor?: string  // Pagination cursor for subsequent pages
+  cursor?: string,  // Pagination cursor for subsequent pages
+  autoPaginate: boolean = true  // Automatically fetch all pages
 ): Promise<{ server: string; data: unknown; error?: string }> {
   try {
-    const response = await axios.post(
-      `${server.url}/query`,
-      {
-        query,
-        userContext: {
-          userId: userContext.userId,
-          username: userContext.username,
-          roles: userContext.roles,
+    const allData: unknown[] = [];
+    let currentCursor = cursor;
+    let pageCount = 0;
+    const maxPages = 10;  // Safety limit to prevent infinite loops
+
+    do {
+      const response = await axios.post(
+        `${server.url}/query`,
+        {
+          query,
+          userContext: {
+            userId: userContext.userId,
+            username: userContext.username,
+            email: userContext.email,  // Include email for user lookup
+            roles: userContext.roles,
+          },
+          ...(currentCursor && { cursor: currentCursor }),
         },
-        ...(cursor && { cursor }),  // Include cursor if provided
-      },
-      {
-        timeout: 30000,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': userContext.userId,
-          'X-User-Roles': userContext.roles.join(','),
-        },
+        {
+          timeout: 30000,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': userContext.userId,
+            'X-User-Roles': userContext.roles.join(','),
+          },
+        }
+      );
+
+      const mcpResponse = response.data as MCPToolResponse;
+
+      // Accumulate data
+      if (isSuccessResponse(mcpResponse) && Array.isArray(mcpResponse.data)) {
+        allData.push(...mcpResponse.data);
+        pageCount++;
+
+        // Check for more pages
+        if (autoPaginate && mcpResponse.metadata?.hasMore && mcpResponse.metadata?.nextCursor && pageCount < maxPages) {
+          currentCursor = mcpResponse.metadata.nextCursor;
+          logger.info(`Auto-paginating ${server.name}, fetched page ${pageCount}, ${allData.length} records so far`);
+        } else {
+          // No more pages or auto-pagination disabled
+          if (allData.length > 0) {
+            // Return aggregated data
+            return {
+              server: server.name,
+              data: {
+                status: 'success',
+                data: allData,
+                metadata: {
+                  returnedCount: allData.length,
+                  totalCount: allData.length,
+                  pagesRetrieved: pageCount,
+                },
+              },
+            };
+          }
+          break;
+        }
+      } else {
+        // Non-array response or error, return as-is
+        return {
+          server: server.name,
+          data: response.data,
+        };
       }
-    );
+    } while (autoPaginate && pageCount < maxPages);
+
+    // Return aggregated data if we exited the loop normally
+    if (allData.length > 0) {
+      return {
+        server: server.name,
+        data: {
+          status: 'success',
+          data: allData,
+          metadata: {
+            returnedCount: allData.length,
+            totalCount: allData.length,
+            pagesRetrieved: pageCount,
+          },
+        },
+      };
+    }
 
     return {
       server: server.name,
-      data: response.data,
+      data: null,
     };
   } catch (error) {
     logger.error(`MCP server ${server.name} error:`, error);
