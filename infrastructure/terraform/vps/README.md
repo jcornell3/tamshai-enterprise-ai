@@ -8,6 +8,7 @@ This Terraform configuration provisions a single VPS with:
 - Docker and Docker Compose
 - All Tamshai services (Keycloak, MCP Gateway, databases)
 - Caddy reverse proxy with automatic Let's Encrypt TLS
+- **Path-based routing** (single domain, no subdomains required)
 - Automatic secret generation
 - GitHub Actions CI/CD integration
 
@@ -62,17 +63,23 @@ terraform apply
 
 ### 3. Configure DNS
 
-After deployment, Terraform outputs required DNS records:
+After deployment, Terraform outputs the required DNS record:
 
 ```
-Create these DNS records pointing to <VPS_IP>:
+Create this DNS record pointing to <VPS_IP>:
 
-Type  Name                      Value
-A     tamshai.yourdomain.com    <VPS_IP>
-A     auth.tamshai.yourdomain.com    <VPS_IP>
-A     api.tamshai.yourdomain.com     <VPS_IP>
-A     app.tamshai.yourdomain.com     <VPS_IP>
+Type  Name                 Value
+A     vps.tamshai.com      <VPS_IP>
 ```
+
+That's it - just one A record. All services use path-based routing:
+- `vps.tamshai.com/` - Main portal
+- `vps.tamshai.com/auth` - Keycloak
+- `vps.tamshai.com/api` - MCP Gateway
+- `vps.tamshai.com/hr` - HR App
+- `vps.tamshai.com/finance` - Finance App
+- `vps.tamshai.com/sales` - Sales App
+- `vps.tamshai.com/support` - Support App
 
 ### 4. Wait for Initialization
 
@@ -125,11 +132,12 @@ If you enabled SSH access (`allowed_ssh_ips` is set):
                     |
             [Caddy Reverse Proxy]
              ports 80, 443 (TLS)
+             path-based routing
                     |
         +-----------+-----------+
         |           |           |
    [Keycloak]  [MCP Gateway]  [Web Apps]
-    auth.*       api.*         *.domain
+    /auth        /api         /hr /finance...
         |           |           |
         +-----------+-----------+
                     |

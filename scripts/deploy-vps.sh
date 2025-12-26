@@ -93,12 +93,12 @@ fi
 check_status() {
   echo -e "${YELLOW}Checking service health...${NC}"
 
-  # Check each service endpoint
-  services=("" "auth." "api.")
+  # Check each service endpoint (path-based routing)
+  paths=("" "/auth" "/api")
   DOMAIN=$(terraform output -raw domain 2>/dev/null || echo "$VPS_IP")
 
-  for prefix in "${services[@]}"; do
-    url="https://${prefix}${DOMAIN}"
+  for path in "${paths[@]}"; do
+    url="https://${DOMAIN}${path}"
     if curl -sf -o /dev/null --max-time 10 "$url"; then
       echo -e "  ${GREEN}✓${NC} $url - healthy"
     else
