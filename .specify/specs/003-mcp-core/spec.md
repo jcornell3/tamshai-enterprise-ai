@@ -274,9 +274,126 @@ app.post('/api/confirm/:confirmationId', async (req, res) => {
 **CURRENT ⚡** - Core implementation exists (473 lines); v1.4 updates required: SSE streaming, truncation warnings, confirmation endpoint, and integration tests.
 
 ## Architecture Version
-**Based on**: Architecture v1.4 (December 2024)
+**Based on**: Architecture v1.4 (December 2025)
 **v1.4 Changes Applied**:
 - ✅ Section 6.1: SSE transport protocol defined
 - ✅ Section 5.3: Truncation warning injection specified
 - ✅ Section 5.6: Human-in-the-loop confirmation flow documented
 - ✅ Section 7.4: LLM-friendly error handling (ref: Spec 004)
+
+## Keycloak Client Configuration
+
+### Required Clients
+
+The MCP Gateway requires properly configured Keycloak clients to function:
+
+#### 1. mcp-gateway (Confidential Client)
+For server-to-server communication:
+- **Client ID**: `mcp-gateway`
+- **Client Authentication**: ON (confidential)
+- **Valid Redirect URIs**: N/A (service account only)
+- **Service Account**: Enabled
+
+#### 2. tamshai-flutter-client (Public Client)
+For Flutter desktop/mobile apps (Spec 009):
+- **Client ID**: `tamshai-flutter-client`
+- **Client Authentication**: OFF (public)
+- **PKCE**: Required
+- **Valid Redirect URIs**:
+  - `http://127.0.0.1:*/callback` (desktop)
+  - `com.tamshai.ai://callback` (mobile)
+- **Web Origins**: `+`
+
+### Required Protocol Mappers
+
+**CRITICAL**: The following protocol mappers must be added to the Flutter client for the MCP Gateway to identify users correctly. Without these, queries like "who are my team members" will fail.
+
+| Mapper Name | Mapper Type | Claim JSON Type | Token Claim Name | Add to Access Token |
+|-------------|-------------|-----------------|------------------|---------------------|
+| preferred_username | User Property | String | preferred_username | ✅ Yes |
+| email | User Property | String | email | ✅ Yes |
+| realm roles | User Realm Role | String | realm_access.roles | ✅ Yes |
+
+#### How to Add Protocol Mappers
+
+**Via Keycloak Admin Console**:
+1. Navigate to Clients → tamshai-flutter-client → Client scopes
+2. Click on the dedicated scope (e.g., `tamshai-flutter-client-dedicated`)
+3. Add Mapper → By configuration → User Property
+4. Configure:
+   - Name: `preferred_username`
+   - User Attribute: `username`
+   - Token Claim Name: `preferred_username`
+   - Add to access token: ON
+5. Repeat for `email`
+
+**Via Keycloak Admin API**:
+```bash
+# Get admin token
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8180/realms/master/protocol/openid-connect/token" \
+  -d "client_id=admin-cli" \
+  -d "username=admin" \
+  -d "password=admin" \
+  -d "grant_type=password" | jq -r '.access_token')
+
+# Add preferred_username mapper
+curl -X POST "http://localhost:8180/admin/realms/tamshai-corp/clients/{client-uuid}/protocol-mappers/models" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "preferred_username",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-usermodel-property-mapper",
+    "config": {
+      "user.attribute": "username",
+      "claim.name": "preferred_username",
+      "access.token.claim": "true",
+      "id.token.claim": "true"
+    }
+  }'
+```
+
+### User Context Propagation
+
+The MCP Gateway extracts user context from the JWT and propagates it to MCP servers:
+
+```typescript
+// Extract from JWT claims
+const userContext: UserContext = {
+  userId: decoded.sub,
+  username: decoded.preferred_username,  // From protocol mapper
+  email: decoded.email,                   // From protocol mapper
+  roles: decoded.realm_access?.roles || [],
+};
+
+// Pass to MCP server in request body
+const response = await axios.post(`${mcpServer.url}/query`, {
+  query: safeQuery,
+  userContext: userContext,
+});
+```
+
+### SSE Event Format
+
+The MCP Gateway sends SSE events in a custom format that differs from Anthropic's standard:
+
+```typescript
+// MCP Gateway format
+{ "type": "text", "text": "Hello, " }
+{ "type": "text", "text": "world!" }
+
+// Anthropic standard format (for reference)
+{ "type": "content_block_delta", "delta": { "type": "text_delta", "text": "Hello, " } }
+```
+
+Clients (especially Flutter - Spec 009) must handle both formats:
+```dart
+switch (json['type']) {
+  case 'text':
+    // MCP Gateway custom format
+    return SSEChunk(text: json['text']);
+  case 'content_block_delta':
+    // Anthropic format
+    return SSEChunk(text: json['delta']?['text']);
+}
+```

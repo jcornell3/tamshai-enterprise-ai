@@ -1,9 +1,30 @@
 # 008-unified-client: React Native Unified Client (Desktop + Mobile)
 
-**Status**: PLANNING
+**Status**: DEPRECATED - Superseded by Spec 009 (Flutter Unified)
 **Feature Branch**: `008-unified-client`
 **Constitutional Compliance**: Article V.1, V.2, V.3 - CRITICAL
 **Created**: December 14, 2024
+**Deprecated**: December 24, 2025
+**Replaced By**: 009-flutter-unified
+
+---
+
+> **WARNING: This specification is DEPRECATED**
+>
+> React Native Windows demonstrated fundamental stability issues that blocked development:
+> - Hermes engine crashes on TextInput (RN Windows 0.80)
+> - NuGet/npm version mismatches (RN Windows 0.73)
+> - std::mutex crash bug in VS 2022 17.10+
+> - XAML initialization failures
+>
+> See **ADR-005** in `.specify/ARCHITECTURE_SPECS.md` for full rationale.
+>
+> **Current Implementation**: Spec 009 (Flutter Unified Client)
+> - Location: `.specify/specs/009-flutter-unified/`
+> - Implementation: `clients/unified_flutter/`
+
+---
+
 **Replaces**: 006-ai-desktop (Electron), 007-mobile (partial)
 
 ---

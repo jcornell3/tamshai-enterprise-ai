@@ -1,153 +1,333 @@
-# Tamshai Corp Enterprise AI Access System
+# Tamshai Enterprise AI - Keycloak Authentication Scaffold
 
-[![Status](https://img.shields.io/badge/Status-Approved-green.svg)](docs/architecture/)
-[![Version](https://img.shields.io/badge/Version-1.3%20FINAL-blue.svg)](docs/architecture/)
-[![Security Review](https://img.shields.io/badge/Security%20Review-Passed-green.svg)](docs/architecture/)
+Production-ready Flutter authentication implementation using Keycloak with TOTP support.
 
-## Overview
+## Features
 
-Enterprise AI Access System enabling secure Claude AI integration with role-based data access. Employees can use AI assistants while ensuring data access respects existing security boundaries.
+✅ **Keycloak OAuth 2.0 / OIDC Integration**
+- Authorization Code Flow with PKCE
+- Automatic TOTP handling (via Keycloak UI)
+- Secure token storage (Windows Credential Manager)
+- Automatic token refresh
+- Session management
 
-**Approval Status:** ✅ Fully Approved for Implementation
-- Technical Lead: Gemini 3 Thinking (Approved)
-- Security Reviewer: ChatGPT 5.1 (Approved)  
-- Project Sponsor: John Cornell (Approved)
+✅ **State Management**
+- Riverpod for reactive state
+- Type-safe authentication states
+- Automatic UI updates
 
-## Architecture Highlights
+✅ **API Integration**
+- Dio HTTP client with automatic token injection
+- 401 detection and token refresh
+- Request retry after refresh
 
-- **SSO + MFA**: Keycloak with TOTP (standard users) and WebAuthn (privileged roles in production)
-- **Hierarchical Access**: Self → Manager → HR → Executive access model
-- **AI Security**: Prompt injection defense, tool allow-listing, field masking for LLM
-- **Defense in Depth**: Kong Gateway → MCP Gateway → MCP Servers → RLS/App Filters → Databases
-- **Comprehensive Audit**: AI-specific logging with intent, justification, and PII scrubbing
+✅ **Security**
+- PKCE prevents authorization code interception
+- Secure storage for tokens
+- No tokens in logs
+- Proper logout (local + server session)
 
-## Quick Start
+## Prerequisites
 
-### Prerequisites
+1. **Flutter SDK** (3.0.0 or higher)
+   ```bash
+   flutter --version
+   ```
 
-- Docker Desktop with Docker Compose
-- Node.js 18+ and npm
-- 8GB RAM minimum
+2. **Visual Studio 2022** (for Windows desktop)
+   - Install "Desktop development with C++"
 
-### Setup
+3. **Keycloak Server** with:
+   - Realm configured
+   - Public client created with PKCE enabled
+   - TOTP authentication enabled (optional)
+   - Redirect URIs configured
+
+## Keycloak Setup
+
+### 1. Create Realm
+1. Login to Keycloak Admin Console
+2. Create new realm (e.g., "tamshai")
+
+### 2. Create Client
+1. Go to Clients → Create Client
+2. Configure:
+   - **Client ID**: `tamshai-flutter-client`
+   - **Client type**: OpenID Connect
+   - **Client authentication**: OFF (Public client)
+   - **Authorization**: OFF
+   - **Authentication flow**: 
+     - ✅ Standard flow
+     - ✅ Direct access grants
+   - **Valid redirect URIs**: 
+     - `http://localhost:*`
+     - `http://localhost:*/callback`
+   - **Web origins**: `+` (allow all redirect URIs)
+
+3. Advanced Settings:
+   - **Proof Key for Code Exchange (PKCE)**: S256 Required
+
+### 3. Enable TOTP (Optional)
+1. Go to Realm Settings → Authentication
+2. Click on "Browser" flow
+3. Add "OTP Form" execution
+4. Set to REQUIRED
+
+### 4. Create Test User
+1. Go to Users → Add user
+2. Set username, email, etc.
+3. Go to Credentials tab
+4. Set password (disable temporary)
+5. If TOTP enabled:
+   - Login as user
+   - Configure TOTP authenticator app
+
+## Installation
+
+### 1. Clone/Copy the scaffold
 
 ```bash
-# Clone the repository
-git clone https://github.com/jcornell3/tamshai-enterprise-ai.git
-cd tamshai-enterprise-ai
+# If starting new project
+flutter create tamshai_app
+cd tamshai_app
 
-# Run setup script
-./scripts/setup-dev.sh
+# Copy scaffold files into your project
+# Replace lib/ folder with scaffold lib/ folder
 ```
 
-### Access Points
+### 2. Install dependencies
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Keycloak Admin | http://localhost:8180 | admin / admin |
-| API Gateway | http://localhost:8100 | - |
-| MCP Gateway | http://localhost:3100 | - |
-| MinIO Console | http://localhost:9102 | minioadmin / minioadmin |
+```bash
+flutter pub get
+```
 
-### Test Users
+### 3. Generate code (for Freezed models)
 
-All users have password: `password123` and must configure TOTP on first login.
+```bash
+flutter pub run build_runner build --delete-conflicting-outputs
+```
 
-| User | Role | Access |
-|------|------|--------|
-| eve.thompson | CEO | Executive (all read) |
-| alice.chen | VP of HR | HR (all employees) |
-| bob.martinez | Finance Director | Finance (all finance) |
-| nina.patel | Engineering Manager | Manager (team only) |
-| marcus.johnson | Software Engineer | Self only |
+### 4. Configure Keycloak settings
+
+Edit `lib/core/auth/models/keycloak_config.dart`:
+
+```dart
+static KeycloakConfig getDevelopmentConfig() {
+  return const KeycloakConfig(
+    issuer: 'https://YOUR-KEYCLOAK-SERVER/realms/YOUR-REALM',
+    clientId: 'YOUR-CLIENT-ID',
+    redirectUrl: 'http://localhost:0/callback',
+    endSessionRedirectUrl: 'http://localhost:0/logout',
+    scopes: ['openid', 'profile', 'email', 'offline_access'],
+  );
+}
+```
+
+Replace:
+- `YOUR-KEYCLOAK-SERVER`: Your Keycloak server URL
+- `YOUR-REALM`: Your realm name
+- `YOUR-CLIENT-ID`: Your client ID
+
+### 5. Configure API base URL
+
+Edit `lib/core/api/token_interceptor.dart`:
+
+```dart
+final dio = Dio(
+  BaseOptions(
+    baseUrl: 'https://YOUR-API-URL',  // <-- Change this
+    ...
+  ),
+);
+```
+
+## Running the App
+
+### Windows Desktop
+
+```bash
+flutter run -d windows
+```
+
+### Android (future)
+
+```bash
+flutter run -d android
+```
+
+### iOS (future - requires macOS)
+
+```bash
+flutter run -d ios
+```
 
 ## Project Structure
 
 ```
-tamshai-enterprise-ai/
-├── docs/                    # Documentation
-│   ├── architecture/        # Architecture documents (v1.3 FINAL)
-│   └── development/         # Development guides
-├── infrastructure/
-│   ├── docker/              # Docker Compose setup
-│   ├── kubernetes/          # K8s manifests (production)
-│   └── gcp/                 # GCP Terraform (production)
-├── services/
-│   └── mcp-gateway/         # AI orchestration service
-├── sample-data/             # Test data and SQL scripts
-└── scripts/                 # Setup and utility scripts
+lib/
+├── core/
+│   ├── auth/
+│   │   ├── models/
+│   │   │   ├── auth_state.dart          # Auth state models
+│   │   │   └── keycloak_config.dart     # Keycloak config
+│   │   ├── providers/
+│   │   │   └── auth_provider.dart       # Riverpod auth provider
+│   │   └── services/
+│   │       └── keycloak_auth_service.dart  # Auth service
+│   ├── api/
+│   │   └── token_interceptor.dart       # Dio token interceptor
+│   └── storage/
+│       └── secure_storage_service.dart  # Secure storage
+├── features/
+│   ├── authentication/
+│   │   └── login_screen.dart            # Login UI
+│   └── home/
+│       └── home_screen.dart             # Home screen
+└── main.dart                             # App entry point
 ```
 
-## Documentation
+## Authentication Flow
 
-- [Architecture Document v1.3 FINAL](docs/architecture/) - Full approved architecture
-- [Port Allocation](docs/development/PORT_ALLOCATION.md) - Service ports and networking
-- [Security Model](docs/architecture/) - Defense-in-depth details
+```
+1. App starts → Check for valid session
+   ├─ Yes → Navigate to Home
+   └─ No → Navigate to Login
 
-## Security Features
+2. User clicks "Sign In" → Opens Keycloak in browser
+   
+3. Keycloak prompts for:
+   ├─ Username/Password
+   └─ TOTP code (if enabled)
 
-### Authentication & Authorization
-- OIDC with Keycloak (SSO)
-- TOTP MFA for all users
-- WebAuthn/FIDO2 for privileged roles (production)
-- JWT token propagation with 5-minute lifetime
-- Redis-backed token revocation
+4. After successful authentication:
+   ├─ Keycloak redirects to app with auth code
+   ├─ App exchanges code for tokens (PKCE)
+   ├─ Tokens stored securely
+   └─ Navigate to Home
 
-### AI-Specific Security
-- Prompt injection defense (5 layers)
-- Tool allow-listing per role
-- Field-level masking before LLM
-- Query result limits (50 records max)
-- AI audit logging with PII scrubbing
+5. During app usage:
+   ├─ Token added to all API requests
+   ├─ On 401 response → Refresh token
+   └─ On token expiry → Refresh token
 
-### Infrastructure Security
-- mTLS for service-to-service
-- PostgreSQL Row Level Security (HR data)
-- Application-level filters (MongoDB, Elasticsearch)
-- Encryption at rest (all data stores)
-- Network segmentation with egress whitelist
+6. Logout:
+   ├─ End Keycloak session
+   └─ Clear local tokens
+```
 
-## Development Phases
+## Testing
 
-1. ✅ Foundation - Docker, Keycloak, Redis
-2. 🔄 Security Layer - mTLS, RLS, audit logging
-3. ⏳ MCP Core - Gateway with AI security
-4. ⏳ MCP Suite - HR, Finance, Sales, Support servers
-5. ⏳ Sample Apps - Web applications
-6. ⏳ AI Desktop - Electron app
-7. ⏳ Ops Tooling - Rate limiting, monitoring
-8. ⏳ Production - K8s deployment
-9. ⏳ Documentation - Final docs
+### Test Login Flow
 
-## Environment Strategy
+1. Run the app
+2. Click "Sign In with Keycloak"
+3. Enter credentials in Keycloak
+4. Enter TOTP code (if enabled)
+5. Should redirect back to app
+6. Should see Home screen with user info
 
-| Aspect | PoC (Current) | Production |
-|--------|---------------|------------|
-| Data | Dummy/synthetic | Real enterprise data |
-| LLM | Claude Pro | Claude Enterprise or local |
-| Device Trust | BYOD | MDM required |
-| Admin MFA | TOTP | WebAuthn required |
-| RPO/RTO | 1 day | 4 hours / 1 hour |
+### Test Token Refresh
 
-## Cost Estimates
+1. Login successfully
+2. Wait for token to expire (or manually set short expiry)
+3. Make an API call
+4. Should automatically refresh and retry
 
-- **PoC**: ~$25-35/month
-- **Production HA**: ~$300-400/month
+### Test Logout
 
-## Contributing
+1. Login successfully
+2. Click logout button
+3. Should return to login screen
+4. Tokens should be cleared from secure storage
 
-This is an internal project. Contact the project team for contribution guidelines.
+## Common Issues
+
+### Issue: "No registered redirect URI"
+**Solution**: Add `http://localhost:*` to Valid Redirect URIs in Keycloak client
+
+### Issue: "PKCE verification failed"
+**Solution**: Ensure PKCE is enabled in Keycloak client settings
+
+### Issue: "Browser doesn't open on login"
+**Solution**: 
+- Check Windows firewall settings
+- Ensure no antivirus blocking
+
+### Issue: "Token refresh fails"
+**Solution**: 
+- Verify `offline_access` scope is included
+- Check refresh token is being stored
+- Verify client has "Standard flow enabled"
+
+## Security Notes
+
+### Production Checklist
+
+- [ ] Change Keycloak URLs to production
+- [ ] Configure production redirect URIs
+- [ ] Enable certificate pinning in Dio
+- [ ] Remove debug logging
+- [ ] Configure proper CORS on API
+- [ ] Enable HTTPS only
+- [ ] Review token expiry times
+- [ ] Implement rate limiting
+- [ ] Add security headers
+- [ ] Enable Keycloak security features (brute force detection, etc.)
+
+### Token Storage
+
+Tokens are stored using `flutter_secure_storage`:
+- **Windows**: Windows Credential Manager
+- **iOS**: Keychain
+- **Android**: KeyStore
+
+Never:
+- Store tokens in SharedPreferences
+- Log tokens to console
+- Store tokens in plain text files
+
+## Next Steps
+
+1. **Add error handling UI**: Better error messages and retry mechanisms
+2. **Implement loading states**: Skeleton screens during token refresh
+3. **Add biometric authentication**: Use local_auth for biometric login
+4. **Implement offline support**: Queue requests when offline
+5. **Add analytics**: Track auth events (with privacy)
+6. **Add unit tests**: Test auth flows and token refresh
+7. **Add integration tests**: Test full auth flow
+
+## API Integration Example
+
+```dart
+// Example: Making authenticated API call
+
+final dio = ref.read(dioProvider);
+
+try {
+  final response = await dio.get('/api/user/profile');
+  // Token automatically added by interceptor
+  // Automatically refreshes on 401
+  print(response.data);
+} catch (e) {
+  // Handle error
+}
+```
+
+## Resources
+
+- [Flutter AppAuth](https://pub.dev/packages/flutter_appauth)
+- [Keycloak Documentation](https://www.keycloak.org/documentation)
+- [OAuth 2.0 PKCE](https://oauth.net/2/pkce/)
+- [Riverpod Documentation](https://riverpod.dev/)
+
+## Support
+
+For issues or questions:
+1. Check Keycloak server logs
+2. Check Flutter logs: `flutter logs`
+3. Review auth state in debug mode
+4. Check secure storage contents
 
 ## License
 
-Proprietary - Tamshai Corp Internal Use Only
-
-## Contacts
-
-- Project Sponsor: John Cornell
-- Technical Lead: [Internal Contact]
-- Security: [Internal Contact]
-
----
-
-*Architecture v1.3 FINAL - Approved November 30, 2025*
+[Add your license here]
