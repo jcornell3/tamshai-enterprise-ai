@@ -97,6 +97,28 @@ class LoginScreen extends ConsumerWidget {
                       ),
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 32),
+
+                // Logout previous session button
+                TextButton.icon(
+                  onPressed: () async {
+                    final storage = ref.read(secureStorageProvider);
+                    await storage.clearAll();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Previous session logged out'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.logout, size: 18),
+                  label: const Text('Logout Previous Session'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey[600],
+                  ),
+                ),
               ],
             ),
           ),
