@@ -4,7 +4,8 @@
   "description": "MCP Gateway for Tamshai Corp Enterprise AI - Routes AI queries to role-appropriate MCP servers",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "node -e \"require('fs').copyFileSync('src/openapi.yaml', 'dist/openapi.yaml')\"",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "jest",
@@ -23,8 +24,10 @@
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.1.0",
+    "swagger-ui-express": "^5.0.0",
     "uuid": "^9.0.1",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -32,6 +35,7 @@
     "@types/jest": "^29.5.11",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.10.0",
+    "@types/swagger-ui-express": "^4.1.6",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
