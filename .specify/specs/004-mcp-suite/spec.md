@@ -617,7 +617,855 @@ async function executeDeleteEmployee(
 - `update_salary` tool not implemented (can be added as needed)
 - `get_org_chart`, `get_performance_reviews` not implemented
 - `get_pipeline`, `close_opportunity` not implemented
-- Finance schema missing RLS policies (HR has full RLS)
+
+### Write Tool Confirmation Flow (End-to-End)
+
+The complete flow for write operations with human-in-the-loop confirmation:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Client/UI     │     │   MCP Gateway   │     │   MCP Server    │     │     Redis       │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │                       │
+         │ 1. User: "Delete      │                       │                       │
+         │    employee Marcus"   │                       │                       │
+         │──────────────────────>│                       │                       │
+         │                       │                       │                       │
+         │                       │ 2. Route to Claude    │                       │
+         │                       │    with MCP tools     │                       │
+         │                       │                       │                       │
+         │                       │ 3. Claude calls       │                       │
+         │                       │    delete_employee    │                       │
+         │                       │──────────────────────>│                       │
+         │                       │                       │                       │
+         │                       │                       │ 4. Generate UUID      │
+         │                       │                       │    Store in Redis     │
+         │                       │                       │──────────────────────>│
+         │                       │                       │                       │
+         │                       │                       │    SETEX pending:uuid │
+         │                       │                       │    TTL=300 (5 min)    │
+         │                       │                       │<──────────────────────│
+         │                       │                       │                       │
+         │                       │ 5. Return             │                       │
+         │                       │    pending_confirmation                       │
+         │                       │<──────────────────────│                       │
+         │                       │                       │                       │
+         │ 6. SSE: Claude shows  │                       │                       │
+         │    approval message   │                       │                       │
+         │<──────────────────────│                       │                       │
+         │                       │                       │                       │
+         │ 7. User clicks        │                       │                       │
+         │    "Approve"          │                       │                       │
+         │──────────────────────>│                       │                       │
+         │                       │                       │                       │
+         │    POST /api/confirm/ │                       │                       │
+         │    {approved: true}   │                       │                       │
+         │                       │                       │                       │
+         │                       │ 8. Gateway retrieves  │                       │
+         │                       │    pending action     │                       │
+         │                       │──────────────────────────────────────────────>│
+         │                       │                       │                       │
+         │                       │    GET pending:uuid   │                       │
+         │                       │<──────────────────────────────────────────────│
+         │                       │                       │                       │
+         │                       │ 9. Gateway calls MCP  │                       │
+         │                       │    /execute endpoint  │                       │
+         │                       │──────────────────────>│                       │
+         │                       │                       │                       │
+         │                       │                       │ 10. Execute delete    │
+         │                       │                       │     with RLS context  │
+         │                       │                       │                       │
+         │                       │ 11. Return result     │                       │
+         │                       │<──────────────────────│                       │
+         │                       │                       │                       │
+         │                       │ 12. Delete from Redis │                       │
+         │                       │──────────────────────────────────────────────>│
+         │                       │                       │                       │
+         │                       │    DEL pending:uuid   │                       │
+         │                       │<──────────────────────────────────────────────│
+         │                       │                       │                       │
+         │ 13. Return success    │                       │                       │
+         │<──────────────────────│                       │                       │
+         │                       │                       │                       │
+```
+
+**MCP Server /execute Endpoint Pattern:**
+
+```typescript
+// Each MCP server exposes /execute for confirmed write operations
+app.post('/execute', authMiddleware, async (req, res) => {
+  const { confirmationData, userContext } = req.body;
+
+  // Verify user matches the one who initiated the action
+  if (confirmationData.userId !== userContext.userId) {
+    return res.status(403).json({
+      status: 'error',
+      code: 'USER_MISMATCH',
+      message: 'Action was initiated by a different user'
+    });
+  }
+
+  // Route to appropriate execution handler
+  switch (confirmationData.action) {
+    case 'delete_employee':
+      return res.json(await executeDeleteEmployee(confirmationData, userContext));
+    case 'delete_invoice':
+      return res.json(await executeDeleteInvoice(confirmationData, userContext));
+    // ... other write operations
+  }
+});
+```
+
+**Redis Confirmation Data Structure:**
+
+```typescript
+// Stored at key: pending:{confirmationId}
+// TTL: 300 seconds (5 minutes)
+{
+  action: 'delete_employee',        // Action type for routing
+  mcpServer: 'hr',                  // Which server will execute
+  userId: 'uuid',                   // User who initiated (for ownership check)
+  timestamp: 1703612345678,         // When confirmation was created
+  // Action-specific data:
+  employeeId: 'uuid',
+  employeeName: 'Marcus Johnson',
+  employeeEmail: 'marcus@tamshai.local',
+  department: 'Engineering',
+  jobTitle: 'Software Engineer',
+  reason: 'No reason provided'
+}
+```
+
+## 9. JSON Schemas for MCP Tools
+
+### 9.1 Response Schema (All Tools)
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCPToolResponse",
+  "description": "Discriminated union response for all MCP tools",
+  "oneOf": [
+    {
+      "type": "object",
+      "title": "SuccessResponse",
+      "required": ["status", "data"],
+      "properties": {
+        "status": { "const": "success" },
+        "data": { "description": "Tool-specific response data" },
+        "metadata": { "$ref": "#/$defs/PaginationMetadata" }
+      }
+    },
+    {
+      "type": "object",
+      "title": "ErrorResponse",
+      "required": ["status", "code", "message"],
+      "properties": {
+        "status": { "const": "error" },
+        "code": { "type": "string", "enum": [
+          "EMPLOYEE_NOT_FOUND", "CUSTOMER_NOT_FOUND", "INVOICE_NOT_FOUND",
+          "TICKET_NOT_FOUND", "ARTICLE_NOT_FOUND", "BUDGET_NOT_FOUND",
+          "INSUFFICIENT_PERMISSIONS", "INVALID_INPUT", "DATABASE_ERROR",
+          "VALIDATION_ERROR", "OPERATION_FAILED", "USER_MISMATCH"
+        ]},
+        "message": { "type": "string" },
+        "suggestedAction": { "type": "string" },
+        "technicalDetails": { "type": "string" }
+      }
+    },
+    {
+      "type": "object",
+      "title": "PendingConfirmationResponse",
+      "required": ["status", "confirmationId", "message", "confirmationData"],
+      "properties": {
+        "status": { "const": "pending_confirmation" },
+        "confirmationId": { "type": "string", "format": "uuid" },
+        "message": { "type": "string" },
+        "confirmationData": { "$ref": "#/$defs/ConfirmationData" }
+      }
+    }
+  ],
+  "$defs": {
+    "PaginationMetadata": {
+      "type": "object",
+      "properties": {
+        "hasMore": { "type": "boolean" },
+        "nextCursor": { "type": "string" },
+        "returnedCount": { "type": "integer", "minimum": 0 },
+        "totalEstimate": { "type": "string", "pattern": "^\\d+\\+?$" },
+        "hint": { "type": "string" },
+        "truncated": { "type": "boolean" },
+        "totalCount": { "type": "string" },
+        "warning": { "type": "string" }
+      }
+    },
+    "ConfirmationData": {
+      "type": "object",
+      "required": ["action", "userId"],
+      "properties": {
+        "action": { "type": "string", "enum": [
+          "delete_employee", "update_salary", "delete_invoice",
+          "approve_budget", "delete_customer", "close_opportunity", "close_ticket"
+        ]},
+        "userId": { "type": "string", "format": "uuid" },
+        "mcpServer": { "type": "string", "enum": ["hr", "finance", "sales", "support"] },
+        "timestamp": { "type": "integer" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
+```
+
+### 9.2 MCP HR Tool Schemas
+
+#### get_employee
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "get_employee Input",
+  "type": "object",
+  "required": ["employee_id"],
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The unique identifier of the employee"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema (on success):**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Employee",
+  "type": "object",
+  "required": ["employee_id", "first_name", "last_name", "email", "department"],
+  "properties": {
+    "employee_id": { "type": "string", "format": "uuid" },
+    "first_name": { "type": "string", "maxLength": 50 },
+    "last_name": { "type": "string", "maxLength": 50 },
+    "email": { "type": "string", "format": "email" },
+    "department": { "type": "string" },
+    "job_title": { "type": "string" },
+    "manager_id": { "type": ["string", "null"], "format": "uuid" },
+    "hire_date": { "type": "string", "format": "date" },
+    "salary": { "oneOf": [
+      { "type": "number", "minimum": 0 },
+      { "type": "string", "const": "*** (Hidden)" }
+    ]},
+    "ssn": { "oneOf": [
+      { "type": "string", "pattern": "^\\d{3}-\\d{2}-\\d{4}$" },
+      { "type": "string", "const": "*** (Hidden)" }
+    ]},
+    "phone": { "type": "string" },
+    "location": { "type": "string" },
+    "active": { "type": "boolean" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
+```
+
+#### list_employees
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "list_employees Input",
+  "type": "object",
+  "properties": {
+    "department": {
+      "type": "string",
+      "description": "Filter by department name"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 50,
+      "description": "Maximum records to return (Article III.2 max: 50)"
+    },
+    "cursor": {
+      "type": "string",
+      "description": "Base64-encoded cursor for pagination"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+#### delete_employee
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "delete_employee Input",
+  "type": "object",
+  "required": ["employee_id"],
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The employee to delete"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Optional reason for deletion (audit trail)"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+#### update_salary
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "update_salary Input",
+  "type": "object",
+  "required": ["employee_id", "new_salary"],
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "new_salary": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10000000,
+      "description": "New annual salary in USD"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date",
+      "description": "When the salary change takes effect (default: immediate)"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+### 9.3 MCP Finance Tool Schemas
+
+#### get_budget
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "get_budget Input",
+  "type": "object",
+  "required": ["department"],
+  "properties": {
+    "department": {
+      "type": "string",
+      "description": "Department name"
+    },
+    "year": {
+      "type": "integer",
+      "minimum": 2000,
+      "maximum": 2100,
+      "description": "Fiscal year (default: current year)"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema:**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Budget",
+  "type": "object",
+  "required": ["budget_id", "department", "fiscal_year", "allocated_amount"],
+  "properties": {
+    "budget_id": { "type": "string", "format": "uuid" },
+    "department": { "type": "string" },
+    "fiscal_year": { "type": "integer" },
+    "allocated_amount": { "type": "number", "minimum": 0 },
+    "spent_amount": { "type": "number", "minimum": 0 },
+    "remaining_amount": { "type": "number" },
+    "status": { "type": "string", "enum": ["draft", "approved", "active", "closed"] },
+    "approved_by": { "type": ["string", "null"], "format": "uuid" },
+    "approved_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
+```
+
+#### list_invoices
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "list_invoices Input",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["pending", "approved", "paid", "rejected", "overdue"],
+      "description": "Filter by invoice status"
+    },
+    "vendor": {
+      "type": "string",
+      "description": "Filter by vendor name (partial match)"
+    },
+    "department": {
+      "type": "string",
+      "description": "Filter by department"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 50
+    },
+    "cursor": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema:**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Invoice",
+  "type": "object",
+  "required": ["invoice_id", "vendor_name", "amount", "status"],
+  "properties": {
+    "invoice_id": { "type": "string", "format": "uuid" },
+    "vendor_name": { "type": "string" },
+    "vendor_id": { "type": "string" },
+    "amount": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "default": "USD" },
+    "description": { "type": "string" },
+    "department": { "type": "string" },
+    "status": { "type": "string", "enum": ["pending", "approved", "paid", "rejected", "overdue"] },
+    "due_date": { "type": "string", "format": "date" },
+    "submitted_by": { "type": "string", "format": "uuid" },
+    "submitted_at": { "type": "string", "format": "date-time" },
+    "approved_by": { "type": ["string", "null"], "format": "uuid" },
+    "approved_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
+```
+
+#### delete_invoice
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "delete_invoice Input",
+  "type": "object",
+  "required": ["invoice_id"],
+  "properties": {
+    "invoice_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+#### approve_budget
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "approve_budget Input",
+  "type": "object",
+  "required": ["department", "amount"],
+  "properties": {
+    "department": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Approved budget amount in USD"
+    },
+    "fiscal_year": {
+      "type": "integer",
+      "minimum": 2000,
+      "maximum": 2100
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 1000
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+### 9.4 MCP Sales Tool Schemas
+
+#### get_customer
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "get_customer Input",
+  "type": "object",
+  "required": ["customer_id"],
+  "properties": {
+    "customer_id": {
+      "type": "string",
+      "description": "MongoDB ObjectId as string"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema:**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Customer",
+  "type": "object",
+  "required": ["_id", "name", "email"],
+  "properties": {
+    "_id": { "type": "string" },
+    "name": { "type": "string" },
+    "email": { "type": "string", "format": "email" },
+    "company": { "type": "string" },
+    "industry": { "type": "string" },
+    "phone": { "type": "string" },
+    "address": {
+      "type": "object",
+      "properties": {
+        "street": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "zip": { "type": "string" },
+        "country": { "type": "string" }
+      }
+    },
+    "account_owner": { "type": "string" },
+    "tier": { "type": "string", "enum": ["enterprise", "business", "startup", "free"] },
+    "annual_revenue": { "type": "number" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
+```
+
+#### list_opportunities
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "list_opportunities Input",
+  "type": "object",
+  "properties": {
+    "stage": {
+      "type": "string",
+      "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"],
+      "description": "Filter by sales stage"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Filter by account owner email"
+    },
+    "min_value": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Minimum deal value"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 50
+    },
+    "cursor": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema:**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Opportunity",
+  "type": "object",
+  "required": ["_id", "customer_id", "name", "value", "stage"],
+  "properties": {
+    "_id": { "type": "string" },
+    "customer_id": { "type": "string" },
+    "customer_name": { "type": "string" },
+    "name": { "type": "string" },
+    "value": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "default": "USD" },
+    "stage": { "type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"] },
+    "probability": { "type": "number", "minimum": 0, "maximum": 100 },
+    "expected_close_date": { "type": "string", "format": "date" },
+    "owner": { "type": "string" },
+    "notes": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
+```
+
+#### delete_customer
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "delete_customer Input",
+  "type": "object",
+  "required": ["customer_id"],
+  "properties": {
+    "customer_id": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 500
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+#### close_opportunity
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "close_opportunity Input",
+  "type": "object",
+  "required": ["opportunity_id", "outcome"],
+  "properties": {
+    "opportunity_id": {
+      "type": "string"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["won", "lost"]
+    },
+    "actual_value": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Final deal value (for won deals)"
+    },
+    "loss_reason": {
+      "type": "string",
+      "description": "Reason for lost deal"
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 1000
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+### 9.5 MCP Support Tool Schemas
+
+#### search_tickets
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "search_tickets Input",
+  "type": "object",
+  "required": ["query"],
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Elasticsearch query string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "in_progress", "pending", "resolved", "closed"],
+      "description": "Filter by ticket status"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "customer_id": {
+      "type": "string",
+      "description": "Filter by customer"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 50
+    },
+    "cursor": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema:**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ticket",
+  "type": "object",
+  "required": ["ticket_id", "subject", "status"],
+  "properties": {
+    "ticket_id": { "type": "string" },
+    "subject": { "type": "string" },
+    "description": { "type": "string" },
+    "status": { "type": "string", "enum": ["open", "in_progress", "pending", "resolved", "closed"] },
+    "priority": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+    "customer_id": { "type": "string" },
+    "customer_name": { "type": "string" },
+    "customer_email": { "type": "string", "format": "email" },
+    "assigned_to": { "type": ["string", "null"] },
+    "category": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "resolved_at": { "type": ["string", "null"], "format": "date-time" },
+    "_score": { "type": "number", "description": "Elasticsearch relevance score" }
+  }
+}
+```
+
+#### get_knowledge_article
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "get_knowledge_article Input",
+  "type": "object",
+  "required": ["article_id"],
+  "properties": {
+    "article_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+**Output Data Schema:**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeArticle",
+  "type": "object",
+  "required": ["article_id", "title", "content"],
+  "properties": {
+    "article_id": { "type": "string" },
+    "title": { "type": "string" },
+    "content": { "type": "string" },
+    "summary": { "type": "string" },
+    "category": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "author": { "type": "string" },
+    "status": { "type": "string", "enum": ["draft", "published", "archived"] },
+    "view_count": { "type": "integer", "minimum": 0 },
+    "helpful_votes": { "type": "integer", "minimum": 0 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
+```
+
+#### close_ticket
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "close_ticket Input",
+  "type": "object",
+  "required": ["ticket_id", "resolution"],
+  "properties": {
+    "ticket_id": {
+      "type": "string"
+    },
+    "resolution": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 2000,
+      "description": "Resolution summary for the ticket"
+    },
+    "resolution_type": {
+      "type": "string",
+      "enum": ["solved", "workaround", "duplicate", "cannot_reproduce", "wont_fix"],
+      "default": "solved"
+    },
+    "customer_notified": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+### 9.6 Schema Validation Example
+
+**TypeScript implementation using Zod:**
+
+```typescript
+import { z } from 'zod';
+
+// Tool input validation
+const getEmployeeSchema = z.object({
+  employee_id: z.string().uuid()
+}).strict();
+
+const listEmployeesSchema = z.object({
+  department: z.string().optional(),
+  limit: z.number().int().min(1).max(50).default(50),
+  cursor: z.string().optional()
+}).strict();
+
+// Validate in tool handler
+async function handleGetEmployee(input: unknown): Promise<MCPToolResponse> {
+  const validation = getEmployeeSchema.safeParse(input);
+
+  if (!validation.success) {
+    return {
+      status: 'error',
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid input parameters',
+      suggestedAction: validation.error.errors.map(e =>
+        `${e.path.join('.')}: ${e.message}`
+      ).join('; ')
+    };
+  }
+
+  const { employee_id } = validation.data;
+  // ... proceed with validated data
+}
+```
 
 ## Architecture Version
 **Updated for**: v1.4 (December 2025)
