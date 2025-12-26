@@ -13,7 +13,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import winston from 'winston';
-import pool, { UserContext, checkConnection, closePool } from './database/connection';
+import pool, { UserContext, checkConnection, closePool, queryWithRLS } from './database/connection';
 import { getEmployee, GetEmployeeInputSchema } from './tools/get-employee';
 import { listEmployees, ListEmployeesInputSchema } from './tools/list-employees';
 import {
@@ -165,7 +165,9 @@ app.post('/query', async (req: Request, res: Response) => {
       logger.info('Looking up user employee ID for team query', { email: userContext.email });
 
       try {
-        const userLookupResult = await pool.query(
+        // Use queryWithRLS to respect RLS policies while looking up user
+        const userLookupResult = await queryWithRLS(
+          userContext,
           'SELECT id FROM hr.employees WHERE work_email = $1 OR email = $1',
           [userContext.email]
         );
