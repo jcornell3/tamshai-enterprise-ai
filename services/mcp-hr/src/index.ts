@@ -166,7 +166,7 @@ app.post('/query', async (req: Request, res: Response) => {
 
       try {
         const userLookupResult = await pool.query(
-          'SELECT id FROM hr.employees WHERE work_email = $1 OR personal_email = $1',
+          'SELECT id FROM hr.employees WHERE work_email = $1 OR email = $1',
           [userContext.email]
         );
 
