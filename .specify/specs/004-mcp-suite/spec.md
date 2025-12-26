@@ -101,28 +101,30 @@ type MCPToolResponse =
 * **Update Confirmation:** Alice asks "Increase Sarah's salary to $120,000" -> Tool returns pending_confirmation -> AI requests approval -> User approves -> Salary updated -> AI confirms change.
 
 ## 5. Success Criteria
-- [ ] All four MCP servers deployed and accessible (ports 3101-3104)
-- [ ] Each server validates JWT and extracts user context
-- [ ] Session variables set before all PostgreSQL queries
-- [ ] MongoDB queries have role-based filters applied
-- [ ] PII masking implemented for salary, SSN, contact info fields
-- [ ] **[v1.4] All tools return discriminated union responses** (success | error | pending_confirmation)
-- [ ] **[v1.4] LLM-friendly error schemas** implemented (Article II.3 compliance)
-- [ ] **[v1.4] Truncation metadata included** in list-based queries (Article III.2 enforcement)
-- [ ] **[v1.4] Write tools return pending_confirmation** for destructive actions
-- [ ] **[v1.4] Confirmation data includes** all info needed for UI approval card
-- [ ] Integration tests verify RBAC for each tool
-- [ ] **[v1.4] Integration tests verify error schema** AI can interpret
-- [ ] **[v1.4] Integration tests verify truncation warnings** injected correctly
-- [ ] **[v1.4] Integration tests verify confirmation flow** (pending → approve → execute)
-- [ ] Performance SLA met (< 500ms for simple queries)
-- [ ] All tools documented with input/output schemas
+- [x] All four MCP servers deployed and accessible (ports 3101-3104)
+- [x] Each server validates JWT and extracts user context
+- [x] Session variables set before all PostgreSQL queries (HR uses RLS)
+- [x] MongoDB queries have role-based filters applied (Sales)
+- [ ] PII masking implemented for salary, SSN, contact info fields (partial)
+- [x] **[v1.4] All tools return discriminated union responses** (success | error | pending_confirmation)
+- [x] **[v1.4] LLM-friendly error schemas** implemented (Article II.3 compliance)
+- [x] **[v1.4] Truncation metadata included** in list-based queries (Article III.2 enforcement)
+- [x] **[v1.4] Write tools return pending_confirmation** for destructive actions
+- [x] **[v1.4] Confirmation data includes** all info needed for UI approval card
+- [x] Integration tests verify RBAC for each tool (mcp-tools.test.ts)
+- [x] **[v1.4] Integration tests verify error schema** AI can interpret
+- [x] **[v1.4] Integration tests verify truncation warnings** injected correctly
+- [x] **[v1.4] Integration tests verify confirmation flow** (pending → approve → execute)
+- [ ] Performance SLA met (< 500ms for simple queries) - not formally measured
+- [x] All tools documented with input/output schemas
 
 ## 6. Database Prerequisites & Sample Data
 
 ### 6.1 PostgreSQL Schema Requirements
 
-**CRITICAL:** The existing `sample-data/hr-data.sql` file (from v1.3) creates tables in the `public` schema, but v1.4 MCP servers expect tables in domain-specific schemas. The sample data files MUST be updated before deployment.
+**STATUS: RESOLVED ✅** - Sample data files have been updated to use proper schemas:
+- `sample-data/hr-data.sql` uses `hr.*` schema with full RLS policies
+- `sample-data/finance-data.sql` uses `finance.*` schema (RLS pending)
 
 #### Required Schema Structure
 
@@ -484,10 +486,27 @@ async function executeDeleteEmployee(
 ```
 
 ## Status
-**PLANNED 🔲** - Next implementation phase after MCP Gateway completion; v1.4 patterns documented.
+**COMPLETE ✅** - All four MCP servers implemented with v1.4 features.
+
+### Implemented Tools Summary
+
+| Service | Port | Tools Implemented |
+|---------|------|-------------------|
+| **mcp-hr** | 3101 | `get_employee`, `list_employees`, `delete_employee` |
+| **mcp-finance** | 3102 | `get_budget`, `list_budgets`, `list_invoices`, `get_expense_report`, `delete_invoice`, `approve_budget` |
+| **mcp-sales** | 3103 | `list_opportunities`, `get_customer`, `delete_opportunity` |
+| **mcp-support** | 3104 | `search_tickets`, `search_knowledge_base`, `close_ticket` |
+
+**Total: 15 tools implemented** (9 read, 6 write with confirmations)
+
+### Known Gaps
+- `update_salary` tool not implemented (can be added as needed)
+- `get_org_chart`, `get_performance_reviews` not implemented
+- `get_pipeline`, `close_opportunity` not implemented
+- Finance schema missing RLS policies (HR has full RLS)
 
 ## Architecture Version
-**Updated for**: v1.4 (December 2024)
+**Updated for**: v1.4 (December 2025)
 **v1.4 Changes Applied**:
 - ✅ Section 3: Updated all tool definitions with discriminated union response schemas
 - ✅ Section 3: Added 8 write tools across 4 MCP servers (delete, update operations)

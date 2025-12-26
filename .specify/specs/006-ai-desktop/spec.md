@@ -1,8 +1,30 @@
 # Specification: AI Desktop Client (React Native)
 
-**Updated**: December 2024
-**Architecture**: React Native for Windows + macOS (replaces Electron)
-**Location**: `clients/unified/`
+**Status**: DEPRECATED - Superseded by Spec 009 (Flutter Unified)
+**Deprecated**: December 26, 2025
+**Replaced By**: 009-flutter-unified
+
+---
+
+> **WARNING: This specification is DEPRECATED**
+>
+> React Native Windows demonstrated fundamental stability issues that blocked development:
+> - Hermes engine crashes on TextInput (RN Windows 0.80)
+> - NuGet/npm version mismatches (RN Windows 0.73)
+> - std::mutex crash bug in VS 2022 17.10+
+> - XAML initialization failures
+>
+> See **ADR-005** in `.specify/ARCHITECTURE_SPECS.md` for full rationale.
+>
+> **Current Implementation**: Spec 009 (Flutter Unified Client)
+> - Location: `clients/unified_flutter/`
+> - Specification: `.specify/specs/009-flutter-unified/`
+
+---
+
+**Original Updated**: December 2024
+**Original Architecture**: React Native for Windows + macOS (replaces Electron)
+**Original Location**: `clients/unified/`
 
 ---
 
@@ -362,11 +384,14 @@ const styles = StyleSheet.create({
 ---
 
 ## Status
-**IN PROGRESS** - Foundation complete, UI pending
+**DEPRECATED** - Superseded by Spec 009 (Flutter Unified Client)
+
+See `.specify/specs/009-flutter-unified/` for the current implementation specification.
 
 ## Architecture Version
-**Updated for**: v1.4 (December 2024)
-**Replaces**: Electron-based specification
+**Original**: v1.4 (December 2024)
+**Deprecated**: December 26, 2025
+**Replaced By**: Spec 009 (Flutter Unified)
 
 **Key Changes from Electron Spec**:
 - Runtime: Electron → React Native

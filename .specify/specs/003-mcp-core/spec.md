@@ -31,16 +31,16 @@ The Gateway itself doesn't expose tools. It orchestrates calls to downstream MCP
 ## 5. Success Criteria
 - [x] Gateway accepts HTTP requests with JWT Bearer tokens
 - [x] Gateway validates JWT signature using Keycloak JWKS
-- [ ] Gateway checks token revocation in Redis cache
-- [ ] Gateway extracts user roles from JWT claims
-- [ ] Gateway determines accessible MCP servers based on roles
-- [ ] Prompt injection defense blocks malicious patterns
-- [ ] Gateway streams responses via **SSE (Server-Sent Events)** without timeouts (v1.4)
-- [ ] **Truncation warnings injected** when MCP returns >50 records (v1.4)
-- [ ] All queries logged with user ID, roles, and timestamp
-- [ ] **Human-in-the-loop confirmations** work for write operations (v1.4)
-- [ ] Integration tests verify RBAC routing
-- [ ] Performance meets SLA (< 200ms latency for routing decisions)
+- [x] Gateway checks token revocation in Redis cache
+- [x] Gateway extracts user roles from JWT claims
+- [x] Gateway determines accessible MCP servers based on roles
+- [x] Prompt injection defense blocks malicious patterns
+- [x] Gateway streams responses via **SSE (Server-Sent Events)** without timeouts (v1.4)
+- [x] **Truncation warnings injected** when MCP returns >50 records (v1.4)
+- [x] All queries logged with user ID, roles, and timestamp
+- [x] **Human-in-the-loop confirmations** work for write operations (v1.4)
+- [x] Integration tests verify RBAC routing (2,465 lines in tests/integration/)
+- [ ] Performance meets SLA (< 200ms latency for routing decisions) - not formally measured
 
 ## 6. Scope
 * **Service:** Node.js/TypeScript Gateway (`services/mcp-gateway`)
@@ -271,7 +271,7 @@ app.post('/api/confirm/:confirmationId', async (req, res) => {
 6. Gateway executes or cancels action
 
 ## Status
-**CURRENT ⚡** - Core implementation exists (473 lines); v1.4 updates required: SSE streaming, truncation warnings, confirmation endpoint, and integration tests.
+**COMPLETE ✅** - Full v1.4 implementation (1,170 lines in `services/mcp-gateway/src/index.ts`). All features implemented: JWT validation, token revocation, role-based routing, SSE streaming (GET + POST), truncation warning injection, human-in-the-loop confirmations, and comprehensive integration tests.
 
 ## Architecture Version
 **Based on**: Architecture v1.4 (December 2025)

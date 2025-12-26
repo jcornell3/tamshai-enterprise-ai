@@ -3,10 +3,28 @@
 ## Document Information
 - **Spec ID**: 007-mobile
 - **Version**: 1.0.0
-- **Status**: PLANNED
+- **Status**: SUPERSEDED by Spec 009 (Flutter Unified)
 - **Author**: AI Architecture Assistant
 - **Created**: December 12, 2025
+- **Superseded**: December 26, 2025
 - **Constitutional Compliance**: Article V (ALL - CRITICAL)
+
+---
+
+> **NOTE: This specification is SUPERSEDED**
+>
+> Mobile development will use Flutter (Spec 009) instead of React Native for platform consistency.
+> The Flutter unified client supports Windows, macOS, iOS, and Android from a single codebase.
+>
+> **Relevant concepts from this spec that remain applicable:**
+> - Network accessibility solutions (host discovery, firewall rules)
+> - WSL2 port forwarding scripts
+> - Mobile Keycloak client configuration patterns
+>
+> **Current Implementation**: Spec 009 (Flutter Unified Client)
+> - Location: `clients/unified_flutter/`
+> - Specification: `.specify/specs/009-flutter-unified/`
+> - Mobile phases: Phase 3 (pending)
 
 ---
 

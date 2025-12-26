@@ -22,15 +22,27 @@ No MCP tools are directly exposed in this phase. This phase enhances security in
 * **mTLS Verification:** Service attempts to connect without valid certificate -> Kong rejects connection -> Request denied at gateway level.
 
 ## 5. Success Criteria
+
+### mTLS (Production Only - Not Implemented in Dev)
 - [ ] Kong Gateway rejects connections from clients without valid mTLS certificates
-- [ ] PostgreSQL RLS policies are active on all employee tables
-- [ ] Direct SQL query as "Alice" (HR) shows all records
-- [ ] Direct SQL query as "Marcus" (Engineer) shows only his own record
-- [ ] Session variables `app.current_user_id` and `app.current_user_roles` are properly set before queries
-- [ ] RLS policies correctly handle composite roles (executive sees all data)
+
+### HR Schema RLS (COMPLETE)
+- [x] PostgreSQL RLS policies are active on all employee tables (`hr.employees`, `hr.performance_reviews`)
+- [x] Direct SQL query as "Alice" (HR) shows all records
+- [x] Direct SQL query as "Marcus" (Engineer) shows only his own record
+- [x] Session variables `app.current_user_id` and `app.current_user_roles` are properly set before queries
+- [x] RLS policies correctly handle composite roles (executive sees all data)
+- [x] Manager hierarchy access via `is_manager_of()` function with SECURITY DEFINER
+
+### Finance Schema RLS (GAP - NOT IMPLEMENTED)
 - [ ] Finance tables have appropriate RLS policies for budget/invoice data
-- [ ] MongoDB query filters are implemented for sales data access control
-- [ ] Integration tests verify RBAC at database level
+
+### MongoDB/Elasticsearch (Application-Level)
+- [x] MongoDB query filters are implemented for sales data access control (MCP Sales)
+- [x] Elasticsearch role-based filtering in MCP Support
+
+### Testing
+- [x] Integration tests verify RBAC at database level (tests/integration/rbac.test.ts)
 
 ## 6. Scope
 * **Certificate Authority (CA):**
@@ -79,4 +91,30 @@ No MCP tools are directly exposed in this phase. This phase enhances security in
   - Rotation: Automated with 30-day warning alerts
 
 ## Status
-**IN PROGRESS ⚡** - RLS policies defined in sample data; mTLS and runtime enforcement pending.
+**PARTIAL ⚡** - HR RLS complete, Finance RLS pending, mTLS deferred to production.
+
+### Implementation Summary
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **HR RLS** | ✅ Complete | 7 policies on `hr.employees` and `hr.performance_reviews` |
+| **Finance RLS** | ❌ Gap | No RLS policies in `sample-data/finance-data.sql` |
+| **MongoDB Filters** | ✅ Complete | Application-level in MCP Sales |
+| **Elasticsearch Filters** | ✅ Complete | Role-based in MCP Support |
+| **mTLS** | ⏳ Deferred | Production only; dev uses HTTP |
+| **Session Variables** | ✅ Complete | `set_user_context()` function in HR |
+| **Audit Logging** | ✅ Complete | `access_audit_log` table in HR schema |
+
+### HR RLS Implementation Details
+- File: `sample-data/hr-data.sql`
+- Tables protected: `hr.employees`, `hr.performance_reviews`
+- Policies: Self-access, HR staff, Executive, Manager hierarchy
+- Special: `is_manager_of()` with SECURITY DEFINER to avoid RLS recursion bug
+
+### Known Gaps
+1. **Finance RLS**: `sample-data/finance-data.sql` has no RLS policies
+2. **mTLS**: Not implemented in development (uses HTTP)
+3. **Audit logging**: Only in HR schema, not Finance
+
+### Architecture Version
+**Updated for**: v1.4 (December 2025)

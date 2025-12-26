@@ -80,30 +80,30 @@ We will build a **Single Monorepo** containing these lightweight React applicati
 
 ## 6. Success Criteria
 ### v1.3 Criteria
-- [ ] Users can log in once and access all apps (SSO)
-- [ ] Token is stored securely (memory) and refreshed automatically
-- [ ] HR App correctly renders/hides sensitive columns based on claims
-- [ ] Finance App blocks non-finance users
-- [ ] Portal displays app links based on user roles
-- [ ] Logout from Portal logs out from all apps
-- [ ] Page refresh maintains authentication (silent refresh)
+- [x] Users can log in once and access all apps (SSO)
+- [x] Token is stored securely (memory) and refreshed automatically
+- [x] HR App correctly renders/hides sensitive columns based on claims
+- [ ] Finance App blocks non-finance users (stub only)
+- [x] Portal displays app links based on user roles
+- [x] Logout from Portal logs out from all apps
+- [x] Page refresh maintains authentication (silent refresh)
 
 ### v1.4 Criteria
-- [ ] **[v1.4] SSE Streaming Works (Section 6.1):**
-  - [ ] EventSource establishes connection to `/api/query` with SSE
-  - [ ] UI streams AI response chunks in real-time
-  - [ ] No timeout errors for queries taking 30-60 seconds
-  - [ ] Connection closes gracefully on [DONE] message
+- [x] **[v1.4] SSE Streaming Works (Section 6.1):**
+  - [x] EventSource establishes connection to `/api/query` with SSE
+  - [x] UI streams AI response chunks in real-time
+  - [x] No timeout errors for queries taking 30-60 seconds
+  - [x] Connection closes gracefully on [DONE] message
 - [ ] **[v1.4] Truncation Warnings Displayed (Section 5.3):**
-  - [ ] AI-generated truncation warnings render clearly in UI
-  - [ ] Users understand results are incomplete
+  - [x] AI-generated truncation warnings render clearly in UI
+  - [ ] Users understand results are incomplete (needs UX testing)
   - [ ] UI encourages query refinement
-- [ ] **[v1.4] Approval Card Component (Section 5.6):**
-  - [ ] pending_confirmation responses render as Approval Cards
-  - [ ] Approve button sends `POST /api/confirm/:id` with `{ approved: true }`
-  - [ ] Reject button sends `POST /api/confirm/:id` with `{ approved: false }`
-  - [ ] Confirmation expiry (5 minutes) handled gracefully
-  - [ ] Success/failure messages display clearly
+- [x] **[v1.4] Approval Card Component (Section 5.6):**
+  - [x] pending_confirmation responses render as Approval Cards
+  - [x] Approve button sends `POST /api/confirm/:id` with `{ approved: true }`
+  - [x] Reject button sends `POST /api/confirm/:id` with `{ approved: false }`
+  - [x] Confirmation expiry (5 minutes) handled gracefully
+  - [x] Success/failure messages display clearly
 
 ## 7. Authentication & Security
 * **OIDC Integration:**
@@ -266,10 +266,34 @@ if (response.status === 'pending_confirmation') {
 * **Article V.3:** OIDC with PKCE flow (no implicit flow)
 
 ## Status
-**PLANNED 🔲** - Implementation after MCP Suite completion.
+**IN PROGRESS ⚡** - Portal and HR apps complete; Finance/Sales/Support are stubs.
+
+### Implementation Status
+
+| App | Port | Status | Notes |
+|-----|------|--------|-------|
+| **Portal** | 4000 | ✅ Complete | Role-based app navigation, user profile |
+| **HR** | 4001 | ✅ Complete | Employee directory (305 lines), AI query page (217 lines) |
+| **Finance** | 4002 | ⚠️ Stub | Dashboard cards only (150 lines) |
+| **Sales** | 4003 | ⚠️ Stub | Opportunities page skeleton (343 lines) |
+| **Support** | 4004 | ⚠️ Stub | Tickets/KB page skeletons (379 lines) |
+
+### Shared Packages Implemented
+
+| Package | Purpose | Key Components |
+|---------|---------|----------------|
+| `@tamshai/auth` | Authentication | AuthProvider, PrivateRoute, useAuth hook |
+| `@tamshai/ui` | Shared components | SSEQueryClient (251 lines), ApprovalCard (205 lines) |
+| `@tamshai/tailwind-config` | Styling | Shared Tailwind configuration |
+
+### Technical Stack
+- **Monorepo**: Turbo with npm workspaces
+- **Build**: Vite 6.2
+- **Framework**: React 18.2 + TypeScript 5.3
+- **Styling**: Tailwind CSS 3.4
 
 ## Architecture Version
-**Updated for**: v1.4 (December 2024)
+**Updated for**: v1.4 (December 2025)
 
 **v1.4 Changes Applied**:
 - ✅ Section 6.1: EventSource API specified for SSE streaming from Gateway
