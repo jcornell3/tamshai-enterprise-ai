@@ -635,26 +635,19 @@
         "com.tamshai.ai://callback",
         "com.tamshai.unifiedflutter://callback"
       ],
-      "postLogoutRedirectUris": [
-        "http://localhost:*/logout",
-        "http://127.0.0.1:*/logout",
-        "com.tamshai.ai://logout",
-        "com.tamshai.unifiedflutter://logout"
-      ],
       "webOrigins": [
         "http://localhost",
         "http://127.0.0.1"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "+"
+        "post.logout.redirect.uris": "http://localhost:*/logout##http://127.0.0.1:*/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout"
       },
       "defaultClientScopes": [
         "openid",
         "profile",
         "email",
-        "roles",
-        "offline_access"
+        "roles"
       ]
     }
   ],

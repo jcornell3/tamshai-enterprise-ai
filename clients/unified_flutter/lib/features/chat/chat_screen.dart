@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/auth/providers/auth_provider.dart';
 import '../../core/chat/models/chat_state.dart';
 import '../../core/chat/providers/chat_provider.dart';
 import 'widgets/message_bubble.dart';
@@ -73,6 +75,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to Home',
+          onPressed: () => context.go('/home'),
+        ),
         title: const Text('AI Assistant'),
         actions: [
           if (chatState.isStreaming)
@@ -112,6 +119,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     );
                   },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () => _showLogoutDialog(context, ref),
           ),
         ],
       ),
@@ -250,6 +262,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _textController.text = text;
         _sendMessage();
       },
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              ref.read(authNotifierProvider.notifier).logout();
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
     );
   }
 }
