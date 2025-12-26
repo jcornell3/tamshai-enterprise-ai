@@ -239,6 +239,19 @@ class DesktopOAuthService implements AuthService {
 
   @override
   Future<AuthUser?> getCurrentUser() async {
+    // Re-extract user from ID token to pick up any extraction logic fixes
+    final idToken = await _storage.getIdToken();
+    if (idToken != null) {
+      try {
+        final user = _extractUserFromIdToken(idToken);
+        // Update stored profile with fresh extraction
+        await _storage.storeUserProfile(user);
+        return user;
+      } catch (e) {
+        _logger.w('Failed to re-extract user from ID token', error: e);
+      }
+    }
+    // Fallback to stored profile
     return await _storage.getUserProfile();
   }
 
