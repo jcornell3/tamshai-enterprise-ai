@@ -29,17 +29,25 @@ class SecureStorageService {
   /// Store authentication tokens
   Future<void> storeTokens(StoredTokens tokens) async {
     try {
-      await Future.wait([
-        _storage.write(key: _accessTokenKey, value: tokens.accessToken),
-        _storage.write(key: _idTokenKey, value: tokens.idToken),
-        if (tokens.refreshToken != null)
-          _storage.write(key: _refreshTokenKey, value: tokens.refreshToken),
-        _storage.write(
-          key: _tokenExpiryKey,
-          value: tokens.accessTokenExpirationDateTime.toIso8601String(),
-        ),
-      ]);
-      _logger.d('Tokens stored securely');
+      final expiryString = tokens.accessTokenExpirationDateTime.toIso8601String();
+      _logger.i('Storing tokens:');
+      _logger.i('  - access_token: ${tokens.accessToken.substring(0, 20)}...');
+      _logger.i('  - refresh_token present: ${tokens.refreshToken != null}');
+      _logger.i('  - expiry: $expiryString');
+
+      // Store tokens sequentially to ensure all writes complete
+      await _storage.write(key: _accessTokenKey, value: tokens.accessToken);
+      await _storage.write(key: _idTokenKey, value: tokens.idToken);
+      await _storage.write(key: _tokenExpiryKey, value: expiryString);
+
+      if (tokens.refreshToken != null) {
+        await _storage.write(key: _refreshTokenKey, value: tokens.refreshToken);
+        _logger.i('  - refresh_token stored');
+      } else {
+        _logger.w('  - NO refresh_token to store!');
+      }
+
+      _logger.i('Tokens stored securely');
     } catch (e, stackTrace) {
       _logger.e('Failed to store tokens', error: e, stackTrace: stackTrace);
       rethrow;
@@ -80,12 +88,25 @@ class SecureStorageService {
   Future<bool> isTokenExpired() async {
     try {
       final expiryString = await _storage.read(key: _tokenExpiryKey);
-      if (expiryString == null) return true;
+      if (expiryString == null) {
+        _logger.w('isTokenExpired: No expiry stored, treating as expired');
+        return true;
+      }
 
       final expiry = DateTime.parse(expiryString);
+      final now = DateTime.now();
       // Consider token expired 30 seconds before actual expiry
       final bufferTime = const Duration(seconds: 30);
-      return DateTime.now().isAfter(expiry.subtract(bufferTime));
+      final effectiveExpiry = expiry.subtract(bufferTime);
+      final isExpired = now.isAfter(effectiveExpiry);
+
+      _logger.d('isTokenExpired check:');
+      _logger.d('  - stored expiry: $expiryString');
+      _logger.d('  - now: ${now.toIso8601String()}');
+      _logger.d('  - effective expiry (minus 30s): ${effectiveExpiry.toIso8601String()}');
+      _logger.d('  - isExpired: $isExpired');
+
+      return isExpired;
     } catch (e, stackTrace) {
       _logger.e('Failed to check token expiry', error: e, stackTrace: stackTrace);
       return true; // Assume expired on error

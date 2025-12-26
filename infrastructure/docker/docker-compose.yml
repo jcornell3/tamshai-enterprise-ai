@@ -62,7 +62,8 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak_password
-      KC_HOSTNAME: localhost
+      # Use 127.0.0.1 instead of localhost for Windows compatibility
+      KC_HOSTNAME: 127.0.0.1
       KC_HOSTNAME_PORT: 8180
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
@@ -120,8 +121,9 @@ services:
       NODE_ENV: development
       PORT: 3100
       # v1.4: JWT validation
-      KEYCLOAK_URL: http://localhost:8180
-      KEYCLOAK_ISSUER: http://localhost:8180/realms/tamshai-corp
+      # Use 127.0.0.1 for Windows compatibility (matches KC_HOSTNAME)
+      KEYCLOAK_URL: http://127.0.0.1:8180
+      KEYCLOAK_ISSUER: http://127.0.0.1:8180/realms/tamshai-corp
       JWKS_URI: http://keycloak:8080/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp
       # v1.4: Claude API
@@ -259,7 +261,7 @@ services:
       dockerfile: apps/portal/Dockerfile
     container_name: tamshai-web-portal
     environment:
-      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_URL: http://127.0.0.1:8180
       VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
@@ -284,7 +286,7 @@ services:
       dockerfile: apps/hr/Dockerfile
     container_name: tamshai-web-hr
     environment:
-      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_URL: http://127.0.0.1:8180
       VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
@@ -309,7 +311,7 @@ services:
       dockerfile: apps/finance/Dockerfile
     container_name: tamshai-web-finance
     environment:
-      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_URL: http://127.0.0.1:8180
       VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
@@ -334,7 +336,7 @@ services:
       dockerfile: apps/sales/Dockerfile
     container_name: tamshai-web-sales
     environment:
-      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_URL: http://127.0.0.1:8180
       VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
@@ -359,7 +361,7 @@ services:
       dockerfile: apps/support/Dockerfile
     container_name: tamshai-web-support
     environment:
-      VITE_KEYCLOAK_URL: http://localhost:8180
+      VITE_KEYCLOAK_URL: http://127.0.0.1:8180
       VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100

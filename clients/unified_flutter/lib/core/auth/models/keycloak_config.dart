@@ -49,9 +49,8 @@ class KeycloakConfigProvider {
       // End session redirect
       endSessionRedirectUrl: 'http://127.0.0.1/logout',
 
-      // Scopes: offline_access needed for refresh tokens
-      // 'roles' scope added for role-based access control
-      scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
+      // Scopes for role-based access control
+      scopes: ['openid', 'profile', 'email', 'roles'],
     );
   }
 

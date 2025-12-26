@@ -53,7 +53,8 @@ class DesktopOAuthService implements AuthService {
 
       // Start local server for callback
       final server = await _startLocalServer();
-      final redirectUri = 'http://localhost:${server.port}/callback';
+      // Use 127.0.0.1 instead of localhost for Windows compatibility
+      final redirectUri = 'http://127.0.0.1:${server.port}/callback';
 
       _logger.i('Local callback server started on port ${server.port}');
 
@@ -328,6 +329,9 @@ class DesktopOAuthService implements AuthService {
       'state': state,
       'code_challenge': codeChallenge,
       'code_challenge_method': 'S256',
+      // Force fresh login to ensure we get current client scopes
+      // This prevents issues with cached browser sessions
+      'prompt': 'login',
     };
 
     return Uri.parse(authEndpoint).replace(queryParameters: params).toString();
@@ -364,13 +368,21 @@ class DesktopOAuthService implements AuthService {
 
       final tokenResponse = jsonDecode(responseBody) as Map<String, dynamic>;
 
+      // Debug logging for token response
+      _logger.i('Token response received:');
+      _logger.i('  - access_token: ${(tokenResponse['access_token'] as String?)?.substring(0, 20)}...');
+      _logger.i('  - refresh_token present: ${tokenResponse['refresh_token'] != null}');
+      _logger.i('  - expires_in: ${tokenResponse['expires_in']}');
+
+      final expiresIn = tokenResponse['expires_in'] as int? ?? 300;
+      final expirationDateTime = DateTime.now().add(Duration(seconds: expiresIn));
+      _logger.i('  - calculated expiration: ${expirationDateTime.toIso8601String()}');
+
       return StoredTokens(
         accessToken: tokenResponse['access_token'] as String,
         idToken: tokenResponse['id_token'] as String,
         refreshToken: tokenResponse['refresh_token'] as String?,
-        accessTokenExpirationDateTime: DateTime.now().add(
-          Duration(seconds: tokenResponse['expires_in'] as int? ?? 300),
-        ),
+        accessTokenExpirationDateTime: expirationDateTime,
         idTokenClaims: _parseJwtClaims(tokenResponse['id_token'] as String),
       );
     } finally {
