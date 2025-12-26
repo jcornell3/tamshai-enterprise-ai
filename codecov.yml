@@ -1,0 +1,38 @@
+coverage:
+  precision: 2
+  round: down
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+        if_ci_failed: error
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+        only_pulls: true
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+flags:
+  gateway:
+    paths:
+      - services/mcp-gateway/
+    carryforward: true
+  flutter:
+    paths:
+      - clients/unified_flutter/
+    carryforward: true
+
+ignore:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*.d.ts"
+  - "**/node_modules/**"
+  - "**/.dart_tool/**"
