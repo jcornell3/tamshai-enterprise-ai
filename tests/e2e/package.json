@@ -1,0 +1,29 @@
+{
+  "name": "@tamshai/e2e-tests",
+  "version": "1.4.0",
+  "description": "End-to-end tests for Tamshai Enterprise AI",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report",
+    "install:browsers": "playwright install chromium"
+  },
+  "keywords": [
+    "tamshai",
+    "e2e",
+    "playwright"
+  ],
+  "author": "John Cornell",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.10.6"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
