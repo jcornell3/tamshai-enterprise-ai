@@ -288,9 +288,14 @@ async function sendToClaudeWithContext(
     .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
     .join('\n\n');
 
-  const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization. 
+  const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization.
 You have access to enterprise data based on the user's role permissions.
-The user "${userContext.username}" has the following roles: ${userContext.roles.join(', ')}.
+The current user is "${userContext.username}" (email: ${userContext.email || 'unknown'}) with system roles: ${userContext.roles.join(', ')}.
+
+IMPORTANT - User Identity Context:
+- First, look for this user in the employee data to understand their position and department
+- Use their employee record to determine who their team members or direct reports are
+- If the user asks about "my team" or "my employees", find the user in the data first, then find employees who report to them or are in their department
 
 When answering questions:
 1. Only use the data provided in the context below
@@ -298,6 +303,7 @@ When answering questions:
 3. Never make up or infer sensitive information not in the data
 4. Be concise and professional
 5. If asked about data you don't have access to, explain that the user's role doesn't have permission
+6. When asked about "my team", first identify the user in the employee data, then find their direct reports
 
 Available data context:
 ${dataContext || 'No relevant data available for this query.'}`;
@@ -593,14 +599,20 @@ async function handleStreamingQuery(
 
     const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization.
 You have access to enterprise data based on the user's role permissions.
-The user "${userContext.username}" has the following roles: ${userContext.roles.join(', ')}.
+The current user is "${userContext.username}" (email: ${userContext.email || 'unknown'}) with system roles: ${userContext.roles.join(', ')}.
+
+IMPORTANT - User Identity Context:
+- First, look for this user in the employee data to understand their position and department
+- Use their employee record to determine who their team members or direct reports are
+- If the user asks about "my team" or "my employees", find the user in the data first, then find employees who report to them or are in their department
 
 When answering questions:
 1. Only use the data provided in the context below
 2. If the data doesn't contain information to answer the question, say so
 3. Never make up or infer sensitive information not in the data
 4. Be concise and professional
-5. If asked about data you don't have access to, explain that the user's role doesn't have permission${paginationInstructions}
+5. If asked about data you don't have access to, explain that the user's role doesn't have permission
+6. When asked about "my team", first identify the user in the employee data, then find their direct reports${paginationInstructions}
 
 Available data context:
 ${dataContext || 'No relevant data available for this query.'}`;

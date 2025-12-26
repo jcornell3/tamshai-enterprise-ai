@@ -204,11 +204,11 @@ class DesktopOAuthService implements AuthService {
           final idToken = await _storage.getIdToken();
           if (idToken != null) {
             // Build end session URL and open in browser
+            // Only send id_token_hint, no redirect URI to avoid Keycloak validation errors
             final endSessionUrl = Uri.parse(
               '${_config.issuer}/protocol/openid-connect/logout',
             ).replace(queryParameters: {
               'id_token_hint': idToken,
-              'post_logout_redirect_uri': _config.endSessionRedirectUrl ?? 'http://localhost/logged-out',
             });
 
             await launchUrl(
@@ -429,15 +429,35 @@ class DesktopOAuthService implements AuthService {
   AuthUser _extractUserFromIdToken(String idToken) {
     final claims = _parseJwtClaims(idToken);
 
+    final firstName = claims['given_name'] as String?;
+    final lastName = claims['family_name'] as String?;
+    final name = claims['name'] as String?;
+    final preferredUsername = claims['preferred_username'] as String?;
+
+    // Build fullName: prefer 'name' claim, fallback to firstName + lastName
+    String? fullName = name;
+    if (fullName == null && (firstName != null || lastName != null)) {
+      fullName = [firstName, lastName].where((s) => s != null).join(' ');
+    }
+
+    // Username fallbacks: preferred_username -> name -> email prefix -> Unknown
+    String username = preferredUsername ?? name ?? 'Unknown';
+    if (username == 'Unknown') {
+      final email = claims['email'] as String?;
+      if (email != null && email.contains('@')) {
+        username = email.split('@').first;
+      }
+    }
+
+    _logger.i('Extracted user: username=$username, fullName=$fullName');
+
     return AuthUser(
       id: claims['sub'] as String? ?? '',
-      username: claims['preferred_username'] as String? ??
-          claims['name'] as String? ??
-          'Unknown',
+      username: username,
       email: claims['email'] as String?,
-      firstName: claims['given_name'] as String?,
-      lastName: claims['family_name'] as String?,
-      fullName: claims['name'] as String?,
+      firstName: firstName,
+      lastName: lastName,
+      fullName: fullName,
       roles: _extractRoles(claims),
       attributes: claims,
     );
