@@ -194,14 +194,33 @@ async function validateToken(token: string): Promise<UserContext> {
         }
 
         const payload = decoded as jwt.JwtPayload;
-        
+
         // Extract roles from Keycloak token structure
         const realmRoles = payload.realm_access?.roles || [];
         const groups = payload.groups || [];
 
+        // Log available claims for debugging
+        logger.debug('JWT claims:', {
+          sub: payload.sub,
+          preferred_username: payload.preferred_username,
+          email: payload.email,
+          name: payload.name,
+          given_name: payload.given_name,
+          family_name: payload.family_name,
+          azp: payload.azp,
+          realm_access: payload.realm_access,
+        });
+
+        // Keycloak may not include preferred_username in access token
+        // Try multiple claim sources for username
+        const username = payload.preferred_username ||
+                        payload.name ||
+                        payload.given_name ||
+                        (payload.sub ? `user-${payload.sub.substring(0, 8)}` : 'unknown');
+
         resolve({
           userId: payload.sub || '',
-          username: payload.preferred_username || '',
+          username: username,
           email: payload.email || '',
           roles: realmRoles,
           groups: groups,
