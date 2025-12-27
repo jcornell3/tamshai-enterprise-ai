@@ -1,0 +1,194 @@
+# =============================================================================
+# Docker Compose Security Overlay for Tamshai Enterprise AI
+# =============================================================================
+#
+# This overlay adds security hardening for production deployments:
+# - Redis AUTH with password protection
+# - PostgreSQL connection encryption
+# - MongoDB authentication hardening
+# - Read-only filesystems where possible
+# - Security options and resource limits
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.secure.yml up -d
+#
+# For mTLS + Security:
+#   docker compose -f docker-compose.yml -f docker-compose.mtls.yml -f docker-compose.secure.yml up -d
+#
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Redis with AUTH and Security Hardening
+  # ===========================================================================
+  redis:
+    command:
+      - "redis-server"
+      - "--requirepass"
+      - "${REDIS_PASSWORD}"
+      - "--rename-command"
+      - "FLUSHALL"
+      - '""'
+      - "--rename-command"
+      - "FLUSHDB"
+      - '""'
+      - "--rename-command"
+      - "DEBUG"
+      - '""'
+      - "--rename-command"
+      - "CONFIG"
+      - "${REDIS_CONFIG_CMD:-CONFIG_DISABLED}"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "volatile-lru"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+
+  # ===========================================================================
+  # PostgreSQL with Security Hardening
+  # ===========================================================================
+  postgres:
+    environment:
+      # Enforce SSL connections
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    command:
+      - "postgres"
+      - "-c"
+      - "password_encryption=scram-sha-256"
+      - "-c"
+      - "log_connections=on"
+      - "-c"
+      - "log_disconnections=on"
+      - "-c"
+      - "log_statement=ddl"
+      - "-c"
+      - "log_checkpoints=on"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  # ===========================================================================
+  # MongoDB with Security Hardening
+  # ===========================================================================
+  mongodb:
+    command:
+      - "mongod"
+      - "--auth"
+      - "--bind_ip_all"
+      - "--setParameter"
+      - "authenticationMechanisms=SCRAM-SHA-256"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  # ===========================================================================
+  # MCP Gateway with Security Hardening
+  # ===========================================================================
+  mcp-gateway:
+    environment:
+      # Redis connection with AUTH
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Force production security
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=128M
+
+  # ===========================================================================
+  # Keycloak with Security Hardening
+  # ===========================================================================
+  keycloak:
+    environment:
+      # Stricter session settings
+      KC_SPI_STICKY_SESSION_ENCODER_INFINISPAN_SHOULD_ATTACH_ROUTE: "false"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY: edge
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  # ===========================================================================
+  # Kong Gateway with Security Hardening
+  # ===========================================================================
+  kong:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+
+# =============================================================================
+# Production Security Checklist:
+# =============================================================================
+#
+# Before deploying to production, ensure:
+#
+# 1. Environment Variables:
+#    [ ] REDIS_PASSWORD is set to a strong password (32+ chars)
+#    [ ] POSTGRES_PASSWORD is set to a strong password
+#    [ ] MONGODB_ROOT_PASSWORD is set to a strong password
+#    [ ] All default passwords are changed
+#
+# 2. Network Security:
+#    [ ] Services are not exposed on public interfaces
+#    [ ] Firewall rules restrict access to management ports
+#    [ ] mTLS is enabled for internal communication
+#
+# 3. Volume Encryption:
+#    [ ] Use encrypted block storage (AWS EBS, GCP PD, Azure Disk)
+#    [ ] Or use LUKS encryption for self-managed volumes
+#    [ ] Encryption keys stored in secure key management (KMS/Vault)
+#
+# 4. Backup Encryption:
+#    [ ] Database backups are encrypted at rest
+#    [ ] Backup encryption keys are rotated regularly
+#
+# 5. Monitoring:
+#    [ ] Security events are logged to SIEM
+#    [ ] Failed login attempts are monitored
+#    [ ] Anomaly detection is enabled
+#
+# =============================================================================

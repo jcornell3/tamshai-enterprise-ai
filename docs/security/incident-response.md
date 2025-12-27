@@ -378,4 +378,179 @@ docker compose restart mcp-gateway
 
 ---
 
+## 9. Specific Incident Runbooks
+
+### 9.1 Compromised API Key (Claude/Anthropic)
+
+**Detection:**
+- Unexpected Claude API usage spike
+- Billing alerts from Anthropic
+- Requests from unknown IPs in Claude dashboard
+
+**Response:**
+
+```bash
+# 1. IMMEDIATELY revoke the key
+# Go to https://console.anthropic.com/settings/keys
+# Click "Revoke" on the compromised key
+
+# 2. Generate new key
+# Create new key in Anthropic console
+
+# 3. Update environment
+cd infrastructure/docker
+# Edit .env with new CLAUDE_API_KEY
+vim .env
+
+# 4. Restart services
+docker compose restart mcp-gateway
+
+# 5. Verify functionality
+curl http://localhost:3100/health
+
+# 6. Audit git history for exposure
+git log --all -S "sk-ant-api" --oneline
+```
+
+### 9.2 Prompt Injection Attack
+
+**Detection:**
+- Alerts from prompt defense module
+- Unusual query patterns in logs
+- Attempts to access unauthorized data
+
+**Response:**
+
+```bash
+# 1. Identify attacker
+docker compose logs mcp-gateway | grep "PROMPT_INJECTION"
+
+# 2. Block user temporarily
+docker compose exec redis redis-cli SET "blocked:{userId}" "true" EX 86400
+
+# 3. Review accessed data
+docker compose logs mcp-gateway | grep "{userId}" | grep "mcp_tool_call"
+
+# 4. Analyze attack pattern
+# Document the injection technique for future defense
+
+# 5. Update prompt defense if needed
+# Edit services/mcp-gateway/src/security/prompt-defense.ts
+```
+
+### 9.3 Data Breach
+
+**Immediate (0-1 hour):**
+```
+[ ] Escalate to P0 - Activate full incident response
+[ ] Notify legal and compliance teams
+[ ] Preserve all logs (minimum 90 days retention)
+[ ] Identify scope: what data, how many records, which users
+```
+
+**Containment (1-4 hours):**
+```bash
+# Revoke all tokens
+docker compose exec redis redis-cli FLUSHALL
+
+# Rotate all secrets
+# - Claude API key
+# - Keycloak client secrets
+# - Database passwords
+
+# Block external access if needed
+docker compose stop kong
+```
+
+**Notification Requirements:**
+- **GDPR (EU):** 72 hours to notify supervisory authority
+- **CCPA (California):** Notify affected residents "in the most expedient time possible"
+- **General:** Document all notifications for compliance
+
+### 9.4 Ransomware/Malware
+
+**CRITICAL: DO NOT PAY RANSOM**
+
+**Immediate:**
+```
+[ ] DISCONNECT all affected systems from network
+[ ] Contact law enforcement (FBI IC3: ic3.gov)
+[ ] Preserve evidence (do not reboot)
+[ ] Identify patient zero
+```
+
+**Recovery:**
+```bash
+# 1. Verify backups are clean (test in isolated environment)
+# 2. Rebuild from known-good images
+docker compose down -v
+docker system prune -a
+# Redeploy from verified source
+
+# 3. Restore data from clean backups
+# 4. Rotate ALL credentials before reconnecting
+```
+
+### 9.5 DDoS Attack
+
+**Detection:**
+- Rate limiting triggered excessively
+- Kong gateway overloaded
+- Network saturation
+
+**Response:**
+```bash
+# 1. Enable stricter rate limiting
+curl -X PATCH http://localhost:8001/plugins/{rate-limit-id} \
+  -d "config.minute=10"
+
+# 2. Block attacking IPs
+curl -X POST http://localhost:8001/plugins \
+  -d "name=ip-restriction" \
+  -d "config.deny={IP_LIST}"
+
+# 3. If using cloud, enable DDoS protection
+# - GCP: Cloud Armor
+# - AWS: Shield/WAF
+# - Cloudflare: Under Attack mode
+
+# 4. Scale horizontally if possible
+docker compose up -d --scale mcp-gateway=3
+```
+
+---
+
+## 10. Compliance Considerations
+
+### Data Breach Notification Requirements
+
+| Regulation | Timeframe | Notify |
+|------------|-----------|--------|
+| GDPR | 72 hours | Supervisory authority + affected individuals |
+| CCPA | "Expedient" | Affected California residents |
+| HIPAA | 60 days | HHS + affected individuals |
+| PCI-DSS | Immediate | Card brands + acquiring bank |
+
+### Documentation Requirements
+
+For each incident, maintain:
+- Incident report (use template in Section 5)
+- Timeline with UTC timestamps
+- Evidence chain of custody
+- Communication log
+- Remediation verification
+
+### Audit Trail Retention
+
+| Data Type | Retention Period |
+|-----------|-----------------|
+| Security incidents | 7 years |
+| Access logs | 1 year |
+| Authentication logs | 90 days |
+| API request logs | 30 days |
+
+---
+
 *This runbook should be reviewed and updated quarterly or after any significant incident.*
+
+*Last Updated: December 2025*

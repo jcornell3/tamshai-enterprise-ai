@@ -1,0 +1,126 @@
+# =============================================================================
+# Docker Compose mTLS Overlay for Tamshai Enterprise AI
+# =============================================================================
+#
+# This overlay file adds mutual TLS (mTLS) configuration to internal services.
+#
+# Usage:
+#   1. Generate certificates: ./scripts/generate-mtls-certs.sh
+#   2. Start with mTLS: docker compose -f docker-compose.yml -f docker-compose.mtls.yml up -d
+#
+# Prerequisites:
+#   - Run generate-mtls-certs.sh to create certificates in ./certs/
+#   - Ensure certs/ directory is NOT committed to git
+#
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # MCP Gateway with mTLS
+  # ===========================================================================
+  mcp-gateway:
+    environment:
+      # Enable TLS for outbound connections to MCP servers
+      NODE_TLS_REJECT_UNAUTHORIZED: "1"
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_CLIENT_CERT: /certs/mcp-gateway.crt
+      MCP_CLIENT_KEY: /certs/mcp-gateway.key
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-gateway.crt:/certs/mcp-gateway.crt:ro
+      - ./certs/mcp-gateway.key:/certs/mcp-gateway.key:ro
+
+  # ===========================================================================
+  # PostgreSQL with TLS
+  # ===========================================================================
+  postgres:
+    command:
+      - "postgres"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/certs/postgres.crt"
+      - "-c"
+      - "ssl_key_file=/certs/postgres.key"
+      - "-c"
+      - "ssl_ca_file=/certs/ca.crt"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/postgres.crt:/certs/postgres.crt:ro
+      - ./certs/postgres.key:/certs/postgres.key:ro
+
+  # ===========================================================================
+  # Redis with TLS
+  # ===========================================================================
+  redis:
+    command:
+      - "redis-server"
+      - "--tls-port"
+      - "6379"
+      - "--port"
+      - "0"
+      - "--tls-cert-file"
+      - "/certs/redis.crt"
+      - "--tls-key-file"
+      - "/certs/redis.key"
+      - "--tls-ca-cert-file"
+      - "/certs/ca.crt"
+      - "--tls-auth-clients"
+      - "yes"
+      - "--requirepass"
+      - "${REDIS_PASSWORD:-redis123}"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/redis.crt:/certs/redis.crt:ro
+      - ./certs/redis.key:/certs/redis.key:ro
+
+  # ===========================================================================
+  # MongoDB with TLS
+  # ===========================================================================
+  mongodb:
+    command:
+      - "mongod"
+      - "--tlsMode"
+      - "requireTLS"
+      - "--tlsCertificateKeyFile"
+      - "/certs/mongodb.pem"
+      - "--tlsCAFile"
+      - "/certs/ca.crt"
+      - "--bind_ip_all"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mongodb.pem:/certs/mongodb.pem:ro
+
+  # ===========================================================================
+  # Keycloak with TLS (for internal service communication)
+  # ===========================================================================
+  keycloak:
+    environment:
+      KC_HTTPS_CERTIFICATE_FILE: /certs/keycloak.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /certs/keycloak.key
+      KC_HTTPS_TRUST_STORE_FILE: /certs/ca.crt
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/keycloak.crt:/certs/keycloak.crt:ro
+      - ./certs/keycloak.key:/certs/keycloak.key:ro
+
+# =============================================================================
+# Notes:
+# =============================================================================
+#
+# 1. Certificate Rotation:
+#    - Service certificates should be rotated annually
+#    - Run generate-mtls-certs.sh --force to regenerate all certs
+#    - Restart services after rotation: docker compose restart
+#
+# 2. Production Considerations:
+#    - Use a proper PKI or HashiCorp Vault for certificate management
+#    - Implement automated certificate rotation
+#    - Monitor certificate expiration with alerting
+#
+# 3. Troubleshooting:
+#    - Check certificate validity: openssl x509 -in cert.crt -text -noout
+#    - Test TLS connection: openssl s_client -connect host:port -CAfile ca.crt
+#    - View container logs: docker compose logs <service>
+#
+# =============================================================================
