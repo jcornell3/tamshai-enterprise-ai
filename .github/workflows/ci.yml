@@ -26,10 +26,10 @@ jobs:
         working-directory: services/mcp-gateway
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -56,7 +56,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == '20'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           files: services/mcp-gateway/coverage/lcov.info
           flags: gateway
@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload type coverage report
         if: matrix.node-version == '20'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: type-coverage
           path: services/mcp-gateway/type-coverage.txt
@@ -92,10 +92,10 @@ jobs:
         working-directory: clients/unified_flutter
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2
         with:
           flutter-version: '3.24.0'
           channel: 'stable'
@@ -123,7 +123,7 @@ jobs:
           fi
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           files: clients/unified_flutter/coverage/lcov.info
           flags: flutter
@@ -142,7 +142,7 @@ jobs:
         working-directory: clients/unified_flutter
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Linux dependencies
         run: |
@@ -150,7 +150,7 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2
         with:
           flutter-version: '3.24.0'
           channel: 'stable'
@@ -170,10 +170,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: '1.5'
 
@@ -206,13 +206,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build MCP Gateway
-        uses: docker/build-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: services/mcp-gateway
           push: false
@@ -228,22 +228,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
       - name: Audit MCP Gateway
         working-directory: services/mcp-gateway
         run: npm audit --audit-level=high
-        continue-on-error: true
 
       - name: Audit Integration Tests
         working-directory: tests/integration
         run: npm audit --audit-level=high
-        continue-on-error: true
 
   # =============================================================================
   # Terraform Security (tfsec)
@@ -253,13 +251,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
           working_directory: infrastructure/terraform
-          soft_fail: true
+          soft_fail: false
 
   # =============================================================================
   # Static Analysis (qlty)
@@ -269,7 +267,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install qlty
         run: |
@@ -278,7 +276,6 @@ jobs:
 
       - name: Run qlty check
         run: qlty check --no-progress
-        continue-on-error: true
 
   # =============================================================================
   # Integration Tests (requires services)
@@ -301,10 +298,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -320,7 +317,6 @@ jobs:
         env:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-        continue-on-error: true
 
   # =============================================================================
   # E2E Tests (Playwright)
@@ -343,10 +339,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
@@ -380,10 +376,9 @@ jobs:
         env:
           GATEWAY_URL: http://localhost:3100
           CI: true
-        continue-on-error: true
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: playwright-report
@@ -411,10 +406,10 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
@@ -437,7 +432,7 @@ jobs:
           LOG_LEVEL: warn
 
       - name: Run k6 Smoke Test
-        uses: grafana/k6-action@v0.3.1
+        uses: grafana/k6-action@e4714b734f2b0afaabeb7b4a69142745548ab9ec # v0.3.1
         with:
           filename: tests/performance/scenarios/gateway-load.js
           flags: --vus 3 --duration 15s
@@ -446,7 +441,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload k6 results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: k6-results
@@ -465,24 +460,24 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a # v0
         with:
           path: .
           format: spdx-json
           output-file: sbom.spdx.json
 
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a # v0
         with:
           path: .
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
       - name: Scan SBOM for vulnerabilities
-        uses: anchore/scan-action@v4
+        uses: anchore/scan-action@64a33b277ea7a1215a3c142735a1091341939ff5 # v4
         id: scan
         with:
           sbom: sbom.spdx.json
@@ -490,7 +485,7 @@ jobs:
           severity-cutoff: critical
 
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom
           path: |
@@ -499,7 +494,7 @@ jobs:
           retention-days: 90
 
       - name: Upload scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@c37a8b7cd97e31de3fcbd9d84c401870edeb8d34 # v3
         if: always()
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}

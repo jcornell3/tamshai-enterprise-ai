@@ -18,6 +18,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
@@ -189,7 +190,7 @@ async function validateToken(token: string): Promise<UserContext> {
       {
         algorithms: ['RS256'],
         issuer: config.keycloak.issuer || `${config.keycloak.url}/realms/${config.keycloak.realm}`,
-        // audience: config.keycloak.clientId,  // Skip audience check as Keycloak uses azp instead
+        audience: [config.keycloak.clientId, 'account'],
       },
       (err, decoded) => {
         if (err) {
@@ -439,6 +440,40 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // =============================================================================
+// RATE LIMITING
+// =============================================================================
+
+// General API rate limiter - 100 requests per minute
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    // Use user ID if authenticated, otherwise use IP
+    const userContext = (req as any).userContext;
+    return userContext?.userId || req.ip || 'unknown';
+  },
+});
+
+// Stricter rate limiter for AI query endpoints - 10 requests per minute
+const aiQueryLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: 'Too many AI queries, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    const userContext = (req as any).userContext;
+    return userContext?.userId || req.ip || 'unknown';
+  },
+});
+
+// Apply general limiter to all /api/ routes
+app.use('/api/', generalLimiter);
+
+// =============================================================================
 // OPENAPI DOCUMENTATION
 // =============================================================================
 
@@ -553,7 +588,7 @@ app.get('/api/mcp/tools', authMiddleware, (req: Request, res: Response) => {
 });
 
 // Main AI query endpoint
-app.post('/api/ai/query', authMiddleware, async (req: Request, res: Response) => {
+app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
   const startTime = Date.now();
   const requestId = req.headers['x-request-id'] as string;
   const userContext: UserContext = (req as any).userContext;
@@ -783,7 +818,7 @@ ${dataContext || 'No relevant data available for this query.'}`;
  * Supports EventSource API which requires GET with query params.
  * Token can be passed via query param since EventSource doesn't support headers.
  */
-app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
+app.get('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
   const query = req.query.q as string;
   const cursor = req.query.cursor as string | undefined;
 
@@ -801,7 +836,7 @@ app.get('/api/query', authMiddleware, async (req: Request, res: Response) => {
  * Supports fetch API with proper Authorization headers and JSON body.
  * Better for clients that can't use EventSource (like React Native).
  */
-app.post('/api/query', authMiddleware, async (req: Request, res: Response) => {
+app.post('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
   const { query, cursor } = req.body;
 
   if (!query || typeof query !== 'string') {
