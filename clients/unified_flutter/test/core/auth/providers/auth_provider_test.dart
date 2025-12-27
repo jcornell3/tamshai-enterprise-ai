@@ -3,12 +3,93 @@
 /// These tests verify the authentication state machine transitions correctly
 /// for login, logout, token refresh, and error handling scenarios.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:unified_flutter/core/auth/models/auth_state.dart';
 import 'package:unified_flutter/core/auth/providers/auth_provider.dart';
 import 'package:unified_flutter/core/auth/services/auth_service.dart';
+import 'package:unified_flutter/core/storage/secure_storage_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+/// Mock FlutterSecureStorage for testing
+class MockFlutterSecureStorage implements FlutterSecureStorage {
+  final Map<String, String> _storage = {};
+
+  MockFlutterSecureStorage();
+
+  @override
+  Future<void> write({required String key, required String? value, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+    if (value != null) {
+      _storage[key] = value;
+    }
+  }
+
+  @override
+  Future<String?> read({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+    return _storage[key];
+  }
+
+  @override
+  Future<void> delete({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+    _storage.remove(key);
+  }
+
+  @override
+  Future<void> deleteAll({IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+    _storage.clear();
+  }
+
+  @override
+  Future<bool> containsKey({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+    return _storage.containsKey(key);
+  }
+
+  @override
+  Future<Map<String, String>> readAll({IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+    return Map.from(_storage);
+  }
+
+  @override
+  Future<bool> isCupertinoProtectedDataAvailable() async => true;
+
+  @override
+  Stream<bool> get onCupertinoProtectedDataAvailabilityChanged => Stream.value(true);
+
+  @override
+  void registerListener({required String key, required ValueChanged<String?> listener}) {}
+
+  @override
+  void unregisterListener({required String key, required ValueChanged<String?> listener}) {}
+
+  @override
+  void unregisterAllListeners() {}
+
+  @override
+  void unregisterAllListenersForAllKeys() {}
+
+  @override
+  void unregisterAllListenersForKey({required String key}) {}
+
+  @override
+  IOSOptions get iOptions => const IOSOptions();
+
+  @override
+  AndroidOptions get aOptions => const AndroidOptions();
+
+  @override
+  LinuxOptions get lOptions => const LinuxOptions();
+
+  @override
+  WindowsOptions get wOptions => const WindowsOptions();
+
+  @override
+  WebOptions get webOptions => const WebOptions();
+
+  @override
+  MacOsOptions get mOptions => const MacOsOptions();
+}
 
 /// Mock AuthService for testing
 class MockAuthService implements AuthService {
@@ -75,8 +156,14 @@ void main() {
         printer: PrettyPrinter(methodCount: 0, errorMethodCount: 0, lineLength: 50),
         level: Level.off, // Disable logging during tests
       );
+      final mockStorage = SecureStorageService(
+        storage: MockFlutterSecureStorage(),
+        biometricStorage: MockFlutterSecureStorage(),
+        logger: logger,
+      );
       authNotifier = AuthNotifier(
         authService: mockAuthService,
+        storage: mockStorage,
         logger: logger,
       );
     });

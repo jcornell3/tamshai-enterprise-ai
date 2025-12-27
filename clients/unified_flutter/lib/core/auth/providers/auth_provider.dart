@@ -7,6 +7,7 @@ import '../models/keycloak_config.dart';
 import '../services/auth_service.dart';
 import '../services/keycloak_auth_service.dart';
 import '../services/desktop_oauth_service.dart';
+import '../services/biometric_service.dart';
 import '../../storage/secure_storage_service.dart';
 
 /// Logger provider
@@ -60,15 +61,35 @@ final keycloakAuthServiceProvider = Provider<AuthService>((ref) {
   return ref.watch(authServiceProvider);
 });
 
+/// Biometric service provider
+final biometricServiceProvider = Provider<BiometricService>((ref) {
+  return BiometricService(logger: ref.watch(loggerProvider));
+});
+
+/// Check if biometric authentication is available on this device
+final isBiometricAvailableProvider = FutureProvider<bool>((ref) async {
+  final biometricService = ref.watch(biometricServiceProvider);
+  return await biometricService.isBiometricAvailable();
+});
+
+/// Check if biometric unlock is enabled and has a saved refresh token
+final hasBiometricRefreshTokenProvider = FutureProvider<bool>((ref) async {
+  final storage = ref.watch(secureStorageProvider);
+  return await storage.hasBiometricRefreshToken();
+});
+
 /// Authentication state notifier
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
+  final SecureStorageService _storage;
   final Logger _logger;
 
   AuthNotifier({
     required AuthService authService,
+    required SecureStorageService storage,
     required Logger logger,
   })  : _authService = authService,
+        _storage = storage,
         _logger = logger,
         super(const AuthState.unauthenticated());
 
@@ -191,6 +212,92 @@ class AuthNotifier extends StateNotifier<AuthState> {
   bool get isAuthenticating {
     return state is Authenticating;
   }
+
+  // ============================================================
+  // Biometric Authentication Methods
+  // ============================================================
+
+  /// Enable biometric unlock for the current session
+  ///
+  /// Stores the refresh token in biometric-protected storage
+  Future<void> enableBiometricUnlock() async {
+    try {
+      final refreshToken = await _storage.getRefreshToken();
+      if (refreshToken == null) {
+        _logger.w('Cannot enable biometric unlock: no refresh token');
+        return;
+      }
+
+      await _storage.enableBiometricUnlock(refreshToken);
+      _logger.i('Biometric unlock enabled');
+    } catch (e, stackTrace) {
+      _logger.e('Failed to enable biometric unlock', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Disable biometric unlock
+  Future<void> disableBiometricUnlock() async {
+    try {
+      await _storage.disableBiometricUnlock();
+      _logger.i('Biometric unlock disabled');
+    } catch (e, stackTrace) {
+      _logger.e('Failed to disable biometric unlock', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Unlock using biometric authentication
+  ///
+  /// Called after successful biometric verification from BiometricUnlockScreen.
+  /// Retrieves the stored refresh token and performs a token refresh.
+  Future<void> unlockWithBiometric() async {
+    try {
+      state = const AuthState.authenticating();
+      _logger.i('Unlocking with biometric authentication');
+
+      // Get the biometric-protected refresh token
+      final refreshToken = await _storage.getBiometricProtectedRefreshToken();
+      if (refreshToken == null) {
+        _logger.e('No biometric refresh token found');
+        state = const AuthState.error('Session expired. Please login again.');
+        return;
+      }
+
+      // Store the refresh token in regular storage for the auth service to use
+      final currentTokens = StoredTokens(
+        accessToken: '', // Will be refreshed
+        idToken: '',
+        refreshToken: refreshToken,
+        accessTokenExpirationDateTime: DateTime.now(), // Expired, needs refresh
+      );
+      await _storage.storeTokens(currentTokens);
+
+      // Now refresh the token
+      final user = await _authService.refreshToken();
+
+      // Update biometric storage with new refresh token if changed
+      final newRefreshToken = await _storage.getRefreshToken();
+      if (newRefreshToken != null && newRefreshToken != refreshToken) {
+        await _storage.updateBiometricRefreshToken(newRefreshToken);
+      }
+
+      state = AuthState.authenticated(user);
+      _logger.i('Biometric unlock successful');
+    } on TokenRefreshException catch (e) {
+      _logger.e('Token refresh failed during biometric unlock', error: e);
+      await _storage.disableBiometricUnlock();
+      state = const AuthState.error('Session expired. Please login again.');
+    } catch (e, stackTrace) {
+      _logger.e('Biometric unlock failed', error: e, stackTrace: stackTrace);
+      state = AuthState.error('Unlock failed: ${e.toString()}');
+    }
+  }
+
+  /// Check if biometric unlock is enabled
+  Future<bool> isBiometricUnlockEnabled() async {
+    return await _storage.isBiometricUnlockEnabled();
+  }
 }
 
 /// Authentication state provider
@@ -198,6 +305,7 @@ final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(
     authService: ref.watch(authServiceProvider),
+    storage: ref.watch(secureStorageProvider),
     logger: ref.watch(loggerProvider),
   );
 });

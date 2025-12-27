@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'core/auth/providers/auth_provider.dart';
 import 'core/auth/models/auth_state.dart';
 import 'features/authentication/login_screen.dart';
+import 'features/authentication/biometric_unlock_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/chat/chat_screen.dart';
 
@@ -63,25 +64,34 @@ class _TamshaiAppState extends ConsumerState<TamshaiApp> {
     return GoRouter(
       initialLocation: '/',
       debugLogDiagnostics: true,
-      redirect: (context, state) {
+      redirect: (context, state) async {
         final authState = ref.read(authNotifierProvider);
         final isAuthenticated = authState is Authenticated;
         final isAuthenticating = authState is Authenticating;
         final isLoginRoute = state.matchedLocation == '/login';
+        final isBiometricRoute = state.matchedLocation == '/biometric-unlock';
 
         // If authenticating, don't redirect
         if (isAuthenticating) {
           return null;
         }
 
-        // If not authenticated and not on login page, redirect to login
-        if (!isAuthenticated && !isLoginRoute) {
-          return '/login';
+        // If authenticated, redirect away from login/biometric screens
+        if (isAuthenticated) {
+          if (isLoginRoute || isBiometricRoute) {
+            return '/';
+          }
+          return null;
         }
 
-        // If authenticated and on login page, redirect to home
-        if (isAuthenticated && isLoginRoute) {
-          return '/';
+        // Not authenticated - check for biometric unlock availability
+        if (!isAuthenticated && !isLoginRoute && !isBiometricRoute) {
+          // Check if biometric unlock is available
+          final hasBiometricToken = await ref.read(hasBiometricRefreshTokenProvider.future);
+          if (hasBiometricToken) {
+            return '/biometric-unlock';
+          }
+          return '/login';
         }
 
         return null;
@@ -95,6 +105,10 @@ class _TamshaiAppState extends ConsumerState<TamshaiApp> {
         GoRoute(
           path: '/login',
           builder: (context, state) => const LoginScreen(),
+        ),
+        GoRoute(
+          path: '/biometric-unlock',
+          builder: (context, state) => const BiometricUnlockScreen(),
         ),
         GoRoute(
           path: '/chat',

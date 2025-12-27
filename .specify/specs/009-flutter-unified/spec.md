@@ -69,6 +69,7 @@ All platforms share ~90% code, with platform-specific implementations for:
 | **Code Generation** | Freezed 2.4+ | Immutable models with union types |
 | **SSE Streaming** | Custom implementation | Handles MCP Gateway event format |
 | **Logging** | logger 2.0+ | Structured logging |
+| **Biometric Auth** | local_auth 2.3+ | Face ID, Touch ID, Windows Hello |
 
 ---
 
@@ -200,6 +201,145 @@ class KeycloakAuthService implements AuthService {
 }
 ```
 
+### V.4 - Biometric Authentication (Quick Unlock)
+
+The Flutter client supports local biometric authentication for returning users, eliminating the need to open the browser for OAuth on every app launch.
+
+**Supported Platforms**:
+- **Windows**: Windows Hello (Face/Fingerprint)
+- **macOS**: Touch ID (on supported devices)
+- **iOS**: Face ID / Touch ID
+- **Android**: Fingerprint / Face Recognition
+
+**Security Model**:
+- Biometric authentication is **local only** - never transmitted to server
+- Refresh token stored in **biometric-protected storage**
+- Biometric prompt required to access the stored refresh token
+- On successful biometric auth, token refresh performed to obtain new access token
+- Falls back to full OAuth login if biometric fails or refresh token expires
+
+```dart
+// BiometricService wraps local_auth for platform detection
+class BiometricService {
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
+  Future<bool> isBiometricAvailable() async {
+    return await _localAuth.canCheckBiometrics &&
+           await _localAuth.isDeviceSupported();
+  }
+
+  Future<BiometricDisplayType> getPrimaryBiometricType() async {
+    final types = await _localAuth.getAvailableBiometrics();
+    if (Platform.isWindows) {
+      return BiometricDisplayType.windowsHello;
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      if (types.contains(BiometricType.face)) {
+        return BiometricDisplayType.faceId;
+      }
+      return BiometricDisplayType.touchId;
+    }
+    // Android
+    if (types.contains(BiometricType.face)) {
+      return BiometricDisplayType.face;
+    }
+    return BiometricDisplayType.fingerprint;
+  }
+
+  Future<bool> authenticate({required String reason}) async {
+    return await _localAuth.authenticate(
+      localizedReason: reason,
+      options: const AuthenticationOptions(
+        stickyAuth: true,
+        biometricOnly: true,
+      ),
+    );
+  }
+}
+```
+
+**Biometric-Protected Token Storage**:
+```dart
+// SecureStorageService with biometric protection
+class SecureStorageService {
+  final FlutterSecureStorage _biometricStorage;
+
+  static FlutterSecureStorage _createBiometricStorage() {
+    if (Platform.isAndroid) {
+      return const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      );
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      return const FlutterSecureStorage(
+        iOptions: IOSOptions(
+          accessibility: KeychainAccessibility.unlocked_this_device,
+        ),
+      );
+    } else {
+      // Windows uses Credential Manager
+      return const FlutterSecureStorage(wOptions: WindowsOptions());
+    }
+  }
+
+  Future<void> enableBiometricUnlock(String refreshToken) async {
+    await _biometricStorage.write(key: 'refresh_token', value: refreshToken);
+    await _storage.write(key: 'biometric_enabled', value: 'true');
+  }
+
+  Future<String?> getBiometricProtectedRefreshToken() async {
+    return await _biometricStorage.read(key: 'refresh_token');
+  }
+}
+```
+
+**Biometric Unlock Flow**:
+```
+App Launch
+    │
+    ▼
+┌─────────────────────────────┐
+│ Check biometric refresh     │
+│ token exists                │
+└─────────────────────────────┘
+    │
+    ├── No → LoginScreen (full OAuth)
+    │
+    ▼ Yes
+┌─────────────────────────────┐
+│ BiometricUnlockScreen       │
+│ "Use Windows Hello to       │
+│  unlock"                    │
+└─────────────────────────────┘
+    │
+    ├── User taps "Use other account" → LoginScreen
+    │
+    ▼ User taps unlock button
+┌─────────────────────────────┐
+│ BiometricService.authenticate│
+│ (Windows Hello prompt)      │
+└─────────────────────────────┘
+    │
+    ├── Failed → Show error, retry or logout
+    │
+    ▼ Success
+┌─────────────────────────────┐
+│ Retrieve biometric-protected│
+│ refresh token               │
+└─────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────┐
+│ AuthNotifier.unlockWithBio- │
+│ metric() → token refresh    │
+└─────────────────────────────┘
+    │
+    ├── Token expired → disableBiometric → LoginScreen
+    │
+    ▼ Success
+┌─────────────────────────────┐
+│ HomeScreen (authenticated)  │
+└─────────────────────────────┘
+```
+
 ---
 
 ## Architecture
@@ -231,8 +371,14 @@ class KeycloakAuthService implements AuthService {
 │  │  ┌─────────────────────┐  ┌─────────────────────┐     │      │
 │  │  │  ChatService        │  │ SecureStorageService│     │      │
 │  │  │  SSE streaming      │  │ Token persistence   │     │      │
-│  │  │  Confirmation flow  │  │ User profile cache  │     │      │
+│  │  │  Confirmation flow  │  │ Biometric storage   │     │      │
 │  │  └─────────────────────┘  └─────────────────────┘     │      │
+│  │                                                        │      │
+│  │  ┌─────────────────────┐                              │      │
+│  │  │  BiometricService   │                              │      │
+│  │  │  Windows Hello      │                              │      │
+│  │  │  Face ID/Touch ID   │                              │      │
+│  │  └─────────────────────┘                              │      │
 │  │                                                        │      │
 │  │  ┌─────────────────────┐                              │      │
 │  │  │ AuthTokenInterceptor│                              │      │
@@ -244,7 +390,9 @@ class KeycloakAuthService implements AuthService {
 │  ┌───────────────────────────┴───────────────────────────┐      │
 │  │                      Features                          │      │
 │  │                                                        │      │
-│  │  LoginScreen → HomeScreen → ChatScreen                │      │
+│  │  LoginScreen ──┬─→ HomeScreen → ChatScreen             │      │
+│  │                │                                       │      │
+│  │  BiometricUnlockScreen ─┘                              │      │
 │  │                               │                        │      │
 │  │                               ├── MessageBubble        │      │
 │  │                               │   └── TruncationBadge  │      │
@@ -440,6 +588,38 @@ class ApprovalCard extends StatelessWidget {
 **Then**: AuthState transitions to `unauthenticated`
 **Then**: go_router redirects to LoginScreen
 
+### P6 - Biometric Quick Unlock
+
+**Given**: User has previously logged in and enabled biometric unlock
+**When**: App is opened (fresh launch or from background)
+**Then**: App checks for biometric-protected refresh token
+**Then**: BiometricUnlockScreen displayed with platform-appropriate prompt
+**Then**: User authenticates with Windows Hello / Face ID / Touch ID
+**Then**: Biometric-protected refresh token retrieved
+**Then**: Token refresh performed to obtain new access token
+**Then**: AuthState transitions to `authenticated`
+**Then**: User sees HomeScreen without opening browser
+
+### P7 - Enable Biometric Unlock
+
+**Given**: User is authenticated and on HomeScreen
+**When**: User navigates to Security section
+**Then**: Biometric toggle displayed (if hardware available)
+**When**: User enables biometric toggle
+**Then**: Biometric authentication prompt shown
+**Then**: If successful, current refresh token copied to biometric-protected storage
+**Then**: Setting persisted, biometric unlock enabled for future sessions
+
+### P8 - Biometric Unlock Failure
+
+**Given**: User has biometric unlock enabled
+**When**: Biometric authentication fails (wrong finger, cancelled, hardware error)
+**Then**: Error message displayed with retry option
+**Then**: "Use different account" option available
+**When**: User taps "Use different account"
+**Then**: Biometric storage cleared
+**Then**: LoginScreen displayed for fresh OAuth login
+
 ---
 
 ## Success Criteria
@@ -455,6 +635,8 @@ class ApprovalCard extends StatelessWidget {
 - [x] Human-in-the-loop ApprovalCard
 - [x] Token refresh via Dio interceptor
 - [x] Logout clears all tokens
+- [x] Biometric unlock via Windows Hello
+- [x] Biometric settings toggle on HomeScreen
 
 ### macOS Desktop (Phase 2) - PENDING
 
@@ -469,7 +651,7 @@ class ApprovalCard extends StatelessWidget {
 - [ ] Android build configured
 - [ ] `flutter_appauth` OAuth flow works
 - [ ] Deep link callbacks work (`com.tamshai.ai://callback`)
-- [ ] Biometric unlock (Face ID, Touch ID, fingerprint)
+- [x] Biometric unlock (Face ID, Touch ID, fingerprint) - shared implementation from Phase 1
 - [ ] Push notifications for approvals
 
 ---
@@ -550,7 +732,8 @@ clients/unified_flutter/
 │   │   │   └── services/
 │   │   │       ├── auth_service.dart          # Abstract interface
 │   │   │       ├── keycloak_auth_service.dart # Mobile (flutter_appauth)
-│   │   │       └── desktop_oauth_service.dart # Desktop (HTTP server)
+│   │   │       ├── desktop_oauth_service.dart # Desktop (HTTP server)
+│   │   │       └── biometric_service.dart     # Biometric auth wrapper
 │   │   ├── chat/
 │   │   │   ├── models/
 │   │   │   │   ├── chat_state.dart            # Freezed: ChatState, ChatMessage
@@ -563,7 +746,8 @@ clients/unified_flutter/
 │   │       └── secure_storage_service.dart    # Token persistence
 │   └── features/
 │       ├── authentication/
-│       │   └── login_screen.dart
+│       │   ├── login_screen.dart
+│       │   └── biometric_unlock_screen.dart  # Biometric quick unlock UI
 │       ├── home/
 │       │   └── home_screen.dart
 │       └── chat/
@@ -759,9 +943,13 @@ services:
 | Truncation warnings | ✅ | Yellow badge on truncated messages |
 | ApprovalCard widget | ✅ | Human-in-the-loop confirmations |
 | Token refresh interceptor | ✅ | Dio interceptor |
+| Biometric unlock | ✅ | Windows Hello via `local_auth` |
+| Biometric settings | ✅ | Toggle in HomeScreen |
 
 **Files**:
 - `clients/unified_flutter/lib/core/auth/services/desktop_oauth_service.dart`
+- `clients/unified_flutter/lib/core/auth/services/biometric_service.dart`
+- `clients/unified_flutter/lib/features/authentication/biometric_unlock_screen.dart`
 - `clients/unified_flutter/lib/core/chat/services/chat_service.dart`
 
 ### Phase 2: macOS Desktop (PENDING)

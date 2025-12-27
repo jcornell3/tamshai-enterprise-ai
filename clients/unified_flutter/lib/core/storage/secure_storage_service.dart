@@ -1,16 +1,21 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 import '../auth/models/auth_state.dart';
 
 /// Secure storage service for authentication tokens and user data
-/// 
+///
 /// Uses flutter_secure_storage which:
 /// - Windows: Uses Windows Credential Manager
-/// - iOS: Uses Keychain
-/// - Android: Uses KeyStore
+/// - iOS: Uses Keychain with biometric access control
+/// - Android: Uses KeyStore with biometric authentication
+///
+/// The refresh token is stored with biometric protection enabled,
+/// requiring Face ID, Touch ID, or Windows Hello to access.
 class SecureStorageService {
   final FlutterSecureStorage _storage;
+  final FlutterSecureStorage _biometricStorage;
   final Logger _logger;
 
   // Storage keys
@@ -19,12 +24,37 @@ class SecureStorageService {
   static const _idTokenKey = 'id_token';
   static const _tokenExpiryKey = 'token_expiry';
   static const _userProfileKey = 'user_profile';
+  static const _biometricEnabledKey = 'biometric_enabled';
 
   SecureStorageService({
     FlutterSecureStorage? storage,
+    FlutterSecureStorage? biometricStorage,
     Logger? logger,
   })  : _storage = storage ?? const FlutterSecureStorage(),
+        _biometricStorage = biometricStorage ?? _createBiometricStorage(),
         _logger = logger ?? Logger();
+
+  /// Create storage with biometric protection enabled
+  static FlutterSecureStorage _createBiometricStorage() {
+    if (Platform.isAndroid) {
+      return const FlutterSecureStorage(
+        aOptions: AndroidOptions(
+          encryptedSharedPreferences: true,
+        ),
+      );
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      return const FlutterSecureStorage(
+        iOptions: IOSOptions(
+          accessibility: KeychainAccessibility.unlocked_this_device,
+        ),
+      );
+    } else {
+      // Windows uses Credential Manager which provides system-level security
+      return const FlutterSecureStorage(
+        wOptions: WindowsOptions(),
+      );
+    }
+  }
 
   /// Store authentication tokens
   Future<void> storeTokens(StoredTokens tokens) async {
@@ -166,6 +196,8 @@ class SecureStorageService {
         _storage.delete(key: _idTokenKey),
         _storage.delete(key: _tokenExpiryKey),
         _storage.delete(key: _userProfileKey),
+        _storage.delete(key: _biometricEnabledKey),
+        _biometricStorage.delete(key: _refreshTokenKey),
       ]);
       _logger.d('All auth data cleared');
     } catch (e, stackTrace) {
@@ -177,11 +209,113 @@ class SecureStorageService {
   /// Delete all stored data (for debugging/testing)
   Future<void> deleteAll() async {
     try {
-      await _storage.deleteAll();
+      await Future.wait([
+        _storage.deleteAll(),
+        _biometricStorage.deleteAll(),
+      ]);
       _logger.w('All secure storage data deleted');
     } catch (e, stackTrace) {
       _logger.e('Failed to delete all data', error: e, stackTrace: stackTrace);
       rethrow;
+    }
+  }
+
+  // ============================================================
+  // Biometric-Protected Storage Methods
+  // ============================================================
+
+  /// Check if biometric unlock is enabled
+  Future<bool> isBiometricUnlockEnabled() async {
+    try {
+      final value = await _storage.read(key: _biometricEnabledKey);
+      return value == 'true';
+    } catch (e) {
+      _logger.e('Failed to check biometric status', error: e);
+      return false;
+    }
+  }
+
+  /// Enable biometric unlock and store refresh token securely
+  Future<void> enableBiometricUnlock(String refreshToken) async {
+    try {
+      _logger.i('Enabling biometric unlock');
+
+      // Store refresh token in biometric-protected storage
+      await _biometricStorage.write(
+        key: _refreshTokenKey,
+        value: refreshToken,
+      );
+
+      // Mark biometric as enabled
+      await _storage.write(key: _biometricEnabledKey, value: 'true');
+
+      _logger.i('Biometric unlock enabled');
+    } catch (e, stackTrace) {
+      _logger.e('Failed to enable biometric unlock', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Disable biometric unlock
+  Future<void> disableBiometricUnlock() async {
+    try {
+      _logger.i('Disabling biometric unlock');
+
+      await Future.wait([
+        _biometricStorage.delete(key: _refreshTokenKey),
+        _storage.delete(key: _biometricEnabledKey),
+      ]);
+
+      _logger.i('Biometric unlock disabled');
+    } catch (e, stackTrace) {
+      _logger.e('Failed to disable biometric unlock', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Get refresh token from biometric-protected storage
+  ///
+  /// This should only be called after successful biometric authentication
+  Future<String?> getBiometricProtectedRefreshToken() async {
+    try {
+      return await _biometricStorage.read(key: _refreshTokenKey);
+    } catch (e, stackTrace) {
+      _logger.e('Failed to read biometric-protected refresh token',
+          error: e, stackTrace: stackTrace);
+      return null;
+    }
+  }
+
+  /// Check if there's a saved refresh token for biometric unlock
+  Future<bool> hasBiometricRefreshToken() async {
+    try {
+      final isEnabled = await isBiometricUnlockEnabled();
+      if (!isEnabled) return false;
+
+      final token = await _biometricStorage.read(key: _refreshTokenKey);
+      return token != null && token.isNotEmpty;
+    } catch (e) {
+      _logger.e('Failed to check biometric refresh token', error: e);
+      return false;
+    }
+  }
+
+  /// Update the biometric-protected refresh token (e.g., after token refresh)
+  Future<void> updateBiometricRefreshToken(String? refreshToken) async {
+    if (refreshToken == null) return;
+
+    try {
+      final isEnabled = await isBiometricUnlockEnabled();
+      if (isEnabled) {
+        await _biometricStorage.write(
+          key: _refreshTokenKey,
+          value: refreshToken,
+        );
+        _logger.d('Biometric refresh token updated');
+      }
+    } catch (e, stackTrace) {
+      _logger.e('Failed to update biometric refresh token',
+          error: e, stackTrace: stackTrace);
     }
   }
 }

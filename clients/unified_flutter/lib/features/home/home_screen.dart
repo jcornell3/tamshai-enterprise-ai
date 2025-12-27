@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/providers/auth_provider.dart';
+import '../../core/auth/services/biometric_service.dart';
 
 /// Home screen shown after successful authentication
 /// 
@@ -121,6 +122,10 @@ class HomeScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                  const SizedBox(height: 16),
+
+                  // Biometric settings card
+                  _BiometricSettingsCard(),
                   const SizedBox(height: 32),
 
                   // AI Assistant quick action
@@ -250,6 +255,205 @@ class HomeScreen extends ConsumerWidget {
             child: const Text('Logout'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Biometric settings card widget
+class _BiometricSettingsCard extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_BiometricSettingsCard> createState() =>
+      _BiometricSettingsCardState();
+}
+
+class _BiometricSettingsCardState extends ConsumerState<_BiometricSettingsCard> {
+  bool _isLoading = false;
+  bool _isEnabled = false;
+  bool _isAvailable = false;
+  BiometricDisplayType _biometricType = BiometricDisplayType.generic;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricStatus();
+  }
+
+  Future<void> _loadBiometricStatus() async {
+    final biometricService = ref.read(biometricServiceProvider);
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+
+    final isAvailable = await biometricService.isBiometricAvailable();
+    final isEnabled = await authNotifier.isBiometricUnlockEnabled();
+    final biometricType = await biometricService.getPrimaryBiometricType();
+
+    if (mounted) {
+      setState(() {
+        _isAvailable = isAvailable;
+        _isEnabled = isEnabled;
+        _biometricType = biometricType;
+      });
+    }
+  }
+
+  Future<void> _toggleBiometric(bool value) async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authNotifier = ref.read(authNotifierProvider.notifier);
+
+      if (value) {
+        // Enable biometric unlock
+        final biometricService = ref.read(biometricServiceProvider);
+        final success = await biometricService.authenticate(
+          reason: 'Authenticate to enable biometric unlock',
+        );
+
+        if (success) {
+          await authNotifier.enableBiometricUnlock();
+          setState(() {
+            _isEnabled = true;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Biometric unlock enabled'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      } else {
+        // Disable biometric unlock
+        await authNotifier.disableBiometricUnlock();
+        setState(() {
+          _isEnabled = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric unlock disabled'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _getBiometricName() {
+    switch (_biometricType) {
+      case BiometricDisplayType.faceId:
+        return 'Face ID';
+      case BiometricDisplayType.touchId:
+        return 'Touch ID';
+      case BiometricDisplayType.windowsHello:
+      case BiometricDisplayType.windowsHelloFace:
+      case BiometricDisplayType.windowsHelloFingerprint:
+        return 'Windows Hello';
+      case BiometricDisplayType.face:
+        return 'Face Recognition';
+      case BiometricDisplayType.fingerprint:
+        return 'Fingerprint';
+      default:
+        return 'Biometric';
+    }
+  }
+
+  IconData _getBiometricIcon() {
+    switch (_biometricType) {
+      case BiometricDisplayType.faceId:
+      case BiometricDisplayType.face:
+      case BiometricDisplayType.windowsHelloFace:
+        return Icons.face;
+      case BiometricDisplayType.touchId:
+      case BiometricDisplayType.fingerprint:
+      case BiometricDisplayType.windowsHelloFingerprint:
+        return Icons.fingerprint;
+      case BiometricDisplayType.windowsHello:
+        return Icons.security;
+      default:
+        return Icons.lock;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAvailable) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Security',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Icon(
+                  _getBiometricIcon(),
+                  size: 32,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_getBiometricName()} Unlock',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        _isEnabled
+                            ? 'Quick access enabled'
+                            : 'Enable for faster login',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isLoading)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Switch(
+                    value: _isEnabled,
+                    onChanged: _toggleBiometric,
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
