@@ -53,9 +53,86 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 
 ### Prerequisites
 
-- Docker Desktop 4.0+ with Docker Compose v2
-- Node.js 20+ and npm 10+
-- 8GB RAM minimum (16GB recommended)
+#### Required Software
+
+| Software | Version | Purpose | Download |
+|----------|---------|---------|----------|
+| **Git** | 2.40+ | Version control | [git-scm.com](https://git-scm.com/downloads) |
+| **Docker Desktop** | 4.0+ | Container runtime | [docker.com](https://www.docker.com/products/docker-desktop/) |
+| **Node.js** | 20 LTS | MCP Gateway, tests | [nodejs.org](https://nodejs.org/) |
+| **Flutter** | 3.24+ | Desktop/mobile client | [flutter.dev](https://docs.flutter.dev/get-started/install) |
+
+#### Windows-Specific Requirements
+
+For Flutter Windows desktop development:
+
+1. **Visual Studio 2022** (Community edition is free)
+   - Download: [visualstudio.microsoft.com](https://visualstudio.microsoft.com/downloads/)
+   - Required workloads during installation:
+     - **"Desktop development with C++"**
+     - Windows 10/11 SDK (10.0.19041.0 or later)
+   - Or install via command line:
+     ```powershell
+     winget install Microsoft.VisualStudio.2022.Community
+     # Then run Visual Studio Installer and add C++ workload
+     ```
+
+2. **Flutter Windows Desktop Support**
+   ```powershell
+   flutter doctor          # Verify installation
+   flutter config --enable-windows-desktop
+   ```
+
+#### macOS-Specific Requirements
+
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Install CocoaPods (for iOS/macOS)
+sudo gem install cocoapods
+
+# Enable macOS desktop
+flutter config --enable-macos-desktop
+```
+
+#### Linux-Specific Requirements
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install clang cmake ninja-build pkg-config \
+  libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+# Enable Linux desktop
+flutter config --enable-linux-desktop
+```
+
+#### System Requirements
+
+- **RAM**: 8GB minimum, 16GB recommended
+- **Disk**: 20GB free space
+- **OS**: Windows 10/11, macOS 12+, or Ubuntu 20.04+
+
+### Verify Installation
+
+Run these commands to verify your development environment:
+
+```bash
+# Git
+git --version              # Should be 2.40+
+
+# Docker
+docker --version           # Should be 24.0+
+docker compose version     # Should be v2.20+
+
+# Node.js
+node --version             # Should be v20+
+npm --version              # Should be 10+
+
+# Flutter
+flutter --version          # Should be 3.24+
+flutter doctor             # Should show all green checkmarks
+```
 
 ### Development Setup
 
@@ -64,14 +141,35 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 git clone https://github.com/jcornell3/tamshai-enterprise-ai.git
 cd tamshai-enterprise-ai
 
-# Run setup script
+# Run setup script (recommended)
 ./scripts/setup-dev.sh
 
 # Or manual setup:
 cd infrastructure/docker
 cp .env.example .env
-# Edit .env with your CLAUDE_API_KEY
+# Edit .env with your CLAUDE_API_KEY from console.anthropic.com
 docker compose up -d
+```
+
+### Flutter Client Setup
+
+```bash
+cd clients/unified_flutter
+
+# Get dependencies
+flutter pub get
+
+# Generate code (Freezed models)
+flutter pub run build_runner build --delete-conflicting-outputs
+
+# Run on Windows
+flutter run -d windows
+
+# Run on macOS
+flutter run -d macos
+
+# Run on Linux
+flutter run -d linux
 ```
 
 ### Access Services
