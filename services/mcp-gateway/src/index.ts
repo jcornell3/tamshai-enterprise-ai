@@ -1247,6 +1247,123 @@ app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, 
 });
 
 // =============================================================================
+// GDPR COMPLIANCE ENDPOINTS
+// =============================================================================
+
+/**
+ * GDPR Data Export (Right to Access)
+ * Returns all data associated with the authenticated user.
+ *
+ * Implementation Notes:
+ * - Aggregates data from all MCP servers the user has access to
+ * - Returns data in portable JSON format
+ * - Rate limited to prevent abuse
+ */
+app.get('/api/gdpr/export', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
+  const requestId = req.headers['x-request-id'] as string;
+  const userContext: UserContext = (req as any).userContext;
+
+  logger.info('GDPR data export requested', {
+    requestId,
+    userId: userContext.userId,
+    username: userContext.username,
+  });
+
+  try {
+    // TODO: Implement actual data aggregation from MCP servers
+    // For now, return a stub response indicating the endpoint exists
+    const exportData = {
+      status: 'pending',
+      message: 'Data export request received. Full implementation pending.',
+      requestId,
+      userId: userContext.userId,
+      username: userContext.username,
+      roles: userContext.roles,
+      timestamp: new Date().toISOString(),
+      estimatedCompletionTime: 'Data export feature is under development',
+    };
+
+    res.json(exportData);
+  } catch (error) {
+    logger.error('GDPR export failed', {
+      requestId,
+      userId: userContext.userId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      status: 'error',
+      code: 'EXPORT_FAILED',
+      message: 'Failed to export user data',
+    });
+  }
+});
+
+/**
+ * GDPR Data Deletion Request (Right to Erasure)
+ * Initiates deletion of all user data across all MCP servers.
+ *
+ * Implementation Notes:
+ * - Requires confirmation before processing
+ * - Deletion is asynchronous and may take up to 30 days
+ * - Some data may be retained for legal/audit requirements
+ */
+app.post('/api/gdpr/delete', authMiddleware, async (req: Request, res: Response) => {
+  const requestId = req.headers['x-request-id'] as string;
+  const userContext: UserContext = (req as any).userContext;
+  const { confirmDeletion } = req.body;
+
+  logger.warn('GDPR data deletion requested', {
+    requestId,
+    userId: userContext.userId,
+    username: userContext.username,
+    confirmed: !!confirmDeletion,
+  });
+
+  if (!confirmDeletion) {
+    return res.status(400).json({
+      status: 'error',
+      code: 'CONFIRMATION_REQUIRED',
+      message: 'Please confirm deletion by setting confirmDeletion: true in request body',
+      warning: 'This action will permanently delete all your data and cannot be undone',
+    });
+  }
+
+  try {
+    // TODO: Implement actual data deletion workflow
+    // - Queue deletion job
+    // - Notify all MCP servers
+    // - Revoke all active sessions
+    // - Schedule account deactivation
+
+    const deletionRequest = {
+      status: 'accepted',
+      message: 'Data deletion request received. Full implementation pending.',
+      requestId,
+      userId: userContext.userId,
+      timestamp: new Date().toISOString(),
+      estimatedCompletionDays: 30,
+      retainedData: [
+        'Audit logs (retained for 7 years per compliance requirements)',
+        'Transaction records (retained for legal requirements)',
+      ],
+    };
+
+    res.json(deletionRequest);
+  } catch (error) {
+    logger.error('GDPR deletion failed', {
+      requestId,
+      userId: userContext.userId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      status: 'error',
+      code: 'DELETION_FAILED',
+      message: 'Failed to process deletion request',
+    });
+  }
+});
+
+// =============================================================================
 // SERVER STARTUP
 // =============================================================================
 
