@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:logger/logger.dart';
 import '../storage/secure_storage_service.dart';
 import '../auth/providers/auth_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'certificate_pinner.dart';
 
 /// Dio interceptor for automatic token injection and refresh
 /// 
@@ -138,7 +140,7 @@ class AuthTokenInterceptor extends Interceptor {
   }
 }
 
-/// Dio client provider with auth interceptor
+/// Dio client provider with auth interceptor and certificate pinning
 final dioProvider = Provider<Dio>((ref) {
   // Development: MCP Gateway at port 3100
   // Production: Kong Gateway at port 8100
@@ -157,6 +159,10 @@ final dioProvider = Provider<Dio>((ref) {
       },
     ),
   );
+
+  // Configure certificate pinning for production security
+  // Note: Pinning is disabled when no certificates are configured (dev mode)
+  CertificatePinner.configure(dio);
 
   // Add auth interceptor
   dio.interceptors.add(

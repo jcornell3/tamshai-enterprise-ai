@@ -1,0 +1,21 @@
+# CODEOWNERS - Defines code ownership for pull request reviews
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @jcornell3
+
+# Security-sensitive files require explicit security review
+services/mcp-gateway/src/security/** @jcornell3
+services/mcp-gateway/src/utils/redis.ts @jcornell3
+keycloak/** @jcornell3
+infrastructure/terraform/** @jcornell3
+infrastructure/docker/docker-compose.yml @jcornell3
+infrastructure/docker/.env.example @jcornell3
+
+# CI/CD and GitHub configuration
+.github/workflows/** @jcornell3
+.github/CODEOWNERS @jcornell3
+
+# Authentication and authorization code
+services/mcp-gateway/src/index.ts @jcornell3
+clients/unified_flutter/lib/core/auth/** @jcornell3

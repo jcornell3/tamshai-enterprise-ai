@@ -418,8 +418,29 @@ ${dataContext || 'No relevant data available for this query.'}`;
 
 const app = express();
 
-// Middleware
-app.use(helmet());
+// Middleware - Strict Security Headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Required for Swagger UI
+      styleSrc: ["'self'", "'unsafe-inline'"],  // Required for Swagger UI
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'none'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,           // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  crossOriginEmbedderPolicy: false, // Required for Swagger UI
+}));
 app.use(cors({
   origin: [
     'http://localhost:3100',     // MCP Gateway itself
@@ -1229,10 +1250,52 @@ app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, 
 // SERVER STARTUP
 // =============================================================================
 
-app.listen(config.port, () => {
-  logger.info(`MCP Gateway listening on port ${config.port}`);
-  logger.info(`Keycloak URL: ${config.keycloak.url}`);
-  logger.info(`Configured MCP servers: ${Object.keys(config.mcpServers).join(', ')}`);
+/**
+ * Validates Keycloak connectivity by fetching the JWKS endpoint.
+ * Fails fast in production if Keycloak is not reachable.
+ */
+async function validateKeycloakConnectivity(): Promise<void> {
+  const jwksUri = config.keycloak.jwksUri ||
+    `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`;
+
+  try {
+    const response = await axios.get(jwksUri, { timeout: 5000 });
+    if (!response.data.keys?.length) {
+      throw new Error('No signing keys found in JWKS');
+    }
+    logger.info('Keycloak JWKS endpoint validated', {
+      keyCount: response.data.keys.length,
+      jwksUri,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Failed to validate Keycloak connectivity', {
+      error: errorMessage,
+      jwksUri,
+    });
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('Exiting: Keycloak validation failed in production mode');
+      process.exit(1); // Fail-fast in production
+    } else {
+      logger.warn('Continuing without Keycloak validation (non-production mode)');
+    }
+  }
+}
+
+// Start server with Keycloak validation
+async function startServer(): Promise<void> {
+  await validateKeycloakConnectivity();
+
+  app.listen(config.port, () => {
+    logger.info(`MCP Gateway listening on port ${config.port}`);
+    logger.info(`Keycloak URL: ${config.keycloak.url}`);
+    logger.info(`Configured MCP servers: ${Object.keys(config.mcpServers).join(', ')}`);
+  });
+}
+
+startServer().catch((error) => {
+  logger.error('Failed to start server:', error);
+  process.exit(1);
 });
 
 export default app;
