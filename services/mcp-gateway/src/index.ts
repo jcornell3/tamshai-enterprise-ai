@@ -550,13 +550,27 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   const tokenFromQuery = req.query.token as string | undefined;
 
-  // Accept token from either Authorization header or query param (for SSE)
+  // Accept token from either Authorization header or query param
+  // SECURITY NOTE: Query param tokens are DEPRECATED due to URL logging risks
+  // Prefer POST /api/query with Authorization header for SSE streaming
   let token: string;
+  let tokenSource: 'header' | 'query';
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
+    tokenSource = 'header';
   } else if (tokenFromQuery) {
-    // EventSource doesn't support custom headers, so accept token via query param
+    // DEPRECATED: Token in URL is logged and visible in browser history
+    // This is kept for backwards compatibility with EventSource clients
+    // New clients should use POST /api/query with fetch() streaming
     token = tokenFromQuery;
+    tokenSource = 'query';
+    logger.warn('Token passed via query parameter (deprecated)', {
+      path: req.path,
+      method: req.method,
+      // Don't log the actual token for security
+      warning: 'Query param tokens are visible in logs and browser history',
+    });
   } else {
     res.status(401).json({ error: 'Missing or invalid authorization header' });
     return;
@@ -836,8 +850,17 @@ ${dataContext || 'No relevant data available for this query.'}`;
 /**
  * v1.4 SSE Streaming Query Endpoint - GET (Section 6.1)
  *
- * Supports EventSource API which requires GET with query params.
- * Token can be passed via query param since EventSource doesn't support headers.
+ * @deprecated Use POST /api/query instead for better security.
+ *
+ * SECURITY WARNING: This endpoint accepts tokens via query parameter
+ * which causes tokens to appear in:
+ * - Server access logs
+ * - Browser history
+ * - Proxy logs
+ * - Network monitoring tools
+ *
+ * Kept for backwards compatibility with EventSource clients.
+ * New clients should use POST /api/query with fetch() streaming.
  */
 app.get('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
   const query = req.query.q as string;
@@ -852,10 +875,26 @@ app.get('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: 
 });
 
 /**
- * v1.4 SSE Streaming Query Endpoint - POST (Section 6.1)
+ * v1.4 SSE Streaming Query Endpoint - POST (Section 6.1) - RECOMMENDED
  *
- * Supports fetch API with proper Authorization headers and JSON body.
- * Better for clients that can't use EventSource (like React Native).
+ * This is the preferred endpoint for AI queries. Supports:
+ * - fetch() API with streaming response
+ * - Proper Authorization header (not exposed in logs)
+ * - JSON body for complex queries
+ *
+ * Example usage with fetch():
+ * ```javascript
+ * const response = await fetch('/api/query', {
+ *   method: 'POST',
+ *   headers: {
+ *     'Authorization': `Bearer ${token}`,
+ *     'Content-Type': 'application/json',
+ *   },
+ *   body: JSON.stringify({ query: 'Your question here' }),
+ * });
+ * const reader = response.body.getReader();
+ * // Read SSE chunks...
+ * ```
  */
 app.post('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
   const { query, cursor } = req.body;
