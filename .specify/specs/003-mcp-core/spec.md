@@ -757,22 +757,37 @@ const response = await axios.post(`${mcpServer.url}/query`, {
 The MCP Gateway sends SSE events in a custom format that differs from Anthropic's standard:
 
 ```typescript
-// MCP Gateway format
+// MCP Gateway format (simplified for MCP context)
 { "type": "text", "text": "Hello, " }
 { "type": "text", "text": "world!" }
+{ "type": "pagination", "hasMore": true, "cursors": [...] }  // v1.4 pagination
+{ "status": "pending_confirmation", "confirmationId": "...", "message": "..." }  // v1.4 HITL
 
 // Anthropic standard format (for reference)
 { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "Hello, " } }
 ```
 
-Clients (especially Flutter - Spec 009) must handle both formats:
+**Design Decision**: The simplified `type: "text"` format was chosen over Anthropic's nested format because:
+1. MCP Gateway aggregates responses from multiple MCP servers, not raw Claude output
+2. Simpler format reduces parsing overhead in clients
+3. Custom types like `pagination` and `pending_confirmation` fit naturally
+
+Clients (especially Flutter - Spec 009) must handle both formats for compatibility:
 ```dart
 switch (json['type']) {
   case 'text':
     // MCP Gateway custom format
     return SSEChunk(text: json['text']);
   case 'content_block_delta':
-    // Anthropic format
+    // Anthropic format (fallback)
     return SSEChunk(text: json['delta']?['text']);
+  case 'pagination':
+    // v1.4 pagination metadata
+    return SSEChunk(type: SSEEventType.pagination, metadata: json);
+}
+
+// Also check 'status' field for pending_confirmation (Section 5.6)
+if (json['status'] == 'pending_confirmation') {
+  return SSEChunk(type: SSEEventType.pendingConfirmation, metadata: json);
 }
 ```

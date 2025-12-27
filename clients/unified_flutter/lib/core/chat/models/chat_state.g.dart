@@ -106,6 +106,8 @@ const _$SSEEventTypeEnumMap = {
   SSEEventType.contentBlockDelta: 'contentBlockDelta',
   SSEEventType.contentBlockStop: 'contentBlockStop',
   SSEEventType.messageStop: 'messageStop',
+  SSEEventType.pendingConfirmation: 'pendingConfirmation',
+  SSEEventType.pagination: 'pagination',
   SSEEventType.error: 'error',
   SSEEventType.done: 'done',
 };

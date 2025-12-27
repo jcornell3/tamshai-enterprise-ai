@@ -69,6 +69,8 @@ enum SSEEventType {
   contentBlockDelta,
   contentBlockStop,
   messageStop,
+  pendingConfirmation,  // v1.4: Human-in-the-loop confirmation required
+  pagination,            // v1.4: More data available
   error,
   done,
 }

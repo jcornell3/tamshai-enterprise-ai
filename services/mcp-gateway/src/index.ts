@@ -223,6 +223,22 @@ async function validateToken(token: string): Promise<UserContext> {
                         payload.given_name ||
                         (payload.sub ? `user-${payload.sub.substring(0, 8)}` : 'unknown');
 
+        // GAP-005: Warn when critical claims are missing (Keycloak protocol mapper misconfiguration)
+        if (!payload.preferred_username) {
+          logger.warn('JWT missing preferred_username claim - Keycloak protocol mapper may be misconfigured', {
+            hasSub: !!payload.sub,
+            hasName: !!payload.name,
+            hasGivenName: !!payload.given_name,
+            usedFallback: username,
+          });
+        }
+        if (!payload.email) {
+          logger.warn('JWT missing email claim - user identity queries may fail', {
+            userId: payload.sub,
+            username,
+          });
+        }
+
         resolve({
           userId: payload.sub || '',
           username: username,
@@ -756,6 +772,24 @@ async function handleStreamingQuery(
 
     const hasPagination = paginationInfo.length > 0;
 
+    // v1.4: Extract truncation warnings (Article III.2, Section 5.3)
+    const truncationWarnings: string[] = [];
+    mcpResults.forEach((result) => {
+      const mcpResponse = result.data as MCPToolResponse;
+      if (isSuccessResponse(mcpResponse) && mcpResponse.metadata?.truncated) {
+        const returnedCount = mcpResponse.metadata.returnedCount || 50;
+        truncationWarnings.push(
+          `TRUNCATION WARNING: Data from ${result.server} returned only ${returnedCount} of ${returnedCount}+ records. ` +
+          `You MUST inform the user that results are incomplete and may not represent the full dataset.`
+        );
+        logger.info('Truncation detected in MCP response', {
+          requestId,
+          server: result.server,
+          returnedCount,
+        });
+      }
+    });
+
     const pendingConfirmations = mcpResults.filter((result) => {
       const mcpResponse = result.data as MCPToolResponse;
       return isPendingConfirmationResponse(mcpResponse);
@@ -798,7 +832,7 @@ When answering questions:
 3. Never make up or infer sensitive information not in the data
 4. Be concise and professional
 5. If asked about data you don't have access to, explain that the user's role doesn't have permission
-6. When asked about "my team", first identify the user in the employee data, then find their direct reports${paginationInstructions}
+6. When asked about "my team", first identify the user in the employee data, then find their direct reports${paginationInstructions}${truncationWarnings.length > 0 ? '\n\n' + truncationWarnings.join('\n') : ''}
 
 Available data context:
 ${dataContext || 'No relevant data available for this query.'}`;

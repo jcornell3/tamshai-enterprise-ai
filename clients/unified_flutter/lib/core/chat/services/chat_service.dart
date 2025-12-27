@@ -159,8 +159,31 @@ class ChatService {
             text: json['text'] as String?,
           );
 
+        // v1.4: Pagination metadata (Section 5.3)
+        case 'pagination':
+          return SSEChunk(
+            type: SSEEventType.pagination,
+            metadata: json,
+          );
+
         default:
-          // Handle custom MCP Gateway events
+          // Handle custom MCP Gateway events based on 'status' field
+          final status = json['status'] as String?;
+
+          // v1.4: Handle pending_confirmation from MCP servers (Section 5.6)
+          if (status == 'pending_confirmation') {
+            return SSEChunk(
+              type: SSEEventType.pendingConfirmation,
+              metadata: {
+                'confirmationId': json['confirmationId'],
+                'message': json['message'],
+                'action': json['action'] ?? 'unknown',
+                'confirmationData': json['confirmationData'],
+              },
+            );
+          }
+
+          // Handle truncation warnings in response data
           if (json.containsKey('truncated') && json['truncated'] == true) {
             return SSEChunk(
               type: SSEEventType.contentBlockDelta,
@@ -169,16 +192,15 @@ class ChatService {
             );
           }
 
+          // Legacy: Handle nested pending_confirmation for backwards compatibility
           if (json.containsKey('pending_confirmation')) {
             return SSEChunk(
-              type: SSEEventType.contentBlockDelta,
-              metadata: {
-                'pending_confirmation': json['pending_confirmation'],
-              },
+              type: SSEEventType.pendingConfirmation,
+              metadata: json['pending_confirmation'] as Map<String, dynamic>?,
             );
           }
 
-          _logger.w('Unknown SSE event type: $type');
+          _logger.w('Unknown SSE event type: $type, status: $status');
           return null;
       }
     } catch (e, stackTrace) {
