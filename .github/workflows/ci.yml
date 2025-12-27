@@ -63,6 +63,24 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Check type coverage
+        if: matrix.node-version == '20'
+        run: |
+          echo "## Type Coverage Report" >> $GITHUB_STEP_SUMMARY
+          npx type-coverage --at-least 85 --ignore-catch --ignore-files "**/*.test.ts" --ignore-files "**/__mocks__/**" | tee type-coverage.txt
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat type-coverage.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Upload type coverage report
+        if: matrix.node-version == '20'
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-coverage
+          path: services/mcp-gateway/type-coverage.txt
+          retention-days: 30
+
   # =============================================================================
   # Flutter Client
   # =============================================================================
@@ -434,3 +452,55 @@ jobs:
           name: k6-results
           path: tests/performance/summary.json
           retention-days: 7
+
+  # =============================================================================
+  # SBOM Generation
+  # =============================================================================
+  sbom:
+    name: SBOM - Generate & Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+
+      - name: Scan SBOM for vulnerabilities
+        uses: anchore/scan-action@v4
+        id: scan
+        with:
+          sbom: sbom.spdx.json
+          fail-build: false
+          severity-cutoff: critical
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom.spdx.json
+            sbom.cdx.json
+          retention-days: 90
+
+      - name: Upload scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+        continue-on-error: true
