@@ -218,7 +218,6 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-        continue-on-error: true
 
   # =============================================================================
   # Security Scanning
@@ -521,7 +520,7 @@ jobs:
           #   path: services/mcp-hr
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Build Docker image
         run: |
@@ -529,7 +528,7 @@ jobs:
             ${{ matrix.image.path }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.24.0
         with:
           image-ref: 'tamshai/${{ matrix.image.name }}:${{ github.sha }}'
           format: 'sarif'
@@ -538,11 +537,11 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@c37a8b7cd97e31de3fcbd9d84c401870edeb8d34 # v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
+        continue-on-error: true  # May fail in forks without GitHub Security access
 
   # =============================================================================
   # Pre-commit Hooks Validation
@@ -552,12 +551,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0  # Full history for gitleaks
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5
         with:
           python-version: '3.12'
 
@@ -565,11 +564,11 @@ jobs:
         run: pip install pre-commit
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc268f2ff4df59f1cc2d6696303 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
       - name: Run pre-commit hooks
         run: pre-commit run --all-files --show-diff-on-failure
-        continue-on-error: true  # Don't fail CI on style issues
+        continue-on-error: true  # Don't fail CI on style issues (gitleaks runs separately)
