@@ -68,7 +68,9 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
     volumes:
-      - ../../keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      # Use realm-export-dev.json for local development (includes test users)
+      # Use realm-export.json for production (no pre-configured users)
+      - ../../keycloak/realm-export-dev.json:/opt/keycloak/data/import/realm-export.json:ro
       - ../keycloak/themes/tamshai:/opt/keycloak/themes/tamshai:ro
     ports:
       - "8180:8080"

@@ -165,7 +165,281 @@
       ]
     }
   ],
-  "users": [],
+  "users": [
+    {
+      "username": "alice.chen",
+      "email": "alice@tamshai.local",
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/HR-Department",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Human Resources"
+        ],
+        "employeeId": [
+          "EMP010"
+        ],
+        "title": [
+          "VP of Human Resources"
+        ]
+      }
+    },
+    {
+      "username": "bob.martinez",
+      "email": "bob@tamshai.local",
+      "firstName": "Bob",
+      "lastName": "Martinez",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Finance-Team",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Finance"
+        ],
+        "employeeId": [
+          "EMP020"
+        ],
+        "title": [
+          "Finance Director"
+        ]
+      }
+    },
+    {
+      "username": "carol.johnson",
+      "email": "carol@tamshai.local",
+      "firstName": "Carol",
+      "lastName": "Johnson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Sales-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Sales"
+        ],
+        "employeeId": [
+          "EMP030"
+        ],
+        "title": [
+          "VP of Sales"
+        ]
+      }
+    },
+    {
+      "username": "dan.williams",
+      "email": "dan@tamshai.local",
+      "firstName": "Dan",
+      "lastName": "Williams",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Support-Team",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Customer Support"
+        ],
+        "employeeId": [
+          "EMP040"
+        ],
+        "title": [
+          "Support Director"
+        ]
+      }
+    },
+    {
+      "username": "eve.thompson",
+      "email": "eve@tamshai.local",
+      "firstName": "Eve",
+      "lastName": "Thompson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/C-Suite"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Executive"
+        ],
+        "employeeId": [
+          "EMP001"
+        ],
+        "title": [
+          "CEO"
+        ]
+      }
+    },
+    {
+      "username": "frank.davis",
+      "email": "frank@tamshai.local",
+      "firstName": "Frank",
+      "lastName": "Davis",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/IT-Team"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "IT"
+        ],
+        "employeeId": [
+          "EMP061"
+        ],
+        "title": [
+          "Intern"
+        ]
+      }
+    },
+    {
+      "username": "ryan.garcia",
+      "email": "ryan.g@tamshai.local",
+      "firstName": "Ryan",
+      "lastName": "Garcia",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Sales-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Sales"
+        ],
+        "employeeId": [
+          "EMP031"
+        ],
+        "title": [
+          "Sales Manager"
+        ]
+      }
+    },
+    {
+      "username": "nina.patel",
+      "email": "nina.p@tamshai.local",
+      "firstName": "Nina",
+      "lastName": "Patel",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Engineering-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Engineering"
+        ],
+        "employeeId": [
+          "EMP051"
+        ],
+        "title": [
+          "Engineering Manager"
+        ]
+      }
+    },
+    {
+      "username": "marcus.johnson",
+      "email": "marcus.j@tamshai.local",
+      "firstName": "Marcus",
+      "lastName": "Johnson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "[REDACTED-DEV-PASSWORD]",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Engineering-Team"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": [
+          "Engineering"
+        ],
+        "employeeId": [
+          "EMP052"
+        ],
+        "title": [
+          "Software Engineer"
+        ]
+      }
+    }
+  ],
   "clients": [
     {
       "clientId": "ai-desktop",
@@ -229,7 +503,7 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "protocol": "openid-connect",
-      "secret": "${MCP_GATEWAY_CLIENT_SECRET}",
+      "secret": "[REDACTED-DEV-SECRET]",
       "defaultClientScopes": [
         "openid",
         "profile",
