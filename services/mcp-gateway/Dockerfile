@@ -29,6 +29,10 @@ RUN npm prune --production
 # =============================================================================
 FROM node:20-alpine AS production
 
+# Security: Update npm to fix CVE-2025-64756 (glob), CVE-2024-21538 (cross-spawn),
+# CVE-2025-5889 (brace-expansion) in npm's bundled dependencies
+RUN npm install -g npm@latest
+
 # Security: Run as non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
