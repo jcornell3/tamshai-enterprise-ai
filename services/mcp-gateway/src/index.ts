@@ -47,6 +47,17 @@ import {
 import { scrubPII } from './utils/pii-scrubber';
 import gdprRoutes from './routes/gdpr';
 
+/**
+ * Sanitize string for safe logging (prevent log injection)
+ * Removes newlines and control characters that could forge log entries
+ */
+function sanitizeForLog(input: string, maxLength = 100): string {
+  return input
+    .replace(/[\r\n\t]/g, ' ')  // Replace newlines/tabs with space
+    .replace(/[^\x20-\x7E]/g, '') // Remove non-printable ASCII
+    .substring(0, maxLength);
+}
+
 dotenv.config();
 
 // =============================================================================
@@ -747,8 +758,9 @@ app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, r
     return;
   }
 
-  logger.info(`AI Query from ${userContext.username}:`, {
+  logger.info('AI Query received', {
     requestId,
+    username: sanitizeForLog(userContext.username),
     query: scrubPII(query.substring(0, 100)),
     roles: userContext.roles,
   });
@@ -827,7 +839,9 @@ app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, r
 
 // Internal audit endpoint (for Kong HTTP log plugin)
 app.post('/internal/audit', express.json(), (req: Request, res: Response) => {
-  logger.info('Gateway audit:', req.body);
+  // Sanitize audit data to prevent log injection
+  const sanitizedBody = JSON.stringify(req.body).replace(/[\r\n]/g, ' ');
+  logger.info('Gateway audit:', { data: sanitizedBody });
   res.status(200).send('OK');
 });
 
@@ -852,8 +866,9 @@ async function handleStreamingQuery(
   const requestId = req.headers['x-request-id'] as string;
   const userContext: UserContext = (req as any).userContext;
 
-  logger.info(`SSE Query from ${userContext.username}:`, {
+  logger.info('SSE Query received', {
     requestId,
+    username: sanitizeForLog(userContext.username),
     query: scrubPII(query.substring(0, 100)),  // Scrub PII from query before logging
     roles: userContext.roles,
     hasCursor: !!cursor,
@@ -1155,12 +1170,19 @@ app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, re
     }
 
     // Execute the confirmed action by calling the MCP server
-    const mcpServerUrl = config.mcpServers[pendingAction.mcpServer as keyof typeof config.mcpServers];
-
-    if (!mcpServerUrl) {
+    // SECURITY: Validate mcpServer is a known server name to prevent property injection
+    const validServerNames = Object.keys(config.mcpServers);
+    if (!pendingAction.mcpServer || !validServerNames.includes(pendingAction.mcpServer)) {
+      logger.warn('Invalid MCP server in pending action', {
+        requestId,
+        confirmationId,
+        attemptedServer: String(pendingAction.mcpServer).substring(0, 50),
+        validServers: validServerNames,
+      });
       res.status(500).json({ error: 'Invalid MCP server in pending action' });
       return;
     }
+    const mcpServerUrl = config.mcpServers[pendingAction.mcpServer as keyof typeof config.mcpServers];
 
     const executeResponse = await axios.post(
       `${mcpServerUrl}/execute`,

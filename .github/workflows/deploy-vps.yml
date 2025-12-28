@@ -62,6 +62,11 @@ env:
   BUILD_FLAG: ${{ github.event.inputs.build && '--build' || '' }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
+# Minimal permissions - deployment uses SSH, not GitHub token
+permissions:
+  contents: read
+  deployments: write
+
 jobs:
   # =============================================================================
   # PRE-DEPLOYMENT CHECKS
