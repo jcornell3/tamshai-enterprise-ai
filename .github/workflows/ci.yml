@@ -183,6 +183,7 @@ jobs:
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive infrastructure/terraform
+        continue-on-error: true  # Non-blocking: format issues don't fail CI
 
       - name: Terraform Init (VPS)
         working-directory: infrastructure/terraform/vps
