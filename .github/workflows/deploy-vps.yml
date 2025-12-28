@@ -74,6 +74,8 @@ jobs:
   pre-deploy:
     name: Pre-deployment Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       should_deploy: ${{ steps.check.outputs.should_deploy }}
 
@@ -108,6 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: pre-deploy
     if: needs.pre-deploy.outputs.should_deploy == 'true'
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -144,6 +148,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [pre-deploy, build-test]
     if: needs.pre-deploy.outputs.should_deploy == 'true'
+    permissions:
+      contents: read
+      deployments: write
     environment:
       name: ${{ github.event.inputs.environment || 'staging' }}
       url: https://${{ secrets.VPS_DOMAIN || secrets.VPS_HOST }}
@@ -242,6 +249,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy
     if: always() && needs.deploy.result == 'success'
+    permissions:
+      contents: read
+      deployments: write
 
     steps:
       - name: Create deployment record
