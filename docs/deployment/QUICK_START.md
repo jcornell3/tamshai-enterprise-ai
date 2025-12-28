@@ -15,6 +15,7 @@ Before deploying, ensure you have:
 | Software | Version | Purpose | Download |
 |----------|---------|---------|----------|
 | **Git** | 2.40+ | Version control | [git-scm.com](https://git-scm.com/downloads) |
+| **GitHub CLI** | 2.40+ | GitHub automation, CI/CD debugging | [cli.github.com](https://cli.github.com/) |
 | **Docker Desktop** | 4.0+ | Container runtime | [docker.com](https://www.docker.com/products/docker-desktop/) |
 | **Node.js** | 20 LTS | MCP Gateway, tests | [nodejs.org](https://nodejs.org/) |
 | **Flutter** | 3.24+ | Desktop/mobile client | [flutter.dev](https://docs.flutter.dev/get-started/install) |
