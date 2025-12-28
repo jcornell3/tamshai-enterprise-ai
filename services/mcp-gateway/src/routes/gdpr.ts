@@ -89,7 +89,7 @@ interface GDPRBreach {
 }
 
 // In-memory storage (replace with database in production)
-const exports: Map<string, GDPRExport> = new Map();
+const gdprExports: Map<string, GDPRExport> = new Map();
 const erasures: Map<string, GDPRErasure> = new Map();
 const breaches: Map<string, GDPRBreach> = new Map();
 
@@ -160,7 +160,7 @@ router.post('/export', requireHRRole, async (req: Request, res: Response) => {
     reason,
   };
 
-  exports.set(exportId, exportRecord);
+  gdprExports.set(exportId, exportRecord);
 
   logger.info('GDPR export initiated', {
     exportId,
@@ -171,7 +171,7 @@ router.post('/export', requireHRRole, async (req: Request, res: Response) => {
 
   // Simulate async processing (in production, this would query MCP servers)
   setTimeout(() => {
-    const record = exports.get(exportId);
+    const record = gdprExports.get(exportId);
     if (record) {
       record.status = 'completed';
       record.completedAt = new Date();
@@ -204,7 +204,7 @@ router.post('/export', requireHRRole, async (req: Request, res: Response) => {
           performance: 'Employment + 3 years',
         },
       };
-      exports.set(exportId, record);
+      gdprExports.set(exportId, record);
     }
   }, 2000);
 
@@ -224,7 +224,7 @@ router.post('/export', requireHRRole, async (req: Request, res: Response) => {
  */
 router.get('/export/:exportId/download', requireHRRole, (req: Request, res: Response) => {
   const { exportId } = req.params;
-  const exportRecord = exports.get(exportId);
+  const exportRecord = gdprExports.get(exportId);
 
   if (!exportRecord) {
     res.status(404).json({ error: 'Export not found or expired' });
