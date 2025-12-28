@@ -839,6 +839,8 @@ describe('RBAC Integration Tests', () => {
 ### Prerequisites
 - Docker Desktop 4.0+ with Docker Compose v2+
 - Node.js 20+ and npm 10+
+- GitHub CLI 2.40+ (for CI/CD debugging, PR management) - [cli.github.com](https://cli.github.com/)
+- Terraform 1.5+ (for VPS deployment) - [terraform.io](https://developer.hashicorp.com/terraform/install)
 - 8GB RAM minimum (16GB recommended)
 - 20GB free disk space
 
