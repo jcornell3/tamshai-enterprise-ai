@@ -25,13 +25,11 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@c37a8b7cd97e31de3fcbd9d84c401870edeb8d34 # v3
         with:
+          # Use custom config to exclude node_modules, Android/iOS platform code
+          config-file: ./.github/codeql/codeql-config.yml
           # Only analyze JavaScript and TypeScript
-          # Swift/Java/Kotlin are React Native/Flutter platform code we don't maintain
           languages: javascript-typescript
-          # Use security-extended for more comprehensive scanning
-          queries: security-extended
-          # build-mode: none tells CodeQL not to try building the project
-          # This prevents errors from Java/Kotlin code in Flutter's Android directory
+          # build-mode: none - JS/TS doesn't need compilation
           build-mode: none
 
       - name: Perform CodeQL Analysis

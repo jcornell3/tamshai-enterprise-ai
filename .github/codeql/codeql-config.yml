@@ -1,0 +1,58 @@
+# CodeQL Configuration
+# This file controls which paths CodeQL scans and excludes
+
+name: "Tamshai CodeQL Config"
+
+# Only scan JavaScript and TypeScript
+# Explicitly do NOT scan Java/Kotlin (React Native/Flutter platform code)
+languages:
+  - javascript-typescript
+
+# Paths to ignore during analysis
+# These contain third-party code or platform-specific code we don't maintain
+paths-ignore:
+  # Node modules (third-party dependencies)
+  - '**/node_modules/**'
+
+  # React Native Android platform code
+  - 'clients/unified/android/**'
+  - 'clients/desktop/android/**'
+
+  # Flutter Android platform code
+  - 'clients/unified_flutter/android/**'
+
+  # Flutter iOS platform code
+  - 'clients/unified_flutter/ios/**'
+
+  # Flutter build outputs
+  - 'clients/unified_flutter/build/**'
+  - 'clients/unified_flutter/.dart_tool/**'
+
+  # React Native iOS platform code
+  - 'clients/unified/ios/**'
+  - 'clients/desktop/ios/**'
+
+  # Build outputs
+  - '**/build/**'
+  - '**/dist/**'
+  - '**/coverage/**'
+
+  # Test fixtures and mocks (lower priority)
+  - '**/__mocks__/**'
+  - '**/__fixtures__/**'
+
+  # Generated code
+  - '**/*.g.dart'
+  - '**/*.freezed.dart'
+
+# Paths to explicitly include (our actual source code)
+paths:
+  - 'services/**'
+  - 'clients/unified/src/**'
+  - 'clients/desktop/src/**'
+  - 'tests/**'
+  - 'apps/**'
+
+# Use security-extended queries
+queries:
+  - uses: security-extended
