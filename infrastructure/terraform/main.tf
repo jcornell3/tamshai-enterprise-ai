@@ -47,7 +47,7 @@ variable "project_id" {
 variable "region" {
   description = "GCP Region"
   type        = string
-  default     = "us-west1"  # Oregon - typically cheaper
+  default     = "us-west1" # Oregon - typically cheaper
 }
 
 variable "zone" {
@@ -72,14 +72,14 @@ variable "domain" {
 variable "machine_type" {
   description = "GCE machine type for services"
   type        = string
-  default     = "e2-micro"  # 0.25 vCPU, 1GB RAM - ~$6/month
+  default     = "e2-micro" # 0.25 vCPU, 1GB RAM - ~$6/month
 }
 
 # For services needing more memory (Keycloak, Elasticsearch)
 variable "machine_type_medium" {
   description = "GCE machine type for memory-intensive services"
   type        = string
-  default     = "e2-small"  # 0.5 vCPU, 2GB RAM - ~$12/month
+  default     = "e2-small" # 0.5 vCPU, 2GB RAM - ~$12/month
 }
 
 # =============================================================================
@@ -309,7 +309,7 @@ resource "random_password" "keycloak_admin_password" {
 
 resource "random_password" "keycloak_db_password" {
   length  = 24
-  special = false  # Avoid special chars in JDBC URLs
+  special = false # Avoid special chars in JDBC URLs
 }
 
 resource "random_password" "tamshai_db_password" {
@@ -443,12 +443,12 @@ resource "google_sql_database_instance" "tamshai_postgres" {
     # db-f1-micro: Shared vCPU, 0.6 GB RAM - ~$8/month
     tier = "db-f1-micro"
 
-    disk_size         = 10  # GB
-    disk_type         = "PD_SSD"
-    disk_autoresize   = false  # Keep costs predictable
+    disk_size       = 10 # GB
+    disk_type       = "PD_SSD"
+    disk_autoresize = false # Keep costs predictable
 
     ip_configuration {
-      ipv4_enabled    = false  # Use private IP only
+      ipv4_enabled    = false # Use private IP only
       private_network = google_compute_network.tamshai_vpc.id
     }
 
@@ -458,7 +458,7 @@ resource "google_sql_database_instance" "tamshai_postgres" {
     }
 
     maintenance_window {
-      day  = 7  # Sunday
+      day  = 7 # Sunday
       hour = 3
     }
 
@@ -552,7 +552,7 @@ resource "google_storage_bucket" "finance_docs" {
   }
 
   encryption {
-    default_kms_key_name = null  # Uses Google-managed encryption
+    default_kms_key_name = null # Uses Google-managed encryption
   }
 }
 
@@ -571,7 +571,7 @@ resource "google_storage_bucket" "public_docs" {
 # Keycloak Instance
 resource "google_compute_instance" "keycloak" {
   name         = "tamshai-${var.environment}-keycloak"
-  machine_type = var.machine_type_medium  # e2-small for Keycloak (needs 2GB)
+  machine_type = var.machine_type_medium # e2-small for Keycloak (needs 2GB)
   zone         = var.zone
 
   tags = ["web-server", "ssh-enabled"]
@@ -653,7 +653,7 @@ resource "google_compute_instance" "keycloak" {
 # MCP Gateway Instance
 resource "google_compute_instance" "mcp_gateway" {
   name         = "tamshai-${var.environment}-mcp-gateway"
-  machine_type = var.machine_type  # e2-micro
+  machine_type = var.machine_type # e2-micro
   zone         = var.zone
 
   tags = ["web-server", "ssh-enabled"]

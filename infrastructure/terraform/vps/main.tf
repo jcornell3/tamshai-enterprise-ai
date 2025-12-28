@@ -75,13 +75,13 @@ variable "hcloud_token" {
 variable "region" {
   description = "Region for VPS deployment"
   type        = string
-  default     = "nyc1"  # DigitalOcean NYC or Hetzner nbg1
+  default     = "nyc1" # DigitalOcean NYC or Hetzner nbg1
 }
 
 variable "vps_size" {
   description = "VPS size (RAM)"
   type        = string
-  default     = "s-4vcpu-8gb"  # DigitalOcean slug or Hetzner type
+  default     = "s-4vcpu-8gb" # DigitalOcean slug or Hetzner type
 }
 
 variable "domain" {
@@ -127,7 +127,7 @@ variable "ssh_public_key_path" {
 variable "allowed_ssh_ips" {
   description = "IP addresses allowed for SSH (empty = disabled)"
   type        = list(string)
-  default     = []  # No SSH by default - fully automated
+  default     = [] # No SSH by default - fully automated
 }
 
 # =============================================================================
@@ -208,11 +208,11 @@ resource "digitalocean_ssh_key" "deploy" {
 }
 
 resource "digitalocean_droplet" "tamshai" {
-  count    = var.cloud_provider == "digitalocean" ? 1 : 0
-  name     = "tamshai-${var.environment}"
-  region   = var.region
-  size     = var.vps_size
-  image    = "ubuntu-24-04-x64"
+  count  = var.cloud_provider == "digitalocean" ? 1 : 0
+  name   = "tamshai-${var.environment}"
+  region = var.region
+  size   = var.vps_size
+  image  = "ubuntu-24-04-x64"
 
   ssh_keys = [digitalocean_ssh_key.deploy[0].fingerprint]
 
@@ -289,7 +289,7 @@ resource "hcloud_ssh_key" "deploy" {
 resource "hcloud_server" "tamshai" {
   count       = var.cloud_provider == "hetzner" ? 1 : 0
   name        = "tamshai-${var.environment}"
-  server_type = var.vps_size == "s-4vcpu-8gb" ? "cx31" : var.vps_size  # Map DO sizes
+  server_type = var.vps_size == "s-4vcpu-8gb" ? "cx31" : var.vps_size # Map DO sizes
   location    = var.region == "nyc1" ? "nbg1" : var.region
   image       = "ubuntu-24.04"
 
@@ -308,16 +308,16 @@ resource "hcloud_firewall" "tamshai" {
   name  = "tamshai-${var.environment}-firewall"
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "80"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "443"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
@@ -345,7 +345,7 @@ resource "hcloud_firewall_attachment" "tamshai" {
 locals {
   vps_ip = var.cloud_provider == "digitalocean" ? (
     length(digitalocean_droplet.tamshai) > 0 ? digitalocean_droplet.tamshai[0].ipv4_address : ""
-  ) : (
+    ) : (
     length(hcloud_server.tamshai) > 0 ? hcloud_server.tamshai[0].ipv4_address : ""
   )
 
