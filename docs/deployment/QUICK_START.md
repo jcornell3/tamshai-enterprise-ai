@@ -18,6 +18,7 @@ Before deploying, ensure you have:
 | **Docker Desktop** | 4.0+ | Container runtime | [docker.com](https://www.docker.com/products/docker-desktop/) |
 | **Node.js** | 20 LTS | MCP Gateway, tests | [nodejs.org](https://nodejs.org/) |
 | **Flutter** | 3.24+ | Desktop/mobile client | [flutter.dev](https://docs.flutter.dev/get-started/install) |
+| **Terraform** | 1.5+ | VPS deployment (optional) | [terraform.io](https://developer.hashicorp.com/terraform/install) |
 
 ### System Requirements
 
@@ -517,37 +518,82 @@ After successful deployment:
 
 ### VPS Deployment (Hetzner/DigitalOcean)
 
-The project includes Terraform configuration for automated VPS deployment:
+The project includes Terraform configuration for fully automated VPS deployment with **no manual SSH required**.
+
+#### Prerequisites for VPS Deployment
+
+| Requirement | Description |
+|-------------|-------------|
+| **Terraform** v1.5+ | [Install guide](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) |
+| **Cloud Provider Account** | [DigitalOcean](https://cloud.digitalocean.com/account/api/tokens) or [Hetzner](https://console.hetzner.cloud/) |
+| **Domain Name** | With DNS access to create A record |
+| **Claude API Key** | From [Anthropic Console](https://console.anthropic.com/settings/keys) |
+
+#### Cost Estimates
+
+| Provider | Size | RAM | Monthly Cost |
+|----------|------|-----|--------------|
+| Hetzner CX21 | 2 vCPU | 4GB | ~$5 |
+| Hetzner CX31 | 2 vCPU | 8GB | ~$10 |
+| DigitalOcean s-2vcpu-4gb | 2 vCPU | 4GB | ~$24 |
+| DigitalOcean s-4vcpu-8gb | 4 vCPU | 8GB | ~$48 |
+
+**Recommendation:** Start with Hetzner CX31 ($10/month) for staging environments.
+
+#### Quick Deploy
 
 ```bash
 cd infrastructure/terraform/vps
 
-# Copy and configure variables
+# 1. Configure variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your domain, API keys, etc.
+# Edit terraform.tfvars with:
+#   - cloud_provider: "hetzner" or "digitalocean"
+#   - do_token or hcloud_token: Your API token
+#   - domain: Your domain (e.g., "app.example.com")
+#   - email: For Let's Encrypt certificates
+#   - claude_api_key: Your Anthropic API key
 
-# Deploy
+# 2. Deploy (takes ~5-10 minutes)
 terraform init
-terraform apply
+terraform plan    # Review changes
+terraform apply   # Confirm with 'yes'
+
+# 3. Configure DNS (one A record)
+# Terraform outputs the required DNS record:
+#   A    app.example.com    → <VPS_IP>
+
+# 4. Access your deployment
+terraform output app_url        # Main URL
+terraform output keycloak_url   # Keycloak admin
 ```
 
-**Features**:
-- Automatic Docker installation via cloud-init
-- Caddy reverse proxy with Let's Encrypt SSL
-- Path-based routing (no subdomains required)
-- Fail2ban security
-- Automated updates via webhook
+#### What Gets Deployed
 
-**Architecture on VPS**:
 ```
-Internet → Caddy (HTTPS) → Docker Containers
-                         ├── / → tamshai-website
-                         ├── /auth → Keycloak
-                         ├── /api → MCP Gateway
-                         └── /app → Web Portal
+Internet → Caddy (HTTPS/TLS) → Docker Containers
+           ├── /              → Corporate Website
+           ├── /auth/*        → Keycloak (SSO)
+           ├── /api/*         → MCP Gateway (AI)
+           ├── /app/*         → Web Portal
+           ├── /hr/*          → HR App
+           ├── /finance/*     → Finance App
+           ├── /sales/*       → Sales App
+           └── /support/*     → Support App
+                    ↓
+           [Internal Network]
+           PostgreSQL, MongoDB, Redis, Elasticsearch, MinIO
+           (No external ports - databases internal only)
 ```
 
-See [VPS Deployment Guide](../../infrastructure/terraform/vps/README.md) for details.
+#### Automated Updates
+
+Once deployed, updates are automatic via GitHub Actions:
+- Push to `main` branch triggers deployment
+- No SSH access required
+- Rollback via git revert
+
+**📖 Full Guide:** [VPS Deployment Guide](../../infrastructure/terraform/vps/README.md) - includes troubleshooting, security details, and cleanup instructions.
 
 ### Cloud Deployment (GCP/AWS)
 
