@@ -1172,7 +1172,8 @@ app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, re
     // Execute the confirmed action by calling the MCP server
     // SECURITY: Validate mcpServer is a known server name to prevent property injection
     const validServerNames = Object.keys(config.mcpServers);
-    if (!pendingAction.mcpServer || !validServerNames.includes(pendingAction.mcpServer)) {
+    const mcpServerName = typeof pendingAction.mcpServer === 'string' ? pendingAction.mcpServer : '';
+    if (!mcpServerName || !validServerNames.includes(mcpServerName)) {
       logger.warn('Invalid MCP server in pending action', {
         requestId,
         confirmationId,
@@ -1182,7 +1183,7 @@ app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, re
       res.status(500).json({ error: 'Invalid MCP server in pending action' });
       return;
     }
-    const mcpServerUrl = config.mcpServers[pendingAction.mcpServer as keyof typeof config.mcpServers];
+    const mcpServerUrl = config.mcpServers[mcpServerName as keyof typeof config.mcpServers];
 
     const executeResponse = await axios.post(
       `${mcpServerUrl}/execute`,
