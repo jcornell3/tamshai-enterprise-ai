@@ -43,11 +43,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
           pip install pylint black flake8 mypy
       
       - name: Run Black (formatter check)
@@ -75,6 +73,7 @@ jobs:
       
       # Secret scanning
       - name: GitGuardian Scan
+        if: secrets.GITGUARDIAN_API_KEY != ''
         uses: GitGuardian/ggshield-action@v1
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
@@ -114,7 +113,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Build Docker images
-        run: docker-compose build
+        run: docker compose build
       
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -145,7 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./terraform
+        working-directory: ./infrastructure/terraform
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -168,7 +167,7 @@ jobs:
       - name: tfsec Security Scan
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          working_directory: ./terraform
+          working_directory: ./infrastructure/terraform
           soft_fail: false
       
       - name: Checkov Scan
@@ -202,18 +201,18 @@ jobs:
       
       - name: Build Docker images
         run: |
-          docker-compose build
-      
+          docker compose build
+
       - name: Run unit tests
         run: |
-          docker-compose run --rm api pytest tests/ -v --cov=app --cov-report=xml
-      
+          docker compose run --rm api pytest tests/ -v --cov=app --cov-report=xml
+
       - name: Run integration tests
         run: |
-          docker-compose up -d
+          docker compose up -d
           sleep 10  # Wait for services to be ready
-          docker-compose run --rm api pytest tests/integration/ -v
-          docker-compose down
+          docker compose run --rm api pytest tests/integration/ -v
+          docker compose down
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -344,10 +343,10 @@ jobs:
             EOF
             
             # Pull latest images
-            docker-compose pull
-            
+            docker compose pull
+
             # Deploy
-            docker-compose up -d
+            docker compose up -d
             
             # Health check
             sleep 10
@@ -425,8 +424,8 @@ jobs:
             cd /opt/tamshai
             
             # Backup current version
-            docker-compose exec -T postgres pg_dump -U tamshai tamshai > backup_$(date +%Y%m%d_%H%M%S).sql
-            
+            docker compose exec -T postgres pg_dump -U tamshai tamshai > backup_$(date +%Y%m%d_%H%M%S).sql
+
             # Create .env file from Vault secrets
             cat > .env <<EOF
             DB_PASSWORD=${DB_PASSWORD}
@@ -437,23 +436,23 @@ jobs:
             SUPABASE_KEY=${SUPABASE_KEY}
             COMMIT_SHA=${COMMIT_SHA}
             EOF
-            
+
             # Pull latest images
-            docker-compose pull
-            
+            docker compose pull
+
             # Blue-green deployment
-            docker-compose up -d --no-deps --build api
-            
+            docker compose up -d --no-deps --build api
+
             # Health check
             sleep 15
             if ! curl -f http://localhost:8000/health; then
               echo "Health check failed, rolling back"
-              docker-compose rollback api
+              docker compose rollback api
               exit 1
             fi
-            
+
             # Update remaining services
-            docker-compose up -d
+            docker compose up -d
             
             # Cleanup old images
             docker image prune -af --filter "until=24h"

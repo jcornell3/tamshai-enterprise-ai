@@ -340,6 +340,49 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
+      - name: Start PostgreSQL for Keycloak
+        run: |
+          docker run -d \
+            --name postgres \
+            --network host \
+            -e POSTGRES_DB=keycloak \
+            -e POSTGRES_USER=keycloak \
+            -e POSTGRES_PASSWORD=keycloak \
+            -p 5432:5432 \
+            postgres:15-alpine
+
+          # Wait for PostgreSQL to be ready
+          timeout 30 bash -c 'until docker exec postgres pg_isready; do sleep 1; done'
+
+      - name: Start Keycloak
+        run: |
+          docker run -d \
+            --name keycloak \
+            --network host \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_DB=postgres \
+            -e KC_DB_URL=jdbc:postgresql://localhost:5432/keycloak \
+            -e KC_DB_USERNAME=keycloak \
+            -e KC_DB_PASSWORD=keycloak \
+            -e KC_HTTP_PORT=8180 \
+            -e KC_HOSTNAME_STRICT=false \
+            -e KC_HOSTNAME_STRICT_HTTPS=false \
+            -e KC_HTTP_ENABLED=true \
+            -p 8180:8180 \
+            quay.io/keycloak/keycloak:23.0 start-dev
+
+          # Wait for Keycloak to be ready (can take 60-90 seconds)
+          timeout 120 bash -c 'until curl -sf http://localhost:8180/health/ready; do echo "Waiting for Keycloak..."; sleep 5; done'
+
+      - name: Import Keycloak Realm
+        run: |
+          # Import the tamshai-corp realm with test users
+          docker cp keycloak/realm-export-dev.json keycloak:/tmp/realm.json
+          docker exec keycloak /opt/keycloak/bin/kc.sh import \
+            --file /tmp/realm.json \
+            --override true
+
       - name: Setup Node.js
         uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v4
         with:
@@ -355,8 +398,15 @@ jobs:
         working-directory: tests/integration
         run: npm test
         env:
+          KEYCLOAK_URL: http://localhost:8180
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+
+      - name: Cleanup containers
+        if: always()
+        run: |
+          docker stop keycloak postgres || true
+          docker rm keycloak postgres || true
 
   # =============================================================================
   # E2E Tests (Playwright)
