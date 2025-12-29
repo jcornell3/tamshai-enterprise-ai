@@ -2,6 +2,7 @@
 ///
 /// These tests verify the authentication state machine transitions correctly
 /// for login, logout, token refresh, and error handling scenarios.
+/// Tested on Windows and Linux environments.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
