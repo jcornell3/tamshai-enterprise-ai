@@ -1,8 +1,13 @@
-# Production Environment Configuration
+# GCP Production Environment Configuration
+#
+# IMPORTANT: This configuration is for GCP production deployment only.
+# For staging (VPS deployment), see: infrastructure/terraform/vps/
+# For development (local Docker), see: infrastructure/docker/
+#
 # Use with: terraform plan -var-file=environments/production.tfvars
 # Or set TF_WORKSPACE=tamshai-production
 
-project_id  = "your-gcp-project-id"  # UPDATE THIS
+project_id  = "your-gcp-project-id"  # UPDATE THIS - Your GCP project ID
 environment = "production"
 
 # Region and Zone

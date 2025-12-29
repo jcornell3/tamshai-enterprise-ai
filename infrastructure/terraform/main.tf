@@ -1,5 +1,9 @@
-# Tamshai Corp Enterprise AI - GCP Infrastructure
+# Tamshai Corp Enterprise AI - GCP Production Infrastructure
 # Terraform Root Module - Orchestrates all child modules
+#
+# IMPORTANT: This configuration is for GCP production deployment only.
+# - For staging (VPS): See infrastructure/terraform/vps/
+# - For development (Docker): See infrastructure/docker/
 #
 # MODULAR ARCHITECTURE:
 # This file calls child modules for networking, security, database, storage, and compute.
@@ -8,7 +12,7 @@
 # SECURITY: All secrets are stored in GCP Secret Manager and fetched at runtime.
 # No secrets are embedded in Terraform state or startup scripts.
 #
-# Estimated Monthly Cost: ~$17-45/month (depends on environment)
+# Estimated Monthly Cost: ~$150-200/month (GCP production)
 
 terraform {
   required_version = ">= 1.0"

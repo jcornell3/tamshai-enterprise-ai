@@ -1,8 +1,12 @@
-# Terraform Modules Documentation
+# Terraform Modules Documentation - GCP Production
 
 ## Overview
 
-The Tamshai Enterprise AI infrastructure has been modularized into reusable, composable Terraform modules following industry best practices. This document explains the module architecture, usage patterns, and testing guidelines.
+**IMPORTANT: This documentation covers GCP production infrastructure only.**
+- **For staging (VPS)**: See `infrastructure/terraform/vps/README.md`
+- **For development (Docker)**: See `CLAUDE.md` Section: "Development Environment"
+
+The Tamshai Enterprise AI **GCP production** infrastructure has been modularized into reusable, composable Terraform modules following industry best practices. This document explains the module architecture, usage patterns, and testing guidelines.
 
 **Benefits of Modularization:**
 - **DRY Principle**: Reusable components eliminate code duplication
@@ -21,31 +25,35 @@ The Tamshai Enterprise AI infrastructure has been modularized into reusable, com
 
 ```
 infrastructure/terraform/
-├── main.tf                     # Root module (orchestration)
+├── main.tf                     # Root module (GCP production orchestration)
 ├── variables.tf                # Root variables
 ├── outputs.tf                  # Aggregated outputs
+├── README.md                   # Deployment architecture guide (START HERE)
+├── TERRAFORM_MODULES.md        # This file - module documentation
 ├── environments/               # Environment-specific configs
-│   ├── dev.tfvars             # Development (~$17-25/month)
-│   ├── staging.tfvars         # Staging (~$45-60/month)
-│   └── production.tfvars      # Production (~$150-200/month)
-└── modules/                    # Reusable child modules
-    ├── networking/            # VPC, subnets, NAT, firewall
+│   └── production.tfvars       # GCP production (~$150-200/month)
+├── vps/                        # VPS staging deployment (separate)
+│   ├── main.tf                 # VPS provisioning
+│   ├── cloud-init.yaml         # Automated setup
+│   └── terraform.tfvars        # Staging configuration
+└── modules/                    # Reusable GCP modules
+    ├── networking/             # VPC, subnets, NAT, firewall
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    ├── security/              # IAM, Secret Manager, passwords
+    ├── security/               # IAM, Secret Manager, passwords
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    ├── database/              # Cloud SQL PostgreSQL
+    ├── database/               # Cloud SQL PostgreSQL
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    ├── storage/               # Cloud Storage buckets
+    ├── storage/                # Cloud Storage buckets
     │   ├── main.tf
     │   ├── variables.tf
     │   └── outputs.tf
-    └── compute/               # GCE instances
+    └── compute/                # GCE instances
         ├── main.tf
         ├── variables.tf
         ├── outputs.tf
@@ -217,13 +225,13 @@ terraform plan -var="project_id=test" -var="environment=test"
 - `hr_db_name` - Database name for HR data
 - `finance_db_name` - Database name for finance data
 
-**Environment-Specific Configuration:**
+**GCP Production Configuration:**
 
-| Environment | Tier | Disk | Backups | HA | Cost |
-|-------------|------|------|---------|-----|------|
-| Dev | db-f1-micro | 10 GB | No | No | ~$8/mo |
-| Staging | db-g1-small | 20 GB | Yes | No | ~$25/mo |
-| Production | db-custom-2-7680 | 50 GB | Yes | Yes | ~$80/mo |
+| Tier | Disk | Backups | HA | Cost |
+|------|------|---------|-----|------|
+| db-custom-2-7680 | 50 GB | Yes | Yes | ~$80/mo |
+
+**Note**: For staging (VPS) and development (Docker Compose), PostgreSQL is deployed via Docker containers, not Cloud SQL. See `infrastructure/terraform/vps/` for staging database configuration.
 
 **Example Usage:**
 ```hcl
@@ -293,13 +301,13 @@ terraform validate
 - `public_docs_bucket_name` - Bucket name for application config
 - `public_docs_bucket_url` - gs:// URL for gsutil
 
-**Environment-Specific Configuration:**
+**GCP Production Configuration:**
 
-| Environment | Versioning | Lifecycle | Force Destroy | Retention |
-|-------------|------------|-----------|---------------|-----------|
-| Dev | No | 90 days | Yes | Short-term |
-| Staging | Yes | 180 days | Yes | Medium-term |
-| Production | Yes | 2555 days (7 years) | No | Compliance |
+| Versioning | Lifecycle | Force Destroy | Retention |
+|------------|-----------|---------------|-----------|
+| Yes | 2555 days (7 years) | No | Compliance |
+
+**Note**: For staging (VPS) and development (Docker), object storage uses MinIO deployed via Docker. See `infrastructure/terraform/vps/` for staging storage configuration.
 
 **Example Usage:**
 ```hcl
@@ -544,7 +552,7 @@ module "compute" {
 
 ## Usage Examples
 
-### Deploying Development Environment
+### Deploying GCP Production Environment
 
 ```bash
 cd infrastructure/terraform
@@ -552,14 +560,15 @@ cd infrastructure/terraform
 # Initialize Terraform
 terraform init
 
-# Select workspace (or set TF_WORKSPACE=tamshai-dev)
-terraform workspace select tamshai-dev
+# Select production workspace
+terraform workspace select tamshai-production
 
-# Plan with dev variables
-terraform plan -var-file=environments/dev.tfvars
+# Plan with production variables
+terraform plan -var-file=environments/production.tfvars
 
+# Review plan carefully before applying
 # Apply
-terraform apply -var-file=environments/dev.tfvars
+terraform apply -var-file=environments/production.tfvars
 
 # View outputs
 terraform output
@@ -570,31 +579,27 @@ terraform output
 # - postgres_private_ip
 # - secret_manager_instructions
 # - ssh_instructions
-# - estimated_monthly_cost
+# - estimated_monthly_cost (~$150-200/month)
 ```
 
-### Deploying Production Environment
-
+**Post-Deployment Steps:**
 ```bash
-cd infrastructure/terraform
-
-# Select production workspace
-terraform workspace select tamshai-production
-
-# Plan with production variables
-terraform plan -var-file=environments/production.tfvars
-
-# Review plan carefully (production has deletion protection)
-# Apply
-terraform apply -var-file=environments/production.tfvars
-
-# Upload Anthropic API key (manual step)
+# Upload Anthropic API key (manual step - production only)
 echo "sk-ant-api03-PROD-KEY" | gcloud secrets versions add \
   tamshai-production-anthropic-api-key --data-file=-
 
 # Restart MCP Gateway to pick up new secret
 gcloud compute instances reset tamshai-production-mcp-gateway \
   --zone=us-central1-a
+```
+
+**For staging deployment (VPS):**
+```bash
+cd infrastructure/terraform/vps
+terraform init
+terraform plan
+terraform apply
+# See vps/README.md for detailed instructions
 ```
 
 ### Updating a Single Module
@@ -639,10 +644,6 @@ cd ../..
 ### Destroying Infrastructure
 
 ```bash
-# Development (allowed)
-terraform workspace select tamshai-dev
-terraform destroy -var-file=environments/dev.tfvars
-
 # Production (deletion_protection = true prevents database destruction)
 terraform workspace select tamshai-production
 terraform destroy -var-file=environments/production.tfvars
@@ -652,6 +653,10 @@ terraform destroy -var-file=environments/production.tfvars
 # 1. Manually disable deletion_protection in production.tfvars or GCP Console
 # 2. Run destroy again
 terraform destroy -var-file=environments/production.tfvars
+
+# For staging VPS destruction:
+cd infrastructure/terraform/vps
+terraform destroy
 ```
 
 ---
@@ -672,8 +677,8 @@ terraform validate
 ### 2. Plan Review
 
 ```bash
-# Always run plan before apply
-terraform plan -var-file=environments/dev.tfvars -out=plan.tfplan
+# Always run plan before apply (production example)
+terraform plan -var-file=environments/production.tfvars -out=plan.tfplan
 
 # Review planned changes carefully:
 # - Resources to be created (+)
@@ -721,20 +726,22 @@ cd modules/compute && terraform init && terraform validate && cd ../..
 
 ### 5. Integration Testing
 
+**Note**: For integration testing, use the VPS staging environment or local Docker Compose. GCP production should not be used for testing.
+
 ```bash
-# Deploy to test environment
-terraform workspace select tamshai-dev
-terraform apply -var-file=environments/dev.tfvars -auto-approve
+# Test with VPS staging
+cd infrastructure/terraform/vps
+terraform apply -auto-approve
 
-# Verify services are running
-KEYCLOAK_IP=$(terraform output -raw keycloak_external_ip)
-curl http://$KEYCLOAK_IP:8080/health
+# Verify services (staging uses domain-based access)
+curl https://staging.tamshai.com/auth/health
+curl https://staging.tamshai.com/api/health
 
-GATEWAY_IP=$(terraform output -raw mcp_gateway_external_ip)
-curl http://$GATEWAY_IP:3100/health
-
-# Clean up
-terraform destroy -var-file=environments/dev.tfvars -auto-approve
+# Or test locally with Docker Compose
+cd infrastructure/docker
+docker compose up -d
+curl http://localhost:8180/health
+curl http://localhost:3100/health
 ```
 
 ### 6. Drift Detection
@@ -758,7 +765,7 @@ terraform plan -var-file=environments/production.tfvars -detailed-exitcode
 
 ## Migration Guide
 
-### Migrating from Monolithic to Modular
+### Migrating from Monolithic to Modular (GCP Production)
 
 **Original State:**
 - Single `main.tf` (831 lines)
@@ -766,8 +773,8 @@ terraform plan -var-file=environments/production.tfvars -detailed-exitcode
 - No reusable components
 
 **New State:**
-- 5 focused modules
-- Environment-specific tfvars
+- 5 focused GCP modules
+- Production-specific tfvars
 - Reusable and testable
 
 **Migration Steps:**
@@ -781,7 +788,8 @@ terraform plan -var-file=environments/production.tfvars -detailed-exitcode
 2. **Plan with new modules:**
    ```bash
    terraform init -upgrade
-   terraform plan -var-file=environments/dev.tfvars
+   terraform workspace select tamshai-production
+   terraform plan -var-file=environments/production.tfvars
    ```
 
 3. **Review plan output:**
@@ -798,10 +806,10 @@ terraform plan -var-file=environments/production.tfvars -detailed-exitcode
 
 5. **Apply changes:**
    ```bash
-   terraform apply -var-file=environments/dev.tfvars
+   terraform apply -var-file=environments/production.tfvars
    ```
 
-**Note**: For production, consider creating a new GCP project and migrating data rather than state manipulation.
+**Note**: For production, consider creating a new GCP project and migrating data rather than state manipulation. The modular structure is designed for greenfield deployments.
 
 ---
 
@@ -950,33 +958,36 @@ Error: Error reading Secret Manager secret version
 
 ## Cost Optimization
 
-### Environment-Specific Costs
+### Deployment Costs by Environment
 
-| Environment | Monthly Cost | Key Cost Drivers |
-|-------------|--------------|------------------|
-| Development | $17-25 | Preemptible instances, db-f1-micro, minimal storage |
-| Staging | $45-60 | Regular instances, db-g1-small, versioned storage |
-| Production | $150-200 | HA database, db-custom-2-7680, 4 vCPU instances, 7-year retention |
+| Environment | Platform | Monthly Cost | Key Cost Drivers |
+|-------------|----------|--------------|------------------|
+| Development | Docker Compose (Local) | $0 | Local resources only |
+| Staging | VPS (DigitalOcean/Hetzner) | $40-60 | Single 4vCPU/8GB VPS |
+| Production | GCP (these modules) | $150-200 | HA database, multiple GCE instances, Cloud Storage |
 
-### Cost Reduction Strategies
+### GCP Production Cost Breakdown
 
-**Development:**
-- Use preemptible instances (80% discount, but can be terminated)
-- Minimal database tier (db-f1-micro)
-- Disable backups
-- Short lifecycle policies (90 days)
+**Production (~$150-200/month):**
+- Cloud SQL (db-custom-2-7680, HA): ~$80/month
+- Compute Engine (2x e2-standard): ~$50/month
+- Cloud Storage (versioned, 7-year retention): ~$10/month
+- Cloud NAT + Networking (egress): ~$15/month
+- Secret Manager: ~$1/month
 
-**Staging:**
-- Regular instances (for stability)
-- Medium database tier (db-g1-small)
-- Enable backups (test restore procedures)
-- Moderate lifecycle (180 days)
+### Cost Reduction Strategies (GCP Production)
 
-**Production:**
-- Committed Use Discounts (1-year or 3-year contracts)
-- Rightsizing (monitor utilization, downsize if underutilized)
+**Immediate Savings:**
+- Committed Use Discounts (1-year or 3-year contracts) - Save 37-57%
 - Sustained Use Discounts (automatic for resources running >25% of month)
+- Rightsizing (monitor utilization, downsize if underutilized)
 - Cloud CDN for static assets (reduce egress costs)
+
+**Long-term Optimization:**
+- Use Cloud Scheduler to stop/start non-critical instances during off-hours
+- Implement Cloud Functions for serverless workloads (if applicable)
+- Review and optimize Cloud Storage lifecycle policies
+- Use Regional (not Multi-regional) for lower costs
 
 **Monitoring:**
 - Use GCP Cost Management tools
