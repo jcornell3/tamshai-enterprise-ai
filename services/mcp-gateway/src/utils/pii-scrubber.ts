@@ -25,17 +25,13 @@ const DEFAULT_OPTIONS: ScrubOptions = {
 };
 
 // PII patterns with replacements
+// NOTE: Order matters! More specific patterns must come before generic ones
 const PII_PATTERNS: { pattern: RegExp; replacement: string; description: string }[] = [
-  // SSN patterns
+  // Bank account / routing numbers (must come before generic 9-digit SSN pattern)
   {
-    pattern: /\b\d{3}-\d{2}-\d{4}\b/g,
-    replacement: '[SSN-REDACTED]',
-    description: 'SSN with dashes',
-  },
-  {
-    pattern: /\b\d{9}\b/g,
-    replacement: '[SSN-REDACTED]',
-    description: 'SSN without dashes (9 consecutive digits)',
+    pattern: /\b(?:account|routing|acct)[\s#:]*\d{8,17}\b/gi,
+    replacement: '[ACCOUNT-REDACTED]',
+    description: 'Bank account number',
   },
 
   // Credit card patterns (major card formats)
@@ -60,11 +56,16 @@ const PII_PATTERNS: { pattern: RegExp; replacement: string; description: string 
     description: 'Discover card',
   },
 
-  // Bank account / routing numbers (8-17 digits)
+  // SSN patterns (must come after more specific patterns to avoid false positives)
   {
-    pattern: /\b(?:account|routing|acct)[\s#:]*\d{8,17}\b/gi,
-    replacement: '[ACCOUNT-REDACTED]',
-    description: 'Bank account number',
+    pattern: /\b\d{3}-\d{2}-\d{4}\b/g,
+    replacement: '[SSN-REDACTED]',
+    description: 'SSN with dashes',
+  },
+  {
+    pattern: /\b\d{9}\b/g,
+    replacement: '[SSN-REDACTED]',
+    description: 'SSN without dashes (9 consecutive digits)',
   },
 
   // Password patterns (in context)
