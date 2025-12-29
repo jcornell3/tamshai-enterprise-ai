@@ -1,7 +1,7 @@
-// eslint.config.js
-import tseslint from 'typescript-eslint';
+// eslint.config.cjs
+const tseslint = require('typescript-eslint');
 
-export default [
+module.exports = [
   {
     ignores: ["dist/", "node_modules/"],
   },
