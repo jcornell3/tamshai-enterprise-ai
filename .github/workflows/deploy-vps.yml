@@ -229,9 +229,9 @@ jobs:
           for path in "" "/auth" "/api"; do
             url="https://${DOMAIN}${path}"
             if curl -sf -o /dev/null --max-time 30 "$url"; then
-              echo "✅ $url - OK"
+              echo "[OK] $url - OK"
             else
-              echo "⚠️ $url - Not reachable (may still be starting)"
+              echo "[WARN] $url - Not reachable (may still be starting)"
             fi
           done
 
@@ -240,7 +240,7 @@ jobs:
         continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
-            --data '{"text":"✅ Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
+            --data '{"text":"[SUCCESS] Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify on failure
@@ -248,7 +248,7 @@ jobs:
         continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
-            --data '{"text":"❌ Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data '{"text":"[FAILED] Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # =============================================================================
