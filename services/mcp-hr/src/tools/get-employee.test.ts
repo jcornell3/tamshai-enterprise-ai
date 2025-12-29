@@ -9,7 +9,9 @@ import { UserContext } from '../database/connection';
 import * as dbConnection from '../database/connection';
 
 // Mock database module
-jest.mock('../database/connection');
+jest.mock('../database/connection', () => ({
+  queryWithRLS: jest.fn(),
+}));
 
 describe('get-employee tool', () => {
   const mockHrReadUser: UserContext = {
@@ -25,19 +27,19 @@ describe('get-employee tool', () => {
   };
 
   const mockRegularUser: UserContext = {
-    userId: 'emp-001',
+    userId: '123e4567-e89b-12d3-a456-426614174000',
     username: 'john.doe',
     roles: ['user'],
   };
 
   const mockManagerUser: UserContext = {
-    userId: 'mgr-001',
+    userId: '923e4567-e89b-12d3-a456-426614174000',
     username: 'bob.manager',
     roles: ['manager'],
   };
 
   const mockEmployee: Employee = {
-    id: 'emp-001',
+    id: '123e4567-e89b-12d3-a456-426614174000',
     first_name: 'John',
     last_name: 'Doe',
     email: 'john.doe@test.com',
@@ -45,8 +47,8 @@ describe('get-employee tool', () => {
     hire_date: '2020-01-15',
     title: 'Software Engineer',
     department_name: 'Engineering',
-    department_id: 'dept-001',
-    manager_id: 'mgr-001',
+    department_id: '823e4567-e89b-12d3-a456-426614174000',
+    manager_id: '923e4567-e89b-12d3-a456-426614174000',
     manager_name: 'Bob Manager',
     salary: null, // Masked for non-privileged users
     location: 'San Francisco',
@@ -69,13 +71,13 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const input: GetEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('success');
       if (result.status === 'success') {
         expect(result.data).toEqual(mockEmployee);
-        expect(result.data.id).toBe('emp-001');
+        expect(result.data.id).toBe('123e4567-e89b-12d3-a456-426614174000');
         expect(result.data.first_name).toBe('John');
         expect(result.data.last_name).toBe('Doe');
       }
@@ -92,13 +94,14 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'non-existent-emp' };
+      const nonExistentId = '999e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId: nonExistentId };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
         expect(result.code).toBe('EMPLOYEE_NOT_FOUND');
-        expect(result.message).toContain('Employee non-existent-emp not found');
+        expect(result.message).toContain(nonExistentId);
         expect(result.suggestedAction).toContain('list_employees');
       }
     });
@@ -114,7 +117,7 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const employeeId = 'emp-123';
+      const employeeId = '323e4567-e89b-12d3-a456-426614174000';
       const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, mockHrReadUser);
 
@@ -144,13 +147,14 @@ describe('get-employee tool', () => {
         roles: ['manager'],
       };
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, customContext);
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         customContext,
         expect.any(String),
-        ['emp-001']
+        [employeeId]
       );
     });
 
@@ -165,13 +169,14 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, mockHrReadUser);
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockHrReadUser,
         expect.stringContaining("e.status = 'ACTIVE'"),
-        ['emp-001']
+        [employeeId]
       );
     });
   });
@@ -188,20 +193,21 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, mockRegularUser);
 
       // Query should request salary with CASE statement for masking
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockRegularUser,
         expect.stringContaining('CASE'),
-        ['emp-001']
+        [employeeId]
       );
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockRegularUser,
         expect.stringMatching(/current_setting.*hr-write.*salary/s),
-        ['emp-001']
+        [employeeId]
       );
     });
 
@@ -216,7 +222,8 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockRegularUser);
 
       expect(result.status).toBe('success');
@@ -241,7 +248,8 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockHrWriteUser);
 
       expect(result.status).toBe('success');
@@ -263,7 +271,8 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('success');
@@ -296,13 +305,14 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, mockHrReadUser);
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockHrReadUser,
         expect.stringContaining('LEFT JOIN hr.departments d'),
-        ['emp-001']
+        [employeeId]
       );
     });
 
@@ -317,13 +327,14 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, mockHrReadUser);
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockHrReadUser,
         expect.stringContaining('LEFT JOIN hr.employees m ON e.manager_id = m.id'),
-        ['emp-001']
+        [employeeId]
       );
     });
   });
@@ -335,7 +346,7 @@ describe('get-employee tool', () => {
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.code).toBe('VALIDATION_ERROR');
+        expect(result.code).toBe('INVALID_INPUT');
         expect(result.message).toContain('UUID');
       }
     });
@@ -365,7 +376,8 @@ describe('get-employee tool', () => {
 
       mockQueryWithRLS.mockRejectedValue(new Error('Connection timeout'));
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('error');
@@ -382,7 +394,8 @@ describe('get-employee tool', () => {
       const permissionError = new Error('permission denied for table employees');
       mockQueryWithRLS.mockRejectedValue(permissionError);
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('error');
@@ -396,7 +409,8 @@ describe('get-employee tool', () => {
 
       mockQueryWithRLS.mockRejectedValue(new Error('syntax error at or near "FROM"'));
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('error');
@@ -425,7 +439,7 @@ describe('get-employee tool', () => {
       // Should fail validation before reaching database
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.code).toBe('VALIDATION_ERROR');
+        expect(result.code).toBe('INVALID_INPUT');
       }
     });
   });
@@ -442,7 +456,8 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       await getEmployee(input, mockHrReadUser);
 
       // Should only make one database call
@@ -469,7 +484,8 @@ describe('get-employee tool', () => {
         fields: [],
       });
 
-      const input: GetEmployeeInput = { employeeId: 'emp-001' };
+      const employeeId = '123e4567-e89b-12d3-a456-426614174000';
+      const input: GetEmployeeInput = { employeeId };
       const result = await getEmployee(input, mockHrReadUser);
 
       expect(result.status).toBe('success');
