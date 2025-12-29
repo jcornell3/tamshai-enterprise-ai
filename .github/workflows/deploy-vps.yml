@@ -179,7 +179,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
         run: |
-          echo "🚀 Deploying to $ENVIRONMENT environment..."
+          echo "[DEPLOY] Deploying to $ENVIRONMENT environment..."
           echo "   Host: $VPS_HOST"
           echo "   Branch: $DEPLOY_BRANCH"
           echo "   Build: $BUILD_FLAG"
@@ -211,8 +211,8 @@ jobs:
           sleep 30
 
           echo "=== Health check ==="
-          curl -sf http://localhost:3100/health && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
-          curl -sf http://localhost:8080/auth/health/ready && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+          curl -sf http://localhost:3100/health && echo "[OK] MCP Gateway: healthy" || echo "[FAIL] MCP Gateway: unhealthy"
+          curl -sf http://localhost:8080/auth/health/ready && echo "[OK] Keycloak: healthy" || echo "[FAIL] Keycloak: unhealthy"
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
