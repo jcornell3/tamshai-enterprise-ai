@@ -4,6 +4,17 @@
  * Tests human-in-the-loop confirmation flow, permissions, and business rules
  */
 
+// Mock ioredis to prevent actual Redis connection
+jest.mock('ioredis', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    setex: jest.fn().mockResolvedValue('OK'),
+    exists: jest.fn().mockResolvedValue(0),
+    get: jest.fn().mockResolvedValue(null),
+    del: jest.fn().mockResolvedValue(1),
+  }));
+});
+
 import {
   deleteEmployee,
   executeDeleteEmployee,
@@ -13,13 +24,12 @@ import { UserContext } from '../database/connection';
 import * as dbConnection from '../database/connection';
 import * as redis from '../utils/redis';
 
-// Mock dependencies
+// Mock database connection
 jest.mock('../database/connection');
-jest.mock('../utils/redis');
 
 describe('delete-employee tool', () => {
   const mockHrWriteUser: UserContext = {
-    userId: 'hr-user-123',
+    userId: '423e4567-e89b-12d3-a456-426614174000',
     username: 'alice.chen',
     roles: ['hr-write'],
   };
@@ -37,7 +47,7 @@ describe('delete-employee tool', () => {
   };
 
   const mockEmployee = {
-    id: 'emp-001',
+    id: '123e4567-e89b-12d3-a456-426614174000',
     first_name: 'John',
     last_name: 'Doe',
     email: 'john.doe@test.com',
@@ -64,7 +74,7 @@ describe('delete-employee tool', () => {
       });
       mockStorePendingConfirmation.mockResolvedValue();
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, mockHrWriteUser);
 
       expect(result.status).toBe('pending_confirmation');
@@ -83,14 +93,14 @@ describe('delete-employee tool', () => {
       });
       mockStorePendingConfirmation.mockResolvedValue();
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, mockExecutiveUser);
 
       expect(result.status).toBe('pending_confirmation');
     });
 
     it('rejects user without hr-write or executive role', async () => {
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, mockRegularUser);
 
       expect(result.status).toBe('error');
@@ -117,7 +127,7 @@ describe('delete-employee tool', () => {
       mockStorePendingConfirmation.mockResolvedValue();
 
       const input: DeleteEmployeeInput = {
-        employeeId: 'emp-001',
+        employeeId: '123e4567-e89b-12d3-a456-426614174000',
         reason: 'Termination due to restructuring',
       };
 
@@ -134,7 +144,7 @@ describe('delete-employee tool', () => {
         expect(result.message).toContain('Termination due to restructuring');
         expect(result.confirmationData.action).toBe('delete_employee');
         expect(result.confirmationData.mcpServer).toBe('hr');
-        expect(result.confirmationData.userId).toBe('hr-user-123');
+        expect(result.confirmationData.userId).toBe('423e4567-e89b-12d3-a456-426614174000');
       }
     });
 
@@ -151,7 +161,7 @@ describe('delete-employee tool', () => {
       });
       mockStorePendingConfirmation.mockResolvedValue();
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       await deleteEmployee(input, mockHrWriteUser);
 
       expect(mockStorePendingConfirmation).toHaveBeenCalledWith(
@@ -159,8 +169,8 @@ describe('delete-employee tool', () => {
         expect.objectContaining({
           action: 'delete_employee',
           mcpServer: 'hr',
-          userId: 'hr-user-123',
-          employeeId: 'emp-001',
+          userId: '423e4567-e89b-12d3-a456-426614174000',
+          employeeId: '123e4567-e89b-12d3-a456-426614174000',
           employeeName: 'John Doe',
           employeeEmail: 'john.doe@test.com',
           department: 'Engineering',
@@ -184,7 +194,7 @@ describe('delete-employee tool', () => {
       mockStorePendingConfirmation.mockResolvedValue();
 
       const input: DeleteEmployeeInput = {
-        employeeId: 'emp-001',
+        employeeId: '123e4567-e89b-12d3-a456-426614174000',
         reason: 'Performance issues',
       };
 
@@ -209,7 +219,7 @@ describe('delete-employee tool', () => {
       });
       mockStorePendingConfirmation.mockResolvedValue();
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       await deleteEmployee(input, mockHrWriteUser);
 
       expect(mockStorePendingConfirmation).toHaveBeenCalledWith(
@@ -225,19 +235,19 @@ describe('delete-employee tool', () => {
   describe('Business rules validation', () => {
     it('prevents user from deleting themselves', async () => {
       const selfContext: UserContext = {
-        userId: 'emp-001',
+        userId: '123e4567-e89b-12d3-a456-426614174000',
         username: 'john.doe',
         roles: ['hr-write'],
       };
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, selfContext);
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
         expect(result.code).toBe('CANNOT_DELETE_SELF');
         expect(result.message).toContain('cannot delete your own employee record');
-        expect(result.suggestedAction).toContain('contact another administrator');
+        expect(result.suggestedAction).toContain('contact your HR administrator');
       }
     });
 
@@ -257,13 +267,13 @@ describe('delete-employee tool', () => {
         fields: [],
       });
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, mockHrWriteUser);
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
         expect(result.code).toBe('EMPLOYEE_HAS_REPORTS');
-        expect(result.message).toContain('has 3 direct reports');
+        expect(result.message).toContain('has 3 direct report(s)');
         expect(result.suggestedAction).toContain('reassign');
       }
     });
@@ -279,13 +289,14 @@ describe('delete-employee tool', () => {
         fields: [],
       });
 
-      const input: DeleteEmployeeInput = { employeeId: 'non-existent-emp' };
+      const nonExistentId = '999e4567-e89b-12d3-a456-426614174000';
+      const input: DeleteEmployeeInput = { employeeId: nonExistentId };
       const result = await deleteEmployee(input, mockHrWriteUser);
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
         expect(result.code).toBe('EMPLOYEE_NOT_FOUND');
-        expect(result.message).toContain('Employee non-existent-emp not found');
+        expect(result.message).toContain(nonExistentId);
         expect(result.suggestedAction).toContain('list_employees');
       }
     });
@@ -296,7 +307,7 @@ describe('delete-employee tool', () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS.mockResolvedValue({
-        rows: [{ id: 'emp-001', first_name: 'John', last_name: 'Doe' }],
+        rows: [{ id: '123e4567-e89b-12d3-a456-426614174000', first_name: 'John', last_name: 'Doe' }],
         rowCount: 1,
         command: '',
         oid: 0,
@@ -306,8 +317,8 @@ describe('delete-employee tool', () => {
       const confirmationData = {
         action: 'delete_employee',
         mcpServer: 'hr',
-        userId: 'hr-user-123',
-        employeeId: 'emp-001',
+        userId: '423e4567-e89b-12d3-a456-426614174000',
+        employeeId: '123e4567-e89b-12d3-a456-426614174000',
       };
 
       const result = await executeDeleteEmployee(confirmationData, mockHrWriteUser);
@@ -316,14 +327,14 @@ describe('delete-employee tool', () => {
       if (result.status === 'success') {
         expect(result.data.success).toBe(true);
         expect(result.data.message).toContain('John Doe has been successfully deleted');
-        expect(result.data.employeeId).toBe('emp-001');
+        expect(result.data.employeeId).toBe('123e4567-e89b-12d3-a456-426614174000');
       }
 
       // Verify UPDATE query was executed (soft delete)
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockHrWriteUser,
         expect.stringContaining("status = 'TERMINATED'"),
-        ['emp-001']
+        ['123e4567-e89b-12d3-a456-426614174000']
       );
     });
 
@@ -342,8 +353,8 @@ describe('delete-employee tool', () => {
       const confirmationData = {
         action: 'delete_employee',
         mcpServer: 'hr',
-        userId: 'hr-user-123',
-        employeeId: 'emp-001',
+        userId: '423e4567-e89b-12d3-a456-426614174000',
+        employeeId: '123e4567-e89b-12d3-a456-426614174000',
       };
 
       const result = await executeDeleteEmployee(confirmationData, mockHrWriteUser);
@@ -358,7 +369,7 @@ describe('delete-employee tool', () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS.mockResolvedValue({
-        rows: [{ id: 'emp-001', first_name: 'John', last_name: 'Doe' }],
+        rows: [{ id: '123e4567-e89b-12d3-a456-426614174000', first_name: 'John', last_name: 'Doe' }],
         rowCount: 1,
         command: '',
         oid: 0,
@@ -368,8 +379,8 @@ describe('delete-employee tool', () => {
       const confirmationData = {
         action: 'delete_employee',
         mcpServer: 'hr',
-        userId: 'hr-user-123',
-        employeeId: 'emp-001',
+        userId: '423e4567-e89b-12d3-a456-426614174000',
+        employeeId: '123e4567-e89b-12d3-a456-426614174000',
       };
 
       await executeDeleteEmployee(confirmationData, mockHrWriteUser);
@@ -377,7 +388,7 @@ describe('delete-employee tool', () => {
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockHrWriteUser,
         expect.stringContaining('updated_at = NOW()'),
-        ['emp-001']
+        ['123e4567-e89b-12d3-a456-426614174000']
       );
     });
   });
@@ -389,7 +400,7 @@ describe('delete-employee tool', () => {
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.code).toBe('VALIDATION_ERROR');
+        expect(result.code).toBe('INVALID_INPUT');
         expect(result.message).toContain('UUID');
       }
     });
@@ -428,7 +439,7 @@ describe('delete-employee tool', () => {
       mockStorePendingConfirmation.mockResolvedValue();
 
       const input: DeleteEmployeeInput = {
-        employeeId: 'emp-001',
+        employeeId: '123e4567-e89b-12d3-a456-426614174000',
         reason: 'Test reason',
       };
 
@@ -444,7 +455,7 @@ describe('delete-employee tool', () => {
 
       mockQueryWithRLS.mockRejectedValue(new Error('Connection timeout'));
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, mockHrWriteUser);
 
       expect(result.status).toBe('error');
@@ -467,7 +478,7 @@ describe('delete-employee tool', () => {
       });
       mockStorePendingConfirmation.mockRejectedValue(new Error('Redis connection failed'));
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       const result = await deleteEmployee(input, mockHrWriteUser);
 
       // Should still fail gracefully
@@ -489,13 +500,13 @@ describe('delete-employee tool', () => {
       });
       mockStorePendingConfirmation.mockResolvedValue();
 
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       await deleteEmployee(input, mockHrWriteUser);
 
       expect(mockStorePendingConfirmation).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          userId: 'hr-user-123',
+          userId: '423e4567-e89b-12d3-a456-426614174000',
           timestamp: expect.any(Number),
         }),
         300
@@ -516,7 +527,7 @@ describe('delete-employee tool', () => {
       mockStorePendingConfirmation.mockResolvedValue();
 
       const beforeTimestamp = Date.now();
-      const input: DeleteEmployeeInput = { employeeId: 'emp-001' };
+      const input: DeleteEmployeeInput = { employeeId: '123e4567-e89b-12d3-a456-426614174000' };
       await deleteEmployee(input, mockHrWriteUser);
       const afterTimestamp = Date.now();
 

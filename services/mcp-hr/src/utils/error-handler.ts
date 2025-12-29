@@ -253,6 +253,27 @@ export function withErrorHandling<T>(
       return error as MCPErrorResponse;
     }
 
+    // Handle Zod validation errors
+    if (error.name === 'ZodError') {
+      const zodError = error as any;
+      const firstIssue = zodError.issues?.[0];
+
+      logger.warn('Validation error', {
+        operation,
+        issues: zodError.issues
+      });
+
+      return createErrorResponse(
+        ErrorCode.INVALID_INPUT,
+        firstIssue?.message || 'Input validation failed',
+        `Please check your input and try again. ${firstIssue?.message || ''}`,
+        {
+          field: firstIssue?.path?.join('.'),
+          issues: zodError.issues
+        }
+      );
+    }
+
     // Convert unknown errors to MCPErrorResponse
     return handleUnknownError(error, operation);
   });

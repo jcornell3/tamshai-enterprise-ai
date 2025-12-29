@@ -9,7 +9,9 @@ import { UserContext } from '../database/connection';
 import * as dbConnection from '../database/connection';
 
 // Mock database module
-jest.mock('../database/connection');
+jest.mock('../database/connection', () => ({
+  queryWithRLS: jest.fn(),
+}));
 
 describe('list-employees tool', () => {
   // Common test data
@@ -21,7 +23,7 @@ describe('list-employees tool', () => {
 
   const mockEmployees = [
     {
-      id: 'emp-001',
+      id: '123e4567-e89b-12d3-a456-426614174000',
       first_name: 'Alice',
       last_name: 'Anderson',
       email: 'alice@test.com',
@@ -29,15 +31,15 @@ describe('list-employees tool', () => {
       hire_date: '2020-01-15',
       title: 'Engineer',
       department_name: 'Engineering',
-      department_id: 'dept-001',
-      manager_id: 'mgr-001',
+      department_id: '823e4567-e89b-12d3-a456-426614174000',
+      manager_id: '923e4567-e89b-12d3-a456-426614174000',
       manager_name: 'Bob Manager',
       salary: null,
       location: 'San Francisco',
       status: 'ACTIVE',
     },
     {
-      id: 'emp-002',
+      id: '223e4567-e89b-12d3-a456-426614174000',
       first_name: 'Bob',
       last_name: 'Brown',
       email: 'bob@test.com',
@@ -45,8 +47,8 @@ describe('list-employees tool', () => {
       hire_date: '2021-03-20',
       title: 'Senior Engineer',
       department_name: 'Engineering',
-      department_id: 'dept-001',
-      manager_id: 'mgr-001',
+      department_id: '823e4567-e89b-12d3-a456-426614174000',
+      manager_id: '923e4567-e89b-12d3-a456-426614174000',
       manager_name: 'Bob Manager',
       salary: null,
       location: 'New York',
@@ -75,7 +77,7 @@ describe('list-employees tool', () => {
       expect(result.status).toBe('success');
       if (result.status === 'success') {
         expect(result.data).toHaveLength(2);
-        expect(result.data[0].id).toBe('emp-001');
+        expect(result.data[0].id).toBe('123e4567-e89b-12d3-a456-426614174000');
         expect(result.metadata).toBeUndefined(); // No pagination metadata when not truncated
       }
 
@@ -117,8 +119,8 @@ describe('list-employees tool', () => {
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.code).toBe('VALIDATION_ERROR');
-        expect(result.message).toContain('limit');
+        expect(result.code).toBe('INVALID_INPUT');
+        expect(result.message).toContain('100');
       }
     });
 
@@ -129,7 +131,7 @@ describe('list-employees tool', () => {
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.code).toBe('VALIDATION_ERROR');
+        expect(result.code).toBe('INVALID_INPUT');
       }
     });
   });
@@ -141,7 +143,7 @@ describe('list-employees tool', () => {
       // Mock 51 rows (limit + 1) to indicate more data exists
       const paginatedEmployees = Array.from({ length: 51 }, (_, i) => ({
         ...mockEmployees[0],
-        id: `emp-${String(i).padStart(3, '0')}`,
+        id: `${String(i).padStart(3, '0')}e4567-e89b-12d3-a456-426614174000`,
         first_name: `Employee${i}`,
       }));
 
@@ -204,7 +206,7 @@ describe('list-employees tool', () => {
         JSON.stringify({
           lastName: 'Anderson',
           firstName: 'Alice',
-          id: 'emp-001',
+          id: '123e4567-e89b-12d3-a456-426614174000',
         })
       ).toString('base64');
 
@@ -215,7 +217,7 @@ describe('list-employees tool', () => {
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockUserContext,
         expect.stringContaining('e.last_name >'),
-        expect.arrayContaining(['Anderson', 'Alice', 'emp-001', 51])
+        expect.arrayContaining(['Anderson', 'Alice', '123e4567-e89b-12d3-a456-426614174000', 51])
       );
     });
 
@@ -292,7 +294,7 @@ describe('list-employees tool', () => {
         fields: [],
       });
 
-      const managerId = 'mgr-001';
+      const managerId = '923e4567-e89b-12d3-a456-426614174000';
       const input = { managerId } as ListEmployeesInput;
       await listEmployees(input, mockUserContext);
 
@@ -310,7 +312,7 @@ describe('list-employees tool', () => {
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.code).toBe('VALIDATION_ERROR');
+        expect(result.code).toBe('INVALID_INPUT');
         expect(result.message).toContain('uuid');
       }
     });
@@ -387,7 +389,7 @@ describe('list-employees tool', () => {
         roles: ['manager'],
       };
 
-      await listEmployees({}, customContext);
+      await listEmployees({} as ListEmployeesInput, customContext);
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         customContext,
@@ -407,7 +409,7 @@ describe('list-employees tool', () => {
         fields: [],
       });
 
-      await listEmployees({}, mockUserContext);
+      await listEmployees({} as ListEmployeesInput, mockUserContext);
 
       // Query should request salary column (RLS determines if it's returned)
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
@@ -447,7 +449,7 @@ describe('list-employees tool', () => {
       const permissionError = new Error('permission denied for table employees');
       mockQueryWithRLS.mockRejectedValue(permissionError);
 
-      const result = await listEmployees({}, mockUserContext);
+      const result = await listEmployees({} as ListEmployeesInput, mockUserContext);
 
       expect(result.status).toBe('error');
       if (result.status === 'error') {
@@ -469,7 +471,7 @@ describe('list-employees tool', () => {
         fields: [],
       });
 
-      const result = await listEmployees({ department: 'NonExistent' }, mockUserContext);
+      const result = await listEmployees({ department: 'NonExistent' } as ListEmployeesInput, mockUserContext);
 
       expect(result.status).toBe('success');
       if (result.status === 'success') {
@@ -488,7 +490,7 @@ describe('list-employees tool', () => {
         fields: [],
       });
 
-      const result = await listEmployees({}, mockUserContext);
+      const result = await listEmployees({} as ListEmployeesInput, mockUserContext);
 
       expect(result.status).toBe('success');
       if (result.status === 'success') {
@@ -515,9 +517,9 @@ describe('list-employees tool', () => {
         fields: [],
       });
 
-      const maliciousInput: ListEmployeesInput = {
+      const maliciousInput = {
         department: "'; DROP TABLE employees; --",
-      };
+      } as ListEmployeesInput;
 
       await listEmployees(maliciousInput, mockUserContext);
 
