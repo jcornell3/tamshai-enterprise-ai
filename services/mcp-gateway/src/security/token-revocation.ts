@@ -24,7 +24,7 @@ export interface RevocationConfig {
 }
 
 const DEFAULT_CONFIG: RevocationConfig = {
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6380',
+  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   keyPrefix: 'tamshai:revoked:',
   defaultTtlSeconds: 3600, // 1 hour (longer than max token lifetime)
 };
