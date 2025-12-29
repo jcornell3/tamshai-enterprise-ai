@@ -84,7 +84,7 @@ const OPTIONAL_PATTERNS = {
     description: 'Email address',
   },
   phone: {
-    pattern: /\b(?:\+?1[-.\s]?)?(?:\([0-9]{3}\)|[0-9]{3})[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b/g,
+    pattern: /(?:\+?1[-.\s]?)?(?:\([0-9]{3}\)|[0-9]{3})[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b/g,
     replacement: '[PHONE-REDACTED]',
     description: 'Phone number',
   },

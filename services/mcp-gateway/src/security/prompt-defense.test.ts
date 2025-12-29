@@ -161,7 +161,7 @@ describe('validatePrompt', () => {
       const longPrompt = 'a'.repeat(5000);
       const result = validatePrompt(longPrompt);
       expect(result.sanitizedPrompt.length).toBeLessThan(longPrompt.length);
-      expect(result.flags).toContain(expect.stringContaining('exceeds maximum length'));
+      expect(result.flags.some(f => f.includes('exceeds maximum length'))).toBe(true);
     });
 
     test('accepts prompts within length limit', () => {
