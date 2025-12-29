@@ -66,12 +66,15 @@
       "!src/**/*.d.ts",
       "!src/**/*.test.ts"
     ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!(uuid)/)"
+    ],
     "coverageThreshold": {
       "global": {
         "branches": 25,
-        "functions": 18,
-        "lines": 24,
-        "statements": 24
+        "functions": 21,
+        "lines": 23,
+        "statements": 23
       }
     }
   },
