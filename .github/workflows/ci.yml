@@ -26,7 +26,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
 
     services:
       redis:
@@ -111,7 +110,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     defaults:
       run:
         working-directory: clients/unified_flutter
@@ -164,7 +162,6 @@ jobs:
     needs: flutter-analyze-test
     permissions:
       contents: read
-      security-events: write
     defaults:
       run:
         working-directory: clients/unified_flutter
@@ -198,7 +195,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -238,7 +234,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -330,7 +325,6 @@ jobs:
     needs: [gateway-lint-test]
     permissions:
       contents: read
-      security-events: write
 
     services:
       redis:
@@ -374,7 +368,6 @@ jobs:
     needs: [gateway-lint-test]
     permissions:
       contents: read
-      security-events: write
 
     services:
       redis:
@@ -444,7 +437,6 @@ jobs:
     needs: [gateway-lint-test]
     permissions:
       contents: read
-      security-events: write
 
     services:
       redis:
