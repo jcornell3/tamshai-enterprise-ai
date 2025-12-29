@@ -28,7 +28,7 @@ dependencies:
   go_router: ^17.0.1
 
   # Utilities
-  freezed_annotation: ^3.1.0
+  freezed_annotation: ^2.4.4  # Pinned to 2.x for Dart 3.6 compatibility
   json_annotation: ^4.8.1
   uuid: ^4.3.3
 
@@ -50,7 +50,7 @@ dev_dependencies:
 
   # Code Generation
   build_runner: ^2.10.4
-  freezed: ^3.2.3
+  freezed: ^2.5.7  # Pinned to 2.x for Dart 3.6 compatibility
   json_serializable: ^6.8.0  # Pinned to 6.8.x for Dart 3.6 compatibility
 
 flutter:
