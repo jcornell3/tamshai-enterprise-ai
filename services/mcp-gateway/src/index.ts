@@ -42,18 +42,14 @@ import {
   stopTokenRevocationSync,
 } from './utils/redis';
 import { scrubPII } from './utils/pii-scrubber';
+import {
+  sanitizeForLog,
+  isValidToolName,
+  getAccessibleMCPServers,
+  getDeniedMCPServers,
+  MCPServerConfig,
+} from './utils/gateway-utils';
 import gdprRoutes from './routes/gdpr';
-
-/**
- * Sanitize string for safe logging (prevent log injection)
- * Removes newlines and control characters that could forge log entries
- */
-function sanitizeForLog(input: string, maxLength = 100): string {
-  return input
-    .replace(/[\r\n\t]/g, ' ')  // Replace newlines/tabs with space
-    .replace(/[^\x20-\x7E]/g, '') // Remove non-printable ASCII
-    .substring(0, maxLength);
-}
 
 dotenv.config();
 
@@ -125,13 +121,6 @@ interface UserContext {
 // Extended Request type with userContext property
 interface AuthenticatedRequest extends Request {
   userContext?: UserContext;
-}
-
-interface MCPServerConfig {
-  name: string;
-  url: string;
-  requiredRoles: string[];
-  description: string;
 }
 
 interface AIQueryRequest {
@@ -278,16 +267,13 @@ async function validateToken(token: string): Promise<UserContext> {
 // MCP SERVER INTERACTION
 // =============================================================================
 
-function getAccessibleMCPServers(userRoles: string[]): MCPServerConfig[] {
-  return mcpServerConfigs.filter((server) =>
-    server.requiredRoles.some((role) => userRoles.includes(role))
-  );
+// Wrapper functions that use the utility functions with the configured MCP servers
+function getAccessibleMCPServersForUser(userRoles: string[]): MCPServerConfig[] {
+  return getAccessibleMCPServers(userRoles, mcpServerConfigs);
 }
 
-function getDeniedMCPServers(userRoles: string[]): MCPServerConfig[] {
-  return mcpServerConfigs.filter((server) =>
-    !server.requiredRoles.some((role) => userRoles.includes(role))
-  );
+function getDeniedMCPServersForUser(userRoles: string[]): MCPServerConfig[] {
+  return getDeniedMCPServers(userRoles, mcpServerConfigs);
 }
 
 /**
@@ -733,7 +719,7 @@ app.get('/api/user', authMiddleware, (req: Request, res: Response) => {
 // Get available MCP tools based on user's roles
 app.get('/api/mcp/tools', authMiddleware, (req: Request, res: Response) => {
   const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  const accessibleServers = getAccessibleMCPServers(userContext.roles);
+  const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
   
   res.json({
     user: userContext.username,
@@ -766,8 +752,8 @@ app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, r
 
   try {
     // Determine accessible MCP servers
-    const accessibleServers = getAccessibleMCPServers(userContext.roles);
-    const deniedServers = getDeniedMCPServers(userContext.roles);
+    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
+    const deniedServers = getDeniedMCPServersForUser(userContext.roles);
 
     // Query all accessible MCP servers in parallel
     const mcpPromises = accessibleServers.map((server) =>
@@ -881,7 +867,7 @@ async function handleStreamingQuery(
 
   try {
     // Determine accessible MCP servers
-    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
 
     // Query all accessible MCP servers in parallel (with cursor for pagination)
     const mcpPromises = accessibleServers.map((server) =>
@@ -1231,16 +1217,6 @@ app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, re
 // =============================================================================
 
 /**
- * Validate tool name to prevent SSRF/path traversal attacks
- * Tool names must be alphanumeric with underscores/hyphens only
- */
-function isValidToolName(toolName: string): boolean {
-  // Only allow alphanumeric characters, underscores, and hyphens
-  // Prevents path traversal (../) and other injection attacks
-  return /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(toolName);
-}
-
-/**
  * Generic MCP tool proxy endpoint
  * Routes: /api/mcp/:serverName/:toolName
  *
@@ -1303,7 +1279,7 @@ app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, r
     }
 
     // Check if user has access to this server
-    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
     const hasAccess = accessibleServers.some((s) => s.name === serverName);
 
     if (!hasAccess) {
@@ -1428,7 +1404,7 @@ app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, 
     }
 
     // Check if user has access to this server
-    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
     const hasAccess = accessibleServers.some((s) => s.name === serverName);
 
     if (!hasAccess) {
@@ -1601,16 +1577,14 @@ startServer().catch((error) => {
   process.exit(1);
 });
 
-// Export internal functions for unit testing
+// Export internal functions and configurations for unit testing
 // Only used in test environment
 export {
-  sanitizeForLog,
-  getAccessibleMCPServers,
-  getDeniedMCPServers,
-  isValidToolName,
   validateToken,
   queryMCPServer,
   mcpServerConfigs,
+  getAccessibleMCPServersForUser,
+  getDeniedMCPServersForUser,
 };
 
 export default app;
