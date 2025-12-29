@@ -283,7 +283,8 @@ void main() {
       expect(config.issuer, 'http://localhost:8180/realms/test');
       expect(config.clientId, 'test-client');
       expect(config.redirectUrl, 'app://callback');
-      expect(config.scopes, ['openid', 'profile', 'email']); // Defaults
+      // Default scopes include offline_access for refresh tokens
+      expect(config.scopes, ['openid', 'profile', 'email', 'offline_access']);
     });
 
     test('creates config with all fields', () {
@@ -302,9 +303,11 @@ void main() {
     test('development config has correct values', () {
       final config = KeycloakConfigProvider.getDevelopmentConfig();
 
-      expect(config.issuer, contains('localhost'));
+      // Uses 127.0.0.1 instead of localhost for Windows compatibility
+      expect(config.issuer, contains('127.0.0.1'));
       expect(config.issuer, contains('8180'));
-      expect(config.clientId, 'unified-flutter');
+      expect(config.issuer, contains('tamshai-corp'));
+      expect(config.clientId, 'tamshai-flutter-client');
     });
   });
 
