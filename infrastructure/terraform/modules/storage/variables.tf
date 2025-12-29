@@ -18,13 +18,13 @@ variable "environment" {
 variable "force_destroy" {
   description = "Allow bucket deletion even if not empty"
   type        = bool
-  default     = true  # Set to false for prod
+  default     = true # Set to false for prod
 }
 
 variable "enable_versioning" {
   description = "Enable object versioning"
   type        = bool
-  default     = false  # Enable for prod
+  default     = false # Enable for prod
 }
 
 variable "lifecycle_age_days" {

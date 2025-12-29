@@ -57,7 +57,7 @@ variable "allowed_http_ports" {
 variable "http_source_ranges" {
   description = "Source IP ranges allowed for HTTP/HTTPS traffic"
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # Restrict in production
+  default     = ["0.0.0.0/0"] # Restrict in production
 }
 
 # =============================================================================

@@ -32,11 +32,11 @@ output "tamshai_db_password" {
 output "secret_ids" {
   description = "Map of secret IDs for reference"
   value = {
-    keycloak_admin_password      = google_secret_manager_secret.keycloak_admin_password.id
-    keycloak_db_password         = google_secret_manager_secret.keycloak_db_password.id
-    tamshai_db_password          = google_secret_manager_secret.tamshai_db_password.id
-    anthropic_api_key            = google_secret_manager_secret.anthropic_api_key.id
-    mcp_gateway_client_secret    = google_secret_manager_secret.mcp_gateway_client_secret.id
-    jwt_secret                   = google_secret_manager_secret.jwt_secret.id
+    keycloak_admin_password   = google_secret_manager_secret.keycloak_admin_password.id
+    keycloak_db_password      = google_secret_manager_secret.keycloak_db_password.id
+    tamshai_db_password       = google_secret_manager_secret.tamshai_db_password.id
+    anthropic_api_key         = google_secret_manager_secret.anthropic_api_key.id
+    mcp_gateway_client_secret = google_secret_manager_secret.mcp_gateway_client_secret.id
+    jwt_secret                = google_secret_manager_secret.jwt_secret.id
   }
 }

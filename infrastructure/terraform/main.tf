@@ -81,12 +81,12 @@ locals {
 module "networking" {
   source = "./modules/networking"
 
-  project_id          = var.project_id
-  region              = var.region
-  environment         = local.environment
-  subnet_cidr         = var.subnet_cidr
-  allowed_http_ports  = var.allowed_http_ports
-  http_source_ranges  = var.http_source_ranges
+  project_id         = var.project_id
+  region             = var.region
+  environment        = local.environment
+  subnet_cidr        = var.subnet_cidr
+  allowed_http_ports = var.allowed_http_ports
+  http_source_ranges = var.http_source_ranges
 }
 
 # Security Module - Service Accounts, Secret Manager, IAM
@@ -122,32 +122,32 @@ module "database" {
 module "storage" {
   source = "./modules/storage"
 
-  project_id          = var.project_id
-  region              = var.region
-  environment         = local.environment
-  force_destroy       = local.force_destroy
-  enable_versioning   = local.enable_versioning
-  lifecycle_age_days  = var.lifecycle_age_days
+  project_id         = var.project_id
+  region             = var.region
+  environment        = local.environment
+  force_destroy      = local.force_destroy
+  enable_versioning  = local.enable_versioning
+  lifecycle_age_days = var.lifecycle_age_days
 }
 
 # Compute Module - GCE Instances
 module "compute" {
   source = "./modules/compute"
 
-  project_id                       = var.project_id
-  region                           = var.region
-  zone                             = var.zone
-  environment                      = local.environment
-  subnet_id                        = module.networking.subnet_id
-  machine_type                     = var.machine_type
-  machine_type_medium              = var.machine_type_medium
-  boot_disk_size_keycloak          = var.boot_disk_size_keycloak
-  boot_disk_size_gateway           = var.boot_disk_size_gateway
-  preemptible                      = local.preemptible
-  automatic_restart                = local.automatic_restart
-  keycloak_service_account_email   = module.security.keycloak_service_account_email
+  project_id                        = var.project_id
+  region                            = var.region
+  zone                              = var.zone
+  environment                       = local.environment
+  subnet_id                         = module.networking.subnet_id
+  machine_type                      = var.machine_type
+  machine_type_medium               = var.machine_type_medium
+  boot_disk_size_keycloak           = var.boot_disk_size_keycloak
+  boot_disk_size_gateway            = var.boot_disk_size_gateway
+  preemptible                       = local.preemptible
+  automatic_restart                 = local.automatic_restart
+  keycloak_service_account_email    = module.security.keycloak_service_account_email
   mcp_gateway_service_account_email = module.security.mcp_gateway_service_account_email
-  postgres_private_ip              = module.database.postgres_private_ip
+  postgres_private_ip               = module.database.postgres_private_ip
 
   depends_on = [module.database, module.security]
 }

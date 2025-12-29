@@ -58,13 +58,13 @@ variable "boot_disk_size_gateway" {
 variable "preemptible" {
   description = "Use preemptible instances (cheaper but can be terminated)"
   type        = bool
-  default     = true  # Set to false for prod
+  default     = true # Set to false for prod
 }
 
 variable "automatic_restart" {
   description = "Automatically restart instances on failure"
   type        = bool
-  default     = false  # Set to true for prod
+  default     = false # Set to true for prod
 }
 
 variable "keycloak_service_account_email" {
