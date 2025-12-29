@@ -51,7 +51,7 @@ dev_dependencies:
   # Code Generation
   build_runner: ^2.10.4
   freezed: ^3.2.3
-  json_serializable: ^6.11.2
+  json_serializable: ^6.8.0  # Pinned to 6.8.x for Dart 3.6 compatibility
 
 flutter:
   uses-material-design: true
