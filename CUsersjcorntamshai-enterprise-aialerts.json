@@ -1,7 +1,0 @@
-At line:1 char:38
-+ "C:\Program Files\GitHub CLI\gh.exe" api repos/jcornell3/tamshai-ente ...
-+                                      ~~~
-Unexpected token 'api' in expression or statement.
-    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
-    + FullyQualifiedErrorId : UnexpectedToken
- 
