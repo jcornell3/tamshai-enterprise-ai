@@ -832,6 +832,131 @@ describe('RBAC Integration Tests', () => {
 });
 ```
 
+### Testing Philosophy
+
+We follow a **"Diff Coverage"** strategy to balance code quality with development velocity:
+
+- **90% coverage required on all new code** (enforced by Codecov, BLOCKS PRs)
+- **49.06% overall coverage** (gradually improving from 31.52%)
+- **70% target for new services** (industry "Commendable" tier)
+
+This approach prevents new technical debt while not blocking work on legacy code (index.ts with 1,532 uncovered lines).
+
+**Rationale:**
+1. **Prevents Regression**: All new code must be tested at 90%+
+2. **Gradual Improvement**: Naturally increases overall coverage as old code is modified
+3. **Developer-Friendly**: Doesn't block work on legacy code
+4. **Realistic Target**: 90% allows for edge cases, not 100% perfectionism
+5. **Industry Alignment**: Google/Microsoft use similar "diff coverage" strategies
+
+See [.specify/specs/011-qa-testing/TEST_COVERAGE_STRATEGY.md](.specify/specs/011-qa-testing/TEST_COVERAGE_STRATEGY.md) for complete strategy.
+
+### All Test Commands
+
+```bash
+cd services/mcp-gateway
+
+# Unit tests
+npm test                          # Run all unit tests
+npm test -- --coverage            # With coverage report
+npm test -- --watch               # Watch mode for TDD
+npm test -- rbac.test.ts          # Run specific test file
+
+# Integration tests (requires services running)
+npm run test:integration          # All integration tests
+npm run test:rbac                 # RBAC integration tests only
+npm run test:mcp                  # MCP tool tests
+npm run test:sse                  # SSE streaming tests (120s timeout)
+npm run test:query                # Query scenario tests
+
+# Coverage
+npm run coverage                  # Generate full coverage report
+npm run type-coverage             # Check TypeScript type coverage (85% min)
+
+# Linting
+npm run lint                      # ESLint + TypeScript rules
+npm run lint:fix                  # Auto-fix linting issues
+```
+
+### Security Testing
+
+Multiple layers of security scanning ensure defense-in-depth:
+
+**1. CodeQL (SAST)** - Static Application Security Testing
+- **Schedule**: Weekly (Sunday) + push to main + all PRs
+- **Languages**: JavaScript/TypeScript
+- **Queries**: security-extended (OWASP Top 10)
+- **Results**: GitHub Security tab
+- **Status**: BLOCKING ❌
+
+**2. npm audit** - Dependency Vulnerability Scanning
+```bash
+cd services/mcp-gateway
+npm audit --audit-level=high
+```
+- **Thresholds**: Critical/High = FAIL, Moderate/Low = WARN
+- **Status**: BLOCKING ❌
+
+**3. Gitleaks** - Secret Detection
+```bash
+# Pre-commit hook (automatic)
+pre-commit run gitleaks --all-files
+
+# Manual scan
+docker run --rm -v "$(pwd):/path" ghcr.io/gitleaks/gitleaks:latest detect --source /path -c .gitleaks.toml
+```
+- **Custom Rules**: Anthropic API keys (`sk-ant-api\d{2}-...`), Keycloak secrets
+- **Allowlist**: `.gitleaksignore` for test fixtures
+- **Status**: BLOCKING ❌ (pre-commit + CI)
+
+**4. tfsec** - Terraform Infrastructure Security
+```bash
+cd infrastructure/terraform
+tfsec .
+```
+- **Checks**: GCP misconfigurations, network exposure, encryption, IAM
+- **Status**: BLOCKING ❌
+
+**5. Trivy** - Container Vulnerability Scanning
+```bash
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy image mcp-gateway:latest
+```
+- **Severity**: CRITICAL, HIGH
+- **Status**: INFORMATIONAL ℹ️ (doesn't block main)
+
+See [.specify/specs/011-qa-testing/TESTING_CI_CD_CONFIG.md](.specify/specs/011-qa-testing/TESTING_CI_CD_CONFIG.md) for complete CI/CD documentation.
+
+### Type Coverage
+
+**Target**: 85% type coverage (enforced on MCP Gateway)
+
+```bash
+cd services/mcp-gateway
+
+# Check type coverage
+npm run type-coverage
+
+# Detailed report
+npx type-coverage --detail
+
+# CI enforcement
+npx type-coverage --at-least 85
+```
+
+**Why 85%?**
+- TypeScript's value is in type safety
+- 85% allows for `any` in edge cases (third-party libraries, dynamic data)
+- Higher than typical projects (50-60%)
+- Catches type errors before runtime
+
+**Example Output**:
+```
+85.23% type coverage
+12,345 / 14,567 expressions
+2,222 expressions with 'any' type
+```
+
 ---
 
 ## Development Environment
