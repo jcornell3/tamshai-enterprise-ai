@@ -50,6 +50,8 @@ import {
   MCPServerConfig,
 } from './utils/gateway-utils';
 import gdprRoutes from './routes/gdpr';
+import healthRoutes from './routes/health.routes';
+import userRoutes from './routes/user.routes';
 
 dotenv.config();
 
@@ -612,44 +614,8 @@ try {
 // ROUTES
 // =============================================================================
 
-// Health check (no auth required)
-app.get('/health', (req: Request, res: Response) => {
-  const tokenRevocationStats = getTokenRevocationStats();
-  const isHealthy = tokenRevocationStats.isHealthy;
-
-  res.status(isHealthy ? 200 : 503).json({
-    status: isHealthy ? 'healthy' : 'degraded',
-    timestamp: new Date().toISOString(),
-    version: '0.1.0',
-    components: {
-      tokenRevocationCache: {
-        status: tokenRevocationStats.isHealthy ? 'healthy' : 'degraded',
-        cacheSize: tokenRevocationStats.cacheSize,
-        lastSyncMs: Date.now() - tokenRevocationStats.lastSyncTime,
-        consecutiveFailures: tokenRevocationStats.consecutiveFailures,
-      },
-    },
-  });
-});
-
-app.get('/api/health', (req: Request, res: Response) => {
-  const tokenRevocationStats = getTokenRevocationStats();
-  const isHealthy = tokenRevocationStats.isHealthy;
-
-  res.status(isHealthy ? 200 : 503).json({
-    status: isHealthy ? 'healthy' : 'degraded',
-    timestamp: new Date().toISOString(),
-    version: '0.1.0',
-    components: {
-      tokenRevocationCache: {
-        status: tokenRevocationStats.isHealthy ? 'healthy' : 'degraded',
-        cacheSize: tokenRevocationStats.cacheSize,
-        lastSyncMs: Date.now() - tokenRevocationStats.lastSyncTime,
-        consecutiveFailures: tokenRevocationStats.consecutiveFailures,
-      },
-    },
-  });
-});
+// Health check routes (no auth required) - extracted to routes/health.routes.ts
+app.use(healthRoutes);
 
 // Authentication middleware
 async function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -704,32 +670,8 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
 // HR-only endpoints for GDPR data subject rights
 app.use('/api/admin/gdpr', authMiddleware, gdprRoutes);
 
-// Get user info
-app.get('/api/user', authMiddleware, (req: Request, res: Response) => {
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  res.json({
-    userId: userContext.userId,
-    username: userContext.username,
-    email: userContext.email,
-    roles: userContext.roles,
-    groups: userContext.groups,
-  });
-});
-
-// Get available MCP tools based on user's roles
-app.get('/api/mcp/tools', authMiddleware, (req: Request, res: Response) => {
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
-  
-  res.json({
-    user: userContext.username,
-    roles: userContext.roles,
-    accessibleDataSources: accessibleServers.map((s) => ({
-      name: s.name,
-      description: s.description,
-    })),
-  });
-});
+// User info and MCP tools routes - extracted to routes/user.routes.ts
+app.use(authMiddleware, userRoutes);
 
 // Main AI query endpoint
 app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
