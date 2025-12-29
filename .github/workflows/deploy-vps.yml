@@ -236,14 +236,16 @@ jobs:
           done
 
       - name: Notify on success
-        if: success() && secrets.SLACK_WEBHOOK_URL
+        if: success()
+        continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data '{"text":"✅ Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify on failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL
+        if: failure()
+        continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data '{"text":"❌ Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
