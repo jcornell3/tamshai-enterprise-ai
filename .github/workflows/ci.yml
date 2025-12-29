@@ -155,8 +155,10 @@ jobs:
   # =============================================================================
   # Flutter Build Verification
   # =============================================================================
+  # DISABLED: Project only supports Windows desktop, not Linux
   flutter-build:
     name: Flutter - Build Linux
+    if: false  # Disabled - only Windows desktop is supported
     runs-on: ubuntu-latest
     needs: flutter-analyze-test
     permissions:
