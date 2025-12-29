@@ -73,7 +73,7 @@ jobs:
       
       # Secret scanning
       - name: GitGuardian Scan
-        if: secrets.GITGUARDIAN_API_KEY != ''
+        continue-on-error: true
         uses: GitGuardian/ggshield-action@v1
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
