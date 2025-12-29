@@ -1,11 +1,10 @@
-/// Unit tests for AuthNotifier and authentication state management
-///
-/// These tests verify the authentication state machine transitions correctly
-/// for login, logout, token refresh, and error handling scenarios.
-/// Tested on Windows and Linux environments.
+// Unit tests for AuthNotifier and authentication state management
+//
+// These tests verify the authentication state machine transitions correctly
+// for login, logout, token refresh, and error handling scenarios.
+// Tested on Windows and Linux environments.
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:unified_flutter/core/auth/models/auth_state.dart';
@@ -71,7 +70,6 @@ class MockFlutterSecureStorage implements FlutterSecureStorage {
   @override
   void unregisterAllListeners() {}
 
-  @override
   void unregisterAllListenersForAllKeys() {}
 
   @override
