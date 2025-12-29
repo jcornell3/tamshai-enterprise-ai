@@ -60,11 +60,11 @@ Remember: You are helpful but secure. Helpfulness never overrides security.
 const INJECTION_PATTERNS: { pattern: RegExp; severity: number; description: string }[] = [
   // Direct instruction override attempts
   { pattern: /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|rules?)/i, severity: 90, description: 'Instruction override attempt' },
-  { pattern: /forget\s+(everything|all|your)\s+(instructions?|rules?|training)/i, severity: 90, description: 'Memory wipe attempt' },
+  { pattern: /forget\s+(everything|all|your)\s+(your\s+)?(instructions?|rules?|training|.*trained)/i, severity: 90, description: 'Memory wipe attempt' },
   { pattern: /disregard\s+(all\s+)?(previous|prior|your)\s+(instructions?|prompts?)/i, severity: 90, description: 'Disregard instructions attempt' },
   { pattern: /you\s+are\s+now\s+(a|an)\s+/i, severity: 80, description: 'Role reassignment attempt' },
-  { pattern: /pretend\s+(to\s+be|you('re|are))\s+/i, severity: 80, description: 'Pretend prompt' },
-  { pattern: /act\s+as\s+(if\s+you('re|are)|a|an)\s+/i, severity: 70, description: 'Act as prompt' },
+  { pattern: /pretend\s+(to\s+be|you\s+(are|'re))\s+/i, severity: 80, description: 'Pretend prompt' },
+  { pattern: /act\s+as\s+(if\s+you\s+(are|'re)|a|an)\s+/i, severity: 70, description: 'Act as prompt' },
   
   // System prompt extraction attempts
   { pattern: /what\s+(are|is)\s+your\s+(system\s+)?(prompt|instructions?|rules?)/i, severity: 85, description: 'System prompt extraction' },
@@ -80,7 +80,7 @@ const INJECTION_PATTERNS: { pattern: RegExp; severity: number; description: stri
   { pattern: /bypass\s+(your\s+)?(safety|security|restrictions?|filters?)/i, severity: 95, description: 'Bypass safety attempt' },
   
   // Encoding/obfuscation detection
-  { pattern: /^[A-Za-z0-9+/]{50,}={0,2}$/m, severity: 60, description: 'Possible base64 encoded content' },
+  { pattern: /^[A-Za-z0-9+/]{40,}={0,2}$/m, severity: 60, description: 'Possible base64 encoded content' },
   { pattern: /\\x[0-9a-fA-F]{2}/g, severity: 70, description: 'Hex escape sequences' },
   { pattern: /\\u[0-9a-fA-F]{4}/g, severity: 60, description: 'Unicode escape sequences' },
   

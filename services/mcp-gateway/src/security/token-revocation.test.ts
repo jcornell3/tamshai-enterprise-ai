@@ -94,8 +94,8 @@ describe('RedisTokenRevocationService', () => {
       // Revoke user tokens
       await service.revokeAllUserTokens('user-123');
 
-      // Wait a moment to ensure new token is issued after revocation
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Wait to ensure we cross a second boundary
+      await new Promise(resolve => setTimeout(resolve, 1100));
 
       const tokenIssuedAt = Math.floor(Date.now() / 1000); // Issued now (after revocation)
 
