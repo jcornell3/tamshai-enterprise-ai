@@ -841,6 +841,7 @@ describe('RBAC Integration Tests', () => {
 - Node.js 20+ and npm 10+
 - GitHub CLI 2.40+ (for CI/CD debugging, PR management) - [cli.github.com](https://cli.github.com/)
 - Terraform 1.5+ (for VPS deployment) - [terraform.io](https://developer.hashicorp.com/terraform/install)
+- Vault CLI (for secrets management, optional) - [vaultproject.io](https://developer.hashicorp.com/vault/install)
 - 8GB RAM minimum (16GB recommended)
 - 20GB free disk space
 
