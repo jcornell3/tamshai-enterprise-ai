@@ -5,7 +5,8 @@
 class MockRedis {
   private store: Map<string, { value: string; ttl?: number }> = new Map();
 
-  constructor(_options?: any) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(_options?: unknown) {
     // Ignore options in mock
   }
 
@@ -53,7 +54,8 @@ class MockRedis {
     return Array.from(this.store.keys()).filter(key => regex.test(key));
   }
 
-  on(_event: string, _callback: (...args: any[]) => void): this {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  on(_event: string, _callback: (...args: unknown[]) => void): this {
     // Ignore event listeners in mock
     return this;
   }

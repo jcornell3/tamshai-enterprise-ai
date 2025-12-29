@@ -8,6 +8,7 @@
  */
 
 import Redis from 'ioredis';
+import { Request, Response, NextFunction } from 'express';
 
 export interface TokenRevocationService {
   isRevoked(tokenJti: string): Promise<boolean>;
@@ -167,10 +168,10 @@ export function getRevocationService(): TokenRevocationService {
 export function createRevocationMiddleware() {
   const service = getRevocationService();
 
-  return async (req: any, res: any, next: any) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Extract JWT claims (assumes previous JWT validation middleware)
-      const jwtPayload = req.user || req.auth;
+      const jwtPayload = (req as Request & { user?: { jti?: string; sub?: string; iat?: number }; auth?: { jti?: string; sub?: string; iat?: number } }).user || (req as Request & { auth?: { jti?: string; sub?: string; iat?: number } }).auth;
       
       if (!jwtPayload) {
         return res.status(401).json({ error: 'No authentication token' });

@@ -33,13 +33,10 @@ import * as path from 'path';
 import {
   MCPToolResponse,
   isSuccessResponse,
-  isErrorResponse,
   isPendingConfirmationResponse,
 } from './types/mcp-response';
 import {
-  storePendingConfirmation,
   getPendingConfirmation,
-  deletePendingConfirmation,
   isTokenRevoked,
   getTokenRevocationStats,
   stopTokenRevocationSync,
@@ -123,6 +120,11 @@ interface UserContext {
   email: string;
   roles: string[];
   groups: string[];
+}
+
+// Extended Request type with userContext property
+interface AuthenticatedRequest extends Request {
+  userContext?: UserContext;
 }
 
 interface MCPServerConfig {
@@ -569,7 +571,7 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     // Use user ID if authenticated, otherwise use IP
-    const userContext = (req as any).userContext;
+    const userContext = (req as AuthenticatedRequest).userContext;
     return userContext?.userId || req.ip || 'unknown';
   },
 });
@@ -582,7 +584,7 @@ const aiQueryLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
-    const userContext = (req as any).userContext;
+    const userContext = (req as AuthenticatedRequest).userContext;
     return userContext?.userId || req.ip || 'unknown';
   },
 });
@@ -672,17 +674,14 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   // SECURITY NOTE: Query param tokens are DEPRECATED due to URL logging risks
   // Prefer POST /api/query with Authorization header for SSE streaming
   let token: string;
-  let tokenSource: 'header' | 'query';
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
-    tokenSource = 'header';
   } else if (tokenFromQuery) {
     // DEPRECATED: Token in URL is logged and visible in browser history
     // This is kept for backwards compatibility with EventSource clients
     // New clients should use POST /api/query with fetch() streaming
     token = tokenFromQuery;
-    tokenSource = 'query';
     logger.warn('Token passed via query parameter (deprecated)', {
       path: req.path,
       method: req.method,
@@ -705,7 +704,7 @@ async function authMiddleware(req: Request, res: Response, next: NextFunction) {
       return;
     }
 
-    (req as any).userContext = userContext;
+    (req as AuthenticatedRequest).userContext = userContext;
     next();
   } catch (error) {
     logger.error('Token validation failed:', error);
@@ -721,7 +720,7 @@ app.use('/api/admin/gdpr', authMiddleware, gdprRoutes);
 
 // Get user info
 app.get('/api/user', authMiddleware, (req: Request, res: Response) => {
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
   res.json({
     userId: userContext.userId,
     username: userContext.username,
@@ -733,7 +732,7 @@ app.get('/api/user', authMiddleware, (req: Request, res: Response) => {
 
 // Get available MCP tools based on user's roles
 app.get('/api/mcp/tools', authMiddleware, (req: Request, res: Response) => {
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
   const accessibleServers = getAccessibleMCPServers(userContext.roles);
   
   res.json({
@@ -750,7 +749,7 @@ app.get('/api/mcp/tools', authMiddleware, (req: Request, res: Response) => {
 app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
   const startTime = Date.now();
   const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
   const { query, conversationId }: AIQueryRequest = req.body;
 
   if (!query || typeof query !== 'string') {
@@ -864,7 +863,7 @@ async function handleStreamingQuery(
 ): Promise<void> {
   const startTime = Date.now();
   const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
 
   logger.info('SSE Query received', {
     requestId,
@@ -1120,7 +1119,7 @@ app.post('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res:
 app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, res: Response) => {
   const { confirmationId } = req.params;
   const { approved } = req.body;
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
   const requestId = req.headers['x-request-id'] as string;
 
   logger.info('Confirmation request', {
@@ -1250,7 +1249,7 @@ function isValidToolName(toolName: string): boolean {
  */
 app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, res: Response) => {
   const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
   const { serverName, toolName } = req.params;
 
   // SECURITY: Validate toolName to prevent SSRF/path traversal
@@ -1270,15 +1269,18 @@ app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, r
   }
 
   // Convert query params to proper types (Express parses everything as strings)
-  const queryParams: any = {};
+  const queryParams: Record<string, string | number | string[]> = {};
   for (const [key, value] of Object.entries(req.query)) {
     if (value === undefined) continue;
     // Try to parse as number if it looks numeric
     if (typeof value === 'string' && /^\d+$/.test(value)) {
       queryParams[key] = parseInt(value, 10);
-    } else {
+    } else if (typeof value === 'string') {
       queryParams[key] = value;
+    } else if (Array.isArray(value)) {
+      queryParams[key] = value.filter((v): v is string => typeof v === 'string');
     }
+    // Skip ParsedQs objects (nested query params)
   }
 
   logger.info(`MCP tool call: ${serverName}/${toolName}`, {
@@ -1387,7 +1389,7 @@ app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, r
  */
 app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, res: Response) => {
   const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as any).userContext;
+  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
   const { serverName, toolName } = req.params;
   const body = req.body;
 

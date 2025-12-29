@@ -15,7 +15,6 @@ import {
   frameAIResponse,
   buildAuditLogEntry,
   DEFAULT_QUERY_LIMITS,
-  PromptValidationResult,
 } from './prompt-defense';
 
 describe('validatePrompt', () => {

@@ -125,7 +125,9 @@ describe('scrubPII', () => {
 
   describe('Edge cases', () => {
     test('handles null/undefined input gracefully', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(scrubPII(null as any)).toBe(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(scrubPII(undefined as any)).toBe(undefined);
     });
 
@@ -134,6 +136,7 @@ describe('scrubPII', () => {
     });
 
     test('handles non-string input', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(scrubPII(12345 as any)).toBe(12345);
     });
 
@@ -180,7 +183,9 @@ describe('scrubPIIFromObject', () => {
 
     const result = scrubPIIFromObject(obj);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((result.user as any).profile.ssn).toContain('[SSN-REDACTED]');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((result.user as any).profile.name).toBe('Jane');
   });
 
@@ -208,7 +213,9 @@ describe('scrubPIIFromObject', () => {
 
     const result = scrubPIIFromObject(obj);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((result.employees as any)[0].ssn).toContain('[SSN-REDACTED]');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((result.employees as any)[1].ssn).toContain('[SSN-REDACTED]');
   });
 
@@ -227,7 +234,9 @@ describe('scrubPIIFromObject', () => {
   });
 
   test('handles null/undefined input', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(scrubPIIFromObject(null as any)).toBe(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(scrubPIIFromObject(undefined as any)).toBe(undefined);
   });
 });
@@ -250,7 +259,9 @@ describe('containsPII', () => {
   });
 
   test('handles null/undefined/empty input', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(containsPII(null as any)).toBe(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(containsPII(undefined as any)).toBe(false);
     expect(containsPII('')).toBe(false);
   });

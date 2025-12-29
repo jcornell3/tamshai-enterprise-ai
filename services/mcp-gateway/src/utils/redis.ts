@@ -186,7 +186,7 @@ class CachedTokenRevocation {
     }
 
     this.syncInterval = setInterval(() => {
-      this.syncFromRedis().catch((err) => {
+      this.syncFromRedis().catch(() => {
         // Already logged in syncFromRedis
       });
     }, tokenRevocationConfig.syncIntervalMs);

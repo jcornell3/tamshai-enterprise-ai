@@ -32,7 +32,7 @@ jest.mock('ioredis', () => {
 
 describe('RedisTokenRevocationService', () => {
   let service: RedisTokenRevocationService;
-  let mockRedis: any;
+  let mockRedis: Record<string, jest.Mock>;
 
   beforeEach(() => {
     // Clear mock store before each test
@@ -43,7 +43,7 @@ describe('RedisTokenRevocationService', () => {
       defaultTtlSeconds: 3600,
     });
     // Access the mock Redis instance
-    mockRedis = (service as any).redis;
+    mockRedis = (service as unknown as { redis: Record<string, jest.Mock> }).redis;
   });
 
   afterEach(async () => {
@@ -128,7 +128,7 @@ describe('RedisTokenRevocationService', () => {
     test('returns false when no user revocation exists', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
 
-      const isRevoked = await (service as any).isUserRevoked('user-123', Math.floor(Date.now() / 1000));
+      const isRevoked = await (service as unknown as { isUserRevoked: (userId: string, tokenIssuedAt: number) => Promise<boolean> }).isUserRevoked('user-123', Math.floor(Date.now() / 1000));
 
       expect(isRevoked).toBe(false);
     });
@@ -138,7 +138,7 @@ describe('RedisTokenRevocationService', () => {
       const tokenIssuedAt = Math.floor(revocationTime / 1000) - 60; // Issued 60 seconds before revocation
       mockRedis.get.mockResolvedValueOnce(revocationTime.toString());
 
-      const isRevoked = await (service as any).isUserRevoked('user-123', tokenIssuedAt);
+      const isRevoked = await (service as unknown as { isUserRevoked: (userId: string, tokenIssuedAt: number) => Promise<boolean> }).isUserRevoked('user-123', tokenIssuedAt);
 
       expect(isRevoked).toBe(true);
     });
@@ -148,7 +148,7 @@ describe('RedisTokenRevocationService', () => {
       const tokenIssuedAt = Math.floor(Date.now() / 1000); // Issued now
       mockRedis.get.mockResolvedValueOnce(revocationTime.toString());
 
-      const isRevoked = await (service as any).isUserRevoked('user-123', tokenIssuedAt);
+      const isRevoked = await (service as unknown as { isUserRevoked: (userId: string, tokenIssuedAt: number) => Promise<boolean> }).isUserRevoked('user-123', tokenIssuedAt);
 
       expect(isRevoked).toBe(false);
     });
@@ -156,7 +156,7 @@ describe('RedisTokenRevocationService', () => {
     test('fails secure on Redis error', async () => {
       mockRedis.get.mockRejectedValueOnce(new Error('Redis error'));
 
-      const isRevoked = await (service as any).isUserRevoked('user-123', Date.now());
+      const isRevoked = await (service as unknown as { isUserRevoked: (userId: string, tokenIssuedAt: number) => Promise<boolean> }).isUserRevoked('user-123', Date.now());
 
       expect(isRevoked).toBe(true);
     });
@@ -167,7 +167,7 @@ describe('RedisTokenRevocationService', () => {
       mockRedis.exists.mockResolvedValueOnce(0); // Token not revoked
       mockRedis.get.mockResolvedValueOnce(null); // User not revoked
 
-      const isValid = await (service as any).isTokenValid('jti-123', 'user-123', Math.floor(Date.now() / 1000));
+      const isValid = await (service as unknown as { isTokenValid: (jti: string, userId: string, tokenIssuedAt: number) => Promise<boolean> }).isTokenValid('jti-123', 'user-123', Math.floor(Date.now() / 1000));
 
       expect(isValid).toBe(true);
     });
@@ -176,7 +176,7 @@ describe('RedisTokenRevocationService', () => {
       mockRedis.exists.mockResolvedValueOnce(1); // Token revoked
       mockRedis.get.mockResolvedValueOnce(null); // User not revoked
 
-      const isValid = await (service as any).isTokenValid('jti-123', 'user-123', Math.floor(Date.now() / 1000));
+      const isValid = await (service as unknown as { isTokenValid: (jti: string, userId: string, tokenIssuedAt: number) => Promise<boolean> }).isTokenValid('jti-123', 'user-123', Math.floor(Date.now() / 1000));
 
       expect(isValid).toBe(false);
     });
@@ -187,7 +187,7 @@ describe('RedisTokenRevocationService', () => {
       mockRedis.exists.mockResolvedValueOnce(0); // Token not revoked
       mockRedis.get.mockResolvedValueOnce(revocationTime.toString()); // User revoked
 
-      const isValid = await (service as any).isTokenValid('jti-123', 'user-123', tokenIssuedAt);
+      const isValid = await (service as unknown as { isTokenValid: (jti: string, userId: string, tokenIssuedAt: number) => Promise<boolean> }).isTokenValid('jti-123', 'user-123', tokenIssuedAt);
 
       expect(isValid).toBe(false);
     });
