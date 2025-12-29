@@ -7,6 +7,18 @@
 import request from 'supertest';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import userRoutes from './user.routes';
+import * as gatewayUtils from '../utils/gateway-utils';
+
+// Authenticated request type for tests
+interface AuthenticatedRequest extends Request {
+  userContext?: {
+    userId: string;
+    username: string;
+    email?: string;
+    roles: string[];
+    groups?: string[];
+  };
+}
 
 // Mock gateway-utils
 jest.mock('../utils/gateway-utils', () => ({
@@ -20,15 +32,14 @@ describe('User Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    const gatewayUtils = require('../utils/gateway-utils');
-    mockGetAccessibleMCPServers = gatewayUtils.getAccessibleMCPServers;
+    mockGetAccessibleMCPServers = gatewayUtils.getAccessibleMCPServers as jest.Mock;
 
     app = express();
     app.use(express.json());
 
     // Default: inject userContext middleware
     app.use((req: Request, _res: Response, next: NextFunction) => {
-      (req as any).userContext = {
+      (req as AuthenticatedRequest).userContext = {
         userId: 'test-user-123',
         username: 'test.user',
         email: 'test@example.com',
@@ -72,7 +83,7 @@ describe('User Routes', () => {
       const multiRoleApp = express();
       multiRoleApp.use(express.json());
       multiRoleApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'exec-user',
           username: 'exec.user',
           email: 'exec@example.com',
@@ -108,7 +119,7 @@ describe('User Routes', () => {
       const noEmailApp = express();
       noEmailApp.use(express.json());
       noEmailApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'user-no-email',
           username: 'no.email',
           roles: ['user'],
@@ -128,7 +139,7 @@ describe('User Routes', () => {
       const noGroupsApp = express();
       noGroupsApp.use(express.json());
       noGroupsApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'user-no-groups',
           username: 'no.groups',
           email: 'nogroups@example.com',
@@ -169,7 +180,7 @@ describe('User Routes', () => {
       const execApp = express();
       execApp.use(express.json());
       execApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'exec-123',
           username: 'exec.user',
           roles: ['executive'],
@@ -189,7 +200,7 @@ describe('User Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.accessibleDataSources).toHaveLength(4);
-      expect(response.body.accessibleDataSources.map((s: any) => s.name)).toEqual([
+      expect(response.body.accessibleDataSources.map((s: { name: string; description: string }) => s.name)).toEqual([
         'mcp-hr',
         'mcp-finance',
         'mcp-sales',
@@ -201,7 +212,7 @@ describe('User Routes', () => {
       const noAccessApp = express();
       noAccessApp.use(express.json());
       noAccessApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'guest-123',
           username: 'guest.user',
           roles: ['guest'],

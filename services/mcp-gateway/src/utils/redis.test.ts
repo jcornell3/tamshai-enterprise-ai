@@ -8,8 +8,10 @@
  */
 
 // Mock ioredis before importing redis module
-jest.mock('ioredis', () => require('ioredis-mock'));
+import ioredisMock from 'ioredis-mock';
+jest.mock('ioredis', () => ioredisMock);
 
+import type Redis from 'ioredis';
 import {
   storePendingConfirmation,
   getPendingConfirmation,
@@ -24,7 +26,7 @@ import redis from './redis';
 describe('Pending Confirmation Management', () => {
   beforeEach(async () => {
     // Clear Redis before each test
-    await (redis as any).flushall();
+    await (redis as unknown as Redis).flushall();
   });
 
   afterAll(async () => {
@@ -201,7 +203,7 @@ describe('Pending Confirmation Management', () => {
 
 describe('Token Revocation Caching', () => {
   beforeEach(async () => {
-    await (redis as any).flushall();
+    await (redis as unknown as Redis).flushall();
   });
 
   afterAll(async () => {
@@ -345,7 +347,7 @@ describe('Token Revocation Caching', () => {
 
 describe('Edge Cases and Error Handling', () => {
   beforeEach(async () => {
-    await (redis as any).flushall();
+    await (redis as unknown as Redis).flushall();
   });
 
   afterAll(async () => {

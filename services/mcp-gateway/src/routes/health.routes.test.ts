@@ -7,6 +7,7 @@
 import request from 'supertest';
 import express, { Express } from 'express';
 import healthRoutes from './health.routes';
+import * as redisModule from '../utils/redis';
 
 // Mock the redis utility
 jest.mock('../utils/redis', () => ({
@@ -22,8 +23,7 @@ describe('Health Routes', () => {
     jest.clearAllMocks();
 
     // Get the mocked function
-    const redisModule = require('../utils/redis');
-    mockGetTokenRevocationStats = redisModule.getTokenRevocationStats;
+    mockGetTokenRevocationStats = redisModule.getTokenRevocationStats as jest.Mock;
 
     // Create test Express app
     app = express();

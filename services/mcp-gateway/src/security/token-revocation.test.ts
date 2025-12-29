@@ -9,9 +9,24 @@
  */
 
 // Use ioredis-mock for basic tests
-jest.mock('ioredis', () => require('ioredis-mock'));
+import ioredisMock from 'ioredis-mock';
+jest.mock('ioredis', () => ioredisMock);
 
 import { Request, Response, NextFunction } from 'express';
+
+// Authenticated request type for tests
+interface AuthenticatedRequest extends Request {
+  user?: {
+    jti?: string;
+    sub?: string;
+    iat?: number;
+  };
+  auth?: {
+    jti?: string;
+    sub?: string;
+    iat?: number;
+  };
+}
 import {
   RedisTokenRevocationService,
   handleKeycloakEvent,
@@ -137,7 +152,7 @@ describe('createRevocationMiddleware', () => {
   });
 
   test('calls next() when token is valid', async () => {
-    (req as any).user = {
+    (req as AuthenticatedRequest).user = {
       jti: 'valid-jti-123',
       sub: 'user-123',
       iat: Math.floor(Date.now() / 1000),
@@ -150,7 +165,7 @@ describe('createRevocationMiddleware', () => {
   });
 
   test('checks req.auth if req.user is not present', async () => {
-    (req as any).auth = {
+    (req as AuthenticatedRequest).auth = {
       jti: 'valid-jti-456',
       sub: 'user-456',
       iat: Math.floor(Date.now() / 1000),
@@ -170,7 +185,7 @@ describe('createRevocationMiddleware', () => {
   });
 
   test('rejects requests with missing jti claim', async () => {
-    (req as any).user = {
+    (req as AuthenticatedRequest).user = {
       sub: 'user-123',
       iat: 1640000000,
     };
@@ -182,7 +197,7 @@ describe('createRevocationMiddleware', () => {
   });
 
   test('rejects requests with missing sub claim', async () => {
-    (req as any).user = {
+    (req as AuthenticatedRequest).user = {
       jti: 'jti-123',
       iat: 1640000000,
     };
@@ -194,7 +209,7 @@ describe('createRevocationMiddleware', () => {
   });
 
   test('rejects requests with missing iat claim', async () => {
-    (req as any).user = {
+    (req as AuthenticatedRequest).user = {
       jti: 'jti-123',
       sub: 'user-123',
     };

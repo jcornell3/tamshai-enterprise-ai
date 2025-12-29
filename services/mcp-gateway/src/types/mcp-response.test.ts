@@ -7,9 +7,6 @@
 
 import {
   MCPToolResponse,
-  MCPSuccessResponse,
-  MCPErrorResponse,
-  MCPPendingConfirmationResponse,
   PaginationMetadata,
   isSuccessResponse,
   isErrorResponse,

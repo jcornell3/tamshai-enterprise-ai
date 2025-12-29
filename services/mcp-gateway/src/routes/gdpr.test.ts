@@ -8,8 +8,18 @@
  */
 
 import request from 'supertest';
-import express, { Express } from 'express';
+import express, { Express, Request } from 'express';
 import gdprRoutes from './gdpr';
+
+// Authenticated request type for tests
+interface AuthenticatedRequest extends Request {
+  userContext?: {
+    userId: string;
+    username: string;
+    email?: string;
+    roles: string[];
+  };
+}
 
 // Mock uuid to return unique predictable IDs
 let uuidCounter = 0;
@@ -31,7 +41,7 @@ describe('GDPR Routes', () => {
     // Add middleware to inject userContext for testing
     app.use((req, _res, next) => {
       // Default: hr-write role (authorized)
-      (req as any).userContext = {
+      (req as AuthenticatedRequest).userContext = {
         userId: 'test-user-123',
         username: 'test.user',
         email: 'test@example.com',
@@ -58,7 +68,7 @@ describe('GDPR Routes', () => {
       const testApp = express();
       testApp.use(express.json());
       testApp.use((req, _res, next) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'security-admin-123',
           username: 'security.admin',
           roles: ['security-admin'],
@@ -78,7 +88,7 @@ describe('GDPR Routes', () => {
       const testApp = express();
       testApp.use(express.json());
       testApp.use((req, _res, next) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'regular-user-123',
           username: 'regular.user',
           roles: ['user'],

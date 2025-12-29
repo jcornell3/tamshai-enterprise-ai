@@ -6,6 +6,17 @@
 
 import request from 'supertest';
 import express, { Express, Request, Response, NextFunction } from 'express';
+import * as redisUtils from './utils/redis';
+
+// Authenticated request type for tests
+interface AuthenticatedRequest extends Request {
+  userContext?: {
+    userId: string;
+    username: string;
+    email?: string;
+    roles: string[];
+  };
+}
 
 // Mock external dependencies before imports
 jest.mock('@anthropic-ai/sdk');
@@ -35,7 +46,7 @@ describe('MCP Gateway Routes', () => {
 
     // Mock auth middleware to inject userContext
     app.use((req: Request, _res: Response, next: NextFunction) => {
-      (req as any).userContext = {
+      (req as AuthenticatedRequest).userContext = {
         userId: 'test-user-123',
         username: 'test.user',
         email: 'test@example.com',
@@ -100,7 +111,7 @@ describe('MCP Gateway Routes', () => {
   describe('User Info Endpoint', () => {
     beforeEach(() => {
       app.get('/api/user', (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
 
         if (!userContext) {
           res.status(401).json({ error: 'Authentication required' });
@@ -132,7 +143,7 @@ describe('MCP Gateway Routes', () => {
       const unauthApp = express();
       unauthApp.use(express.json());
       unauthApp.get('/api/user', (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
 
         if (!userContext) {
           res.status(401).json({ error: 'Authentication required' });
@@ -152,7 +163,7 @@ describe('MCP Gateway Routes', () => {
   describe('MCP Tools Listing Endpoint', () => {
     beforeEach(() => {
       app.get('/api/mcp/tools', (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
 
         if (!userContext) {
           res.status(401).json({ error: 'Authentication required' });
@@ -167,7 +178,7 @@ describe('MCP Gateway Routes', () => {
 
         // Filter accessible servers
         const accessibleServers = mcpServers.filter(server =>
-          server.requiredRoles.some(role => userContext.roles.includes(role))
+          server.requiredRoles.some(role => userContext!.roles.includes(role))
         );
 
         res.json({
@@ -195,7 +206,7 @@ describe('MCP Gateway Routes', () => {
       const execApp = express();
       execApp.use(express.json());
       execApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'exec-user',
           username: 'executive.user',
           roles: ['executive'],
@@ -203,7 +214,7 @@ describe('MCP Gateway Routes', () => {
         next();
       });
       execApp.get('/api/mcp/tools', (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
 
         const mcpServers = [
           { name: 'mcp-hr', requiredRoles: ['hr-read', 'hr-write', 'executive'] },
@@ -211,7 +222,7 @@ describe('MCP Gateway Routes', () => {
         ];
 
         const accessibleServers = mcpServers.filter(server =>
-          server.requiredRoles.some(role => userContext.roles.includes(role))
+          server.requiredRoles.some(role => userContext!.roles.includes(role))
         );
 
         res.json({
@@ -233,10 +244,11 @@ describe('MCP Gateway Routes', () => {
 
   describe('Confirmation Endpoint', () => {
     beforeEach(() => {
-      const { getPendingConfirmation, deletePendingConfirmation } = require('./utils/redis');
+      const getPendingConfirmation = redisUtils.getPendingConfirmation as jest.Mock;
+      const deletePendingConfirmation = redisUtils.deletePendingConfirmation as jest.Mock;
 
       app.post('/api/confirm/:confirmationId', async (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
         const { confirmationId } = req.params;
         const { approved } = req.body;
 
@@ -299,13 +311,13 @@ describe('MCP Gateway Routes', () => {
     });
 
     test('returns 404 for non-existent confirmation', async () => {
-      const { getPendingConfirmation } = require('./utils/redis');
+      const getPendingConfirmation = redisUtils.getPendingConfirmation as jest.Mock;
 
       // Create a new app instance with updated mock
       const testApp = express();
       testApp.use(express.json());
       testApp.use((req: Request, _res: Response, next: NextFunction) => {
-        (req as any).userContext = {
+        (req as AuthenticatedRequest).userContext = {
           userId: 'test-user-123',
           username: 'test.user',
           roles: ['hr-read'],
@@ -316,7 +328,7 @@ describe('MCP Gateway Routes', () => {
       getPendingConfirmation.mockResolvedValueOnce(null);
 
       testApp.post('/api/confirm/:confirmationId', async (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
         const { confirmationId } = req.params;
 
         if (!userContext) {
@@ -383,9 +395,9 @@ describe('MCP Gateway Routes', () => {
   describe('Role-Based Access Control', () => {
     test('denies access to finance endpoints for hr-read role', async () => {
       app.get('/api/finance/data', (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
         const requiredRoles = ['finance-read', 'finance-write', 'executive'];
-        const hasAccess = requiredRoles.some(role => userContext.roles.includes(role));
+        const hasAccess = requiredRoles.some(role => userContext!.roles.includes(role));
 
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
@@ -403,9 +415,9 @@ describe('MCP Gateway Routes', () => {
 
     test('allows access to hr endpoints for hr-read role', async () => {
       app.get('/api/hr/data', (req: Request, res: Response) => {
-        const userContext = (req as any).userContext;
+        const userContext = (req as AuthenticatedRequest).userContext;
         const requiredRoles = ['hr-read', 'hr-write', 'executive'];
-        const hasAccess = requiredRoles.some(role => userContext.roles.includes(role));
+        const hasAccess = requiredRoles.some(role => userContext!.roles.includes(role));
 
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
