@@ -4,10 +4,11 @@
  * Tests Redis-backed token revocation functionality.
  */
 
-import { RedisTokenRevocationService, handleKeycloakEvent } from './token-revocation';
-
 // Use ioredis-mock for deterministic, fast unit tests without external dependencies
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock('ioredis', () => require('ioredis-mock'));
+
+import { RedisTokenRevocationService, handleKeycloakEvent } from './token-revocation';
 
 describe('RedisTokenRevocationService', () => {
   let service: RedisTokenRevocationService;
