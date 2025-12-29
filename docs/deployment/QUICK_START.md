@@ -628,6 +628,116 @@ See [Production Deployment Guide](./PRODUCTION.md) for details.
 
 ---
 
+## Staging Environment
+
+### Current Deployment
+
+**Status**: ✅ Operational (deployed 2025-12-29 03:29 UTC)
+
+**Infrastructure:**
+- **VPS**: Hetzner CPX31 (4 vCPU, 8GB RAM, 160GB NVMe)
+- **IP**: 5.78.159.29
+- **Location**: Helsinki, Finland
+- **Domain**: tamshai.com (via Cloudflare)
+
+**Services Running:**
+- All 18 containers healthy
+- Caddy reverse proxy serving website
+- Vault for secrets management
+- Full stack: PostgreSQL, MongoDB, Redis, Elasticsearch, MinIO
+
+**Access:**
+- Website: http://tamshai.com (pending Cloudflare DNS)
+- Direct IP: http://5.78.159.29 (with Host header)
+- Vault: https://5.78.159.29:8200
+- MCP Gateway: http://5.78.159.29:3100
+
+### Cloudflare Configuration
+
+Since tamshai.com is hosted on Cloudflare, follow these steps to connect to the VPS:
+
+#### Step 1: Configure DNS Record
+
+In Cloudflare Dashboard:
+1. Go to **DNS** tab
+2. Add/Update A record:
+   ```
+   Type: A
+   Name: @ (for tamshai.com) or www
+   IPv4 Address: 5.78.159.29
+   Proxy status: Proxied (orange cloud icon)
+   TTL: Auto
+   ```
+
+#### Step 2: Set SSL/TLS Mode
+
+In Cloudflare Dashboard → **SSL/TLS** tab:
+- **Recommended**: **Flexible** (Cloudflare ↔ Visitor: HTTPS, Cloudflare ↔ Origin: HTTP)
+- **Alternative**: **Full** (requires HTTPS on origin - Caddy will auto-provision)
+
+**Why Flexible is fine:**
+- Caddy is behind Cloudflare's proxy
+- Cloudflare handles all public SSL/TLS
+- Origin server (VPS) only needs HTTP
+- Cloudflare provides DDoS protection and caching
+
+#### Step 3: Verify Connection
+
+After DNS propagates (5-10 minutes):
+```bash
+# Test from your machine
+curl -I https://tamshai.com
+curl -I https://www.tamshai.com
+
+# Should return HTTP 200 and serve website
+```
+
+#### Optional: Cloudflare Page Rules
+
+Add page rules for better performance:
+1. **Cache Everything** for static content:
+   ```
+   URL: tamshai.com/assets/*
+   Settings: Cache Level = Cache Everything
+   ```
+
+2. **Redirect www to apex**:
+   ```
+   URL: www.tamshai.com/*
+   Settings: Forwarding URL (301) = https://tamshai.com/$1
+   ```
+
+### Future Subdomain Routing
+
+When ready to expose applications, update Caddyfile on VPS:
+
+```bash
+ssh -i ~/.ssh/tamshai_staging root@5.78.159.29
+
+# Edit Caddyfile
+nano /opt/caddy/Caddyfile
+
+# Add subdomain routing:
+# app.tamshai.com {
+#     reverse_proxy localhost:4000  # Web portal
+# }
+#
+# api.tamshai.com {
+#     reverse_proxy localhost:8100  # Kong Gateway
+# }
+#
+# auth.tamshai.com {
+#     reverse_proxy localhost:8180  # Keycloak
+# }
+
+# Restart Caddy
+cd /opt/caddy && docker compose restart
+```
+
+Then add corresponding A records in Cloudflare for each subdomain.
+
+---
+
 ## Support & Resources
 
 - **Documentation**: `docs/architecture/V1.4_IMPLEMENTATION_SUMMARY.md`

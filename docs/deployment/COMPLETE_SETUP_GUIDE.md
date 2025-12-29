@@ -695,3 +695,47 @@ See individual guides:
 - [Vault Docs](https://developer.hashicorp.com/vault/docs)
 - [GitHub Actions Docs](https://docs.github.com/en/actions)
 - [Hetzner Cloud Docs](https://docs.hetzner.com/cloud/)
+
+---
+
+## Deployment History
+
+### Staging Environment - December 28, 2025
+
+**Infrastructure:**
+- **VPS**: Hetzner CPX31 (4 vCPU, 8GB RAM, 160GB NVMe)
+- **IP**: 5.78.159.29
+- **Location**: Helsinki, Finland
+- **OS**: Ubuntu 24.04 LTS
+- **Cost**: €11.90/month
+
+**Timeline:**
+- **Deployed**: 2025-12-29 03:29 UTC
+- **Status**: ✅ All services operational
+
+**Components Deployed:**
+- ✅ HashiCorp Vault 1.15.4 (https://5.78.159.29:8200)
+- ✅ 18 Docker containers (all healthy)
+- ✅ Caddy reverse proxy (serving tamshai.com)
+- ✅ UFW firewall + Fail2ban
+- ✅ SSH key-based authentication only
+
+**Services:**
+- MCP Gateway + 4 MCP servers (HR, Finance, Sales, Support)
+- Kong API Gateway
+- Keycloak authentication
+- PostgreSQL, MongoDB, Redis, Elasticsearch, MinIO
+- 5 web applications (Portal, HR, Finance, Sales, Support)
+
+**Vault Configuration:**
+- Unseal keys stored in GitHub Secrets
+- TLS with self-signed certificates
+- Ready for secrets management
+
+**Pending Configuration:**
+- ⏳ Cloudflare DNS → 5.78.159.29
+- ⏳ SSL/TLS mode: Flexible or Full
+- ⏳ Keycloak realm import
+- ⏳ Flutter client connection test
+
+See [VPS_SETUP_GUIDE.md](VPS_SETUP_GUIDE.md) for complete deployment details.
