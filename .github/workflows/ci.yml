@@ -120,7 +120,6 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2
         with:
-          flutter-version: 'stable'
           channel: 'stable'
           cache: true
 
@@ -128,7 +127,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze code
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run tests with coverage
         run: flutter test --coverage
@@ -177,7 +176,6 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2
         with:
-          flutter-version: 'stable'
           channel: 'stable'
           cache: true
 

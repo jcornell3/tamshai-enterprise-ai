@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+// ignore: depend_on_referenced_packages
+import 'package:flutter_riverpod/legacy.dart'; // For StateNotifier (Riverpod 3.0+)
+import 'package:logger/logger.dart';
 import 'package:unified_flutter/features/chat/widgets/chat_input.dart';
+import 'package:unified_flutter/core/speech/providers/speech_provider.dart';
+import 'package:unified_flutter/core/speech/models/speech_state.dart';
 
 void main() {
   group('ChatInput', () {
@@ -23,17 +29,27 @@ void main() {
       bool isStreaming = false,
       VoidCallback? onSend,
       VoidCallback? onCancel,
+      SpeechState? mockSpeechState,
     }) {
-      return MaterialApp(
-        theme: ThemeData.light(useMaterial3: true),
-        home: Scaffold(
-          body: ChatInput(
-            controller: controller,
-            focusNode: focusNode,
-            isLoading: isLoading,
-            isStreaming: isStreaming,
-            onSend: onSend ?? () {},
-            onCancel: onCancel ?? () {},
+      // Default speech state for testing
+      final speechState = mockSpeechState ?? const SpeechState();
+
+      return ProviderScope(
+        overrides: [
+          // Override the speech provider with a test notifier
+          speechProvider.overrideWith((ref) => TestSpeechNotifier(speechState)),
+        ],
+        child: MaterialApp(
+          theme: ThemeData.light(useMaterial3: true),
+          home: Scaffold(
+            body: ChatInput(
+              controller: controller,
+              focusNode: focusNode,
+              isLoading: isLoading,
+              isStreaming: isStreaming,
+              onSend: onSend ?? () {},
+              onCancel: onCancel ?? () {},
+            ),
           ),
         ),
       );
@@ -43,7 +59,7 @@ void main() {
       await tester.pumpWidget(buildTestWidget());
 
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('Type a message...'), findsOneWidget);
+      expect(find.text('Type a message or hold mic to speak...'), findsOneWidget);
     });
 
     testWidgets('shows streaming hint when streaming', (tester) async {
@@ -143,4 +159,35 @@ void main() {
       expect(container.constraints?.maxHeight, 150);
     });
   });
+}
+
+/// Test speech notifier for mocking speech provider
+///
+/// This mock prevents actual speech recognition from running during tests
+class TestSpeechNotifier extends SpeechNotifier {
+  final SpeechState _initialState;
+
+  TestSpeechNotifier(this._initialState) : super(logger: Logger()) {
+    // Override initial state after construction
+    state = _initialState;
+  }
+
+  @override
+  Future<bool> startListening() async {
+    // Don't actually start speech recognition in tests
+    state = state.copyWith(isListening: true);
+    return true;
+  }
+
+  @override
+  Future<void> stopListening() async {
+    // Don't actually stop speech recognition in tests
+    state = state.copyWith(isListening: false);
+  }
+
+  @override
+  Future<void> cancelListening() async {
+    // Don't actually cancel speech recognition in tests
+    state = state.copyWith(isListening: false);
+  }
 }

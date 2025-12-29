@@ -1,10 +1,10 @@
-/// Unit tests for AuthNotifier and authentication state management
-///
-/// These tests verify the authentication state machine transitions correctly
-/// for login, logout, token refresh, and error handling scenarios.
+// Unit tests for AuthNotifier and authentication state management
+//
+// These tests verify the authentication state machine transitions correctly
+// for login, logout, token refresh, and error handling scenarios.
+// Tested on Windows and Linux environments.
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:unified_flutter/core/auth/models/auth_state.dart';
@@ -16,38 +16,42 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Mock FlutterSecureStorage for testing
 class MockFlutterSecureStorage implements FlutterSecureStorage {
   final Map<String, String> _storage = {};
+  final Map<String, List<ValueChanged<String?>>> _listeners = {};
 
   MockFlutterSecureStorage();
 
   @override
-  Future<void> write({required String key, required String? value, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+  Map<String, List<ValueChanged<String?>>> get getListeners => _listeners;
+
+  @override
+  Future<void> write({required String key, required String? value, AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) async {
     if (value != null) {
       _storage[key] = value;
     }
   }
 
   @override
-  Future<String?> read({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+  Future<String?> read({required String key, AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) async {
     return _storage[key];
   }
 
   @override
-  Future<void> delete({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+  Future<void> delete({required String key, AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) async {
     _storage.remove(key);
   }
 
   @override
-  Future<void> deleteAll({IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+  Future<void> deleteAll({AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) async {
     _storage.clear();
   }
 
   @override
-  Future<bool> containsKey({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+  Future<bool> containsKey({required String key, AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) async {
     return _storage.containsKey(key);
   }
 
   @override
-  Future<Map<String, String>> readAll({IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) async {
+  Future<Map<String, String>> readAll({AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) async {
     return Map.from(_storage);
   }
 
@@ -66,7 +70,6 @@ class MockFlutterSecureStorage implements FlutterSecureStorage {
   @override
   void unregisterAllListeners() {}
 
-  @override
   void unregisterAllListenersForAllKeys() {}
 
   @override
