@@ -1601,4 +1601,16 @@ startServer().catch((error) => {
   process.exit(1);
 });
 
+// Export internal functions for unit testing
+// Only used in test environment
+export {
+  sanitizeForLog,
+  getAccessibleMCPServers,
+  getDeniedMCPServers,
+  isValidToolName,
+  validateToken,
+  queryMCPServer,
+  mcpServerConfigs,
+};
+
 export default app;
