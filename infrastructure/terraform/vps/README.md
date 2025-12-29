@@ -49,8 +49,8 @@ email = "johncornell@tamshai.com"
 claude_api_key = "sk-ant-api03-..."  # Update this
 
 # Optional - Hetzner configuration
-region = "ash"  # ash (Ashburn VA), nbg1 (Germany), fsn1 (Germany), hel1 (Finland)
-vps_size = "cx31"  # cx31 = 2 vCPU, 8GB RAM (~$10/mo)
+region = "hil"  # hil (Hillsboro OR), ash (Ashburn VA), nbg1 (Germany), fsn1 (Germany), hel1 (Finland)
+vps_size = "cpx31"  # cpx31 = 4 vCPU AMD, 8GB RAM (~$13/mo)
 environment = "staging"
 ```
 
@@ -238,15 +238,17 @@ Cloudflare handles TLS automatically. If HTTPS not working:
 
 ## Cost Estimates
 
-| Provider | Size | Monthly Cost |
-|----------|------|--------------|
-| DigitalOcean | s-2vcpu-4gb | ~$24 |
-| DigitalOcean | s-4vcpu-8gb | ~$48 |
-| Hetzner | CX21 (4GB) | ~$5 |
-| Hetzner | CX31 (8GB) | ~$10 |
-| Hetzner | CX41 (16GB) | ~$18 |
+| Provider | Size | vCPUs | RAM | Monthly Cost |
+|----------|------|-------|-----|--------------|
+| DigitalOcean | s-2vcpu-4gb | 2 | 4GB | ~$24 |
+| DigitalOcean | s-4vcpu-8gb | 4 | 8GB | ~$48 |
+| Hetzner | CX21 (Intel) | 2 | 4GB | ~$5 |
+| Hetzner | CX31 (Intel) | 2 | 8GB | ~$10 |
+| Hetzner | CPX21 (AMD) | 3 | 4GB | ~$7 |
+| **Hetzner** | **CPX31 (AMD)** | **4** | **8GB** | **~$13** ← **Current** |
+| Hetzner | CPX41 (AMD) | 8 | 16GB | ~$26 |
 
-Recommendation: Start with Hetzner CX31 for staging (~$10/month).
+**Currently Deployed**: Hetzner CPX31 in Hillsboro, OR (~$13/month)
 
 ## Cleanup
 
