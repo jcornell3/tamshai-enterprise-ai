@@ -624,3 +624,117 @@ Before going to production:
 **Estimated Total Time**: 30-45 minutes
 **Cost**: ~€11.90/month (Hetzner CPX31)
 **Status**: Production-ready deployment ✅
+
+---
+
+## Deployment History
+
+### Staging Deployment - December 28, 2025
+
+**VPS Details:**
+- **Provider**: Hetzner
+- **Plan**: CPX31 (4 vCPU, 8GB RAM, 160GB NVMe)
+- **IP**: 5.78.159.29
+- **Location**: Helsinki, Finland
+- **OS**: Ubuntu 24.04 LTS
+- **Cost**: €11.90/month
+
+**Deployment Timeline:**
+- **Start**: 2025-12-28 22:00 UTC
+- **Completion**: 2025-12-29 03:29 UTC
+- **Total Duration**: ~5.5 hours (including documentation)
+
+**Phases Completed:**
+1. ✅ **SSH Hardening** (15 min)
+   - Ed25519 key-based authentication configured
+   - Password authentication disabled
+   - Cloud-init override fixed
+
+2. ✅ **Core Dependencies** (20 min)
+   - Docker CE 29.1.3 installed
+   - Docker Compose v5.0.0 installed
+   - UFW firewall configured (ports: 22, 80, 443, 8200)
+   - Fail2ban enabled (2 IPs already banned)
+
+3. ✅ **HashiCorp Vault** (15 min)
+   - Vault 1.15.4 installed
+   - TLS self-signed certificates generated
+   - Vault initialized with 5 unseal keys (threshold: 3)
+   - Unseal keys stored in GitHub Secrets
+   - Vault accessible at: https://5.78.159.29:8200
+
+4. ✅ **Tamshai Services** (2.5 hours)
+   - Repository cloned to `/opt/tamshai`
+   - Environment configured with staging API key
+   - All 11 Docker images built successfully
+   - 18 containers started and verified healthy
+
+**Services Deployed:**
+
+Infrastructure (7 services):
+- PostgreSQL 16 → 5.78.159.29:5433
+- MongoDB 7 → 5.78.159.29:27018
+- Redis 7 → 5.78.159.29:6380
+- Elasticsearch 8.11 → 5.78.159.29:9201
+- MinIO → 5.78.159.29:9100 (API), 9102 (Console)
+- Keycloak 24.0 → 5.78.159.29:8180
+- Kong 3.4 → 5.78.159.29:8100
+
+MCP Servers (5 services):
+- MCP Gateway v0.1.0 → 5.78.159.29:3100
+- MCP HR → 5.78.159.29:3101
+- MCP Finance → 5.78.159.29:3102
+- MCP Sales → 5.78.159.29:3103
+- MCP Support → 5.78.159.29:3104
+
+Web Applications (6 services):
+- Portal → 5.78.159.29:4000
+- HR → 5.78.159.29:4001
+- Finance → 5.78.159.29:4002
+- Sales → 5.78.159.29:4003
+- Support → 5.78.159.29:4004
+- Public Website → 5.78.159.29:8080
+
+**Health Check Results:**
+```json
+MCP Gateway: {"status":"healthy","version":"0.1.0","components":{"tokenRevocationCache":{"status":"healthy"}}}
+Kong Gateway: {"status":"healthy","version":"0.1.0","components":{"tokenRevocationCache":{"status":"healthy"}}}
+Keycloak: {"status":"UP","checks":[]}
+```
+
+**Docker Images Built:**
+- tamshai-dev-mcp-gateway: 337MB
+- tamshai-dev-mcp-hr: 247MB
+- tamshai-dev-mcp-finance: 211MB
+- tamshai-dev-mcp-sales: 220MB
+- tamshai-dev-mcp-support: 252MB
+- tamshai-dev-web-portal: 81.6MB
+- tamshai-dev-web-hr: 81.8MB
+- tamshai-dev-web-finance: 81.7MB
+- tamshai-dev-web-sales: 81.8MB
+- tamshai-dev-web-support: 81.8MB
+- tamshai-dev-tamshai-website: 202MB
+
+**Issues Encountered & Resolved:**
+1. **SSH service name**: Ubuntu uses `ssh` not `sshd` service name
+2. **Cloud-init override**: `/etc/ssh/sshd_config.d/50-cloud-init.conf` re-enabled password auth; fixed by updating override file
+3. **Docker repository**: `docker.io` not in default repos; added official Docker repository instead
+4. **GitHub CLI path**: Used full path `C:/Program Files/GitHub CLI/gh.exe` to access gh command
+
+**Security Measures:**
+- ✅ SSH key-based authentication only
+- ✅ UFW firewall active
+- ✅ Fail2ban protecting SSH
+- ✅ Vault unseal keys stored in GitHub Secrets (7 secrets)
+- ✅ Strong random passwords generated for all services
+- ⚠️ Self-signed TLS certs (production will use Let's Encrypt)
+
+**Next Steps:**
+1. Configure reverse proxy with Caddy + Let's Encrypt
+2. Point domain to VPS IP
+3. Import Keycloak realm configuration
+4. Test OAuth flow with Flutter client
+5. Set up automated backups
+6. Configure monitoring/alerting
+
+**Deployment Status**: ✅ **SUCCESSFUL** - All 18 services healthy and operational
