@@ -2,21 +2,25 @@ coverage:
   precision: 2
   round: down
   status:
+    # Overall project coverage (informational, won't block PRs)
     project:
       default:
-        target: 70%
-        threshold: 5%
+        target: auto  # Track trend, don't enforce absolute threshold yet
+        threshold: 1%  # Allow small drops
         if_ci_failed: error
+        informational: true  # Don't block PR merges on overall coverage
+    # Diff coverage (ENFORCED - requires 90%+ on new code)
     patch:
       default:
-        target: 70%
-        threshold: 5%
+        target: 90%  # Require 90% coverage on new/changed code
+        threshold: 0%  # No tolerance for drops
         only_pulls: true
+        informational: false  # BLOCK PR if diff coverage < 90%
 
 comment:
-  layout: "reach,diff,flags,files"
+  layout: "diff, files, footer"  # Put diff coverage first (most important)
   behavior: default
-  require_changes: true
+  require_changes: false  # Always comment, even if no change
 
 flags:
   gateway:
