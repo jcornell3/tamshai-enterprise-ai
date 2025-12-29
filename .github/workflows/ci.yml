@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
 
 # Default minimal permissions for all jobs
-# Phase 1: Removed unused actions:read and pull-requests:write
+# Phase 3: Simplified to single default permission (contents:read)
+# Security jobs explicitly grant security-events:write when needed
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
