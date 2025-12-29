@@ -66,6 +66,14 @@ env:
 permissions:
   contents: read
   deployments: write
+  packages: none
+  statuses: write
+  actions: none
+  checks: none
+  pages: none
+  pull-requests: none
+  repository-projects: none
+  security-events: none
 
 jobs:
   # =============================================================================
