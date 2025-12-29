@@ -8,11 +8,10 @@ on:
   workflow_dispatch:
 
 # Default minimal permissions for all jobs
+# Phase 1: Removed unused actions:read and pull-requests:write
 permissions:
   contents: read
   security-events: write
-  actions: read
-  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,7 +27,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     services:
       redis:
@@ -114,7 +112,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
     defaults:
       run:
         working-directory: clients/unified_flutter
@@ -168,7 +165,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
     defaults:
       run:
         working-directory: clients/unified_flutter
@@ -203,7 +199,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -244,7 +239,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -269,7 +263,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -296,7 +289,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -316,7 +308,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -340,7 +331,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     services:
       redis:
@@ -385,7 +375,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     services:
       redis:
@@ -456,7 +445,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     services:
       redis:
@@ -522,7 +510,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -575,7 +562,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     strategy:
       matrix:
@@ -619,7 +605,6 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      actions: read
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
