@@ -531,6 +531,7 @@ The project includes Terraform configuration for fully automated VPS deployment 
 | **Cloud Provider Account** | [DigitalOcean](https://cloud.digitalocean.com/account/api/tokens) or [Hetzner](https://console.hetzner.cloud/) |
 | **Domain Name** | With DNS access to create A record |
 | **Claude API Key** | From [Anthropic Console](https://console.anthropic.com/settings/keys) |
+| **SSH Hardening** | **Important:** Follow [SSH hardening guidelines](./COMPLETE_SETUP_GUIDE.md#step-63-production-hardening) after deployment |
 
 #### Cost Estimates
 

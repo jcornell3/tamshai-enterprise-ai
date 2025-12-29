@@ -25,8 +25,18 @@ terraform {
     }
   }
 
-  # Backend configuration for encrypted state storage
-  # Uncomment and configure for production use
+  # Terraform Cloud backend for encrypted state storage
+  # Provides state locking, encryption, and version history
+  # See: docs/deployment/TERRAFORM_CLOUD_SETUP.md for setup instructions
+  cloud {
+    organization = "tamshai"  # Update with your organization name
+
+    workspaces {
+      name = "tamshai-production"  # Update with your workspace name
+    }
+  }
+
+  # Alternative: GCS backend (commented out - use Terraform Cloud instead)
   # backend "gcs" {
   #   bucket = "tamshai-terraform-state"
   #   prefix = "enterprise-ai"
