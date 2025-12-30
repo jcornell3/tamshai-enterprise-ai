@@ -130,6 +130,13 @@ variable "allowed_ssh_ips" {
   default     = [] # No SSH by default - fully automated
 }
 
+variable "root_password" {
+  description = "Root password for VPS console access (from VPS_PW env var)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # =============================================================================
 # PROVIDERS
 # =============================================================================
@@ -362,6 +369,7 @@ locals {
     mongodb_password     = random_password.mongodb_password.result
     minio_password       = random_password.minio_password.result
     jwt_secret           = random_password.jwt_secret.result
+    root_password        = var.root_password
   })
 }
 
