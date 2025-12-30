@@ -440,28 +440,33 @@ jobs:
             -H "Authorization: Bearer $ADMIN_TOKEN" \
             -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
 
-          # Wait for realm CONFIGURATION ENDPOINTS to be ready (not just realm metadata)
-          # Root cause: Realm metadata ready != configuration endpoints ready
-          # Solution: Test the actual roles endpoint we're about to use
-          echo "Waiting for tamshai-corp realm configuration endpoints to be ready..."
+          # Wait for realm WRITE OPERATIONS to be ready (GET working != POST working!)
+          # Discovery: Keycloak initializes read endpoints before write endpoints
+          # Solution: Test POST by creating a test role, then delete it
+          echo "Waiting for tamshai-corp realm write operations to be ready..."
           for i in {1..30}; do
-            # Test if roles endpoint is functional (returns 200 with empty array)
-            ROLES_ENDPOINT_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-              -X GET "http://localhost:8180/admin/realms/tamshai-corp/roles" \
-              -H "Authorization: Bearer $ADMIN_TOKEN" 2>/dev/null)
+            # Test if we can actually CREATE a role (not just read the endpoint)
+            TEST_ROLE_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+              -X POST "http://localhost:8180/admin/realms/tamshai-corp/roles" \
+              -H "Authorization: Bearer $ADMIN_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"name":"_test_readiness"}' 2>/dev/null)
 
-            if [ "$ROLES_ENDPOINT_STATUS" == "200" ]; then
-              echo "✅ Realm configuration endpoints ready! (attempt $i)"
-              sleep 3  # Final grace period
+            if [ "$TEST_ROLE_STATUS" == "201" ] || [ "$TEST_ROLE_STATUS" == "409" ]; then
+              echo "✅ Realm write operations ready! (attempt $i) - HTTP $TEST_ROLE_STATUS"
+              # Clean up test role if it was created
+              curl -sf -X DELETE "http://localhost:8180/admin/realms/tamshai-corp/roles/_test_readiness" \
+                -H "Authorization: Bearer $ADMIN_TOKEN" 2>/dev/null || true
+              sleep 2  # Final grace period
               break
             fi
 
             if [ $i -eq 30 ]; then
-              echo "❌ Realm configuration endpoints failed to initialize after 60 seconds"
-              echo "Roles endpoint returned: HTTP $ROLES_ENDPOINT_STATUS"
+              echo "❌ Realm write operations failed to initialize after 60 seconds"
+              echo "POST roles endpoint returned: HTTP $TEST_ROLE_STATUS"
               exit 1
             fi
-            echo "⏳ Realm not ready (HTTP $ROLES_ENDPOINT_STATUS), waiting... ($i/30)"
+            echo "⏳ Realm not ready for writes (HTTP $TEST_ROLE_STATUS), waiting... ($i/30)"
             sleep 2
           done
 
