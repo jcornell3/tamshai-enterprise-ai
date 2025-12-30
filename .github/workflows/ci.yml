@@ -72,8 +72,10 @@ jobs:
         if: matrix.node-version == '20'
         run: |
           # Extract coverage percentage from Jest output
-          # Jest config enforces 70% threshold - build will fail if not met
-          echo "Coverage threshold enforced by jest.config.js (70% minimum)"
+          # Jest enforces 31% overall coverage (legacy baseline)
+          # Codecov enforces 90% diff coverage on NEW code
+          echo "Overall coverage: 31% minimum (legacy baseline)"
+          echo "New code coverage: 90% minimum (enforced by Codecov)"
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == '20'
