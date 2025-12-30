@@ -378,9 +378,11 @@ jobs:
           # Wait for Keycloak to be ready (can take 60-90 seconds)
           echo "Waiting for Keycloak to start..."
           for i in {1..60}; do
-            # Keycloak 23.0 uses /health/ready for readiness checks
-            if curl -sf http://localhost:8180/health/ready > /dev/null 2>&1; then
+            # Check if Keycloak admin console is accessible (more reliable than health endpoints)
+            if curl -sf http://localhost:8180/ | grep -q "Keycloak" > /dev/null 2>&1; then
               echo "Keycloak is ready!"
+              # Give it a few more seconds to fully initialize
+              sleep 5
               break
             fi
             if [ $i -eq 60 ]; then
