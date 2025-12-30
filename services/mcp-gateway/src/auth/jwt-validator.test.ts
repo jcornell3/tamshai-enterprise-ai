@@ -276,7 +276,7 @@ describe('JWTValidator', () => {
         const mockHeader: jwt.JwtHeader = { kid: 'unknown-key', alg: 'RS256' };
         (getKey as (header: jwt.JwtHeader, cb: jwt.SigningKeyCallback) => void)(
           mockHeader,
-          (err, key) => {
+          (err) => {
             if (err) {
               callback(err);
             }
@@ -298,7 +298,7 @@ describe('JWTValidator', () => {
         const mockHeader: jwt.JwtHeader = { kid: 'test-key', alg: 'RS256' };
         (getKey as (header: jwt.JwtHeader, cb: jwt.SigningKeyCallback) => void)(
           mockHeader,
-          (err, key) => {
+          (err) => {
             if (err) {
               callback(err);
             }

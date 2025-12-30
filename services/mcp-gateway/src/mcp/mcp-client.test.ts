@@ -306,7 +306,7 @@ describe('MCPClient', () => {
     });
 
     it('should handle timeout errors (ECONNABORTED)', async () => {
-      const axiosError: any = new Error('timeout of 5000ms exceeded');
+      const axiosError = new Error('timeout of 5000ms exceeded') as Error & { code: string };
       axiosError.code = 'ECONNABORTED';
       (axios.isAxiosError as unknown as jest.Mock).mockReturnValueOnce(true);
       mockAxios.post.mockRejectedValue(axiosError);
