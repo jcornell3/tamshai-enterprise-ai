@@ -16,8 +16,10 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
-  pull_request:
-    branches: [main]
+  # NOTE: Disabled for pull requests - this is a deployment pipeline, not CI
+  # CI checks are handled by ci.yml workflow
+  # pull_request:
+  #   branches: [main]
   workflow_dispatch:  # Manual trigger
 
 env:
