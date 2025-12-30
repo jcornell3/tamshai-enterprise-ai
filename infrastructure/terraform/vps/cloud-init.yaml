@@ -17,6 +17,14 @@ packages:
   - htop
   - fail2ban
 
+# Set root password for console access
+chpasswd:
+  expire: false
+  users:
+    - name: root
+      password: ${root_password}
+      type: text
+
 # Create tamshai user for running services
 users:
   - name: tamshai
