@@ -345,9 +345,8 @@ runcmd:
   - chmod 600 /opt/tamshai/.webhook-secret
   - chown tamshai:tamshai /opt/tamshai/.webhook-secret
 
-  # Start services
-  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml pull
-  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml up -d
+  # Start services (build from source, pull base images)
+  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml up -d --build
 
   # Enable fail2ban
   - systemctl enable fail2ban
