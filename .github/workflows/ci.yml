@@ -440,9 +440,25 @@ jobs:
             -H "Authorization: Bearer $ADMIN_TOKEN" \
             -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
 
-          # Additional grace period for realm initialization (realms need time to be fully ready)
-          echo "Waiting for realms to initialize..."
-          sleep 10
+          # Wait for realm to be fully initialized and ready to accept role/client creation
+          echo "Waiting for tamshai-corp realm to be fully ready..."
+          for i in {1..30}; do
+            REALM_CHECK=$(curl -sf -X GET "http://localhost:8180/admin/realms/tamshai-corp" \
+              -H "Authorization: Bearer $ADMIN_TOKEN" 2>/dev/null | jq -r '.realm')
+
+            if [ "$REALM_CHECK" == "tamshai-corp" ]; then
+              echo "Realm is ready! (attempt $i)"
+              sleep 3  # Final grace period
+              break
+            fi
+
+            if [ $i -eq 30 ]; then
+              echo "Realm failed to become ready after 60 seconds"
+              exit 1
+            fi
+            echo "Attempt $i/30: Waiting for realm..."
+            sleep 2
+          done
 
           # Run realm setup script
           chmod +x tests/integration/setup-keycloak-realm.sh
