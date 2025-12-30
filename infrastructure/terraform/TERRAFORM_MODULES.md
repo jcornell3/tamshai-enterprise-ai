@@ -740,8 +740,8 @@ curl https://staging.tamshai.com/api/health
 # Or test locally with Docker Compose
 cd infrastructure/docker
 docker compose up -d
-curl http://localhost:8180/health
-curl http://localhost:3100/health
+curl http://localhost:8180/health/ready  # Keycloak
+curl http://localhost:3100/health  # MCP Gateway
 ```
 
 ### 6. Drift Detection

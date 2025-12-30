@@ -359,7 +359,7 @@ curl http://localhost:3101/health  # MCP HR
 curl http://localhost:3102/health  # MCP Finance
 curl http://localhost:3103/health  # MCP Sales
 curl http://localhost:3104/health  # MCP Support
-curl http://localhost:8180/health  # Keycloak
+curl http://localhost:8180/health/ready  # Keycloak (23.0 uses /health/ready)
 
 # Expected: {"status":"healthy",...}
 ```
