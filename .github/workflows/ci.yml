@@ -410,8 +410,60 @@ jobs:
             -u admin:admin \
             -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
 
-          # The integration test setup scripts will create users/clients programmatically
-          echo "Keycloak ready for integration tests"
+          # Wait for Admin API to be ready
+          echo "Waiting for Keycloak Admin API..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8180/admin/realms > /dev/null 2>&1; then
+              echo "Admin API ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Admin API failed to become ready"
+              docker logs keycloak
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Run realm setup script
+          chmod +x tests/integration/setup-keycloak-realm.sh
+          ./tests/integration/setup-keycloak-realm.sh
+        env:
+          KEYCLOAK_URL: http://localhost:8180
+          KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: admin
+
+      - name: Verify Keycloak Setup
+        run: |
+          # Get admin token
+          ADMIN_TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
+            -d "client_id=admin-cli" \
+            -d "username=admin" \
+            -d "password=admin" \
+            -d "grant_type=password" | jq -r '.access_token')
+
+          # Verify users
+          USER_COUNT=$(curl -sf -X GET http://localhost:8180/admin/realms/tamshai-corp/users \
+            -H "Authorization: Bearer $ADMIN_TOKEN" | jq '. | length')
+
+          echo "Users created: $USER_COUNT"
+          if [ "$USER_COUNT" -lt 8 ]; then
+            echo "Expected at least 8 users, got $USER_COUNT"
+            exit 1
+          fi
+
+          # Verify client
+          CLIENT=$(curl -sf -X GET "http://localhost:8180/admin/realms/tamshai-corp/clients?clientId=mcp-gateway" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.[0].clientId')
+
+          echo "Client created: $CLIENT"
+          if [ "$CLIENT" != "\"mcp-gateway\"" ]; then
+            echo "Client mcp-gateway not found"
+            exit 1
+          fi
+
+          echo "✅ Keycloak setup verified successfully"
 
       - name: Build MCP Gateway
         working-directory: services/mcp-gateway
@@ -462,6 +514,7 @@ jobs:
           CI: true
           KEYCLOAK_URL: http://localhost:8180
           KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_CLIENT_SECRET: test-client-secret
           GATEWAY_URL: http://localhost:3100
           REDIS_HOST: localhost
           REDIS_PORT: 6379
