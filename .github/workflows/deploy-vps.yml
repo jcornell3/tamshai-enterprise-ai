@@ -107,7 +107,21 @@ jobs:
           echo "should_deploy=true" >> $GITHUB_OUTPUT
 
       - name: Validate docker-compose.vps.yml
+        env:
+          # Default values for CI validation only (not used in real deployment)
+          TAMSHAI_DB_PASSWORD: ci_test_value
+          POSTGRES_PASSWORD: ci_test_value
+          KEYCLOAK_DB_PASSWORD: ci_test_value
+          MONGODB_PASSWORD: ci_test_value
+          MINIO_ROOT_PASSWORD: ci_test_value
+          KEYCLOAK_ADMIN_PASSWORD: ci_test_value
+          KEYCLOAK_ISSUER: http://localhost:8080/realms/tamshai
+          KEYCLOAK_URL: http://localhost:8080
+          KC_HOSTNAME: localhost
+          VITE_MCP_GATEWAY_URL: http://localhost:3100
+          VITE_KEYCLOAK_URL: http://localhost:8180
         run: |
+          # Validate docker-compose configuration (uses env vars above for syntax check)
           docker compose -f docker-compose.vps.yml config --quiet
 
   # =============================================================================
