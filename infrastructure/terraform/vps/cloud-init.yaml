@@ -327,17 +327,18 @@ runcmd:
   - curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
   - chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-  # Create application directory
-  - mkdir -p /opt/tamshai
-  - chown -R tamshai:tamshai /opt/tamshai
+  # Clone repository to temporary location (write_files already created /opt/tamshai)
+  - git clone --branch ${github_branch} ${github_repo} /tmp/tamshai-repo
 
-  # Clone repository
-  - cd /opt/tamshai && git clone --branch ${github_branch} ${github_repo} .
-  - chown -R tamshai:tamshai /opt/tamshai
+  # Move repository files to /opt/tamshai (merge with existing Caddyfile/scripts from write_files)
+  - cp -r /tmp/tamshai-repo/. /opt/tamshai/
+  - rm -rf /tmp/tamshai-repo
 
   # Move generated .env file from temp location
   - mv /tmp/tamshai.env /opt/tamshai/.env
-  - chown tamshai:tamshai /opt/tamshai/.env
+
+  # Set ownership
+  - chown -R tamshai:tamshai /opt/tamshai
 
   # Generate webhook secret
   - openssl rand -hex 32 > /opt/tamshai/.webhook-secret
