@@ -2,7 +2,8 @@
 # CI Environment Configuration (GitHub Actions)
 # ============================================================
 
-# Keycloak connection settings (CI uses localhost)
+# Keycloak connection settings (CI uses localhost, no /auth prefix)
+# Note: CI Keycloak runs at root path, dev uses /auth due to KC_HTTP_RELATIVE_PATH
 keycloak_url            = "http://localhost:8180"
 keycloak_admin_user     = "admin"
 keycloak_admin_password = "admin"

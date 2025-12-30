@@ -539,6 +539,130 @@ terraform refresh -var-file=environments/dev.tfvars
 
 ---
 
+## Testing Results (2025-12-30)
+
+### Successful Local Docker Deployment
+
+**Test Environment**:
+- Keycloak 24.0.5
+- PostgreSQL 16
+- Terraform 1.10.3
+- Keycloak Provider 4.4.0
+
+**Test Procedure**:
+1. Started fresh Keycloak container (no realm import)
+2. Dropped and recreated keycloak database
+3. Ran `terraform apply -var-file=environments/dev.tfvars`
+4. Verified resource creation
+5. Tested authentication with created users
+
+**Results**: ✅ **All tests passed**
+
+```
+Apply complete! Resources: 25 added, 0 changed, 0 destroyed.
+
+Resources Created:
+- 1 realm (tamshai-corp)
+- 9 roles (hr-read, hr-write, finance-read, finance-write, sales-read, sales-write, support-read, support-write, executive)
+- 8 users (alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson)
+- 1 OpenID client (mcp-gateway)
+- 5 role assignments
+```
+
+**Authentication Test**:
+```bash
+curl -X POST http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-gateway" \
+  -d "client_secret=test-client-secret" \
+  -d "username=alice.chen" \
+  -d "password=password123" \
+  -d "grant_type=password" \
+  -d "scope=openid"
+
+# Result: ✅ Successfully returned access_token
+```
+
+### Key Discoveries
+
+#### 1. KC_HTTP_RELATIVE_PATH Configuration
+
+**Issue**: Initial terraform apply failed with connection errors to http://localhost:8180/
+
+**Root Cause**: docker-compose.yml sets `KC_HTTP_RELATIVE_PATH: /auth`, causing Keycloak to run at http://localhost:8180/auth not root.
+
+**Fix**: Updated `environments/dev.tfvars`:
+```hcl
+# Before:
+keycloak_url = "http://localhost:8180"
+
+# After:
+keycloak_url = "http://localhost:8180/auth"
+```
+
+**Impact**:
+- Affects ALL Keycloak URLs in dev environment
+- Admin console: http://localhost:8180/auth/admin
+- Realms: http://localhost:8180/auth/realms/{realm}
+- Health check: http://localhost:8180/auth/health/ready
+
+**Action for CI**: Ensure ci.tfvars uses correct URL with /auth prefix if CI Keycloak uses same configuration.
+
+#### 2. Database Persistence
+
+**Discovery**: Keycloak realm data persists in PostgreSQL even when container is removed.
+
+**Implication**:
+- Removing `tamshai-keycloak` container does NOT remove realm data
+- Must drop/recreate `keycloak` database for truly fresh test
+- In CI: Fresh Keycloak container + fresh database = clean slate for Terraform
+
+**Testing Procedure for Fresh Deployment**:
+```bash
+# Stop Keycloak
+docker compose stop keycloak
+
+# Drop and recreate database
+docker compose exec postgres psql -U postgres -d postgres \
+  -c "DROP DATABASE keycloak;"
+docker compose exec postgres psql -U postgres -d postgres \
+  -c "CREATE DATABASE keycloak WITH OWNER keycloak;"
+
+# Restart Keycloak (will initialize fresh schema)
+docker compose up -d keycloak
+
+# Wait for health check
+for i in {1..40}; do
+  if curl -sf http://localhost:8180/auth/health/ready > /dev/null 2>&1; then
+    echo "Keycloak ready!"
+    break
+  fi
+  sleep 3
+done
+
+# Run Terraform
+cd infrastructure/terraform/keycloak
+terraform apply -var-file=environments/dev.tfvars
+```
+
+#### 3. Comparison with Bash Script Approach
+
+**Bash Script Issues** (from CI failures):
+- HTTP 400 errors during role creation (10 failures documented)
+- Race conditions between realm creation and role creation
+- Manual wait loops (`sleep 10`) insufficient
+- No detection of when realm is "truly ready" for role creation
+
+**Terraform Approach** (tested successfully):
+- ✅ Zero HTTP 400 errors
+- ✅ Built-in dependency management (roles wait for realm)
+- ✅ Provider handles retries and waits automatically
+- ✅ Idempotent - can rerun safely without errors
+- ✅ State management detects drift
+
+**Evidence**: Terraform completed all 25 resources in single apply with no errors or retries needed.
+
+---
+
 ## References
 
 - **Terraform Keycloak Provider**: https://registry.terraform.io/providers/mrparkers/keycloak/latest/docs
@@ -551,4 +675,5 @@ terraform refresh -var-file=environments/dev.tfvars
 **Created**: 2025-12-30
 **Author**: Tamshai QA Team
 **Purpose**: Environment alignment (dev/ci/stage/prod) via Infrastructure-as-Code
-**Status**: Ready for testing
+**Status**: ✅ Tested successfully - Local Docker deployment complete (2025-12-30)
+**Next Steps**: Update CI workflow to use Terraform instead of bash scripts

@@ -2,8 +2,8 @@
 # Development Environment Configuration (Local Docker)
 # ============================================================
 
-# Keycloak connection settings
-keycloak_url            = "http://localhost:8180"
+# Keycloak connection settings (KC_HTTP_RELATIVE_PATH=/auth in docker-compose.yml)
+keycloak_url            = "http://localhost:8180/auth"
 keycloak_admin_user     = "admin"
 keycloak_admin_password = "admin"
 
