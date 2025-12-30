@@ -242,13 +242,16 @@ async function checkServiceHealth(name, url) {
 
 /**
  * Check if Keycloak is ready
+ * Note: Keycloak 23.0 in start-dev mode doesn't have reliable /health endpoints
+ * so we check if the admin console is accessible instead
  */
 async function checkKeycloakHealth() {
   try {
-    const response = await axios.get(`${CONFIG.keycloakUrl}/health/ready`, {
+    const response = await axios.get(`${CONFIG.keycloakUrl}/`, {
       timeout: 5000,
     });
-    if (response.status === 200) {
+    // Check if response contains "Keycloak" (admin console HTML)
+    if (response.status === 200 && response.data.includes('Keycloak')) {
       console.log('✅ Keycloak is ready');
       return true;
     }
