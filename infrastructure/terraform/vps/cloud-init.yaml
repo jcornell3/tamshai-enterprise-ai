@@ -34,8 +34,8 @@ users:
     lock_passwd: true
 
 write_files:
-  # Environment file with secrets
-  - path: /opt/tamshai/.env
+  # Environment file with secrets (temporary location)
+  - path: /tmp/tamshai.env
     permissions: '0600'
     content: |
       # Tamshai Enterprise AI - Environment Configuration
@@ -335,9 +335,9 @@ runcmd:
   - cd /opt/tamshai && git clone --branch ${github_branch} ${github_repo} .
   - chown -R tamshai:tamshai /opt/tamshai
 
-  # Move generated config files
-  - mv /opt/tamshai/.env /opt/tamshai/.env.generated || true
-  - cat /opt/tamshai/.env.generated >> /opt/tamshai/.env 2>/dev/null || cp /opt/tamshai/.env.generated /opt/tamshai/.env
+  # Move generated .env file from temp location
+  - mv /tmp/tamshai.env /opt/tamshai/.env
+  - chown tamshai:tamshai /opt/tamshai/.env
 
   # Generate webhook secret
   - openssl rand -hex 32 > /opt/tamshai/.webhook-secret
