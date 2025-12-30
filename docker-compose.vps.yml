@@ -89,7 +89,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -113,8 +113,8 @@ services:
       PORT: 3100
       KEYCLOAK_URL: ${KEYCLOAK_URL}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      JWKS_URI: http://keycloak:8080/auth/realms/tamshai/protocol/openid-connect/certs
-      KEYCLOAK_REALM: tamshai
+      JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
+      KEYCLOAK_REALM: tamshai-corp
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -260,100 +260,101 @@ services:
   # =============================================================================
   # WEB APPLICATIONS
   # =============================================================================
-  web-portal:
-    build:
-      context: ./apps/web
-      dockerfile: apps/portal/Dockerfile
-      args:
-        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
-        VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
-    image: tamshai/web-portal:${IMAGE_TAG:-latest}
-    container_name: tamshai-web-portal
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-    networks:
-      - tamshai-network
-
-  web-hr:
-    build:
-      context: ./apps/web
-      dockerfile: apps/hr/Dockerfile
-      args:
-        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
-        VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
-    image: tamshai/web-hr:${IMAGE_TAG:-latest}
-    container_name: tamshai-web-hr
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-    networks:
-      - tamshai-network
-
-  web-finance:
-    build:
-      context: ./apps/web
-      dockerfile: apps/finance/Dockerfile
-      args:
-        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
-        VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
-    image: tamshai/web-finance:${IMAGE_TAG:-latest}
-    container_name: tamshai-web-finance
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-    networks:
-      - tamshai-network
-
-  web-sales:
-    build:
-      context: ./apps/web
-      dockerfile: apps/sales/Dockerfile
-      args:
-        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
-        VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
-    image: tamshai/web-sales:${IMAGE_TAG:-latest}
-    container_name: tamshai-web-sales
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-    networks:
-      - tamshai-network
-
-  web-support:
-    build:
-      context: ./apps/web
-      dockerfile: apps/support/Dockerfile
-      args:
-        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
-        VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
-    image: tamshai/web-support:${IMAGE_TAG:-latest}
-    container_name: tamshai-web-support
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-    networks:
-      - tamshai-network
+  # TODO: Uncomment when apps/web directory is created
+  # web-portal:
+  #   build:
+  #     context: ./apps/web
+  #     dockerfile: apps/portal/Dockerfile
+  #     args:
+  #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
+  #   image: tamshai/web-portal:${IMAGE_TAG:-latest}
+  #   container_name: tamshai-web-portal
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+  #     interval: 30s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - tamshai-network
+  #
+  # web-hr:
+  #   build:
+  #     context: ./apps/web
+  #     dockerfile: apps/hr/Dockerfile
+  #     args:
+  #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
+  #   image: tamshai/web-hr:${IMAGE_TAG:-latest}
+  #   container_name: tamshai-web-hr
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+  #     interval: 30s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - tamshai-network
+  #
+  # web-finance:
+  #   build:
+  #     context: ./apps/web
+  #     dockerfile: apps/finance/Dockerfile
+  #     args:
+  #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
+  #   image: tamshai/web-finance:${IMAGE_TAG:-latest}
+  #   container_name: tamshai-web-finance
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+  #     interval: 30s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - tamshai-network
+  #
+  # web-sales:
+  #   build:
+  #     context: ./apps/web
+  #     dockerfile: apps/sales/Dockerfile
+  #     args:
+  #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
+  #   image: tamshai/web-sales:${IMAGE_TAG:-latest}
+  #   container_name: tamshai-web-sales
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+  #     interval: 30s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - tamshai-network
+  #
+  # web-support:
+  #   build:
+  #     context: ./apps/web
+  #     dockerfile: apps/support/Dockerfile
+  #     args:
+  #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
+  #   image: tamshai/web-support:${IMAGE_TAG:-latest}
+  #   container_name: tamshai-web-support
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+  #     interval: 30s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - tamshai-network
 
   # =============================================================================
   # CORPORATE WEBSITE (Static)

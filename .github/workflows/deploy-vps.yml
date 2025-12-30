@@ -161,7 +161,6 @@ jobs:
       deployments: write
     environment:
       name: ${{ github.event.inputs.environment || 'staging' }}
-      url: https://${{ secrets.VPS_DOMAIN || secrets.VPS_HOST }}
 
     steps:
       - name: Checkout code
@@ -179,7 +178,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
         run: |
-          echo "🚀 Deploying to $ENVIRONMENT environment..."
+          echo "[DEPLOY] Deploying to $ENVIRONMENT environment..."
           echo "   Host: $VPS_HOST"
           echo "   Branch: $DEPLOY_BRANCH"
           echo "   Build: $BUILD_FLAG"
@@ -211,8 +210,8 @@ jobs:
           sleep 30
 
           echo "=== Health check ==="
-          curl -sf http://localhost:3100/health && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
-          curl -sf http://localhost:8080/auth/health/ready && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+          curl -sf http://localhost:3100/health && echo "[OK] MCP Gateway: healthy" || echo "[FAIL] MCP Gateway: unhealthy"
+          curl -sf http://localhost:8080/auth/health/ready && echo "[OK] Keycloak: healthy" || echo "[FAIL] Keycloak: unhealthy"
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
@@ -229,24 +228,26 @@ jobs:
           for path in "" "/auth" "/api"; do
             url="https://${DOMAIN}${path}"
             if curl -sf -o /dev/null --max-time 30 "$url"; then
-              echo "✅ $url - OK"
+              echo "[OK] $url - OK"
             else
-              echo "⚠️ $url - Not reachable (may still be starting)"
+              echo "[WARN] $url - Not reachable (may still be starting)"
             fi
           done
 
       - name: Notify on success
-        if: success() && secrets.SLACK_WEBHOOK_URL
+        if: success()
+        continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
-            --data '{"text":"✅ Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
+            --data '{"text":"[SUCCESS] Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify on failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL
+        if: failure()
+        continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
-            --data '{"text":"❌ Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+            --data '{"text":"[FAILED] Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # =============================================================================
