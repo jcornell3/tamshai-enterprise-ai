@@ -113,8 +113,8 @@ services:
       PORT: 3100
       KEYCLOAK_URL: ${KEYCLOAK_URL}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      JWKS_URI: http://keycloak:8080/auth/realms/tamshai/protocol/openid-connect/certs
-      KEYCLOAK_REALM: tamshai
+      JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
+      KEYCLOAK_REALM: tamshai-corp
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
       REDIS_HOST: redis
       REDIS_PORT: 6379

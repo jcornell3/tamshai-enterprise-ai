@@ -75,9 +75,9 @@ write_files:
       CLAUDE_API_KEY=${claude_api_key}
       JWT_SECRET=${jwt_secret}
       KEYCLOAK_URL=https://${domain}/auth
-      KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai
-      JWKS_URI=http://keycloak:8080/auth/realms/tamshai/protocol/openid-connect/certs
-      KEYCLOAK_REALM=tamshai
+      KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai-corp
+      JWKS_URI=http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
+      KEYCLOAK_REALM=tamshai-corp
 
       # Web Apps
       VITE_KEYCLOAK_URL=https://${domain}/auth
