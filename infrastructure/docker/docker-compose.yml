@@ -55,6 +55,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: tamshai-keycloak
+    restart: unless-stopped
     command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
@@ -66,8 +67,10 @@ services:
       # Use 127.0.0.1 instead of localhost for Windows compatibility
       KC_HOSTNAME: 127.0.0.1
       KC_HOSTNAME_PORT: 8180
+      KC_HTTP_RELATIVE_PATH: /auth
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
     volumes:
       # Use realm-export-dev.json for local development (includes test users)
       # Use realm-export.json for production (no pre-configured users)
