@@ -161,7 +161,6 @@ jobs:
       deployments: write
     environment:
       name: ${{ github.event.inputs.environment || 'staging' }}
-      url: https://${{ secrets.VPS_DOMAIN || secrets.VPS_HOST }}
 
     steps:
       - name: Checkout code
