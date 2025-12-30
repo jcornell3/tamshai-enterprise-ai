@@ -1399,6 +1399,578 @@ describe('AI Query Integration', () => {
 
 ---
 
-**Last Updated**: 2025-12-30
+## ADDENDUM: Review #1 Feedback (Critical Issues)
+
+**Reviewer**: Technical Lead
+**Date**: 2025-12-30
+**Status**: 🚨 **CRITICAL FIXES REQUIRED BEFORE STARTING**
+
+### Issue #1: 🔴 JWKS Client Performance Trap (CRITICAL)
+
+**Problem Identified**:
+The proposed `JWTValidator` class initializes `jwks-rsa` client in the constructor:
+
+```typescript
+export class JWTValidator {
+  private jwksClient: JwksClient;
+
+  constructor(private config: JWTValidatorConfig, private logger: Logger) {
+    this.jwksClient = jwksRsa({
+      jwksUri: config.jwksUri,
+      cache: true,
+      rateLimit: true,
+    });
+  }
+}
+```
+
+**If** this class is instantiated per-request (e.g., `new JWTValidator(...)` inside middleware), it will:
+- ❌ Bypass the JWKS signing key cache
+- ❌ Make a network request to Keycloak **on every API call**
+- ❌ Cause rate-limiting or 10x+ latency increase
+
+**Current Implementation** (index.ts lines 182-186):
+```typescript
+// CORRECT: Global singleton
+const jwksClient = jwksRsa({
+  jwksUri: config.keycloak.jwksUri || `...`,
+  cache: true,
+  rateLimit: true,
+});
+```
+
+**Root Cause**: The current code uses a **module-level singleton** that persists across requests. The proposed refactor moves this into a class, but if not instantiated correctly, creates a new JWKS client per request.
+
+**REQUIRED FIX**:
+
+**1. Ensure Singleton Instantiation at Server Startup**
+
+```typescript
+// src/index.ts or src/app.ts
+import { JWTValidator } from './auth/jwt-validator';
+import { createAuthMiddleware } from './middleware/auth.middleware';
+
+// ✅ CORRECT: Create validator ONCE at startup
+const jwtValidator = new JWTValidator(
+  {
+    jwksUri: config.keycloak.jwksUri || `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`,
+    issuer: config.keycloak.issuer || `${config.keycloak.url}/realms/${config.keycloak.realm}`,
+    audience: [config.keycloak.clientId, 'account'],
+  },
+  logger
+);
+
+// ✅ CORRECT: Pass singleton instance to middleware factory
+const authMiddleware = createAuthMiddleware(jwtValidator, logger);
+
+// ✅ CORRECT: Use the middleware
+app.use('/api/*', authMiddleware);
+```
+
+**2. Update Middleware to Accept Validator Instance**
+
+```typescript
+// src/middleware/auth.middleware.ts
+export function createAuthMiddleware(
+  validator: JWTValidator,  // Accept pre-instantiated validator
+  logger: Logger
+) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    // ... extract token ...
+
+    const userContext = await validator.validate(token);  // Use singleton
+
+    // ... rest of middleware ...
+  };
+}
+```
+
+**3. Add Warning Comment in JWTValidator**
+
+```typescript
+// src/auth/jwt-validator.ts
+/**
+ * JWT Validator Service
+ *
+ * ⚠️ CRITICAL: This class MUST be instantiated as a singleton at server startup.
+ * Do NOT create new instances per-request or you will bypass JWKS caching.
+ *
+ * Correct usage:
+ *   const validator = new JWTValidator(config, logger); // Once at startup
+ *   app.use(createAuthMiddleware(validator, logger));
+ *
+ * Incorrect usage:
+ *   app.use((req, res, next) => {
+ *     const validator = new JWTValidator(...); // ❌ Creates new client per request!
+ *   });
+ */
+export class JWTValidator {
+  private jwksClient: JwksClient;
+  // ...
+}
+```
+
+**Testing the Fix**:
+```typescript
+// src/auth/jwt-validator.test.ts
+describe('JWTValidator Singleton Behavior', () => {
+  it('should reuse same jwksClient instance across multiple validations', async () => {
+    const validator = new JWTValidator(config, logger);
+
+    // Spy on jwksClient.getSigningKey to verify caching
+    const getSigningKeySpy = jest.spyOn(validator['jwksClient'], 'getSigningKey');
+
+    // First validation - should fetch key
+    await validator.validate(token1);
+    expect(getSigningKeySpy).toHaveBeenCalledTimes(1);
+
+    // Second validation with same kid - should use cache
+    await validator.validate(token2);
+    expect(getSigningKeySpy).toHaveBeenCalledTimes(1); // Still 1, not 2
+  });
+});
+```
+
+---
+
+### Issue #2: 🟡 Streaming Logic Gap (Missing Phase)
+
+**Problem Identified**:
+The plan ends at `ClaudeClient` but doesn't address the most complex code: `handleStreamingQuery` (lines 786-1039, 253 lines).
+
+This function mixes:
+- Business logic (calling Claude, checking pagination)
+- Transport logic (writing `res.write('data: ...')`)
+- Error handling (timeouts, abort signals)
+
+**Current Code Structure** (index.ts:786-979):
+```typescript
+async function handleStreamingQuery(req, res, query, cursor) {
+  // Business logic
+  const mcpResults = await Promise.all(mcpPromises);
+
+  // Transport logic mixed in
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.write(`data: ${JSON.stringify(...)}\n\n`);
+
+  // Claude streaming
+  const stream = await anthropic.messages.stream(...);
+  for await (const chunk of stream) {
+    res.write(`data: ${JSON.stringify({ type: 'text', text: chunk.delta.text })}\n\n`);
+  }
+
+  res.write('data: [DONE]\n\n');
+  res.end();
+}
+```
+
+**Problem**: Hard to unit test because it requires mocking Express `Response` object with `res.write()`.
+
+**REQUIRED FIX**: Extract to AsyncGenerator Pattern
+
+**New Phase 2.5: Streaming Service**
+
+**File**: `src/ai/streaming.service.ts`
+
+```typescript
+// src/ai/streaming.service.ts
+import { Logger } from 'winston';
+import { ClaudeClient } from './claude-client';
+import { MCPClient } from '../mcp/client';
+import { UserContext } from '../auth/jwt-validator';
+
+export type StreamEvent =
+  | { type: 'service_unavailable'; warnings: any[]; successfulServers: string[]; failedServers: string[] }
+  | { type: 'text'; text: string }
+  | { type: 'pagination'; hasMore: boolean; cursors: any[]; hint: string }
+  | { type: 'error'; message: string }
+  | { type: 'done' };
+
+/**
+ * Streaming Service
+ *
+ * Yields SSE events as an AsyncGenerator for easy unit testing.
+ * The transport layer (Express controller) loops over this and writes to res.
+ */
+export class StreamingService {
+  constructor(
+    private mcpClient: MCPClient,
+    private claudeClient: ClaudeClient,
+    private logger: Logger
+  ) {}
+
+  /**
+   * Execute streaming query and yield SSE events
+   *
+   * ✅ TESTABLE: No Express Response object needed!
+   */
+  async *executeQuery(
+    query: string,
+    userContext: UserContext,
+    accessibleServers: any[],
+    cursor?: string
+  ): AsyncGenerator<StreamEvent, void, unknown> {
+    const requestId = crypto.randomUUID();
+
+    try {
+      // Query MCP servers
+      const mcpPromises = accessibleServers.map((server) =>
+        this.mcpClient.query(server, query, userContext, { cursor })
+      );
+      const mcpResults = await Promise.all(mcpPromises);
+
+      // Separate successful/failed results
+      const successfulResults = mcpResults.filter((r) => r.status === 'success');
+      const failedResults = mcpResults.filter((r) => r.status !== 'success');
+
+      // Yield service unavailability warnings
+      if (failedResults.length > 0) {
+        yield {
+          type: 'service_unavailable',
+          warnings: failedResults.map((r) => ({
+            server: r.server,
+            code: r.status === 'timeout' ? 'TIMEOUT' : 'ERROR',
+            message: r.error || 'Service error',
+          })),
+          successfulServers: successfulResults.map((r) => r.server),
+          failedServers: failedResults.map((r) => r.server),
+        };
+      }
+
+      // Extract pagination/truncation metadata
+      const paginationInfo = this.extractPaginationInfo(mcpResults);
+      const truncationWarnings = this.extractTruncationWarnings(mcpResults, requestId);
+
+      // Stream Claude response
+      const dataContext = successfulResults.map((r) => ({ server: r.server, data: r.data }));
+
+      for await (const text of this.claudeClient.queryStream(
+        query,
+        dataContext,
+        userContext,
+        {
+          paginationHints: paginationInfo.map((p) => p.hint).filter(Boolean),
+          truncationWarnings,
+        }
+      )) {
+        yield { type: 'text', text };
+      }
+
+      // Yield pagination metadata
+      if (paginationInfo.length > 0) {
+        yield {
+          type: 'pagination',
+          hasMore: true,
+          cursors: paginationInfo.map((p) => ({ server: p.server, cursor: p.nextCursor })),
+          hint: 'More data available. Request next page to continue.',
+        };
+      }
+
+      // Yield completion
+      yield { type: 'done' };
+    } catch (error) {
+      this.logger.error('Streaming query error:', error);
+      yield { type: 'error', message: 'Failed to process query' };
+      yield { type: 'done' };
+    }
+  }
+
+  private extractPaginationInfo(mcpResults: any[]): any[] {
+    return mcpResults
+      .filter((r) => {
+        const mcpResponse = r.data;
+        return mcpResponse?.status === 'success' && mcpResponse.metadata?.hasMore;
+      })
+      .map((r) => ({
+        server: r.server,
+        hasMore: r.data.metadata.hasMore,
+        nextCursor: r.data.metadata.nextCursor,
+        hint: r.data.metadata.hint,
+      }));
+  }
+
+  private extractTruncationWarnings(mcpResults: any[], requestId: string): string[] {
+    const warnings: string[] = [];
+    mcpResults.forEach((result) => {
+      const mcpResponse = result.data;
+      if (mcpResponse?.status === 'success' && mcpResponse.metadata?.truncated) {
+        const returnedCount = mcpResponse.metadata.returnedCount || 50;
+        warnings.push(
+          `TRUNCATION WARNING: Data from ${result.server} returned only ${returnedCount} of ${returnedCount}+ records. ` +
+          `You MUST inform the user that results are incomplete.`
+        );
+        this.logger.info('Truncation detected', {
+          requestId,
+          server: result.server,
+          returnedCount,
+        });
+      }
+    });
+    return warnings;
+  }
+}
+```
+
+**New Transport Layer** (Express Controller):
+
+```typescript
+// src/routes/streaming.routes.ts
+import { Router, Request, Response } from 'express';
+import { StreamingService } from '../ai/streaming.service';
+import { getAccessibleMCPServers } from '../mcp/role-mapper';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
+
+export function createStreamingRoutes(streamingService: StreamingService): Router {
+  const router = Router();
+
+  router.post('/query', async (req: Request, res: Response) => {
+    const userContext = (req as AuthenticatedRequest).userContext!;
+    const { query, cursor } = req.body;
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const accessibleServers = getAccessibleMCPServers(userContext.roles);
+
+    // Loop over generator and write to response
+    for await (const event of streamingService.executeQuery(query, userContext, accessibleServers, cursor)) {
+      if (event.type === 'done') {
+        res.write('data: [DONE]\n\n');
+        break;
+      }
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+
+    res.end();
+  });
+
+  return router;
+}
+```
+
+**Unit Tests** (Easy to Test!):
+
+```typescript
+// src/ai/streaming.service.test.ts
+import { StreamingService } from './streaming.service';
+
+describe('StreamingService', () => {
+  let service: StreamingService;
+  let mockMCPClient: jest.Mocked<MCPClient>;
+  let mockClaudeClient: jest.Mocked<ClaudeClient>;
+
+  beforeEach(() => {
+    mockMCPClient = createMockMCPClient();
+    mockClaudeClient = createMockClaudeClient();
+    service = new StreamingService(mockMCPClient, mockClaudeClient, mockLogger);
+  });
+
+  it('should yield text events from Claude stream', async () => {
+    mockMCPClient.query.mockResolvedValue({
+      status: 'success',
+      server: 'hr',
+      data: { employees: [] },
+    });
+
+    // Mock Claude streaming response
+    mockClaudeClient.queryStream = jest.fn(async function* () {
+      yield 'Hello ';
+      yield 'World';
+    });
+
+    const events: any[] = [];
+    for await (const event of service.executeQuery('test query', userContext, [hrServer])) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: 'text', text: 'Hello ' },
+      { type: 'text', text: 'World' },
+      { type: 'done' },
+    ]);
+  });
+
+  it('should yield service_unavailable for failed MCP servers', async () => {
+    mockMCPClient.query.mockResolvedValueOnce({
+      status: 'timeout',
+      server: 'hr',
+      data: null,
+      error: 'Service did not respond',
+    });
+
+    const events: any[] = [];
+    for await (const event of service.executeQuery('test query', userContext, [hrServer])) {
+      events.push(event);
+    }
+
+    expect(events[0]).toEqual({
+      type: 'service_unavailable',
+      warnings: [{ server: 'hr', code: 'TIMEOUT', message: 'Service did not respond' }],
+      successfulServers: [],
+      failedServers: ['hr'],
+    });
+  });
+
+  it('should yield pagination event when hasMore is true', async () => {
+    mockMCPClient.query.mockResolvedValue({
+      status: 'success',
+      server: 'hr',
+      data: {
+        status: 'success',
+        data: [],
+        metadata: { hasMore: true, nextCursor: 'page2', hint: 'Use cursor for next page' },
+      },
+    });
+
+    const events: any[] = [];
+    for await (const event of service.executeQuery('test query', userContext, [hrServer])) {
+      events.push(event);
+    }
+
+    const paginationEvent = events.find((e) => e.type === 'pagination');
+    expect(paginationEvent).toEqual({
+      type: 'pagination',
+      hasMore: true,
+      cursors: [{ server: 'hr', cursor: 'page2' }],
+      hint: 'More data available. Request next page to continue.',
+    });
+  });
+});
+```
+
+**Coverage**: 95%+ (no Express mocking needed!)
+
+---
+
+### Issue #3: 🟡 Integration Test Gap
+
+**Problem Identified**:
+The plan focuses heavily on unit tests (mocking everything) but lacks integration tests to catch "wiring issues":
+- Did I forget to export a module?
+- Did I pass the wrong config?
+- Are all services connected correctly?
+
+**REQUIRED FIX**: Add Integration Test Suite
+
+**File**: `tests/integration/happy-path.test.ts`
+
+```typescript
+// tests/integration/happy-path.test.ts
+import request from 'supertest';
+import app from '../../src/index';  // Actual Express app
+import { setupKeycloakMock, getKeycloakToken } from '../helpers/keycloak-mock';
+import { setupMCPMocks } from '../helpers/mcp-mock';
+
+/**
+ * Happy Path Integration Test
+ *
+ * Purpose: Verify the entire stack works end-to-end
+ * - Boots the real Express app
+ * - Mocks external services (Keycloak, MCP servers)
+ * - Sends real HTTP requests
+ * - Verifies correct responses
+ */
+describe('Happy Path Integration', () => {
+  beforeAll(() => {
+    setupKeycloakMock();  // Mock Keycloak JWKS endpoint
+    setupMCPMocks();      // Mock MCP server responses
+  });
+
+  it('should process AI query with all services wired correctly', async () => {
+    const token = await getKeycloakToken('alice.chen', 'hr-read');
+
+    const response = await request(app)
+      .post('/api/ai/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List all employees in Engineering' })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      requestId: expect.any(String),
+      conversationId: expect.any(String),
+      response: expect.stringContaining('Engineering'),
+      status: 'success',
+      metadata: {
+        dataSourcesQueried: expect.arrayContaining(['hr']),
+        processingTimeMs: expect.any(Number),
+      },
+    });
+  });
+
+  it('should handle missing token with 401', async () => {
+    await request(app)
+      .post('/api/ai/query')
+      .send({ query: 'test' })
+      .expect(401);
+  });
+
+  it('should handle invalid token with 401', async () => {
+    await request(app)
+      .post('/api/ai/query')
+      .set('Authorization', 'Bearer invalid-token')
+      .send({ query: 'test' })
+      .expect(401);
+  });
+
+  it('should stream SSE response correctly', async () => {
+    const token = await getKeycloakToken('alice.chen', 'hr-read');
+
+    const response = await request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'Who is Alice?' })
+      .expect(200)
+      .expect('Content-Type', /text\/event-stream/);
+
+    // Verify SSE format
+    const events = response.text.split('\n\n');
+    expect(events[events.length - 1]).toContain('[DONE]');
+  });
+});
+```
+
+**Why This Matters**:
+- Unit tests can pass even if the app doesn't boot
+- Integration tests catch DI misconfigurations
+- Verifies routes are mounted correctly
+- Ensures middleware order is correct
+
+---
+
+## Updated Migration Timeline
+
+| Phase | Original Plan | Updated Plan |
+|-------|---------------|--------------|
+| **1** | Extract config, role-mapper | ✅ No changes |
+| **2** | Extract JWT, MCP, Claude services | ✅ **+ Add singleton warnings** |
+| **2.5** | _(Not in original)_ | 🆕 **Extract StreamingService with AsyncGenerator** |
+| **3** | Extract middleware & routes | ✅ **+ Update to use StreamingService** |
+| **4** | Write comprehensive tests | ✅ **+ Add integration test suite** |
+
+**New Timeline**: 5 weeks (was 4 weeks)
+- Week 1: Phase 1 (Pure functions)
+- Week 2: Phase 2 (Services with singleton pattern)
+- Week 3: Phase 2.5 (Streaming service refactor)
+- Week 4: Phase 3 (Routes & middleware)
+- Week 5: Phase 4 (Comprehensive tests + integration tests)
+
+---
+
+## Critical Checklist Before Starting
+
+Before starting the refactoring, ensure:
+
+- [ ] **Singleton Pattern**: All services (JWTValidator, MCPClient, ClaudeClient, StreamingService) instantiated ONCE at server startup
+- [ ] **AsyncGenerator Pattern**: Streaming logic extracted to `StreamingService.executeQuery()` that yields events
+- [ ] **Integration Tests**: At least one "happy path" test that boots the full app
+- [ ] **Performance Baseline**: Measure current JWKS cache hit rate (should be >95% in production)
+- [ ] **Coverage Baseline**: Confirm starting coverage is 31% overall, 49.06% on mcp-gateway
+
+---
+
+**Last Updated**: 2025-12-30 (Revised)
 **Author**: Claude (Anthropic)
-**Reviewers**: [Pending]
+**Reviewers**: Technical Lead (Review #1 - Critical fixes applied)
