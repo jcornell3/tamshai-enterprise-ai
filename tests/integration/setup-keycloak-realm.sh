@@ -151,11 +151,15 @@ main() {
   # Get admin token
   ADMIN_TOKEN=$(get_admin_token)
 
-  # Create roles
-  log_info "Creating roles..."
-  for role in hr-read hr-write finance-read finance-write sales-read sales-write support-read support-write executive; do
-    create_role "$role"
-  done
+  # Create roles (skip if SKIP_ROLE_CREATION is set)
+  if [ "${SKIP_ROLE_CREATION:-false}" == "true" ]; then
+    log_info "Skipping role creation (SKIP_ROLE_CREATION=true)"
+  else
+    log_info "Creating roles..."
+    for role in hr-read hr-write finance-read finance-write sales-read sales-write support-read support-write executive; do
+      create_role "$role"
+    done
+  fi
 
   # Create client
   log_info "Creating mcp-gateway client..."

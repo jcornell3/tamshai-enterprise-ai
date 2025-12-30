@@ -499,11 +499,11 @@ jobs:
             fi
           done
 
-          # Run setup script for users and client (skip roles)
+          # Create users and client using setup script
+          # Note: Roles already created above, script will skip them (409 conflicts expected)
           chmod +x tests/integration/setup-keycloak-realm.sh
-          # TODO: Modify script to skip role creation since we did it above
-          # For now, let the script run and handle 409 conflicts
-          ./tests/integration/setup-keycloak-realm.sh || true
+          export SKIP_ROLE_CREATION=true  # Signal script to skip role creation
+          ./tests/integration/setup-keycloak-realm.sh
         env:
           KEYCLOAK_URL: http://localhost:8180
           KEYCLOAK_REALM: tamshai-corp
