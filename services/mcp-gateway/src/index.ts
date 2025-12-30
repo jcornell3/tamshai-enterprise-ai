@@ -38,7 +38,6 @@ import {
 import {
   getPendingConfirmation,
   isTokenRevoked,
-  getTokenRevocationStats,
   stopTokenRevocationSync,
 } from './utils/redis';
 import { scrubPII } from './utils/pii-scrubber';

@@ -25,5 +25,5 @@ export function createMockLogger(): jest.Mocked<Logger> {
     silly: jest.fn(),
     log: jest.fn(),
     // Add other Logger methods as needed
-  } as any as jest.Mocked<Logger>;
+  } as unknown as jest.Mocked<Logger>;
 }
