@@ -121,20 +121,20 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'tamshai-api:latest'
+          image-ref: 'mcp-gateway:latest'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-      
+
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
-      
+
       - name: Run Grype
         uses: anchore/scan-action@v3
         with:
-          image: 'tamshai-api:latest'
+          image: 'mcp-gateway:latest'
           severity-cutoff: high
           fail-build: true
 
@@ -211,13 +211,13 @@ jobs:
 
       - name: Run unit tests
         run: |
-          docker compose run --rm api pytest tests/ -v --cov=app --cov-report=xml
+          docker compose run --rm mcp-gateway npm test -- --coverage --coverageReporters=xml
 
       - name: Run integration tests
         run: |
           docker compose up -d
           sleep 10  # Wait for services to be ready
-          docker compose run --rm api pytest tests/integration/ -v
+          docker compose run --rm mcp-gateway npm run test:integration
           docker compose down
       
       - name: Upload coverage to Codecov
@@ -447,13 +447,13 @@ jobs:
             docker compose pull
 
             # Blue-green deployment
-            docker compose up -d --no-deps --build api
+            docker compose up -d --no-deps --build mcp-gateway
 
             # Health check
             sleep 15
-            if ! curl -f http://localhost:8000/health; then
+            if ! curl -f http://localhost:3100/health; then
               echo "Health check failed, rolling back"
-              docker compose rollback api
+              docker compose rollback mcp-gateway
               exit 1
             fi
 

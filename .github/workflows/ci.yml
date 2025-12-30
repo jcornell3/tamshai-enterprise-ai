@@ -370,7 +370,7 @@ jobs:
             -e KC_HOSTNAME_STRICT=false \
             -e KC_HOSTNAME_STRICT_HTTPS=false \
             -e KC_HTTP_ENABLED=true \
-            -p 8180:8180 \
+            -p 8180:8080 \
             quay.io/keycloak/keycloak:23.0 start-dev
 
           # Wait for Keycloak to be ready (can take 60-90 seconds)
