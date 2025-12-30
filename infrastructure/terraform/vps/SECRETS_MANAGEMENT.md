@@ -1,0 +1,460 @@
+# VPS Secrets Management Guide
+
+## Security Principle
+
+**NEVER commit secrets to Git!**
+
+This includes:
+- API keys (Claude/Anthropic)
+- Cloud provider tokens (Hetzner)
+- Passwords
+- Private keys
+
+---
+
+## Secrets Required for VPS Deployment
+
+| Secret | Purpose | Where Used |
+|--------|---------|------------|
+| `hcloud_token` | Hetzner Cloud API access | Terraform (creates VPS) |
+| `claude_api_key` | Claude AI API access | VPS runtime (MCP Gateway) |
+
+---
+
+## Option 1: Environment Variables (Recommended for Local)
+
+Terraform automatically reads variables prefixed with `TF_VAR_`.
+
+### Windows (PowerShell)
+
+```powershell
+# Set for current session
+$env:TF_VAR_hcloud_token = "your-hetzner-token-here"
+$env:TF_VAR_claude_api_key = "sk-ant-api03-your-key-here"
+
+# Verify
+echo $env:TF_VAR_hcloud_token
+echo $env:TF_VAR_claude_api_key
+
+# Deploy
+cd infrastructure/terraform/vps
+terraform init
+terraform plan
+terraform apply
+```
+
+### Linux/macOS (Bash/Zsh)
+
+```bash
+# Set for current session
+export TF_VAR_hcloud_token="your-hetzner-token-here"
+export TF_VAR_claude_api_key="sk-ant-api03-your-key-here"
+
+# Verify
+echo $TF_VAR_hcloud_token
+echo $TF_VAR_claude_api_key
+
+# Deploy
+cd infrastructure/terraform/vps
+terraform init
+terraform plan
+terraform apply
+```
+
+### Persistent Environment Variables (Windows)
+
+For permanent storage (use with caution):
+
+```powershell
+# User-level (recommended)
+[System.Environment]::SetEnvironmentVariable('TF_VAR_hcloud_token', 'your-token', 'User')
+[System.Environment]::SetEnvironmentVariable('TF_VAR_claude_api_key', 'sk-ant-api03-...', 'User')
+
+# Restart PowerShell to load variables
+
+# Verify
+echo $env:TF_VAR_hcloud_token
+```
+
+**Pros:**
+- ✅ No secrets in files
+- ✅ Works seamlessly with Terraform
+- ✅ Simple to set up
+
+**Cons:**
+- ⚠️ Must set before each deployment (if session-based)
+- ⚠️ Can be exposed via process lists
+
+---
+
+## Option 2: GitHub Actions Secrets (CI/CD)
+
+For automated deployments via GitHub Actions.
+
+### Setup GitHub Secrets
+
+1. Go to GitHub repository: https://github.com/jcornell3/tamshai-enterprise-ai
+2. **Settings** > **Secrets and variables** > **Actions**
+3. Click **New repository secret**
+
+Add these secrets:
+
+| Name | Value | Purpose |
+|------|-------|---------|
+| `HCLOUD_TOKEN` | Your Hetzner API token | VPS provisioning |
+| `CLAUDE_API_KEY` | Your Claude API key | MCP Gateway runtime |
+| `VPS_SSH_KEY` | Contents of `.keys/deploy_key` | SSH access (after first deploy) |
+
+### GitHub Actions Workflow
+
+The workflow will use secrets automatically:
+
+```yaml
+# .github/workflows/deploy-vps.yml
+name: Deploy VPS
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/vps
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform/vps
+        env:
+          TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          TF_VAR_claude_api_key: ${{ secrets.CLAUDE_API_KEY }}
+        run: terraform apply -auto-approve
+```
+
+**Pros:**
+- ✅ Encrypted at rest
+- ✅ Audit logging
+- ✅ Automatic deployment on push
+- ✅ No local secrets needed
+
+**Cons:**
+- ⚠️ Requires GitHub Actions setup
+- ⚠️ Only works in CI/CD context
+
+---
+
+## Option 3: HashiCorp Vault (Enterprise)
+
+For organizations with centralized secrets management.
+
+### Setup
+
+```bash
+# Install Vault CLI
+# Windows: choco install vault
+# macOS: brew install vault
+
+# Login to Vault
+vault login
+
+# Store secrets
+vault kv put secret/tamshai/vps \
+  hcloud_token="your-token" \
+  claude_api_key="sk-ant-api03-..."
+
+# Configure Terraform to use Vault
+export VAULT_ADDR="https://vault.yourcompany.com"
+export VAULT_TOKEN="your-vault-token"
+```
+
+**Terraform Configuration:**
+
+```hcl
+# infrastructure/terraform/vps/vault.tf
+data "vault_generic_secret" "vps" {
+  path = "secret/tamshai/vps"
+}
+
+locals {
+  hcloud_token    = data.vault_generic_secret.vps.data["hcloud_token"]
+  claude_api_key  = data.vault_generic_secret.vps.data["claude_api_key"]
+}
+```
+
+**Pros:**
+- ✅ Centralized secrets management
+- ✅ Audit logging
+- ✅ Dynamic secrets
+- ✅ Encryption at rest and in transit
+
+**Cons:**
+- ⚠️ Requires Vault infrastructure
+- ⚠️ Complex setup
+- ⚠️ Overkill for single VPS
+
+---
+
+## Option 4: Terraform Cloud Variables
+
+If using Terraform Cloud for state management.
+
+### Setup
+
+1. Create Terraform Cloud account: https://app.terraform.io/
+2. Create workspace: `tamshai-vps-staging`
+3. Configure backend in `main.tf`:
+
+```hcl
+terraform {
+  cloud {
+    organization = "tamshai"
+    workspaces {
+      name = "vps-staging"
+    }
+  }
+}
+```
+
+4. Add variables in Terraform Cloud UI:
+   - `hcloud_token` (sensitive)
+   - `claude_api_key` (sensitive)
+
+**Pros:**
+- ✅ Encrypted remote state
+- ✅ Team collaboration
+- ✅ Variable versioning
+- ✅ Audit logging
+
+**Cons:**
+- ⚠️ Requires Terraform Cloud account
+- ⚠️ Internet dependency
+
+---
+
+## Option 5: .env File (Not Recommended)
+
+**DO NOT USE FOR PRODUCTION**
+
+Only for local testing in isolated environments.
+
+```bash
+# infrastructure/terraform/vps/.env
+export TF_VAR_hcloud_token="your-token"
+export TF_VAR_claude_api_key="sk-ant-api03-..."
+
+# Load variables
+source .env
+
+# Deploy
+terraform apply
+```
+
+**IMPORTANT:** Add `.env` to `.gitignore`!
+
+**Pros:**
+- ✅ Simple for local development
+
+**Cons:**
+- ❌ Easy to accidentally commit
+- ❌ Not encrypted
+- ❌ Not suitable for production
+
+---
+
+## Recommended Approach
+
+### For This Project
+
+**Local Development:**
+- ✅ **Environment Variables** (Option 1)
+- Simple, secure, no additional infrastructure
+
+**CI/CD Deployment:**
+- ✅ **GitHub Secrets** (Option 2)
+- Integrated with existing GitHub workflow
+
+**Future (If Scaling):**
+- Consider **HashiCorp Vault** for centralized management
+
+---
+
+## Security Checklist
+
+Before deploying, verify:
+
+- [ ] `terraform.tfvars` does **NOT** contain API keys
+- [ ] `.gitignore` includes:
+  - `*.tfvars` (except `.example`)
+  - `.env`
+  - `.keys/`
+  - `terraform.tfstate*`
+- [ ] Secrets are set as environment variables
+- [ ] GitHub Secrets are configured (for CI/CD)
+- [ ] SSH private keys are **NOT** committed
+
+---
+
+## Verifying Secrets Are Loaded
+
+### Before Terraform Apply
+
+```bash
+# Windows PowerShell
+if ($env:TF_VAR_claude_api_key -and $env:TF_VAR_hcloud_token) {
+    Write-Host "✓ Secrets loaded" -ForegroundColor Green
+} else {
+    Write-Host "✗ Secrets missing!" -ForegroundColor Red
+}
+
+# Linux/macOS Bash
+if [[ -n "$TF_VAR_claude_api_key" && -n "$TF_VAR_hcloud_token" ]]; then
+    echo "✓ Secrets loaded"
+else
+    echo "✗ Secrets missing!"
+fi
+```
+
+### During Terraform Plan
+
+Terraform will error if required variables are missing:
+
+```
+Error: No value for required variable
+
+  on variables.tf line 103:
+ 103: variable "claude_api_key" {
+
+The root module input variable "claude_api_key" is not set, and has no
+default value. Use a -var or -var-file command line argument to provide a
+value for this variable.
+```
+
+---
+
+## Rotating Secrets
+
+### Claude API Key
+
+```bash
+# 1. Generate new key at https://console.anthropic.com/settings/keys
+# 2. Update environment variable
+$env:TF_VAR_claude_api_key = "sk-ant-api03-NEW-KEY"
+
+# 3. Redeploy (will update VPS .env file)
+terraform apply
+
+# 4. Restart MCP Gateway to pick up new key
+ssh -i .keys/deploy_key root@$(terraform output -raw vps_ip)
+cd /opt/tamshai
+docker compose -f docker-compose.vps.yml restart mcp-gateway
+```
+
+### Hetzner API Token
+
+```bash
+# 1. Generate new token in Hetzner Cloud Console
+# 2. Update environment variable
+$env:TF_VAR_hcloud_token = "NEW-HETZNER-TOKEN"
+
+# 3. Next terraform run will use new token
+terraform plan
+```
+
+---
+
+## Emergency: Secret Leaked
+
+If a secret is accidentally committed:
+
+### 1. Revoke Immediately
+
+- **Claude API**: https://console.anthropic.com/settings/keys → Delete key
+- **Hetzner**: https://console.hetzner.cloud/ → API Tokens → Delete
+
+### 2. Remove from Git History
+
+```bash
+# Install git-filter-repo
+pip install git-filter-repo
+
+# Remove file from all commits
+git filter-repo --path infrastructure/terraform/vps/terraform.tfvars --invert-paths
+
+# Force push (DESTRUCTIVE - coordinate with team!)
+git push origin --force --all
+```
+
+### 3. Rotate Secrets
+
+- Generate new API keys
+- Update environment variables
+- Redeploy
+
+---
+
+## Best Practices Summary
+
+1. ✅ **Use environment variables** for local Terraform runs
+2. ✅ **Use GitHub Secrets** for CI/CD
+3. ✅ **Never commit** secrets to Git
+4. ✅ **Add `.gitignore`** entries for secret files
+5. ✅ **Rotate secrets** regularly (every 90 days)
+6. ✅ **Use separate keys** for dev/staging/production
+7. ✅ **Monitor usage** via cloud provider dashboards
+8. ✅ **Set up alerts** for unusual API usage
+
+---
+
+## Quick Reference
+
+### Windows PowerShell Deployment
+
+```powershell
+# Set secrets
+$env:TF_VAR_hcloud_token = "your-hetzner-token"
+$env:TF_VAR_claude_api_key = "sk-ant-api03-your-key"
+
+# Verify
+if ($env:TF_VAR_claude_api_key -and $env:TF_VAR_hcloud_token) {
+    Write-Host "✓ Ready to deploy" -ForegroundColor Green
+
+    cd infrastructure/terraform/vps
+    terraform init
+    terraform plan
+    terraform apply
+} else {
+    Write-Host "✗ Set secrets first!" -ForegroundColor Red
+}
+```
+
+### Linux/macOS Bash Deployment
+
+```bash
+# Set secrets
+export TF_VAR_hcloud_token="your-hetzner-token"
+export TF_VAR_claude_api_key="sk-ant-api03-your-key"
+
+# Verify and deploy
+if [[ -n "$TF_VAR_claude_api_key" && -n "$TF_VAR_hcloud_token" ]]; then
+    echo "✓ Ready to deploy"
+    cd infrastructure/terraform/vps
+    terraform init
+    terraform plan
+    terraform apply
+else
+    echo "✗ Set secrets first!"
+fi
+```
+
+---
+
+*Last Updated: December 29, 2025*
+*Security Review: Required every 90 days*
