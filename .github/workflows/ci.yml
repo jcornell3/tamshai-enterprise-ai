@@ -376,7 +376,8 @@ jobs:
           # Wait for Keycloak to be ready (can take 60-90 seconds)
           echo "Waiting for Keycloak to start..."
           for i in {1..60}; do
-            if curl -sf http://localhost:8180/health/ready > /dev/null 2>&1; then
+            # Keycloak 23.0+ uses /health (not /health/ready)
+            if curl -sf http://localhost:8180/health > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               break
             fi
