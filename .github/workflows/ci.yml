@@ -403,8 +403,46 @@ jobs:
             -u admin:admin \
             -d '{"realm":"tamshai","enabled":true}' || echo "Realm may already exist"
 
+          # Create tamshai-corp realm (used by integration tests)
+          echo "Creating tamshai-corp realm..."
+          curl -X POST http://localhost:8180/admin/realms \
+            -H "Content-Type: application/json" \
+            -u admin:admin \
+            -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
+
           # The integration test setup scripts will create users/clients programmatically
           echo "Keycloak ready for integration tests"
+
+      - name: Build MCP Gateway
+        working-directory: services/mcp-gateway
+        run: |
+          docker build -t mcp-gateway:test .
+
+      - name: Start MCP Gateway
+        run: |
+          docker run -d \
+            --name mcp-gateway \
+            --network keycloak-network \
+            -e PORT=3100 \
+            -e KEYCLOAK_URL=http://keycloak:8080 \
+            -e KEYCLOAK_REALM=tamshai-corp \
+            -e KEYCLOAK_CLIENT_ID=mcp-gateway \
+            -e REDIS_URL=redis://localhost:6379 \
+            -e CLAUDE_API_KEY=sk-ant-test-dummy-key-for-ci \
+            -e NODE_ENV=test \
+            -p 3100:3100 \
+            mcp-gateway:test
+
+          # Wait for gateway to be healthy
+          echo "Waiting for MCP Gateway to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:3100/health > /dev/null 2>&1; then
+              echo "MCP Gateway is ready!"
+              break
+            fi
+            echo "Attempt $i/30: Gateway not ready yet..."
+            sleep 2
+          done
 
       - name: Setup Node.js
         uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v4
@@ -423,14 +461,16 @@ jobs:
         env:
           CI: true
           KEYCLOAK_URL: http://localhost:8180
+          KEYCLOAK_REALM: tamshai-corp
+          GATEWAY_URL: http://localhost:3100
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
       - name: Cleanup containers
         if: always()
         run: |
-          docker stop keycloak postgres || true
-          docker rm keycloak postgres || true
+          docker stop mcp-gateway keycloak postgres || true
+          docker rm mcp-gateway keycloak postgres || true
           docker network rm keycloak-network || true
 
   # =============================================================================
