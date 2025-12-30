@@ -38,17 +38,25 @@ get_admin_token() {
 # Function: Create role (idempotent)
 create_role() {
   local role_name=$1
-  local response=$(curl -sf -w "%{http_code}" -o /dev/null -X POST "$KEYCLOAK_URL/admin/realms/$REALM/roles" \
+  # Capture both status code and response body for debugging
+  local temp_file=$(mktemp)
+  local response=$(curl -sf -w "%{http_code}" -o "$temp_file" -X POST "$KEYCLOAK_URL/admin/realms/$REALM/roles" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"name": "'$role_name'"}' 2>/dev/null)
 
   if [ "$response" == "201" ]; then
     log_info "Created role: $role_name"
+    rm -f "$temp_file"
   elif [ "$response" == "409" ]; then
     log_warn "Role already exists: $role_name"
+    rm -f "$temp_file"
   else
     log_error "Failed to create role $role_name (HTTP $response)"
+    if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+      log_error "Response body: $(cat $temp_file)"
+    fi
+    rm -f "$temp_file"
     return 1
   fi
 }
