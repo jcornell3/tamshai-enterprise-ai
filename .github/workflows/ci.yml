@@ -440,8 +440,9 @@ jobs:
             -H "Authorization: Bearer $ADMIN_TOKEN" \
             -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
 
-          # Additional grace period for realm initialization
-          sleep 5
+          # Additional grace period for realm initialization (realms need time to be fully ready)
+          echo "Waiting for realms to initialize..."
+          sleep 10
 
           # Run realm setup script
           chmod +x tests/integration/setup-keycloak-realm.sh
