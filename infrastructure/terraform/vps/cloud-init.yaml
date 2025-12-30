@@ -238,7 +238,7 @@ write_files:
       # Check key services
       echo "Checking service health..."
       curl -sf http://localhost:3100/health > /dev/null && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
-      curl -sf http://localhost:8080/auth/health/ready > /dev/null && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+      curl -sf http://localhost:8080/auth/health > /dev/null && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
 
       echo "=== Deployment complete ==="
 
