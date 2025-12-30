@@ -1971,6 +1971,959 @@ Before starting the refactoring, ensure:
 
 ---
 
-**Last Updated**: 2025-12-30 (Revised)
+---
+
+## ADDENDUM #2: Review #2 Feedback (QA/Testing Enhancements)
+
+**Reviewer**: Principal SDET (QA Lead)
+**Date**: 2025-12-30
+**Status**: ✅ **APPROVED WITH REVISIONS**
+
+**Summary**: Plan is solid with excellent DI patterns and incremental migration strategy. Requires enhancements to integration test strategy, mock factory definitions, and coverage metrics alignment.
+
+---
+
+### Must-Have Change #1: 🟢 SSE Integration Test Scenarios
+
+**Problem Identified**:
+The plan mentions "SSE streaming tests" but doesn't specify which scenarios to test. SSE streaming is 253 lines of very high complexity code that requires comprehensive integration testing.
+
+**Required Addition**: Specific SSE integration test cases
+
+**File**: `tests/integration/sse-streaming.test.ts`
+
+```typescript
+// tests/integration/sse-streaming.test.ts
+import request from 'supertest';
+import app from '../../src/index';
+import { getKeycloakToken } from '../helpers/keycloak-mock';
+import { setupMCPMocks } from '../helpers/mcp-mock';
+
+/**
+ * SSE Streaming Integration Tests
+ *
+ * Covers 6 critical SSE flows from v1.4 architecture:
+ * 1. Real-time streaming
+ * 2. Client disconnect handling
+ * 3. Pagination hints
+ * 4. Truncation warnings
+ * 5. Timeout handling
+ * 6. Confirmation interrupts
+ */
+describe('SSE Streaming Integration', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    token = await getKeycloakToken('alice.chen', 'hr-read');
+    setupMCPMocks();
+  });
+
+  /**
+   * Test 1: Real-time streaming of AI responses
+   * Verifies that SSE chunks arrive progressively, not all at once
+   */
+  it('should stream AI responses in real-time chunks', async () => {
+    const response = await request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List employees' })
+      .expect(200)
+      .expect('Content-Type', /text\/event-stream/);
+
+    // Parse SSE events
+    const events = response.text.split('\n\n').filter(Boolean);
+
+    // Should have multiple text chunks (not one big response)
+    const textEvents = events.filter(e => e.includes('"type":"text"'));
+    expect(textEvents.length).toBeGreaterThan(3); // Streaming, not batch
+
+    // Should end with [DONE]
+    expect(events[events.length - 1]).toContain('[DONE]');
+
+    // Should contain employee data
+    expect(response.text).toContain('employee');
+  });
+
+  /**
+   * Test 2: Client disconnect mid-stream
+   * Verifies graceful handling when client closes connection
+   */
+  it('should handle client disconnect mid-stream without errors', async () => {
+    const controller = new AbortController();
+
+    // Start streaming request
+    const promise = request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List all employees' })
+      .signal(controller.signal);
+
+    // Abort after 100ms (simulates client disconnect)
+    setTimeout(() => controller.abort(), 100);
+
+    // Should not throw or crash server
+    await expect(promise).rejects.toThrow(); // Request aborted, but no server error
+
+    // Verify server is still healthy
+    await request(app).get('/health').expect(200);
+  });
+
+  /**
+   * Test 3: Pagination hints in streamed response
+   * Verifies v1.4 pagination metadata is included
+   */
+  it('should include pagination hints in streamed response', async () => {
+    // Mock MCP server returns hasMore=true
+    setupMCPMocks({ hasMore: true, nextCursor: 'page2' });
+
+    const response = await request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List employees' })
+      .expect(200);
+
+    // Should include pagination event
+    expect(response.text).toContain('"type":"pagination"');
+    expect(response.text).toContain('"hasMore":true');
+    expect(response.text).toContain('"nextCursor":"page2"');
+
+    // AI should mention partial results (pagination instruction in system prompt)
+    expect(response.text).toMatch(/partial|more data|additional/i);
+  });
+
+  /**
+   * Test 4: Truncation warnings for partial data
+   * Verifies v1.4 Article III.2 truncation warning injection
+   */
+  it('should inject truncation warnings for partial data', async () => {
+    // Mock MCP server returns truncated=true
+    setupMCPMocks({ truncated: true, returnedCount: 50 });
+
+    const response = await request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List all employees' })
+      .expect(200);
+
+    // AI must acknowledge truncation (warning in system prompt)
+    expect(response.text).toMatch(/TRUNCATION WARNING|incomplete|only 50/i);
+  });
+
+  /**
+   * Test 5: Timeout handling for slow MCP servers
+   * Verifies v1.5 partial response degradation
+   */
+  it('should timeout slow MCP servers during streaming', async () => {
+    // Mock MCP server with 10s delay (exceeds 5s read timeout)
+    setupMCPMocks({ delay: 10000 });
+
+    const response = await request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List employees' })
+      .expect(200);
+
+    // Should include service_unavailable event
+    expect(response.text).toContain('"type":"service_unavailable"');
+    expect(response.text).toContain('"code":"TIMEOUT"');
+
+    // Should still stream response with partial data
+    expect(response.text).toContain('[DONE]');
+  });
+
+  /**
+   * Test 6: Confirmation interrupts in streams
+   * Verifies v1.4 HITL pending_confirmation handling
+   */
+  it('should handle confirmation interrupts in streams', async () => {
+    const response = await request(app)
+      .post('/api/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'Delete employee 123' }) // Triggers confirmation
+      .expect(200);
+
+    // Should return pending_confirmation immediately (no Claude streaming)
+    expect(response.text).toContain('"status":"pending_confirmation"');
+    expect(response.text).toContain('"confirmationId"');
+    expect(response.text).toContain('[DONE]');
+
+    // Should NOT call Claude API
+    expect(response.text).not.toContain('"type":"text"');
+  });
+});
+```
+
+**Coverage Target**: 6 critical SSE scenarios (100% of v1.4 streaming features)
+
+---
+
+### Must-Have Change #2: 🟢 Mock Factory Patterns
+
+**Problem Identified**:
+The plan mentions "Create mock factories" but doesn't show the pattern. This leads to test boilerplate duplication (10 lines per test instead of 1).
+
+**Required Addition**: Test utility factories
+
+**Directory**: `src/test-utils/`
+
+**File 1**: `src/test-utils/mock-logger.ts`
+
+```typescript
+// src/test-utils/mock-logger.ts
+import { Logger } from 'winston';
+
+/**
+ * Create a mock Winston logger for testing
+ *
+ * Usage:
+ *   const logger = createMockLogger();
+ *   const service = new MyService(logger);
+ *   expect(logger.error).toHaveBeenCalledWith(...);
+ */
+export function createMockLogger(): jest.Mocked<Logger> {
+  return {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    verbose: jest.fn(),
+    silly: jest.fn(),
+    // Add other Logger methods as needed
+  } as any as jest.Mocked<Logger>;
+}
+```
+
+**File 2**: `src/test-utils/mock-mcp-server.ts`
+
+```typescript
+// src/test-utils/mock-mcp-server.ts
+import { MCPServerConfig } from '../mcp/role-mapper';
+
+/**
+ * Create a mock MCP server configuration for testing
+ *
+ * Usage:
+ *   const hrServer = createMockMCPServer({ name: 'hr', requiredRoles: ['hr-read'] });
+ */
+export function createMockMCPServer(
+  overrides?: Partial<MCPServerConfig>
+): MCPServerConfig {
+  return {
+    name: 'test-server',
+    url: 'http://localhost:9999',
+    requiredRoles: ['test-role'],
+    description: 'Test MCP Server',
+    ...overrides,
+  };
+}
+
+/**
+ * Create a set of standard test MCP servers
+ */
+export function createStandardMCPServers(): MCPServerConfig[] {
+  return [
+    createMockMCPServer({ name: 'hr', url: 'http://localhost:3101', requiredRoles: ['hr-read', 'executive'] }),
+    createMockMCPServer({ name: 'finance', url: 'http://localhost:3102', requiredRoles: ['finance-read', 'executive'] }),
+    createMockMCPServer({ name: 'sales', url: 'http://localhost:3103', requiredRoles: ['sales-read', 'executive'] }),
+    createMockMCPServer({ name: 'support', url: 'http://localhost:3104', requiredRoles: ['support-read', 'executive'] }),
+  ];
+}
+```
+
+**File 3**: `src/test-utils/mock-user-context.ts`
+
+```typescript
+// src/test-utils/mock-user-context.ts
+import { UserContext } from '../auth/jwt-validator';
+
+/**
+ * Create a mock user context for testing
+ *
+ * Usage:
+ *   const alice = createMockUserContext({ username: 'alice', roles: ['hr-read', 'hr-write'] });
+ *   const intern = createMockUserContext({ roles: ['intern'] });
+ */
+export function createMockUserContext(
+  overrides?: Partial<UserContext>
+): UserContext {
+  return {
+    userId: 'test-user-123',
+    username: 'testuser',
+    email: 'test@example.com',
+    roles: ['hr-read'],
+    groups: [],
+    ...overrides,
+  };
+}
+
+/**
+ * Pre-defined user contexts for common test scenarios
+ */
+export const TEST_USERS = {
+  hrManager: createMockUserContext({
+    userId: 'alice-123',
+    username: 'alice.chen',
+    email: 'alice@tamshai.com',
+    roles: ['hr-read', 'hr-write'],
+    groups: ['/tamshai/hr'],
+  }),
+  executive: createMockUserContext({
+    userId: 'eve-456',
+    username: 'eve.thompson',
+    email: 'eve@tamshai.com',
+    roles: ['executive'],
+    groups: ['/tamshai/executive'],
+  }),
+  intern: createMockUserContext({
+    userId: 'frank-789',
+    username: 'frank.davis',
+    email: 'frank@tamshai.com',
+    roles: ['intern'],
+    groups: ['/tamshai/engineering'],
+  }),
+};
+```
+
+**File 4**: `src/test-utils/mock-mcp-client.ts`
+
+```typescript
+// src/test-utils/mock-mcp-client.ts
+import { MCPClient, MCPQueryResult } from '../mcp/client';
+
+/**
+ * Create a mock MCP client for testing
+ *
+ * Usage:
+ *   const mockClient = createMockMCPClient();
+ *   mockClient.query.mockResolvedValue({ status: 'success', server: 'hr', data: {...} });
+ */
+export function createMockMCPClient(): jest.Mocked<MCPClient> {
+  return {
+    query: jest.fn().mockResolvedValue({
+      status: 'success',
+      server: 'test-server',
+      data: { status: 'success', data: [] },
+      durationMs: 100,
+    } as MCPQueryResult),
+  } as any as jest.Mocked<MCPClient>;
+}
+```
+
+**File 5**: `src/test-utils/mock-claude-client.ts`
+
+```typescript
+// src/test-utils/mock-claude-client.ts
+import { ClaudeClient } from '../ai/claude-client';
+
+/**
+ * Create a mock Claude client for testing
+ */
+export function createMockClaudeClient(): jest.Mocked<ClaudeClient> {
+  return {
+    query: jest.fn().mockResolvedValue('Test AI response'),
+    queryStream: jest.fn().mockImplementation(async function* () {
+      yield 'Test ';
+      yield 'streaming ';
+      yield 'response';
+    }),
+  } as any as jest.Mocked<ClaudeClient>;
+}
+```
+
+**Usage Example** (Before vs After):
+
+```typescript
+// BEFORE: 15 lines of boilerplate per test
+describe('MyService', () => {
+  it('should do something', () => {
+    const mockLogger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+    const userContext = {
+      userId: 'test-123',
+      username: 'test',
+      email: 'test@test.com',
+      roles: ['hr-read'],
+      groups: [],
+    };
+    const service = new MyService(mockLogger);
+    // ... test logic
+  });
+});
+
+// AFTER: 3 lines total
+describe('MyService', () => {
+  it('should do something', () => {
+    const service = new MyService(createMockLogger());
+    const result = service.doSomething(createMockUserContext());
+    // ... assertions
+  });
+});
+```
+
+**Benefits**:
+- ✅ Reduces test boilerplate by 80%
+- ✅ Consistent mock objects across all tests
+- ✅ Easy to update when interfaces change (single source of truth)
+- ✅ Pre-defined test users for common scenarios
+
+---
+
+### Must-Have Change #3: 🟢 Type Coverage Metric
+
+**Problem Identified**:
+The plan tracks code coverage but not type coverage (TypeScript `any` usage). Type safety is critical for refactoring confidence.
+
+**Required Addition**: Add type coverage to success metrics
+
+**Updated Success Metrics Table**:
+
+| Metric | Before | After |
+|--------|--------|-------|
+| index.ts LOC | 1,533 | <200 |
+| Overall Coverage | 31% | 70%+ |
+| **Type Coverage** | **Unknown** | **85%+** |
+| MCP Gateway Coverage | 49.06% | 85%+ |
+| Avg Function Length | 50+ lines | <20 lines |
+| Cyclomatic Complexity | High | Low |
+| Test Execution Time | ~5s | <10s |
+
+**Baseline Type Coverage**:
+
+```bash
+cd services/mcp-gateway
+npx type-coverage --detail
+
+# Expected output:
+# 3205 / 3890 85.39%
+# type-coverage success: true
+```
+
+**Enforce in CI**:
+
+```yaml
+# .github/workflows/ci.yml (add to MCP Gateway job)
+- name: Check type coverage
+  run: |
+    cd services/mcp-gateway
+    npx type-coverage --at-least 85
+```
+
+**Track During Refactoring**:
+- Phase 1: Baseline type coverage (likely 75-80%)
+- Phase 2: Increase to 82%+ (services with strong typing)
+- Phase 3: Increase to 84%+ (typed routes)
+- Phase 4: Target 85%+ (all extracted code fully typed)
+
+**Why This Matters**:
+- Prevents `any` from creeping into new code
+- Catches type errors at compile time, not runtime
+- Makes refactoring safer (TypeScript will catch breaking changes)
+
+---
+
+### Nice-to-Have Change #4: ⚠️ Confirmation Endpoint Test Cases
+
+**Problem Identified**:
+The plan mentions "Confirmation workflow" but doesn't specify test cases for the 109-line confirmation handler (lines 1047-1155).
+
+**Recommended Addition**: Explicit confirmation test cases
+
+**File**: `tests/integration/confirmation.test.ts`
+
+```typescript
+// tests/integration/confirmation.test.ts
+import request from 'supertest';
+import app from '../../src/index';
+import { getKeycloakToken } from '../helpers/keycloak-mock';
+import { setupMCPMocks, setupRedis } from '../helpers/mcp-mock';
+
+/**
+ * Human-in-the-Loop Confirmation Integration Tests
+ *
+ * Covers v1.4 Section 5.6 confirmation workflow:
+ * 1. Write operations return pending_confirmation
+ * 2. User can approve/reject via /api/confirm/:id
+ * 3. Confirmations expire after TTL
+ * 4. Replay attacks prevented
+ */
+describe('Human-in-the-Loop Confirmation', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    token = await getKeycloakToken('alice.chen', 'hr-write');
+    setupMCPMocks();
+    setupRedis();
+  });
+
+  /**
+   * Test 1: Write operations return pending_confirmation
+   */
+  it('should return pending_confirmation for write operations', async () => {
+    const response = await request(app)
+      .post('/api/mcp/hr/delete_employee')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ employeeId: '123' })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'pending_confirmation',
+      confirmationId: expect.any(String),
+      message: expect.stringContaining('Delete employee'),
+      confirmationData: {
+        employeeId: '123',
+        employeeName: expect.any(String),
+      },
+    });
+
+    // Confirmation should be stored in Redis
+    const confirmationId = response.body.confirmationId;
+    expect(confirmationId).toMatch(/^[0-9a-f-]{36}$/); // UUID format
+  });
+
+  /**
+   * Test 2: User can approve confirmation and action executes
+   */
+  it('should execute confirmed action and delete Redis key', async () => {
+    // Step 1: Initiate write operation
+    const initResponse = await request(app)
+      .post('/api/mcp/hr/delete_employee')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ employeeId: '123' })
+      .expect(200);
+
+    const confirmationId = initResponse.body.confirmationId;
+
+    // Step 2: Approve confirmation
+    const confirmResponse = await request(app)
+      .post(`/api/confirm/${confirmationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ approved: true })
+      .expect(200);
+
+    expect(confirmResponse.body).toMatchObject({
+      status: 'success',
+      message: expect.stringContaining('Action completed'),
+      result: expect.objectContaining({
+        status: 'success',
+      }),
+    });
+
+    // Step 3: Confirmation should be consumed (deleted from Redis)
+    const retryResponse = await request(app)
+      .post(`/api/confirm/${confirmationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ approved: true })
+      .expect(404);
+
+    expect(retryResponse.body.error).toContain('not found or expired');
+  });
+
+  /**
+   * Test 3: User can reject confirmation
+   */
+  it('should cancel on user rejection', async () => {
+    const initResponse = await request(app)
+      .post('/api/mcp/hr/delete_employee')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ employeeId: '456' })
+      .expect(200);
+
+    const confirmationId = initResponse.body.confirmationId;
+
+    const confirmResponse = await request(app)
+      .post(`/api/confirm/${confirmationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ approved: false })
+      .expect(200);
+
+    expect(confirmResponse.body).toMatchObject({
+      status: 'cancelled',
+      message: expect.stringContaining('cancelled'),
+    });
+
+    // Confirmation should be deleted
+    await request(app)
+      .post(`/api/confirm/${confirmationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ approved: true })
+      .expect(404);
+  });
+
+  /**
+   * Test 4: Confirmations expire after TTL (300 seconds)
+   */
+  it('should return 404 for expired confirmations (TTL=300s)', async () => {
+    const initResponse = await request(app)
+      .post('/api/mcp/hr/delete_employee')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ employeeId: '789' })
+      .expect(200);
+
+    const confirmationId = initResponse.body.confirmationId;
+
+    // Simulate TTL expiration (mock Redis to return null)
+    setupRedis({ simulateExpiration: true });
+
+    const confirmResponse = await request(app)
+      .post(`/api/confirm/${confirmationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ approved: true })
+      .expect(404);
+
+    expect(confirmResponse.body.error).toContain('not found or expired');
+    expect(confirmResponse.body.message).toContain('expired');
+  });
+
+  /**
+   * Test 5: Prevent replay attacks (different user)
+   */
+  it('should prevent replay attacks on confirmed actions', async () => {
+    // Alice initiates delete
+    const aliceToken = await getKeycloakToken('alice.chen', 'hr-write');
+    const initResponse = await request(app)
+      .post('/api/mcp/hr/delete_employee')
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send({ employeeId: '999' })
+      .expect(200);
+
+    const confirmationId = initResponse.body.confirmationId;
+
+    // Bob tries to confirm (different user)
+    const bobToken = await getKeycloakToken('bob.martinez', 'hr-write');
+    const bobResponse = await request(app)
+      .post(`/api/confirm/${confirmationId}`)
+      .set('Authorization', `Bearer ${bobToken}`)
+      .send({ approved: true })
+      .expect(403);
+
+    expect(bobResponse.body.error).toContain('initiating user');
+  });
+});
+```
+
+**Coverage**: 5 critical confirmation scenarios (100% of v1.4 HITL features)
+
+---
+
+### Nice-to-Have Change #5: ⚠️ Error Handling Service
+
+**Problem Identified**:
+The plan extracts business logic but doesn't extract error handling patterns (fail-secure, logging, audit trails).
+
+**Recommended Addition**: Phase 2.4 - Error Handler Service
+
+**File**: `src/middleware/error.middleware.ts`
+
+```typescript
+// src/middleware/error.middleware.ts
+import { Request, Response, NextFunction } from 'express';
+import { Logger } from 'winston';
+
+export enum ErrorType {
+  AUTHENTICATION = 'authentication',
+  AUTHORIZATION = 'authorization',
+  VALIDATION = 'validation',
+  NOT_FOUND = 'not_found',
+  RATE_LIMIT = 'rate_limit',
+  INTERNAL = 'internal',
+}
+
+/**
+ * Centralized Error Handler Service
+ *
+ * Benefits:
+ * - Consistent error responses across all endpoints
+ * - Fail-secure: Never leak internal details
+ * - Structured audit logging
+ * - Easy to test error scenarios
+ */
+export class ErrorHandler {
+  constructor(private logger: Logger) {}
+
+  /**
+   * Handle authentication errors (401)
+   */
+  handleAuthError(error: unknown, req: Request, res: Response): void {
+    const requestId = req.headers['x-request-id'] as string;
+
+    this.logger.warn('Authentication failed', {
+      requestId,
+      path: req.path,
+      method: req.method,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(401).json({
+      error: 'Authentication failed',
+      message: 'Invalid or expired credentials',
+      requestId,
+    });
+  }
+
+  /**
+   * Handle authorization errors (403)
+   */
+  handleAuthzError(error: unknown, req: Request, res: Response, details?: { requiredRoles?: string[] }): void {
+    const requestId = req.headers['x-request-id'] as string;
+
+    this.logger.warn('Authorization failed', {
+      requestId,
+      path: req.path,
+      userId: (req as any).userContext?.userId,
+      userRoles: (req as any).userContext?.roles,
+      requiredRoles: details?.requiredRoles,
+    });
+
+    res.status(403).json({
+      error: 'Access denied',
+      message: 'You do not have permission to access this resource',
+      requestId,
+    });
+  }
+
+  /**
+   * Handle validation errors (400)
+   */
+  handleValidationError(error: unknown, req: Request, res: Response): void {
+    const requestId = req.headers['x-request-id'] as string;
+
+    // Fail-secure: Never leak internal validation logic
+    res.status(400).json({
+      error: 'Invalid request',
+      message: error instanceof Error ? error.message : 'Request validation failed',
+      requestId,
+    });
+  }
+
+  /**
+   * Handle not found errors (404)
+   */
+  handleNotFoundError(req: Request, res: Response, resource?: string): void {
+    const requestId = req.headers['x-request-id'] as string;
+
+    res.status(404).json({
+      error: 'Not found',
+      message: resource ? `${resource} not found` : 'The requested resource was not found',
+      requestId,
+    });
+  }
+
+  /**
+   * Handle rate limit errors (429)
+   */
+  handleRateLimitError(req: Request, res: Response): void {
+    const requestId = req.headers['x-request-id'] as string;
+
+    this.logger.warn('Rate limit exceeded', {
+      requestId,
+      path: req.path,
+      userId: (req as any).userContext?.userId,
+      ip: req.ip,
+    });
+
+    res.status(429).json({
+      error: 'Rate limit exceeded',
+      message: 'Too many requests, please try again later',
+      requestId,
+    });
+  }
+
+  /**
+   * Handle internal server errors (500)
+   * CRITICAL: Never leak internal details to client
+   */
+  handleInternalError(error: unknown, req: Request, res: Response): void {
+    const requestId = req.headers['x-request-id'] as string;
+
+    // Log full error details internally
+    this.logger.error('Internal server error', {
+      requestId,
+      path: req.path,
+      method: req.method,
+      userId: (req as any).userContext?.userId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    // Return minimal error to client (fail-secure)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'An unexpected error occurred',
+      requestId,
+    });
+  }
+
+  /**
+   * Express error middleware factory
+   * Use this to create the global error handler
+   */
+  createMiddleware() {
+    return (error: any, req: Request, res: Response, next: NextFunction): void => {
+      // Determine error type and delegate
+      if (error.name === 'UnauthorizedError' || error.name === 'JsonWebTokenError') {
+        this.handleAuthError(error, req, res);
+      } else if (error.name === 'ForbiddenError') {
+        this.handleAuthzError(error, req, res);
+      } else if (error.name === 'ValidationError') {
+        this.handleValidationError(error, req, res);
+      } else if (error.statusCode === 429) {
+        this.handleRateLimitError(req, res);
+      } else {
+        this.handleInternalError(error, req, res);
+      }
+    };
+  }
+}
+```
+
+**Usage in index.ts**:
+
+```typescript
+// src/index.ts
+import { ErrorHandler } from './middleware/error.middleware';
+
+const errorHandler = new ErrorHandler(logger);
+
+// ... all routes ...
+
+// Global error handler (MUST be last middleware)
+app.use(errorHandler.createMiddleware());
+```
+
+**Tests**: `src/middleware/error.middleware.test.ts`
+
+```typescript
+describe('ErrorHandler', () => {
+  let handler: ErrorHandler;
+  let mockLogger: jest.Mocked<Logger>;
+  let req: Partial<Request>;
+  let res: Partial<Response>;
+
+  beforeEach(() => {
+    mockLogger = createMockLogger();
+    handler = new ErrorHandler(mockLogger);
+    req = { headers: { 'x-request-id': 'test-123' }, path: '/api/test', method: 'GET' };
+    res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  });
+
+  it('should return 401 for auth errors', () => {
+    handler.handleAuthError(new Error('Invalid token'), req as Request, res as Response);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Authentication failed',
+      message: 'Invalid or expired credentials',
+      requestId: 'test-123',
+    });
+    expect(mockLogger.warn).toHaveBeenCalled();
+  });
+
+  it('should never leak internal error details', () => {
+    const internalError = new Error('Database connection failed at line 42 with password abc123');
+
+    handler.handleInternalError(internalError, req as Request, res as Response);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    const response = (res.json as jest.Mock).mock.calls[0][0];
+    expect(response.message).toBe('An unexpected error occurred'); // Generic message
+    expect(response.message).not.toContain('Database'); // No internal details
+    expect(response.message).not.toContain('password'); // No secrets
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Internal server error',
+      expect.objectContaining({
+        error: 'Database connection failed at line 42 with password abc123', // Full error logged
+      })
+    );
+  });
+});
+```
+
+**Coverage Target**: 95%+ (pure service, easy to test)
+
+---
+
+### Nice-to-Have Change #6: ⚠️ Revise Phase 4 Coverage Target
+
+**Problem Identified**:
+The plan targets 85%+ MCP Gateway coverage, but index.ts currently has 1,532 uncovered lines. Even after extraction, legacy code will drag down the average.
+
+**Recommended Change**: Align with "Diff Coverage" strategy
+
+**Updated Success Metrics**:
+
+| Metric | Before | After (Revised) |
+|--------|--------|-----------------|
+| index.ts LOC | 1,533 | <200 |
+| Overall Coverage | 31% | 70%+ |
+| Type Coverage | Unknown | 85%+ |
+| **MCP Gateway Coverage** | **49.06%** | **60%+ (diff: 90%+)** |
+| Avg Function Length | 50+ lines | <20 lines |
+
+**Rationale**:
+- **60% overall** = realistic given legacy code remains
+- **90% diff coverage** = all NEW extracted code is well-tested
+- **Aligns with strategy**: "49.06% gradually improving, 90% on new code"
+
+**Coverage Projection** (from QA review):
+
+| Phase | New Covered Lines | Cumulative Coverage |
+|-------|-------------------|---------------------|
+| **Baseline** | 0 | 49.06% |
+| **Phase 1** | +58.6 | 53% |
+| **Phase 2** | +246.5 | 62% |
+| **Phase 3** | +440.5 | 72% |
+| **Phase 4** | +560 | **78%** |
+
+**Adjusted Target**: 60%+ overall (more conservative), but Phase 4 projection shows 78% is achievable if all tests written.
+
+**Updated Recommendation**:
+- **Minimum Success**: 60% overall, 90% diff coverage
+- **Stretch Goal**: 70%+ overall (original target)
+- **Likely Outcome**: 65-70% based on QA projections
+
+---
+
+## Updated Implementation Checklist
+
+Before starting the refactoring, ensure:
+
+**Must-Have Items**:
+- [ ] **Singleton Pattern**: All services instantiated ONCE at server startup
+- [ ] **AsyncGenerator Pattern**: Streaming logic extracted to `StreamingService.executeQuery()`
+- [ ] **Integration Tests**: Happy path + 6 SSE scenarios + 5 confirmation scenarios
+- [ ] **Mock Factories**: Create `test-utils/` with mock-logger, mock-user-context, etc.
+- [ ] **Type Coverage Baseline**: Run `npx type-coverage --detail` and document starting percentage
+- [ ] **Performance Baseline**: Measure current JWKS cache hit rate (should be >95%)
+- [ ] **Coverage Baseline**: Confirm starting at 31% overall, 49.06% on mcp-gateway
+
+**Nice-to-Have Items**:
+- [ ] **Error Handler Service**: Centralized error handling (Phase 2.4)
+- [ ] **Revised Coverage Target**: Update metrics table to 60%+ (diff: 90%+)
+- [ ] **Pre-defined Test Users**: Add TEST_USERS to mock-user-context.ts
+
+---
+
+## Updated Migration Timeline (5 Weeks)
+
+| Week | Phase | Tasks | Tests |
+|------|-------|-------|-------|
+| **1** | Phase 1 | Extract config, role-mapper | **+ Setup mock factories** |
+| **2** | Phase 2 | Extract JWT, MCP, Claude services | Write unit tests (85-95% coverage) |
+| **2.5** | Phase 2.5 | Extract StreamingService | Unit tests with AsyncGenerator |
+| **3** | Phase 3 | Extract middleware, routes | **+ SSE integration tests (6 scenarios)** |
+| **3.5** | Phase 3.5 | _(Optional)_ Error handler service | **+ Confirmation tests (5 scenarios)** |
+| **4** | Phase 4 | Clean up, coverage report | Integration happy path, deploy |
+
+**Total**: 5 weeks with optional error handler service
+
+---
+
+**Last Updated**: 2025-12-30 (Revised - QA Feedback)
 **Author**: Claude (Anthropic)
-**Reviewers**: Technical Lead (Review #1 - Critical fixes applied)
+**Reviewers**:
+- Technical Lead (Review #1 - Critical fixes applied)
+- Principal SDET/QA Lead (Review #2 - Testing enhancements applied)
