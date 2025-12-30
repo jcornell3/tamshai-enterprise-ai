@@ -4,7 +4,7 @@
  * Target: 95%+ coverage (pure function, easy to test)
  */
 
-import { loadConfig, GatewayConfig } from './index';
+import { loadConfig } from './index';
 
 describe('Configuration Module', () => {
   // Store original env vars to restore after tests
