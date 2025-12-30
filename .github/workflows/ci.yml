@@ -421,6 +421,7 @@ jobs:
         working-directory: tests/integration
         run: npm test
         env:
+          CI: true
           KEYCLOAK_URL: http://localhost:8180
           REDIS_HOST: localhost
           REDIS_PORT: 6379

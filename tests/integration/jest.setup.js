@@ -265,14 +265,19 @@ async function checkKeycloakHealth() {
 beforeAll(async () => {
   console.log('🔍 Verifying all services are healthy...\n');
 
-  const checks = await Promise.all([
-    checkKeycloakHealth(),
-    checkServiceHealth('MCP Gateway', CONFIG.gatewayUrl),
-    checkServiceHealth('MCP HR', CONFIG.mcpHrUrl),
-    checkServiceHealth('MCP Finance', CONFIG.mcpFinanceUrl),
-    checkServiceHealth('MCP Sales', CONFIG.mcpSalesUrl),
-    checkServiceHealth('MCP Support', CONFIG.mcpSupportUrl),
-  ]);
+  // In CI, only check Keycloak (MCP services are mocked)
+  const isCI = process.env.CI === 'true';
+
+  const checks = isCI
+    ? await Promise.all([checkKeycloakHealth()])
+    : await Promise.all([
+        checkKeycloakHealth(),
+        checkServiceHealth('MCP Gateway', CONFIG.gatewayUrl),
+        checkServiceHealth('MCP HR', CONFIG.mcpHrUrl),
+        checkServiceHealth('MCP Finance', CONFIG.mcpFinanceUrl),
+        checkServiceHealth('MCP Sales', CONFIG.mcpSalesUrl),
+        checkServiceHealth('MCP Support', CONFIG.mcpSupportUrl),
+      ]);
 
   const allHealthy = checks.every((check) => check === true);
 
@@ -282,7 +287,7 @@ beforeAll(async () => {
     throw new Error('Services not ready for integration tests');
   }
 
-  console.log('\n✅ All services are healthy.');
+  console.log(isCI ? '\n✅ Keycloak is healthy (CI mode).' : '\n✅ All services are healthy.');
 
   // Get admin token and prepare test users
   try {
