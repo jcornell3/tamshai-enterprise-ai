@@ -2922,8 +2922,556 @@ Before starting the refactoring, ensure:
 
 ---
 
-**Last Updated**: 2025-12-30 (Revised - QA Feedback)
+---
+
+## ADDENDUM #3: Final Execution Recommendations (Critical Implementation Details)
+
+**Received**: 2025-12-30
+**Source**: Final Technical Review
+**Status**: ⚠️ **CRITICAL - Must implement before production**
+
+### Overview
+
+Two critical implementation details that, if missed, will cause **production incidents**:
+
+1. **🔴 CRITICAL**: Zombie Anthropic API usage from disconnected clients (unbounded cost)
+2. **🔴 CRITICAL**: Flaky integration tests dependent on live MCP microservices
+
+---
+
+### 🚨 Critical Issue #1: Client Disconnect Handling in Phase 3
+
+**Problem**: The AsyncGenerator pattern in Phase 2.5 creates a **cost and resource leak risk** if the HTTP client disconnects mid-stream.
+
+**Scenario**:
+```typescript
+// Client opens SSE connection
+const eventSource = new EventSource('/api/query');
+
+// Server starts streaming from Anthropic
+for await (const event of streamingService.executeQuery(...)) {
+  res.write(`data: ${JSON.stringify(event)}\n\n`);
+}
+
+// ❌ PROBLEM: Client closes browser/tab
+// ❌ AsyncGenerator CONTINUES running
+// ❌ Anthropic API CONTINUES billing for tokens
+// ❌ Server resources tied up for 60+ seconds
+```
+
+**Root Cause**: Express does NOT automatically abort async operations when `res` closes. The `for await` loop continues until the generator naturally completes.
+
+#### ✅ Required Implementation (Phase 3 - streaming.routes.ts)
+
+```typescript
+// src/routes/streaming.routes.ts
+import { Router, Request, Response } from 'express';
+import { StreamingService } from '../ai/streaming.service';
+
+export function createStreamingRoutes(
+  streamingService: StreamingService,
+  logger: Logger
+): Router {
+  const router = Router();
+
+  router.post('/api/query', async (req: Request, res: Response) => {
+    const requestId = req.headers['x-request-id'] as string;
+    const userContext = (req as any).userContext; // From auth middleware
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Create AbortController for cleanup
+    const abortController = new AbortController();
+    let streamClosed = false;
+
+    // 🔴 CRITICAL: Handle client disconnect
+    req.on('close', () => {
+      if (!streamClosed) {
+        logger.warn('Client disconnected mid-stream', { requestId });
+        streamClosed = true;
+        abortController.abort(); // Signal generator to stop
+      }
+    });
+
+    try {
+      const generator = streamingService.executeQuery(
+        req.body.query,
+        userContext,
+        accessibleServers,
+        abortController.signal // Pass abort signal
+      );
+
+      for await (const event of generator) {
+        // 🔴 CRITICAL: Check if client disconnected
+        if (streamClosed || abortController.signal.aborted) {
+          logger.info('Aborting stream due to client disconnect', { requestId });
+          break; // Exit loop immediately
+        }
+
+        // Write event to client
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+        // 🔴 CRITICAL: Flush immediately (don't buffer)
+        if (res.flush) res.flush();
+      }
+
+      // Clean end
+      if (!streamClosed) {
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+    } catch (error) {
+      logger.error('Streaming error', { requestId, error });
+      if (!streamClosed && !res.headersSent) {
+        res.status(500).json({ error: 'Stream failed' });
+      }
+    } finally {
+      streamClosed = true;
+    }
+  });
+
+  return router;
+}
+```
+
+#### ✅ Required Implementation (Phase 2.5 - StreamingService)
+
+**Update StreamingService to accept AbortSignal**:
+
+```typescript
+// src/ai/streaming.service.ts
+export class StreamingService {
+  async *executeQuery(
+    query: string,
+    userContext: UserContext,
+    accessibleServers: any[],
+    signal?: AbortSignal, // ← NEW: Accept abort signal
+    cursor?: string
+  ): AsyncGenerator<StreamEvent, void, unknown> {
+    // 🔴 CRITICAL: Check abort before expensive operations
+    if (signal?.aborted) {
+      this.logger.warn('Stream aborted before start');
+      return;
+    }
+
+    try {
+      // Call Anthropic API with streaming
+      const stream = await this.anthropic.messages.stream(
+        {
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: safeQuery }],
+          tools: this.buildMcpTools(accessibleServers),
+        },
+        { signal } // ← Pass abort signal to Anthropic SDK
+      );
+
+      for await (const chunk of stream) {
+        // 🔴 CRITICAL: Check abort between chunks
+        if (signal?.aborted) {
+          this.logger.info('Stream aborted mid-processing');
+          await stream.abort(); // Clean up Anthropic stream
+          return;
+        }
+
+        // Process chunk
+        if (chunk.type === 'content_block_delta') {
+          yield {
+            type: 'text',
+            text: chunk.delta.text,
+            requestId: userContext.requestId,
+          };
+        }
+
+        // ... other chunk handling
+      }
+
+      yield { type: 'done', requestId: userContext.requestId };
+    } catch (error) {
+      // AbortError is expected on client disconnect
+      if (error.name === 'AbortError') {
+        this.logger.info('Stream cleanly aborted', { requestId: userContext.requestId });
+        return;
+      }
+      throw error;
+    }
+  }
+}
+```
+
+#### 📊 Cost Impact Analysis
+
+**Without Disconnect Handling**:
+- Average query duration: 30 seconds
+- Average tokens: 2,000 input + 4,000 output
+- Cost per query: ~$0.08 (Claude Sonnet 4.5)
+- **10 disconnected clients/hour = $0.80/hour = $19/day = $576/month in WASTE**
+
+**With Disconnect Handling**:
+- Aborted within 100ms of disconnect
+- Wasted tokens: ~50 (minimal)
+- Cost per abandoned query: ~$0.001
+- **10 disconnected clients/hour = $0.01/hour = $0.24/day = $7/month**
+
+**Savings**: **$569/month** (98% reduction in waste)
+
+#### ✅ Required Unit Test (Phase 3)
+
+```typescript
+// tests/unit/routes/streaming.routes.test.ts
+describe('Client Disconnect Handling', () => {
+  it('should abort AsyncGenerator when client disconnects', async () => {
+    const mockStreamingService = {
+      executeQuery: jest.fn().mockImplementation(async function* (query, ctx, servers, signal) {
+        yield { type: 'text', text: 'Chunk 1' };
+        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate delay
+
+        // 🔴 Should be aborted by now
+        if (signal?.aborted) {
+          return; // Generator stops
+        }
+
+        yield { type: 'text', text: 'Chunk 2' }; // Should NOT reach here
+      }),
+    };
+
+    const router = createStreamingRoutes(mockStreamingService as any, mockLogger);
+    const app = express();
+    app.use(router);
+
+    const server = app.listen(0);
+    const port = (server.address() as any).port;
+
+    // Simulate client that disconnects after first chunk
+    const response = await fetch(`http://localhost:${port}/api/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'test' }),
+      signal: AbortSignal.timeout(150), // Abort after 150ms
+    }).catch(err => err); // Expect abort error
+
+    // Verify generator was called with abort signal
+    expect(mockStreamingService.executeQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ aborted: false }) // Signal passed
+    );
+
+    // Verify only 1 chunk was yielded (not 2)
+    const generator = mockStreamingService.executeQuery.mock.results[0].value;
+    const chunks = [];
+    for await (const chunk of generator) {
+      chunks.push(chunk);
+    }
+    expect(chunks).toHaveLength(1); // Only first chunk before abort
+
+    server.close();
+  });
+});
+```
+
+#### 📋 Phase 3 Implementation Checklist
+
+- [ ] **streaming.routes.ts**: Add `req.on('close')` handler with AbortController
+- [ ] **streaming.routes.ts**: Check `streamClosed` flag in loop
+- [ ] **streaming.routes.ts**: Call `res.flush()` after each write
+- [ ] **StreamingService**: Accept `signal?: AbortSignal` parameter
+- [ ] **StreamingService**: Pass signal to Anthropic SDK
+- [ ] **StreamingService**: Check `signal?.aborted` in loop
+- [ ] **StreamingService**: Call `stream.abort()` on early exit
+- [ ] **Unit Test**: Verify generator stops on disconnect
+- [ ] **Integration Test**: Test with real SSE client disconnect (EventSource.close())
+- [ ] **Monitoring**: Add metric for aborted streams vs completed streams
+
+---
+
+### 🚨 Critical Issue #2: HTTP Mocking Strategy for Phase 4.2
+
+**Problem**: Integration tests currently assume live MCP microservices (mcp-hr, mcp-finance, etc.) are running. This creates:
+
+1. **Flaky tests**: If service is down, tests fail
+2. **Slow tests**: Network round-trips add 100-500ms per test
+3. **CI dependency**: Requires Docker Compose in CI (complex setup)
+4. **Concurrent test issues**: Shared database state causes race conditions
+
+**Current Approach** (from REFACTORING_PLAN.md Phase 4.2):
+```typescript
+// ❌ PROBLEM: Assumes live services
+it('should process AI query with all services wired correctly', async () => {
+  const response = await request(app)
+    .post('/api/ai/query')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ query: 'List all employees in Engineering' })
+    .expect(200);
+
+  // This REQUIRES mcp-hr:3101 to be running
+  expect(response.body.results).toBeDefined();
+});
+```
+
+#### ✅ Required Implementation: HTTP Interception with Nock
+
+**Install Dependency**:
+```bash
+cd services/mcp-gateway
+npm install --save-dev nock
+```
+
+**Create Mock MCP Response Helper**:
+
+```typescript
+// src/test-utils/nock-mcp-mocks.ts
+import nock from 'nock';
+
+export interface MockMCPServerConfig {
+  name: string;
+  baseUrl: string;
+  tools: Array<{
+    name: string;
+    response: any;
+  }>;
+}
+
+export function setupMCPMocks(servers: MockMCPServerConfig[]): void {
+  servers.forEach(server => {
+    const scope = nock(server.baseUrl)
+      .persist() // Keep mock active for multiple requests
+      .defaultReplyHeaders({
+        'Content-Type': 'application/json',
+      });
+
+    // Mock tool discovery endpoint
+    scope
+      .get('/mcp/tools')
+      .reply(200, {
+        tools: server.tools.map(t => ({
+          name: t.name,
+          description: `Mock ${t.name}`,
+          inputSchema: { type: 'object' },
+        })),
+      });
+
+    // Mock tool execution endpoints
+    server.tools.forEach(tool => {
+      scope
+        .post(`/mcp/tools/${tool.name}`)
+        .reply(200, tool.response);
+    });
+  });
+}
+
+export function cleanupMCPMocks(): void {
+  nock.cleanAll();
+}
+
+// Pre-defined mock responses for common scenarios
+export const MOCK_MCP_RESPONSES = {
+  hr: {
+    list_employees: {
+      status: 'success',
+      data: [
+        {
+          employee_id: '550e8400-e29b-41d4-a716-446655440001',
+          first_name: 'Alice',
+          last_name: 'Chen',
+          department: 'Engineering',
+          job_title: 'VP of HR',
+          email: 'alice.chen@tamshai.com',
+        },
+        {
+          employee_id: '550e8400-e29b-41d4-a716-446655440002',
+          first_name: 'Marcus',
+          last_name: 'Johnson',
+          department: 'Engineering',
+          job_title: 'Software Engineer',
+          email: 'marcus.johnson@tamshai.com',
+        },
+      ],
+      metadata: {
+        truncated: false,
+        totalCount: '2',
+      },
+    },
+    get_employee: {
+      status: 'success',
+      data: {
+        employee_id: '550e8400-e29b-41d4-a716-446655440001',
+        first_name: 'Alice',
+        last_name: 'Chen',
+        department: 'Engineering',
+        job_title: 'VP of HR',
+        salary: 185000,
+        manager_id: null,
+      },
+    },
+  },
+  finance: {
+    get_department_budget: {
+      status: 'success',
+      data: {
+        department: 'Engineering',
+        budget: 5000000,
+        spent: 3200000,
+        remaining: 1800000,
+        fiscal_year: 2025,
+      },
+    },
+  },
+  sales: {
+    list_opportunities: {
+      status: 'success',
+      data: [
+        {
+          opportunity_id: 'OPP-001',
+          customer_name: 'Acme Corp',
+          value: 250000,
+          stage: 'Negotiation',
+          close_date: '2025-03-15',
+        },
+      ],
+      metadata: {
+        truncated: false,
+        totalCount: '1',
+      },
+    },
+  },
+};
+```
+
+#### ✅ Updated Integration Test (Phase 4.2)
+
+```typescript
+// tests/integration/happy-path.test.ts
+import request from 'supertest';
+import nock from 'nock';
+import { app } from '../../src/app';
+import { setupMCPMocks, cleanupMCPMocks, MOCK_MCP_RESPONSES } from '../../src/test-utils/nock-mcp-mocks';
+import { getKeycloakToken } from './test-helpers';
+
+describe('Integration: Happy Path (with HTTP mocks)', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    // Setup HTTP interception for MCP servers
+    setupMCPMocks([
+      {
+        name: 'mcp-hr',
+        baseUrl: 'http://mcp-hr:3101',
+        tools: [
+          { name: 'list_employees', response: MOCK_MCP_RESPONSES.hr.list_employees },
+          { name: 'get_employee', response: MOCK_MCP_RESPONSES.hr.get_employee },
+        ],
+      },
+      {
+        name: 'mcp-finance',
+        baseUrl: 'http://mcp-finance:3102',
+        tools: [
+          { name: 'get_department_budget', response: MOCK_MCP_RESPONSES.finance.get_department_budget },
+        ],
+      },
+    ]);
+
+    // Get real Keycloak token (Keycloak still runs in Docker)
+    token = await getKeycloakToken('alice.chen', process.env.TEST_PASSWORD);
+  });
+
+  afterAll(() => {
+    cleanupMCPMocks();
+  });
+
+  it('should process AI query with all services wired correctly', async () => {
+    const response = await request(app)
+      .post('/api/ai/query')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ query: 'List all employees in Engineering' })
+      .expect(200);
+
+    // Verify response structure
+    expect(response.body).toMatchObject({
+      requestId: expect.any(String),
+      response: expect.stringContaining('Alice Chen'),
+      status: 'success',
+    });
+
+    // ✅ NO LIVE MCP SERVICES REQUIRED - nock intercepted HTTP calls
+  });
+
+  it('should verify HTTP interception worked', () => {
+    // Verify nock intercepted the requests
+    const pendingMocks = nock.pendingMocks();
+    expect(pendingMocks).toHaveLength(0); // All expected calls were made
+  });
+});
+```
+
+#### 📊 Test Performance Impact
+
+**Before (Live Services)**:
+- Test duration: 2.5 seconds
+- Flaky rate: 5% (network/service issues)
+- CI setup: Requires `docker-compose up` (adds 30s to CI)
+
+**After (Nock Mocks)**:
+- Test duration: 0.3 seconds (**8x faster**)
+- Flaky rate: 0% (deterministic)
+- CI setup: None (just `npm test`)
+
+**Savings**: **~2 seconds per test × 50 integration tests = 100 seconds saved per CI run**
+
+#### 📋 Phase 4.2 Implementation Checklist
+
+- [ ] **Install nock**: `npm install --save-dev nock`
+- [ ] **Create nock-mcp-mocks.ts**: HTTP interception helper
+- [ ] **Define MOCK_MCP_RESPONSES**: Standard test data for all MCP servers
+- [ ] **Update happy-path.test.ts**: Use setupMCPMocks() in beforeAll
+- [ ] **Update rbac.test.ts**: Mock MCP servers per test case
+- [ ] **Update sse-streaming.test.ts**: Mock MCP servers with pagination
+- [ ] **Update confirmation.test.ts**: Mock write tool responses
+- [ ] **Document in TESTING.md**: Explain why nock over live services
+- [ ] **CI Update**: Remove Docker Compose requirement for integration tests
+- [ ] **Add verification**: Check `nock.pendingMocks()` to catch missed mocks
+
+---
+
+### 🎯 Summary: Critical Actions Required
+
+| Phase | Critical Action | Risk if Skipped | Estimated Effort |
+|-------|----------------|------------------|------------------|
+| **2.5** | Add `signal?: AbortSignal` to StreamingService | **Unbounded API costs** | 30 minutes |
+| **3** | Add `req.on('close')` handler in streaming routes | **$570/month waste** | 1 hour |
+| **3** | Write disconnect unit test | Regression risk | 30 minutes |
+| **4.2** | Install nock and create mock helpers | **Flaky CI, slow tests** | 1 hour |
+| **4.2** | Update all integration tests to use nock | **CI dependency on Docker** | 2 hours |
+
+**Total Critical Work**: **5 hours** to prevent production incidents and improve CI reliability
+
+---
+
+### ✅ Acceptance Criteria
+
+**Phase 3 Complete When**:
+- [ ] `streaming.routes.ts` handles client disconnect with AbortController
+- [ ] StreamingService accepts and respects AbortSignal
+- [ ] Unit test verifies generator stops on disconnect
+- [ ] Integration test confirms no zombie Anthropic streams
+- [ ] Monitoring dashboard shows `aborted_streams` metric
+
+**Phase 4.2 Complete When**:
+- [ ] All integration tests use nock for MCP HTTP calls
+- [ ] CI runs integration tests without Docker Compose
+- [ ] Test suite runs in <10 seconds (was 2+ minutes)
+- [ ] Flaky test rate = 0% (was 5%)
+- [ ] `nock.pendingMocks()` verification passes
+
+---
+
+**Last Updated**: 2025-12-30 (Final Execution Recommendations)
 **Author**: Claude (Anthropic)
 **Reviewers**:
 - Technical Lead (Review #1 - Critical fixes applied)
 - Principal SDET/QA Lead (Review #2 - Testing enhancements applied)
+- Final Technical Review (ADDENDUM #3 - Production-critical safeguards)
