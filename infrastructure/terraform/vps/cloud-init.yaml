@@ -17,6 +17,14 @@ packages:
   - htop
   - fail2ban
 
+# Set root password for console access
+chpasswd:
+  expire: false
+  users:
+    - name: root
+      password: ${root_password}
+      type: text
+
 # Create tamshai user for running services
 users:
   - name: tamshai
@@ -26,8 +34,8 @@ users:
     lock_passwd: true
 
 write_files:
-  # Environment file with secrets
-  - path: /opt/tamshai/.env
+  # Environment file with secrets (temporary location)
+  - path: /tmp/tamshai.env
     permissions: '0600'
     content: |
       # Tamshai Enterprise AI - Environment Configuration
@@ -67,9 +75,9 @@ write_files:
       CLAUDE_API_KEY=${claude_api_key}
       JWT_SECRET=${jwt_secret}
       KEYCLOAK_URL=https://${domain}/auth
-      KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai
-      JWKS_URI=http://keycloak:8080/auth/realms/tamshai/protocol/openid-connect/certs
-      KEYCLOAK_REALM=tamshai
+      KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai-corp
+      JWKS_URI=http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
+      KEYCLOAK_REALM=tamshai-corp
 
       # Web Apps
       VITE_KEYCLOAK_URL=https://${domain}/auth
@@ -83,20 +91,25 @@ write_files:
       ENABLE_AUDIT_LOGGING=true
       ENABLE_RATE_LIMITING=true
 
-  # Caddyfile for reverse proxy with automatic HTTPS
+  # Caddyfile for reverse proxy behind Cloudflare
   - path: /opt/tamshai/Caddyfile
     permissions: '0644'
     content: |
       # Tamshai Enterprise AI - Caddy Reverse Proxy
       # Path-based routing (no subdomains required)
-      # Automatic HTTPS with Let's Encrypt
+      # HTTP-only - Cloudflare handles TLS termination
 
       {
-        email ${email}
-        acme_ca https://acme-v02.api.letsencrypt.org/directory
+        # Disable automatic HTTPS (Cloudflare handles TLS)
+        auto_https off
+        # Trust Cloudflare proxy headers
+        servers {
+          trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+        }
       }
 
-      ${domain} {
+      # Listen on HTTP only (port 80) - Cloudflare proxies to this
+      :80 {
         encode gzip
 
         header {
@@ -233,7 +246,8 @@ write_files:
       # Check key services
       echo "Checking service health..."
       curl -sf http://localhost:3100/health > /dev/null && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
-      curl -sf http://localhost:8080/auth/health/ready > /dev/null && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+      # Keycloak health check (using nc since curl may not be in container)
+      echo "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" | nc localhost 8080 2>&1 | grep -q "200\|UP" && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
 
       echo "=== Deployment complete ==="
 
@@ -314,26 +328,26 @@ runcmd:
   - curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
   - chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-  # Create application directory
-  - mkdir -p /opt/tamshai
-  - chown -R tamshai:tamshai /opt/tamshai
+  # Clone repository to temporary location (write_files already created /opt/tamshai)
+  - git clone --branch ${github_branch} ${github_repo} /tmp/tamshai-repo
 
-  # Clone repository
-  - cd /opt/tamshai && git clone --branch ${github_branch} ${github_repo} .
-  - chown -R tamshai:tamshai /opt/tamshai
+  # Move repository files to /opt/tamshai (merge with existing Caddyfile/scripts from write_files)
+  - cp -r /tmp/tamshai-repo/. /opt/tamshai/
+  - rm -rf /tmp/tamshai-repo
 
-  # Move generated config files
-  - mv /opt/tamshai/.env /opt/tamshai/.env.generated || true
-  - cat /opt/tamshai/.env.generated >> /opt/tamshai/.env 2>/dev/null || cp /opt/tamshai/.env.generated /opt/tamshai/.env
+  # Move generated .env file from temp location
+  - mv /tmp/tamshai.env /opt/tamshai/.env
+
+  # Set ownership
+  - chown -R tamshai:tamshai /opt/tamshai
 
   # Generate webhook secret
   - openssl rand -hex 32 > /opt/tamshai/.webhook-secret
   - chmod 600 /opt/tamshai/.webhook-secret
   - chown tamshai:tamshai /opt/tamshai/.webhook-secret
 
-  # Start services
-  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml pull
-  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml up -d
+  # Start services (build from source, pull base images)
+  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml up -d --build
 
   # Enable fail2ban
   - systemctl enable fail2ban

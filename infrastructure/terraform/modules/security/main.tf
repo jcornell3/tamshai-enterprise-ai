@@ -1,0 +1,252 @@
+# Security Module
+# Manages service accounts, Secret Manager, and IAM
+
+# =============================================================================
+# SERVICE ACCOUNTS (Principle of Least Privilege)
+# =============================================================================
+
+# Service account for Keycloak
+resource "google_service_account" "keycloak" {
+  account_id   = "tamshai-${var.environment}-keycloak"
+  display_name = "Tamshai Keycloak Service Account"
+  description  = "Service account for Keycloak identity provider"
+  project      = var.project_id
+}
+
+# Service account for MCP Gateway
+resource "google_service_account" "mcp_gateway" {
+  account_id   = "tamshai-${var.environment}-mcp-gateway"
+  display_name = "Tamshai MCP Gateway Service Account"
+  description  = "Service account for MCP Gateway AI orchestration"
+  project      = var.project_id
+}
+
+# Service account for MCP Servers
+resource "google_service_account" "mcp_servers" {
+  account_id   = "tamshai-${var.environment}-mcp-servers"
+  display_name = "Tamshai MCP Servers Service Account"
+  description  = "Service account for domain MCP servers (HR, Finance, Sales, Support)"
+  project      = var.project_id
+}
+
+# =============================================================================
+# SECRET MANAGER
+# =============================================================================
+
+# Enable Secret Manager API
+resource "google_project_service" "secretmanager" {
+  project            = var.project_id
+  service            = "secretmanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+# --- Keycloak Secrets ---
+
+resource "google_secret_manager_secret" "keycloak_admin_password" {
+  secret_id = "tamshai-${var.environment}-keycloak-admin-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "keycloak"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "keycloak_admin_password" {
+  secret      = google_secret_manager_secret.keycloak_admin_password.id
+  secret_data = random_password.keycloak_admin_password.result
+}
+
+resource "google_secret_manager_secret" "keycloak_db_password" {
+  secret_id = "tamshai-${var.environment}-keycloak-db-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "keycloak"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "keycloak_db_password" {
+  secret      = google_secret_manager_secret.keycloak_db_password.id
+  secret_data = random_password.keycloak_db_password.result
+}
+
+# --- Database Secrets ---
+
+resource "google_secret_manager_secret" "tamshai_db_password" {
+  secret_id = "tamshai-${var.environment}-db-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "database"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "tamshai_db_password" {
+  secret      = google_secret_manager_secret.tamshai_db_password.id
+  secret_data = random_password.tamshai_db_password.result
+}
+
+# --- MCP Gateway Secrets ---
+
+resource "google_secret_manager_secret" "anthropic_api_key" {
+  secret_id = "tamshai-${var.environment}-anthropic-api-key"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "mcp-gateway"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+# NOTE: Anthropic API key must be added manually after terraform apply
+# gcloud secrets versions add tamshai-${var.environment}-anthropic-api-key --data-file=-
+
+resource "google_secret_manager_secret" "mcp_gateway_client_secret" {
+  secret_id = "tamshai-${var.environment}-mcp-gateway-client-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "mcp-gateway"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "mcp_gateway_client_secret" {
+  secret      = google_secret_manager_secret.mcp_gateway_client_secret.id
+  secret_data = random_password.mcp_gateway_client_secret.result
+}
+
+# --- JWT Signing Key ---
+
+resource "google_secret_manager_secret" "jwt_secret" {
+  secret_id = "tamshai-${var.environment}-jwt-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "auth"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "jwt_secret" {
+  secret      = google_secret_manager_secret.jwt_secret.id
+  secret_data = random_password.jwt_secret.result
+}
+
+# =============================================================================
+# SECRET MANAGER IAM - Grant access to service accounts
+# =============================================================================
+
+# Keycloak can access its own secrets
+resource "google_secret_manager_secret_iam_member" "keycloak_admin_access" {
+  secret_id = google_secret_manager_secret.keycloak_admin_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.keycloak.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "keycloak_db_access" {
+  secret_id = google_secret_manager_secret.keycloak_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.keycloak.email}"
+  project   = var.project_id
+}
+
+# MCP Gateway can access its secrets
+resource "google_secret_manager_secret_iam_member" "mcp_gateway_anthropic_access" {
+  secret_id = google_secret_manager_secret.anthropic_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_gateway.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "mcp_gateway_client_secret_access" {
+  secret_id = google_secret_manager_secret.mcp_gateway_client_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_gateway.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "mcp_gateway_jwt_access" {
+  secret_id = google_secret_manager_secret.jwt_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_gateway.email}"
+  project   = var.project_id
+}
+
+# MCP Servers can access database password
+resource "google_secret_manager_secret_iam_member" "mcp_servers_db_access" {
+  secret_id = google_secret_manager_secret.tamshai_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_servers.email}"
+  project   = var.project_id
+}
+
+# =============================================================================
+# RANDOM PASSWORD GENERATION
+# =============================================================================
+
+resource "random_password" "keycloak_admin_password" {
+  length           = 24
+  special          = true
+  override_special = "!@#$%^&*"
+}
+
+resource "random_password" "keycloak_db_password" {
+  length  = 24
+  special = false # Avoid special chars in JDBC URLs
+}
+
+resource "random_password" "tamshai_db_password" {
+  length  = 24
+  special = false
+}
+
+resource "random_password" "mcp_gateway_client_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "jwt_secret" {
+  length  = 64
+  special = false
+}
