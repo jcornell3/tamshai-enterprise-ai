@@ -398,18 +398,19 @@ jobs:
         run: |
           # Wait for Keycloak Admin API to be ready (verify we can authenticate AND use the token)
           echo "Waiting for Keycloak Admin API..."
+          ADMIN_TOKEN=""
           for i in {1..60}; do
             # Get admin token
-            TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
+            ADMIN_TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
               -d "client_id=admin-cli" \
               -d "username=admin" \
               -d "password=admin" \
               -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
 
             # Verify token works by accessing Admin API
-            if [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ]; then
+            if [ -n "$ADMIN_TOKEN" ] && [ "$ADMIN_TOKEN" != "null" ]; then
               if curl -sf -X GET "http://localhost:8180/admin/realms" \
-                -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1; then
+                -H "Authorization: Bearer $ADMIN_TOKEN" > /dev/null 2>&1; then
                 echo "Admin API ready! (attempt $i)"
                 sleep 5  # Grace period for full initialization
                 break
@@ -429,14 +430,14 @@ jobs:
           echo "Creating tamshai realm..."
           curl -X POST http://localhost:8180/admin/realms \
             -H "Content-Type: application/json" \
-            -u admin:admin \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
             -d '{"realm":"tamshai","enabled":true}' || echo "Realm may already exist"
 
           # Create tamshai-corp realm (used by integration tests)
           echo "Creating tamshai-corp realm..."
           curl -X POST http://localhost:8180/admin/realms \
             -H "Content-Type: application/json" \
-            -u admin:admin \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
             -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
 
           # Additional grace period for realm initialization
