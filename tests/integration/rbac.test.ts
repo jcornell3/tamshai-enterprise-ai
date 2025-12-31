@@ -165,54 +165,54 @@ describe('Authorization Tests - MCP Access', () => {
     
     expect(response.status).toBe(200);
     const accessibleSources = response.data.accessibleDataSources.map((s: any) => s.name);
-    expect(accessibleSources).toContain('hr');
+    expect(accessibleSources).toContain('mcp-hr');
   });
 
   test('HR user cannot access Finance MCP server', async () => {
     const token = await getAccessToken(TEST_USERS.hrUser.username, TEST_USERS.hrUser.password);
     const client = createAuthenticatedClient(token);
-    
+
     const response = await client.get('/api/mcp/tools');
-    
+
     expect(response.status).toBe(200);
     const accessibleSources = response.data.accessibleDataSources.map((s: any) => s.name);
-    expect(accessibleSources).not.toContain('finance');
+    expect(accessibleSources).not.toContain('mcp-finance');
   });
 
   test('Finance user can access Finance MCP server', async () => {
     const token = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
     const client = createAuthenticatedClient(token);
-    
+
     const response = await client.get('/api/mcp/tools');
-    
+
     expect(response.status).toBe(200);
     const accessibleSources = response.data.accessibleDataSources.map((s: any) => s.name);
-    expect(accessibleSources).toContain('finance');
+    expect(accessibleSources).toContain('mcp-finance');
   });
 
   test('Finance user cannot access HR MCP server', async () => {
     const token = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
     const client = createAuthenticatedClient(token);
-    
+
     const response = await client.get('/api/mcp/tools');
-    
+
     expect(response.status).toBe(200);
     const accessibleSources = response.data.accessibleDataSources.map((s: any) => s.name);
-    expect(accessibleSources).not.toContain('hr');
+    expect(accessibleSources).not.toContain('mcp-hr');
   });
 
   test('Executive can access all MCP servers', async () => {
     const token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
     const client = createAuthenticatedClient(token);
-    
+
     const response = await client.get('/api/mcp/tools');
-    
+
     expect(response.status).toBe(200);
     const accessibleSources = response.data.accessibleDataSources.map((s: any) => s.name);
-    expect(accessibleSources).toContain('hr');
-    expect(accessibleSources).toContain('finance');
-    expect(accessibleSources).toContain('sales');
-    expect(accessibleSources).toContain('support');
+    expect(accessibleSources).toContain('mcp-hr');
+    expect(accessibleSources).toContain('mcp-finance');
+    expect(accessibleSources).toContain('mcp-sales');
+    expect(accessibleSources).toContain('mcp-support');
   });
 
   test('Intern cannot access any MCP servers', async () => {
@@ -237,7 +237,7 @@ describe('Authorization Tests - AI Queries', () => {
     
     expect(response.status).toBe(200);
     expect(response.data.response).toBeDefined();
-    expect(response.data.metadata.dataSourcesQueried).toContain('hr');
+    expect(response.data.metadata.dataSourcesQueried).toContain('mcp-hr');
   });
 
   test('Finance user AI query about budgets succeeds', async () => {
@@ -250,7 +250,7 @@ describe('Authorization Tests - AI Queries', () => {
     
     expect(response.status).toBe(200);
     expect(response.data.response).toBeDefined();
-    expect(response.data.metadata.dataSourcesQueried).toContain('finance');
+    expect(response.data.metadata.dataSourcesQueried).toContain('mcp-finance');
   });
 
   test('Sales user cannot query HR data', async () => {
@@ -263,7 +263,7 @@ describe('Authorization Tests - AI Queries', () => {
     
     expect(response.status).toBe(200);
     // Response should indicate no access to HR data
-    expect(response.data.metadata.dataSourcesQueried).not.toContain('hr');
+    expect(response.data.metadata.dataSourcesQueried).not.toContain('mcp-hr');
   });
 
   test('Unauthenticated request is rejected', async () => {
