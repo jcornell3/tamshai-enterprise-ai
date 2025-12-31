@@ -501,6 +501,10 @@ jobs:
         working-directory: services/mcp-hr
         run: npm ci
 
+      - name: Build MCP HR Server
+        working-directory: services/mcp-hr
+        run: npm run build
+
       - name: Start MCP HR Server
         working-directory: services/mcp-hr
         run: npm start &
@@ -519,6 +523,10 @@ jobs:
       - name: Install MCP Finance dependencies
         working-directory: services/mcp-finance
         run: npm ci
+
+      - name: Build MCP Finance Server
+        working-directory: services/mcp-finance
+        run: npm run build
 
       - name: Start MCP Finance Server
         working-directory: services/mcp-finance
@@ -539,6 +547,10 @@ jobs:
         working-directory: services/mcp-sales
         run: npm ci
 
+      - name: Build MCP Sales Server
+        working-directory: services/mcp-sales
+        run: npm run build
+
       - name: Start MCP Sales Server
         working-directory: services/mcp-sales
         run: npm start &
@@ -553,6 +565,10 @@ jobs:
       - name: Install MCP Support dependencies
         working-directory: services/mcp-support
         run: npm ci
+
+      - name: Build MCP Support Server
+        working-directory: services/mcp-support
+        run: npm run build
 
       - name: Start MCP Support Server
         working-directory: services/mcp-support
