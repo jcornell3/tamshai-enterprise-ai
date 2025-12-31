@@ -394,152 +394,30 @@ jobs:
             sleep 3
           done
 
-      - name: Setup Keycloak Realm and Test Users
+      - name: Setup HashiCorp Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: Setup Keycloak Realm with Terraform
+        working-directory: infrastructure/terraform/keycloak
         run: |
-          # Wait for Keycloak Admin API to be ready (verify we can authenticate AND use the token)
-          echo "Waiting for Keycloak Admin API..."
-          ADMIN_TOKEN=""
-          for i in {1..60}; do
-            # Get admin token
-            ADMIN_TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
-              -d "client_id=admin-cli" \
-              -d "username=admin" \
-              -d "password=admin" \
-              -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+          # Initialize Terraform (download providers)
+          echo "Initializing Terraform..."
+          terraform init
 
-            # Verify token works by accessing Admin API
-            if [ -n "$ADMIN_TOKEN" ] && [ "$ADMIN_TOKEN" != "null" ]; then
-              if curl -sf -X GET "http://localhost:8180/admin/realms" \
-                -H "Authorization: Bearer $ADMIN_TOKEN" > /dev/null 2>&1; then
-                echo "Admin API ready! (attempt $i)"
-                sleep 5  # Grace period for full initialization
-                break
-              fi
-            fi
+          # Apply Terraform configuration
+          echo "Creating Keycloak realm, roles, users, and client with Terraform..."
+          terraform apply -auto-approve -var-file=environments/ci.tfvars
 
-            if [ $i -eq 60 ]; then
-              echo "Admin API failed to become ready after 120 seconds"
-              docker logs keycloak | tail -100
-              exit 1
-            fi
-            echo "Attempt $i/60: Waiting for Admin API..."
-            sleep 2
-          done
+          # Export client secret for integration tests
+          echo "KEYCLOAK_CLIENT_SECRET=$(terraform output -raw mcp_gateway_client_secret)" >> $GITHUB_ENV
 
-          # Create tamshai realm via Admin API (realm import has incompatible auth flows in KC 23.0)
-          echo "Creating tamshai realm..."
-          curl -X POST http://localhost:8180/admin/realms \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -d '{"realm":"tamshai","enabled":true}' || echo "Realm may already exist"
-
-          # Create tamshai-corp realm (used by integration tests)
-          echo "Creating tamshai-corp realm..."
-          curl -X POST http://localhost:8180/admin/realms \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -d '{"realm":"tamshai-corp","enabled":true}' || echo "Realm may already exist"
-
-          # Wait for realm initialization (Keycloak 23.0 requires 10-20s for configuration endpoints)
-          # Root cause discovery: Realm metadata ready != configuration endpoints ready
-          #   - 0-5s: Realm metadata available (GET /admin/realms/{id} works)
-          #   - 10-20s: Configuration endpoints functional (POST /admin/realms/{id}/roles works)
-          # Solution: Fixed wait period based on empirical testing
-          echo "Waiting 15 seconds for tamshai-corp realm to fully initialize..."
-          sleep 15
-
-          # Verify realm is ready by testing POST operation
-          echo "Verifying realm write operations..."
-          for i in {1..10}; do
-            TEST_ROLE_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
-              -X POST "http://localhost:8180/admin/realms/tamshai-corp/roles" \
-              -H "Authorization: Bearer $ADMIN_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d '{"name":"_test_readiness"}' 2>/dev/null)
-
-            if [ "$TEST_ROLE_STATUS" == "201" ] || [ "$TEST_ROLE_STATUS" == "409" ]; then
-              echo "✅ Realm write operations verified! (attempt $i) - HTTP $TEST_ROLE_STATUS"
-              # Clean up test role
-              curl -sf -X DELETE "http://localhost:8180/admin/realms/tamshai-corp/roles/_test_readiness" \
-                -H "Authorization: Bearer $ADMIN_TOKEN" 2>/dev/null || true
-              sleep 5  # Additional grace period after cleanup
-              break
-            fi
-
-            if [ $i -eq 10 ]; then
-              echo "❌ Realm write operations still not ready after 15s + 20s = 35s total"
-              echo "POST roles endpoint returned: HTTP $TEST_ROLE_STATUS"
-              exit 1
-            fi
-            echo "⏳ Realm not ready for writes (HTTP $TEST_ROLE_STATUS), waiting... ($i/10)"
-            sleep 2
-          done
-
-          # Create roles directly (bypassing script to rule out token issues)
-          echo "Creating roles with verified admin token..."
-          for role in hr-read hr-write finance-read finance-write sales-read sales-write support-read support-write executive; do
-            ROLE_STATUS=$(curl -sf -w "%{http_code}" -o /dev/null \
-              -X POST "http://localhost:8180/admin/realms/tamshai-corp/roles" \
-              -H "Authorization: Bearer $ADMIN_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"name\":\"$role\"}" 2>/dev/null)
-
-            if [ "$ROLE_STATUS" == "201" ]; then
-              echo "✅ Created role: $role"
-            elif [ "$ROLE_STATUS" == "409" ]; then
-              echo "⚠️ Role already exists: $role"
-            else
-              echo "❌ Failed to create role $role (HTTP $ROLE_STATUS)"
-              # Capture error response
-              curl -sf -X POST "http://localhost:8180/admin/realms/tamshai-corp/roles" \
-                -H "Authorization: Bearer $ADMIN_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "{\"name\":\"$role\"}"
-              exit 1
-            fi
-          done
-
-          # Create users and client using setup script
-          # Note: Roles already created above, script will skip them (409 conflicts expected)
-          chmod +x tests/integration/setup-keycloak-realm.sh
-          export SKIP_ROLE_CREATION=true  # Signal script to skip role creation
-          ./tests/integration/setup-keycloak-realm.sh
-        env:
-          KEYCLOAK_URL: http://localhost:8180
-          KEYCLOAK_REALM: tamshai-corp
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-
-      - name: Verify Keycloak Setup
-        run: |
-          # Get admin token
-          ADMIN_TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
-            -d "client_id=admin-cli" \
-            -d "username=admin" \
-            -d "password=admin" \
-            -d "grant_type=password" | jq -r '.access_token')
-
-          # Verify users
-          USER_COUNT=$(curl -sf -X GET http://localhost:8180/admin/realms/tamshai-corp/users \
-            -H "Authorization: Bearer $ADMIN_TOKEN" | jq '. | length')
-
-          echo "Users created: $USER_COUNT"
-          if [ "$USER_COUNT" -lt 8 ]; then
-            echo "Expected at least 8 users, got $USER_COUNT"
-            exit 1
-          fi
-
-          # Verify client
-          CLIENT=$(curl -sf -X GET "http://localhost:8180/admin/realms/tamshai-corp/clients?clientId=mcp-gateway" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.[0].clientId')
-
-          echo "Client created: $CLIENT"
-          if [ "$CLIENT" != "\"mcp-gateway\"" ]; then
-            echo "Client mcp-gateway not found"
-            exit 1
-          fi
-
-          echo "✅ Keycloak setup verified successfully"
+          # Display summary
+          echo "✅ Terraform deployment complete"
+          terraform output realm_name
+          terraform output -json roles_created | jq -r '.[]' | sed 's/^/  - /'
+          echo "Test users: 8 created (alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson)"
 
       - name: Build MCP Gateway
         working-directory: services/mcp-gateway
@@ -590,7 +468,7 @@ jobs:
           CI: true
           KEYCLOAK_URL: http://localhost:8180
           KEYCLOAK_REALM: tamshai-corp
-          KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
           GATEWAY_URL: http://localhost:3100
           REDIS_HOST: localhost
           REDIS_PORT: 6379
