@@ -155,10 +155,10 @@ resource "null_resource" "docker_compose_up" {
   depends_on = [local_file.docker_env]
 
   triggers = {
-    env_file_hash  = local_file.docker_env.content
-    compose_dir    = local.compose_path
-    project_name   = var.docker_compose_project
-    always_run     = timestamp() # Always run on apply
+    env_file_hash = local_file.docker_env.content
+    compose_dir   = local.compose_path
+    project_name  = var.docker_compose_project
+    always_run    = timestamp() # Always run on apply
   }
 
   provisioner "local-exec" {

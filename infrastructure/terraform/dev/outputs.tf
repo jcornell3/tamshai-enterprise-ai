@@ -88,13 +88,13 @@ output "env_file_path" {
 output "quick_commands" {
   description = "Useful Docker Compose commands"
   value = {
-    "View logs (all)"        = "docker compose -p ${var.docker_compose_project} logs -f"
+    "View logs (all)"         = "docker compose -p ${var.docker_compose_project} logs -f"
     "View logs (mcp-gateway)" = "docker compose -p ${var.docker_compose_project} logs -f mcp-gateway"
-    "Check service status"   = "docker compose -p ${var.docker_compose_project} ps"
-    "Restart MCP Gateway"    = "docker compose -p ${var.docker_compose_project} restart mcp-gateway"
-    "Stop all services"      = "docker compose -p ${var.docker_compose_project} down"
-    "Start all services"     = "docker compose -p ${var.docker_compose_project} up -d"
-    "Rebuild MCP services"   = "docker compose -p ${var.docker_compose_project} up -d --build mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support"
+    "Check service status"    = "docker compose -p ${var.docker_compose_project} ps"
+    "Restart MCP Gateway"     = "docker compose -p ${var.docker_compose_project} restart mcp-gateway"
+    "Stop all services"       = "docker compose -p ${var.docker_compose_project} down"
+    "Start all services"      = "docker compose -p ${var.docker_compose_project} up -d"
+    "Rebuild MCP services"    = "docker compose -p ${var.docker_compose_project} up -d --build mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support"
   }
 }
 
@@ -105,7 +105,7 @@ output "quick_commands" {
 output "next_steps" {
   description = "Next steps after Terraform apply"
   sensitive   = true
-  value = <<-EOT
+  value       = <<-EOT
     ╔══════════════════════════════════════════════════════════════════════════╗
     ║ Tamshai Dev Environment - Successfully Deployed!                         ║
     ╚══════════════════════════════════════════════════════════════════════════╝

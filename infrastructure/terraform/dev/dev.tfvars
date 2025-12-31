@@ -23,17 +23,17 @@
 # PROJECT CONFIGURATION
 # =============================================================================
 
-environment          = "dev"
-project_root         = "C:/Users/jcorn/tamshai-enterprise-ai"
-docker_compose_dir   = "infrastructure/docker"
+environment            = "dev"
+project_root           = "C:/Users/jcorn/tamshai-enterprise-ai"
+docker_compose_dir     = "infrastructure/docker"
 docker_compose_project = "tamshai-dev"
 
 # =============================================================================
 # AUTOMATION SETTINGS
 # =============================================================================
 
-auto_start_services    = true   # Start Docker services on apply
-auto_stop_services     = false  # Keep services running on destroy (manual cleanup)
+auto_start_services = true  # Start Docker services on apply
+auto_stop_services  = false # Keep services running on destroy (manual cleanup)
 
 # =============================================================================
 # DATABASE CREDENTIALS
