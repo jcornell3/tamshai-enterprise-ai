@@ -22,7 +22,7 @@ const CONFIG = {
   keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
   gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:3100',
   clientId: 'mcp-gateway',
-  clientSecret: '[REDACTED-DEV-SECRET]',
+  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
 };
 
 // Test users

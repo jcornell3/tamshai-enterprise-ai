@@ -23,7 +23,7 @@ const CONFIG = {
   mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
   redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6380',
   clientId: 'mcp-gateway',
-  clientSecret: '[REDACTED-DEV-SECRET]',
+  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
 };
 
 // Test users with role assignments
