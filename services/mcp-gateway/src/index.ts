@@ -214,8 +214,13 @@ async function validateToken(token: string): Promise<UserContext> {
         const payload = decoded as jwt.JwtPayload;
 
         // Extract roles from Keycloak token structure
+        // Support both realm roles (legacy/global) and client roles (best practice)
         const realmRoles = payload.realm_access?.roles || [];
+        const clientRoles = payload.resource_access?.[config.keycloak.clientId]?.roles || [];
         const groups = payload.groups || [];
+
+        // Merge and deduplicate roles from both sources
+        const allRoles = Array.from(new Set([...realmRoles, ...clientRoles]));
 
         // Log available claims for debugging
         logger.debug('JWT claims:', {
@@ -227,6 +232,10 @@ async function validateToken(token: string): Promise<UserContext> {
           family_name: payload.family_name,
           azp: payload.azp,
           realm_access: payload.realm_access,
+          resource_access: payload.resource_access,
+          realmRoles,
+          clientRoles,
+          mergedRoles: allRoles,
         });
 
         // Keycloak may not include preferred_username in access token
@@ -256,7 +265,7 @@ async function validateToken(token: string): Promise<UserContext> {
           userId: payload.sub || '',
           username: username,
           email: payload.email || '',
-          roles: realmRoles,
+          roles: allRoles, // Merged realm + client roles
           groups: groups,
         });
       }

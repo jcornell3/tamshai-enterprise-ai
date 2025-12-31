@@ -608,7 +608,9 @@ jobs:
           PORT: 3100
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          KEYCLOAK_URL: http://localhost:8180
+          # CRITICAL: Use 127.0.0.1 to match test runner (jest.setup.js)
+          # This ensures JWT issuer claim matches Gateway's expected issuer
+          KEYCLOAK_URL: http://127.0.0.1:8180
           LOG_LEVEL: warn
 
       - name: Install Playwright
@@ -677,7 +679,9 @@ jobs:
           PORT: 3100
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          KEYCLOAK_URL: http://localhost:8180
+          # CRITICAL: Use 127.0.0.1 to match test runner (jest.setup.js)
+          # This ensures JWT issuer claim matches Gateway's expected issuer
+          KEYCLOAK_URL: http://127.0.0.1:8180
           LOG_LEVEL: warn
 
       - name: Run k6 Smoke Test
