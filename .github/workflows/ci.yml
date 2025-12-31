@@ -478,7 +478,9 @@ jobs:
         run: npm test
         env:
           CI: true
-          KEYCLOAK_URL: http://localhost:8180
+          # CRITICAL: Use 127.0.0.1 to match Gateway configuration (line 444)
+          # This ensures tokens issued by Keycloak match Gateway's expected issuer
+          KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
           GATEWAY_URL: http://localhost:3100
