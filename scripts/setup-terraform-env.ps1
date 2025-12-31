@@ -19,10 +19,6 @@
 # Author: Tamshai QA Team
 # =============================================================================
 
-# Require administrator privileges for system-wide variables
-# Comment out if you only want user-level variables
-# Requires -RunAsAdministrator
-
 Write-Host "==============================================================================" -ForegroundColor Cyan
 Write-Host "  Terraform Development Environment Setup" -ForegroundColor Cyan
 Write-Host "==============================================================================" -ForegroundColor Cyan
@@ -47,9 +43,9 @@ function Set-TerraformVar {
     [Environment]::SetEnvironmentVariable($Name, $Value, "User")
 
     if ($Required) {
-        Write-Host "  Status: ✓ Required - Set" -ForegroundColor Green
+        Write-Host "  Status: Required - Set" -ForegroundColor Green
     } else {
-        Write-Host "  Status: ○ Optional - Set" -ForegroundColor Cyan
+        Write-Host "  Status: Optional - Set" -ForegroundColor Cyan
     }
     Write-Host ""
 }
@@ -68,7 +64,7 @@ Set-TerraformVar `
 Set-TerraformVar `
     -Name "TF_VAR_test_user_password" `
     -Value "password123" `
-    -Description "Password for test users (alice.chen, bob.martinez, etc.)" `
+    -Description "Password for test users" `
     -Required $true `
     -Sensitive $true
 
@@ -104,7 +100,7 @@ Set-TerraformVar `
     -Required $false `
     -Sensitive $true
 
-Write-Host "SECTION 3: Storage & Cache Credentials (For Future Full-Stack)" -ForegroundColor Magenta
+Write-Host "SECTION 3: Storage and Cache Credentials (For Future Full-Stack)" -ForegroundColor Magenta
 Write-Host "------------------------------------------------------" -ForegroundColor Magenta
 Write-Host ""
 
@@ -152,7 +148,7 @@ if ($claudeKeyPlain -and $claudeKeyPlain.Length -gt 0) {
         -Required $true `
         -Sensitive $true
 } else {
-    Write-Host "⚠ Skipped: TF_VAR_claude_api_key" -ForegroundColor Yellow
+    Write-Host "Skipped: TF_VAR_claude_api_key" -ForegroundColor Yellow
     Write-Host "  You can set this later with:" -ForegroundColor Gray
     Write-Host '  setx TF_VAR_claude_api_key "sk-ant-api03-your-key-here"' -ForegroundColor Gray
     Write-Host ""
@@ -167,7 +163,7 @@ Write-Host "Next Steps:" -ForegroundColor Yellow
 Write-Host "  1. RESTART YOUR TERMINAL for changes to take effect" -ForegroundColor White
 Write-Host "  2. Verify variables: Get-ChildItem Env:TF_VAR_*" -ForegroundColor White
 Write-Host "  3. Run Terraform: cd infrastructure/terraform/keycloak" -ForegroundColor White
-Write-Host "  4. Test deployment: terraform plan -var-file=environments/dev.tfvars" -ForegroundColor White
+Write-Host "  4. Test deployment: terraform plan -var-file=environments\dev.tfvars" -ForegroundColor White
 Write-Host ""
 
 Write-Host "Current Terraform Variables:" -ForegroundColor Cyan
@@ -187,7 +183,7 @@ foreach ($var in $tfVars) {
 }
 
 Write-Host ""
-Write-Host "⚠ SECURITY REMINDER:" -ForegroundColor Red
+Write-Host "SECURITY REMINDER:" -ForegroundColor Red
 Write-Host "  - These are DEVELOPMENT ONLY credentials" -ForegroundColor Yellow
 Write-Host "  - DO NOT use these passwords in production" -ForegroundColor Yellow
 Write-Host "  - For production, use GCP Secret Manager" -ForegroundColor Yellow
