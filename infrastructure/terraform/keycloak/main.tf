@@ -119,10 +119,10 @@ resource "keycloak_openid_client" "mcp_gateway" {
   service_accounts_enabled     = true
 
   valid_redirect_uris = var.valid_redirect_uris
-  web_origins         = ["+"]  # Allow all valid redirect URIs
+  web_origins         = ["+"] # Allow all valid redirect URIs
 
   # OAuth/OIDC settings
-  full_scope_allowed = false  # Only allow explicitly mapped roles
+  full_scope_allowed = false # Only allow explicitly mapped roles
 }
 
 # Map realm roles to client scope
