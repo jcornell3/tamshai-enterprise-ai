@@ -204,7 +204,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
-          terraform_version: '1.5'
+          terraform_version: '1.10.3'
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive infrastructure/terraform
@@ -350,7 +350,7 @@ jobs:
           --health-retries 5
 
       postgres-mcp:
-        image: postgres:15-alpine
+        image: postgres:16-alpine
         ports:
           - 5433:5432
         env:
@@ -376,6 +376,20 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+        ports:
+          - 9201:9200
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: false
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        options: >-
+          --health-cmd "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
@@ -399,15 +413,22 @@ jobs:
           PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_finance < sample-data/finance-data.sql
           echo "✅ Loaded Finance sample data"
 
-          # Install mongosh for loading MongoDB sample data
-          wget -qO- https://www.mongodb.org/static/pgp/server-7.0.asc | sudo tee /etc/apt/trusted.gpg.d/mongodb-server-7.0.asc
-          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-          sudo apt-get update
-          sudo apt-get install -y mongodb-mongosh
-
-          # Load Sales sample data (MongoDB)
-          mongosh "mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin" < sample-data/sales-data.js
+          # Load Sales sample data (MongoDB) using Docker
+          docker run --rm --network host \
+            -v "$(pwd)/sample-data:/data" \
+            mongo:7 \
+            mongosh "mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin" /data/sales-data.js
           echo "✅ Loaded Sales sample data"
+
+          # Load Support sample data (Elasticsearch)
+          # Wait for Elasticsearch to be ready
+          timeout 60 bash -c 'until curl -s http://localhost:9201/_cluster/health | grep -q "yellow\|green"; do sleep 2; done'
+
+          # Bulk load support tickets and knowledge base
+          curl -X POST "http://localhost:9201/_bulk" \
+            -H 'Content-Type: application/x-ndjson' \
+            --data-binary @sample-data/support-data.ndjson
+          echo "✅ Loaded Support sample data"
 
           echo "✅ All sample data loaded successfully"
 
@@ -422,7 +443,7 @@ jobs:
             -e POSTGRES_DB=keycloak \
             -e POSTGRES_USER=keycloak \
             -e POSTGRES_PASSWORD=keycloak \
-            postgres:15-alpine
+            postgres:16-alpine
 
           # Wait for PostgreSQL to be ready
           timeout 30 bash -c 'until docker exec postgres pg_isready; do sleep 1; done'
@@ -442,7 +463,7 @@ jobs:
             -e KC_HOSTNAME_STRICT_HTTPS=false \
             -e KC_HTTP_ENABLED=true \
             -p 8180:8080 \
-            quay.io/keycloak/keycloak:23.0 start-dev
+            quay.io/keycloak/keycloak:24.0 start-dev
 
           # Wait for Keycloak to be ready (can take 60-90 seconds)
           echo "Waiting for Keycloak to start..."
@@ -636,7 +657,7 @@ jobs:
           PORT: 3104
           KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
-          MONGODB_URL: mongodb://root:changeme@localhost:27018/tamshai_support?authSource=admin
+          ELASTICSEARCH_URL: http://localhost:9201
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
