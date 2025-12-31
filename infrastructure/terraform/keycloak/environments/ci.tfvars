@@ -13,8 +13,8 @@ realm_name         = "tamshai-corp"
 realm_display_name = "Tamshai Corporation - CI"
 
 # Test credentials (CI only)
-test_user_password         = "password123"
-mcp_gateway_client_secret  = "test-client-secret"
+test_user_password        = "password123"
+mcp_gateway_client_secret = "test-client-secret"
 
 # Environment
 environment = "ci"
