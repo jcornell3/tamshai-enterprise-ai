@@ -349,8 +349,45 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      postgres-mcp:
+        image: postgres:15-alpine
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_USER: tamshai
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: tamshai_hr
+        options: >-
+          --health-cmd "pg_isready -U tamshai"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27018:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: changeme
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping:1})' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Create additional PostgreSQL databases
+        run: |
+          # Wait for postgres-mcp service to be ready
+          timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai; do sleep 1; done'
+
+          # Create tamshai_finance database
+          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr -c "CREATE DATABASE tamshai_finance;"
+
+          echo "✅ Created tamshai_finance database"
 
       - name: Create Docker network
         run: docker network create keycloak-network
