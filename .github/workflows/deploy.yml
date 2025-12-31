@@ -112,6 +112,10 @@ jobs:
   security-scan-containers:
     name: Security - Container Scanning
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -210,8 +214,8 @@ jobs:
 
       - name: Run unit tests
         run: |
-          # Install devDependencies (including jest) then run tests
-          docker compose run --rm mcp-gateway sh -c "npm ci --include=dev && npm test -- --coverage --coverageReporters=xml"
+          # Install all dependencies (npm ci includes devDependencies by default) then run tests
+          docker compose run --rm mcp-gateway sh -c "npm ci && npm test -- --coverage --coverageReporters=xml"
 
       - name: Run integration tests
         run: |
