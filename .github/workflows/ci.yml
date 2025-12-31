@@ -385,10 +385,10 @@ jobs:
           xpack.security.enabled: false
           ES_JAVA_OPTS: -Xms512m -Xmx512m
         options: >-
-          --health-cmd "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:9200/_cluster/health || exit 1"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 20
+          --health-retries 30
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
