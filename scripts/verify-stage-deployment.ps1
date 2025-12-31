@@ -9,7 +9,8 @@
 
 $ErrorActionPreference = "Continue"
 
-$STAGE_URL = "https://5.78.159.29"
+# Direct IP uses HTTP (Cloudflare handles SSL for domain)
+$STAGE_URL = "http://5.78.159.29"
 $STAGE_DOMAIN = "https://vps.tamshai.com"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -20,7 +21,7 @@ Write-Host ""
 # Test 1: VPS Responding
 Write-Host "Test 1: VPS Availability" -ForegroundColor Yellow
 try {
-    $response = Invoke-WebRequest -Uri "$STAGE_URL/" -UseBasicParsing -TimeoutSec 10 -SkipCertificateCheck 2>$null
+    $response = Invoke-WebRequest -Uri "$STAGE_URL/" -UseBasicParsing -TimeoutSec 10 2>$null
     if ($response.StatusCode -eq 200) {
         Write-Host "✅ VPS is responding (HTTP $($response.StatusCode))" -ForegroundColor Green
     } else {
@@ -39,7 +40,7 @@ Write-Host ""
 # Test 2: Keycloak Availability
 Write-Host "Test 2: Keycloak Availability" -ForegroundColor Yellow
 try {
-    $response = Invoke-WebRequest -Uri "$STAGE_URL/auth/" -UseBasicParsing -TimeoutSec 10 -SkipCertificateCheck 2>$null
+    $response = Invoke-WebRequest -Uri "$STAGE_URL/auth/" -UseBasicParsing -TimeoutSec 10 2>$null
     if ($response.Content -match "Keycloak") {
         Write-Host "✅ Keycloak is responding" -ForegroundColor Green
     } else {
@@ -53,7 +54,7 @@ Write-Host ""
 # Test 3: API Gateway Availability
 Write-Host "Test 3: API Gateway Availability" -ForegroundColor Yellow
 try {
-    $response = Invoke-WebRequest -Uri "$STAGE_URL/api/health" -UseBasicParsing -TimeoutSec 10 -SkipCertificateCheck 2>$null
+    $response = Invoke-WebRequest -Uri "$STAGE_URL/api/health" -UseBasicParsing -TimeoutSec 10 2>$null
     $content = $response.Content
     Write-Host "✅ API Gateway is responding" -ForegroundColor Green
     Write-Host "   Response: $content" -ForegroundColor Gray
@@ -87,7 +88,6 @@ try {
             -Method Post `
             -Body $body `
             -ContentType "application/x-www-form-urlencoded" `
-            -SkipCertificateCheck `
             -TimeoutSec 10 2>$null
 
         if ($tokenResponse.access_token) {
