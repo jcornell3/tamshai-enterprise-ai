@@ -130,13 +130,6 @@ variable "allowed_ssh_ips" {
   default     = [] # No SSH by default - fully automated
 }
 
-variable "root_password" {
-  description = "Root password for VPS console access (from VPS_PW env var)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
 # =============================================================================
 # PROVIDERS
 # =============================================================================
@@ -181,6 +174,14 @@ resource "random_password" "minio_password" {
 resource "random_password" "jwt_secret" {
   length  = 64
   special = false
+}
+
+resource "random_password" "root_password" {
+  length  = 20
+  special = true
+  upper   = true
+  lower   = true
+  numeric = true
 }
 
 # =============================================================================
@@ -369,7 +370,7 @@ locals {
     mongodb_password     = random_password.mongodb_password.result
     minio_password       = random_password.minio_password.result
     jwt_secret           = random_password.jwt_secret.result
-    root_password        = var.root_password
+    root_password        = random_password.root_password.result
   })
 }
 
@@ -400,6 +401,12 @@ output "api_url" {
 output "keycloak_admin_password" {
   description = "Keycloak admin password"
   value       = random_password.keycloak_admin_password.result
+  sensitive   = true
+}
+
+output "root_password" {
+  description = "VPS root password for console access"
+  value       = random_password.root_password.result
   sensitive   = true
 }
 
