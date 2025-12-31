@@ -389,6 +389,22 @@ jobs:
 
           echo "✅ Created tamshai_finance database"
 
+      - name: Load sample data
+        run: |
+          # Load HR sample data (23 employees)
+          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr < sample-data/hr-data.sql
+          echo "✅ Loaded HR sample data"
+
+          # Load Finance sample data
+          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_finance < sample-data/finance-data.sql
+          echo "✅ Loaded Finance sample data"
+
+          # Load Sales sample data (MongoDB)
+          mongosh "mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin" < sample-data/sales-data.js
+          echo "✅ Loaded Sales sample data"
+
+          echo "✅ All sample data loaded successfully"
+
       - name: Create Docker network
         run: docker network create keycloak-network
 
