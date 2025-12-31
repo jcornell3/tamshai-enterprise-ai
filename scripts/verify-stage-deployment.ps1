@@ -66,8 +66,8 @@ Write-Host ""
 # Test 4: Token Acquisition
 Write-Host "Test 4: Keycloak Token Acquisition (alice.chen)" -ForegroundColor Yellow
 try {
-    # VPS uses realm-export.json with fixed client secret
-    $clientSecret = "test-client-secret"
+    # VPS staging uses realm-export-dev.json with test users and fixed client secret
+    $clientSecret = "mcp-gateway-secret"
 
     $body = @{
         grant_type = "password"
@@ -75,7 +75,6 @@ try {
         client_secret = $clientSecret
         username = "alice.chen"
         password = "password123"
-        scope = "openid profile email"
     }
 
     $tokenResponse = Invoke-RestMethod -Uri "$STAGE_URL/auth/realms/tamshai-corp/protocol/openid-connect/token" `
