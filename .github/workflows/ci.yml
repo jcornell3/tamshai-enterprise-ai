@@ -519,7 +519,7 @@ jobs:
               echo "Token preview (first 50 chars): ${TOKEN:0:50}..."
               echo ""
               echo "=== Decoded Token Claims ==="
-              echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, sub, preferred_username, resource_access}' || echo "Token decode failed"
+              echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, sub, aud, azp, preferred_username, resource_access}' || echo "Token decode failed"
             else
               echo "❌ Response doesn't contain access_token"
               echo "Response: $RESPONSE_BODY"
