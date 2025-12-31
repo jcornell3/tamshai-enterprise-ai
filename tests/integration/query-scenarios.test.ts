@@ -117,7 +117,7 @@ async function getAccessToken(username: string, password: string): Promise<strin
     client_secret: CONFIG.clientSecret,
     username,
     password,
-    scope: 'openid profile email roles',
+    scope: 'openid profile email',  // Removed "roles" - Keycloak includes roles in resource_access by default
   });
 
   const response = await axios.post<TokenResponse>(tokenUrl, params, {
