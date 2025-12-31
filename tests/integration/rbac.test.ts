@@ -273,7 +273,13 @@ describe('Authorization Tests - AI Queries', () => {
       });
       fail('Should have thrown an error');
     } catch (error: any) {
-      expect(error.response.status).toBe(401);
+      if (error.response) {
+        expect(error.response.status).toBe(401);
+      } else {
+        // If no response, log the error for debugging
+        console.error('Unexpected error (no response):', error.code, error.message);
+        throw error;
+      }
     }
   });
 
@@ -286,7 +292,13 @@ describe('Authorization Tests - AI Queries', () => {
       await client.post('/api/ai/query', { query: 'Test query' });
       fail('Should have thrown an error');
     } catch (error: any) {
-      expect(error.response.status).toBe(401);
+      if (error.response) {
+        expect(error.response.status).toBe(401);
+      } else {
+        // If no response, log the error for debugging
+        console.error('Unexpected error (no response):', error.code, error.message);
+        throw error;
+      }
     }
   });
 });

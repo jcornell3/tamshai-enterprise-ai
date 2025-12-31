@@ -243,8 +243,13 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
         );
         fail('Should have thrown an error');
       } catch (error: any) {
-        expect(error.response.status).toBe(401);
-        expect(error.response.data.error).toContain('Invalid');
+        if (error.response) {
+          expect(error.response.status).toBe(401);
+          expect(error.response.data.error).toContain('Invalid');
+        } else {
+          console.error('Unexpected error (no response):', error.code, error.message);
+          throw error;
+        }
       }
     });
 
@@ -325,8 +330,13 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
         );
         fail('Should have thrown an error');
       } catch (error: any) {
-        expect(error.response.status).toBe(400);
-        expect(error.response.data.error).toContain('query');
+        if (error.response) {
+          expect(error.response.status).toBe(400);
+          expect(error.response.data.error).toContain('query');
+        } else {
+          console.error('Unexpected error (no response):', error.code, error.message);
+          throw error;
+        }
       }
     });
   });
