@@ -123,6 +123,7 @@ services:
     build:
       context: ../../services/mcp-gateway
       dockerfile: Dockerfile
+    image: mcp-gateway:latest
     container_name: tamshai-mcp-gateway
     environment:
       NODE_ENV: development
