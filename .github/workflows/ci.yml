@@ -384,11 +384,6 @@ jobs:
           discovery.type: single-node
           xpack.security.enabled: false
           ES_JAVA_OPTS: -Xms512m -Xmx512m
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:9200/_cluster/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 30
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
@@ -421,8 +416,10 @@ jobs:
           echo "✅ Loaded Sales sample data"
 
           # Load Support sample data (Elasticsearch)
-          # Wait for Elasticsearch to be ready
-          timeout 60 bash -c 'until curl -s http://localhost:9201/_cluster/health | grep -q "yellow\|green"; do sleep 2; done'
+          # Wait for Elasticsearch to be ready (can take 2-3 minutes)
+          echo "Waiting for Elasticsearch to start..."
+          timeout 180 bash -c 'until curl -s http://localhost:9201/_cluster/health | grep -q "yellow\|green"; do echo "Waiting for Elasticsearch..."; sleep 5; done'
+          echo "✅ Elasticsearch is ready"
 
           # Bulk load support tickets and knowledge base
           curl -X POST "http://localhost:9201/_bulk" \
