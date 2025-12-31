@@ -134,6 +134,31 @@ resource "keycloak_openid_client" "mcp_gateway" {
   full_scope_allowed = true # Include all assigned client roles in tokens
 }
 
+# Protocol Mapper: Client Roles in Access Token
+# ============================================================
+# CRITICAL: Without this mapper, Keycloak does NOT include client roles in the
+# resource_access claim, even with full_scope_allowed=true.
+#
+# This mapper explicitly tells Keycloak to populate:
+#   resource_access["mcp-gateway"]["roles"] = ["hr-read", "hr-write", ...]
+#
+# Without this, the Gateway receives tokens with resource_access: null,
+# causing all authorization checks to fail with 401 Unauthorized.
+resource "keycloak_openid_user_client_role_protocol_mapper" "mcp_gateway_roles" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.mcp_gateway.id
+  name      = "client-roles-mapper"
+
+  claim_name       = "resource_access.${keycloak_openid_client.mcp_gateway.client_id}.roles"
+  claim_value_type = "JSON" # Critical: Must be JSON to render as a list inside the object
+
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+
+  multivalued = true # Ensures it renders as an array
+}
+
 # Map realm roles to client scope
 resource "keycloak_openid_client_default_scopes" "mcp_gateway_default_scopes" {
   realm_id  = keycloak_realm.tamshai_corp.id
