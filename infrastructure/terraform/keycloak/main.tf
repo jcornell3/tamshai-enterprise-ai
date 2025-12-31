@@ -149,8 +149,8 @@ resource "keycloak_openid_user_client_role_protocol_mapper" "mcp_gateway_roles" 
   client_id = keycloak_openid_client.mcp_gateway.id
   name      = "client-roles-mapper"
 
-  claim_name       = "resource_access.${keycloak_openid_client.mcp_gateway.client_id}.roles"
-  claim_value_type = "JSON" # Critical: Must be JSON to render as a list inside the object
+  claim_name       = "resource_access.$.roles"
+  claim_value_type = "String" # Changed from JSON - this mapper auto-handles array conversion
 
   add_to_id_token     = true
   add_to_access_token = true
