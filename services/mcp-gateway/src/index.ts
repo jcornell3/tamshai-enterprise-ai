@@ -463,6 +463,27 @@ async function sendToClaudeWithContext(
   mcpData: Array<{ server: string; data: unknown }>,
   userContext: UserContext
 ): Promise<string> {
+  // TEST/CI MODE: Return mock responses to avoid Claude API calls with invalid key
+  // This allows integration tests to verify Gateway routing and auth without requiring real API key
+  const isMockMode =
+    process.env.NODE_ENV === 'test' ||
+    config.claude.apiKey.startsWith('sk-ant-test-');
+
+  if (isMockMode) {
+    logger.info('Mock mode: Returning simulated Claude response', {
+      username: userContext.username,
+      roles: userContext.roles,
+      dataSourceCount: mcpData.length,
+    });
+
+    // Return a realistic mock response that tests can verify
+    const dataSources = mcpData.map((d) => d.server).join(', ') || 'none';
+    return `[Mock Response] Query processed successfully for user ${userContext.username} ` +
+           `with roles: ${userContext.roles.join(', ')}. ` +
+           `Data sources consulted: ${dataSources}. ` +
+           `Query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`;
+  }
+
   // Build context from MCP data
   const dataContext = mcpData
     .filter((d) => d.data !== null)
