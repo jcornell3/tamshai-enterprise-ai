@@ -399,6 +399,12 @@ jobs:
           PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_finance < sample-data/finance-data.sql
           echo "✅ Loaded Finance sample data"
 
+          # Install mongosh for loading MongoDB sample data
+          wget -qO- https://www.mongodb.org/static/pgp/server-7.0.asc | sudo tee /etc/apt/trusted.gpg.d/mongodb-server-7.0.asc
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+          sudo apt-get update
+          sudo apt-get install -y mongodb-mongosh
+
           # Load Sales sample data (MongoDB)
           mongosh "mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin" < sample-data/sales-data.js
           echo "✅ Loaded Sales sample data"
