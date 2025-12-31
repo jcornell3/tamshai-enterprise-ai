@@ -151,6 +151,10 @@ jobs:
   terraform-security:
     name: Terraform Security Scanning
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -179,7 +183,7 @@ jobs:
       - name: Checkov Scan
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: ./terraform
+          directory: ./infrastructure/terraform
           framework: terraform
           soft_fail: true
           output_format: sarif
