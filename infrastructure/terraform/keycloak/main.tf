@@ -33,18 +33,20 @@ resource "keycloak_realm" "tamshai_corp" {
 }
 
 # ============================================================
-# Realm Roles
+# Client Roles (assigned to mcp-gateway client)
 # ============================================================
 
 # HR Roles
 resource "keycloak_role" "hr_read" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "hr-read"
   description = "Read access to HR data"
 }
 
 resource "keycloak_role" "hr_write" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "hr-write"
   description = "Write access to HR data"
 }
@@ -52,12 +54,14 @@ resource "keycloak_role" "hr_write" {
 # Finance Roles
 resource "keycloak_role" "finance_read" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "finance-read"
   description = "Read access to finance data"
 }
 
 resource "keycloak_role" "finance_write" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "finance-write"
   description = "Write access to finance data"
 }
@@ -65,12 +69,14 @@ resource "keycloak_role" "finance_write" {
 # Sales Roles
 resource "keycloak_role" "sales_read" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "sales-read"
   description = "Read access to sales data"
 }
 
 resource "keycloak_role" "sales_write" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "sales-write"
   description = "Write access to sales data"
 }
@@ -78,12 +84,14 @@ resource "keycloak_role" "sales_write" {
 # Support Roles
 resource "keycloak_role" "support_read" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "support-read"
   description = "Read access to support data"
 }
 
 resource "keycloak_role" "support_write" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "support-write"
   description = "Write access to support data"
 }
@@ -91,6 +99,7 @@ resource "keycloak_role" "support_write" {
 # Executive Role (composite)
 resource "keycloak_role" "executive" {
   realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
   name        = "executive"
   description = "Executive access (read all departments)"
 
