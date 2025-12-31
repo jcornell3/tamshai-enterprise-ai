@@ -1,27 +1,42 @@
 # =============================================================================
-# Terraform Development Environment Variables Setup
+# Terraform DEV Environment Variables Setup
 # =============================================================================
 #
-# This script sets up Windows environment variables for Terraform development.
+# ⚠️ DEV ENVIRONMENT ONLY - DO NOT USE FOR CI/STAGE/PROD ⚠️
+#
+# This script sets up Windows environment variables for LOCAL DEVELOPMENT ONLY.
 # It configures variables for both current Keycloak management and future
 # full-stack expansion.
 #
-# Usage:
-#   .\scripts\setup-terraform-env.ps1
+# Environment: DEV (Local Docker)
+# Usage: .\scripts\setup-terraform-dev-env.ps1
+#
+# What this sets:
+#   - Development-only passwords (hardcoded, insecure)
+#   - Your personal Claude API key (for local testing)
+#   - Credentials matching infrastructure/docker/.env.example
+#
+# Other Environments:
+#   - CI: Uses GitHub Secrets (set in .github/workflows/ci.yml)
+#   - Stage: Uses environment variables on VPS
+#   - Prod: Uses GCP Secret Manager (never hardcoded)
 #
 # Notes:
 #   - Variables are stored in Windows User environment (persist across sessions)
-#   - You must restart your terminal after running this script
-#   - Development-only passwords (DO NOT use in production)
-#   - For production, use GCP Secret Manager or similar
+#   - You MUST restart your terminal after running this script
+#   - Your Claude API key is for DEV testing only
+#   - DO NOT commit these values to git
 #
 # Created: 2025-12-30
 # Author: Tamshai QA Team
 # =============================================================================
 
 Write-Host "==============================================================================" -ForegroundColor Cyan
-Write-Host "  Terraform Development Environment Setup" -ForegroundColor Cyan
+Write-Host "  Terraform DEV Environment Setup (Local Development Only)" -ForegroundColor Cyan
 Write-Host "==============================================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "WARNING: This sets DEV environment variables only!" -ForegroundColor Yellow
+Write-Host "Your Claude API key will be used for local testing." -ForegroundColor Yellow
 Write-Host ""
 
 # Function to set environment variable with confirmation

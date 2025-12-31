@@ -4,20 +4,22 @@ Utility scripts for Tamshai Enterprise AI development and deployment.
 
 ## Terraform Environment Setup
 
-### setup-terraform-env.ps1
+### setup-terraform-dev-env.ps1
 
-Sets up Windows environment variables required for Terraform development.
+⚠️ **DEV ENVIRONMENT ONLY** - Sets up Windows environment variables for local development.
 
 **Usage**:
 ```powershell
-.\scripts\setup-terraform-env.ps1
+.\scripts\setup-terraform-dev-env.ps1
 ```
 
 **What it does**:
-- Sets `TF_VAR_*` environment variables for Terraform
-- Prompts for Claude API key (secure input)
-- Configures dev credentials for Keycloak, databases, storage
+- Sets `TF_VAR_*` environment variables for Terraform DEV environment
+- Prompts for your personal Claude API key (secure input, for local testing)
+- Configures dev-only credentials matching `infrastructure/docker/.env.example`
 - Stores variables in Windows User environment (persists across sessions)
+
+**Environment**: DEV (Local Docker) - Your personal Claude API key is for local testing only
 
 **Variables Set**:
 
@@ -40,13 +42,13 @@ Sets up Windows environment variables required for Terraform development.
 2. Verify: `Get-ChildItem Env:TF_VAR_*`
 3. Test Terraform: `cd infrastructure/terraform/keycloak && terraform plan -var-file=environments/dev.tfvars`
 
-### cleanup-terraform-env.ps1
+### cleanup-terraform-dev-env.ps1
 
-Removes all Terraform environment variables.
+Removes all Terraform DEV environment variables.
 
 **Usage**:
 ```powershell
-.\scripts\cleanup-terraform-env.ps1
+.\scripts\cleanup-terraform-dev-env.ps1
 ```
 
 **What it does**:
@@ -94,9 +96,9 @@ Removes all Terraform environment variables.
 **Problem**: Variables have incorrect values
 
 **Solution**:
-1. Run cleanup script: `.\scripts\cleanup-terraform-env.ps1`
+1. Run cleanup script: `.\scripts\cleanup-terraform-dev-env.ps1`
 2. Restart terminal
-3. Run setup script again: `.\scripts\setup-terraform-env.ps1`
+3. Run setup script again: `.\scripts\setup-terraform-dev-env.ps1`
 
 ### Verify variables are set
 ```powershell
@@ -124,9 +126,9 @@ terraform plan -var-file=environments/dev.tfvars
 ### First-time setup
 ```powershell
 # 1. Run setup script
-.\scripts\setup-terraform-env.ps1
+.\scripts\setup-terraform-dev-env.ps1
 
-# 2. Enter your Claude API key when prompted
+# 2. Enter your Claude API key when prompted (for local dev testing)
 # sk-ant-api03-your-key-here
 
 # 3. Restart terminal
@@ -152,7 +154,7 @@ setx TF_VAR_claude_api_key "sk-ant-api03-new-key-here"
 ### Start fresh
 ```powershell
 # 1. Remove all variables
-.\scripts\cleanup-terraform-env.ps1
+.\scripts\cleanup-terraform-dev-env.ps1
 # Type "yes" to confirm
 
 # 2. Restart terminal
@@ -162,20 +164,20 @@ Get-ChildItem Env:TF_VAR_*
 # Should show nothing
 
 # 4. Set up again
-.\scripts\setup-terraform-env.ps1
+.\scripts\setup-terraform-dev-env.ps1
 ```
 
 ## Script Maintenance
 
 **Adding new variables**:
-1. Edit `setup-terraform-env.ps1`
+1. Edit `setup-terraform-dev-env.ps1`
 2. Add new `Set-TerraformVar` call in appropriate section
 3. Update this README with the new variable
 4. Test the script
 5. Commit changes
 
 **Removing variables**:
-- Variables are automatically cleaned up by `cleanup-terraform-env.ps1`
+- Variables are automatically cleaned up by `cleanup-terraform-dev-env.ps1`
 - No manual maintenance needed
 
 ---

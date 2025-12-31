@@ -1,11 +1,11 @@
 # =============================================================================
-# Terraform Environment Variables Cleanup
+# Terraform DEV Environment Variables Cleanup
 # =============================================================================
 #
-# This script removes all Terraform environment variables set by setup-terraform-env.ps1
+# This script removes all Terraform environment variables set by setup-terraform-dev-env.ps1
 #
-# Usage:
-#   .\scripts\cleanup-terraform-env.ps1
+# Environment: DEV (Local Development)
+# Usage: .\scripts\cleanup-terraform-dev-env.ps1
 #
 # Notes:
 #   - Removes variables from Windows User environment
