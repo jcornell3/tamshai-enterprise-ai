@@ -229,7 +229,7 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "protocol": "openid-connect",
-      "secret": "${MCP_GATEWAY_CLIENT_SECRET}",
+      "secret": "test-client-secret",
       "defaultClientScopes": [
         "openid",
         "profile",

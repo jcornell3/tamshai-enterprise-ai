@@ -120,7 +120,7 @@ write_files:
         }
 
         # Keycloak authentication (/auth/*)
-        handle_path /auth/* {
+        handle /auth/* {
           reverse_proxy keycloak:8080
         }
 

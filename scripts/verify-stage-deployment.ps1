@@ -66,38 +66,31 @@ Write-Host ""
 # Test 4: Token Acquisition
 Write-Host "Test 4: Keycloak Token Acquisition (alice.chen)" -ForegroundColor Yellow
 try {
-    # Get client secret from Terraform
-    Push-Location infrastructure/terraform/vps
-    $clientSecret = terraform output -raw keycloak_admin_password 2>$null
-    Pop-Location
+    # VPS uses realm-export.json with fixed client secret
+    $clientSecret = "test-client-secret"
 
-    if ([string]::IsNullOrEmpty($clientSecret)) {
-        Write-Host "⚠️  Could not get client secret from Terraform" -ForegroundColor Yellow
-        Write-Host "   Skipping token test..." -ForegroundColor Gray
+    $body = @{
+        grant_type = "password"
+        client_id = "mcp-gateway"
+        client_secret = $clientSecret
+        username = "alice.chen"
+        password = "password123"
+        scope = "openid profile email"
+    }
+
+    $tokenResponse = Invoke-RestMethod -Uri "$STAGE_URL/auth/realms/tamshai-corp/protocol/openid-connect/token" `
+        -Method Post `
+        -Body $body `
+        -ContentType "application/x-www-form-urlencoded" `
+        -TimeoutSec 10 2>$null
+
+    if ($tokenResponse.access_token) {
+        Write-Host "✅ Token acquired successfully" -ForegroundColor Green
+        Write-Host "   Token length: $($tokenResponse.access_token.Length) characters" -ForegroundColor Gray
+        Write-Host "   Token type: $($tokenResponse.token_type)" -ForegroundColor Gray
+        Write-Host "   Expires in: $($tokenResponse.expires_in) seconds" -ForegroundColor Gray
     } else {
-        $body = @{
-            grant_type = "password"
-            client_id = "mcp-gateway"
-            client_secret = $clientSecret
-            username = "alice.chen"
-            password = "password123"
-            scope = "openid profile email"
-        }
-
-        $tokenResponse = Invoke-RestMethod -Uri "$STAGE_URL/auth/realms/tamshai-corp/protocol/openid-connect/token" `
-            -Method Post `
-            -Body $body `
-            -ContentType "application/x-www-form-urlencoded" `
-            -TimeoutSec 10 2>$null
-
-        if ($tokenResponse.access_token) {
-            Write-Host "✅ Token acquired successfully" -ForegroundColor Green
-            Write-Host "   Token length: $($tokenResponse.access_token.Length) characters" -ForegroundColor Gray
-            Write-Host "   Token type: $($tokenResponse.token_type)" -ForegroundColor Gray
-            Write-Host "   Expires in: $($tokenResponse.expires_in) seconds" -ForegroundColor Gray
-        } else {
-            Write-Host "❌ Token response missing access_token" -ForegroundColor Red
-        }
+        Write-Host "❌ Token response missing access_token" -ForegroundColor Red
     }
 } catch {
     Write-Host "❌ Token acquisition failed" -ForegroundColor Red
