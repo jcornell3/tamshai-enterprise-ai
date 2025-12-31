@@ -419,31 +419,43 @@ jobs:
           terraform output -json roles_created | jq -r '.[]' | sed 's/^/  - /'
           echo "Test users: 8 created (alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson)"
 
+      - name: Setup Node.js for Gateway
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/mcp-gateway/package-lock.json
+
+      - name: Install Gateway Dependencies
+        working-directory: services/mcp-gateway
+        run: npm ci
+
       - name: Build MCP Gateway
         working-directory: services/mcp-gateway
-        run: |
-          docker build -t mcp-gateway:test .
+        run: npm run build
 
       - name: Start MCP Gateway
-        run: |
-          docker run -d \
-            --name mcp-gateway \
-            --network keycloak-network \
-            -e PORT=3100 \
-            -e KEYCLOAK_URL=http://keycloak:8080 \
-            -e KEYCLOAK_REALM=tamshai-corp \
-            -e KEYCLOAK_CLIENT_ID=mcp-gateway \
-            -e REDIS_URL=redis://localhost:6379 \
-            -e CLAUDE_API_KEY=sk-ant-test-dummy-key-for-ci \
-            -e NODE_ENV=test \
-            -p 3100:3100 \
-            mcp-gateway:test
+        working-directory: services/mcp-gateway
+        run: npm start &
+        env:
+          PORT: 3100
+          # CRITICAL: Use 127.0.0.1 to match test runner (jest.setup.js)
+          # This ensures JWT issuer claim matches Gateway's expected issuer
+          KEYCLOAK_URL: http://127.0.0.1:8180
+          KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_CLIENT_ID: mcp-gateway
+          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          REDIS_URL: redis://localhost:6379
+          CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
+          NODE_ENV: test
 
-          # Wait for gateway to be healthy
+      - name: Wait for MCP Gateway
+        run: |
           echo "Waiting for MCP Gateway to be ready..."
           for i in {1..30}; do
             if curl -sf http://localhost:3100/health > /dev/null 2>&1; then
               echo "MCP Gateway is ready!"
+              sleep 2  # Grace period for full initialization
               break
             fi
             echo "Attempt $i/30: Gateway not ready yet..."
@@ -473,11 +485,17 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
+      - name: Stop MCP Gateway
+        if: always()
+        run: |
+          # Kill the Gateway process
+          pkill -f "node.*mcp-gateway" || true
+
       - name: Cleanup containers
         if: always()
         run: |
-          docker stop mcp-gateway keycloak postgres || true
-          docker rm mcp-gateway keycloak postgres || true
+          docker stop keycloak postgres || true
+          docker rm keycloak postgres || true
           docker network rm keycloak-network || true
 
   # =============================================================================
