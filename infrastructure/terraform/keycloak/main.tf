@@ -133,7 +133,7 @@ resource "keycloak_openid_client_default_scopes" "mcp_gateway_default_scopes" {
   default_scopes = [
     "profile",
     "email",
-    "roles",
+    # Removed "roles" scope - Keycloak includes roles in resource_access claim by default
   ]
 }
 
