@@ -412,9 +412,18 @@ jobs:
       - name: Setup Keycloak Realm with Terraform
         working-directory: infrastructure/terraform/keycloak
         run: |
-          # Initialize Terraform (download providers)
+          # Initialize Terraform (download providers) with retry logic for network issues
           echo "Initializing Terraform..."
-          terraform init
+          for i in {1..3}; do
+            terraform init && break || {
+              echo "⚠️ Terraform init attempt $i failed, retrying in 10s..."
+              sleep 10
+            }
+          done
+          if [ ! -d .terraform ]; then
+            echo "❌ Terraform init failed after 3 attempts"
+            exit 1
+          fi
 
           # Apply Terraform configuration
           echo "Creating Keycloak realm, roles, users, and client with Terraform..."
