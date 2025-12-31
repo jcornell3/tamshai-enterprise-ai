@@ -159,6 +159,26 @@ resource "keycloak_openid_user_client_role_protocol_mapper" "mcp_gateway_roles" 
   multivalued = true # Ensures it renders as an array
 }
 
+# Protocol Mapper: Audience Claim
+# ============================================================
+# CRITICAL: JWT validation requires the "aud" (audience) claim.
+# Without this mapper, tokens have aud: null, causing Gateway to reject them with 401.
+#
+# Gateway validates (index.ts:206):
+#   audience: [config.keycloak.clientId, 'account']
+#
+# This mapper adds "mcp-gateway" to the aud claim array.
+resource "keycloak_openid_audience_protocol_mapper" "mcp_gateway_audience" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.mcp_gateway.id
+  name      = "audience-mapper"
+
+  included_client_audience = "mcp-gateway"
+
+  add_to_id_token     = true
+  add_to_access_token = true
+}
+
 # Map realm roles to client scope
 resource "keycloak_openid_client_default_scopes" "mcp_gateway_default_scopes" {
   realm_id  = keycloak_realm.tamshai_corp.id
