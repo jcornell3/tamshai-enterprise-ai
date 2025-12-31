@@ -218,6 +218,14 @@ jobs:
         working-directory: infrastructure/terraform/vps
         run: terraform validate
 
+      - name: Terraform Init (Keycloak)
+        working-directory: infrastructure/terraform/keycloak
+        run: terraform init -backend=false
+
+      - name: Terraform Validate (Keycloak)
+        working-directory: infrastructure/terraform/keycloak
+        run: terraform validate
+
       - name: Terraform Init (Main)
         working-directory: infrastructure/terraform
         run: terraform init -backend=false
