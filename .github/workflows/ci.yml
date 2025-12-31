@@ -391,7 +391,7 @@ jobs:
       - name: Create additional PostgreSQL databases
         run: |
           # Wait for postgres-mcp service to be ready
-          timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai; do sleep 1; done'
+          timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai -d tamshai_hr; do sleep 1; done'
 
           # Create tamshai_finance database
           PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr -c "CREATE DATABASE tamshai_finance;"
