@@ -18,30 +18,37 @@ This document explains our test coverage strategy, current baselines, rationale 
 
 ### 1.1 Overall Project Coverage
 
-**As of December 2025:**
+**As of January 2026:**
 
 | Metric | Coverage | Target | Status |
 |--------|----------|--------|--------|
-| **Overall** | 49.06% | 70-80% | 🟡 Approaching Acceptable |
-| Statements | 49.73% | 70% | 🟡 In Progress |
-| Branches | 44.67% | 70% | 🟡 In Progress |
-| Functions | 48.10% | 70% | 🟡 In Progress |
-| Lines | 49.10% | 70% | 🟡 In Progress |
+| **Overall** | 54.30% | 70-80% | 🟡 Approaching Acceptable |
+| Statements | 53.38% | 70% | 🟡 In Progress |
+| Branches | 52.85% | 70% | 🟡 In Progress |
+| Functions | 53.80% | 70% | 🟡 In Progress |
+| Lines | 54.30% | 70% | 🟡 In Progress |
 
-**Progress:** +17.54pp improvement from 31.52% (session start)
+**Progress:** +22.78pp improvement from 31.52% (original baseline)
 
-**Total Tests:** 283 passing across 10 test suites
+**Total Tests:** 283 unit tests + 96 integration tests (89 passed, 7 skipped)
 
 ---
 
 ### 1.2 MCP Gateway (Services/mcp-gateway)
 
-**Overall:** 49.06%
+**Overall:** 54.30% (up from 49.06%)
 
 **Module Breakdown:**
 
 | Module | Coverage | Status | Notes |
 |--------|----------|--------|-------|
+| **ai/** | 100% | ✅ Perfect | Claude client integration |
+| - claude-client.ts | 100% | ✅ Perfect | AI streaming, error handling |
+| **auth/** | 94.44% | ✅ Excellent | JWT validation |
+| - jwt-validator.ts | 94.44% | ✅ Excellent | Token validation, role extraction |
+| **mcp/** | 95.91% | ✅ Excellent | MCP client and routing |
+| - mcp-client.ts | 94.87% | ✅ Excellent | Tool execution, error handling |
+| - role-mapper.ts | 100% | ✅ Perfect | Role-to-server mapping |
 | **routes/** | 92.02% | ✅ Excellent | Extracted modules, well-tested |
 | - health.routes.ts | 100% | ✅ Perfect | 13 tests, all scenarios covered |
 | - user.routes.ts | 100% | ✅ Perfect | 12 tests, auth + MCP tools |
@@ -54,7 +61,6 @@ This document explains our test coverage strategy, current baselines, rationale 
 | **utils/** | 90.07% | ✅ Excellent | Utility functions |
 | - gateway-utils.ts | 100% | ✅ Perfect | Role routing logic |
 | - pii-scrubber.ts | 100% | ✅ Perfect | PII masking |
-| - redis.ts | 84.14% | ✅ Good | Redis operations |
 | **index.ts** | 0% | ❌ Blocker | 1,532 uncovered lines (monolithic) |
 
 **Jest Thresholds (Enforced):**
@@ -258,13 +264,17 @@ comment:
 
 **Achievements:**
 - Extracted route modules (health, user, GDPR)
-- Created 283 passing tests
+- Added AI client, auth, and MCP client modules with tests
+- Created 283 unit tests + 96 integration tests
 - Achieved 90%+ coverage on new modules
-- Established 49.06% overall baseline
+- Established 54.30% overall baseline
 
-**Coverage Improvement:** 31.52% → 49.06% (+17.54pp)
+**Coverage Improvement:** 31.52% → 54.30% (+22.78pp)
 
 **Key Wins:**
+- `ai/`: 100% coverage (Claude client)
+- `auth/`: 94.44% coverage (JWT validator)
+- `mcp/`: 95.91% coverage (MCP client)
 - `routes/`: 92.02% coverage
 - `security/`: 88.37% coverage
 - `types/`: 100% coverage
@@ -334,7 +344,7 @@ comment:
 | **75-80%** | 🟢 Commendable | **Sweet spot** - strong confidence without over-testing |
 | **90%+** | 🌟 Exemplary | Mission-critical only (finance, healthcare, safety) |
 
-**Our Position:** 49% → Approaching Acceptable, with 90% diff coverage preventing regression
+**Our Position:** 54% → Approaching Acceptable, with 90% diff coverage preventing regression
 
 ---
 
@@ -757,6 +767,7 @@ start coverage/index.html  # Windows
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | Dec 2025 | Initial documentation - coverage strategy and rationale |
+| 1.1 | Jan 2026 | Updated coverage from 49% to 54%, added new modules (ai/, auth/, mcp/), updated integration test counts (96 tests) |
 
 ---
 
