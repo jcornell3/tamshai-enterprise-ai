@@ -135,7 +135,7 @@ export async function listEmployees(
       const queryLimit = limit + 1;
 
       const sqlQuery = `SELECT
-  e.id,
+  e.id as employee_id,
   e.first_name,
   e.last_name,
   e.email,

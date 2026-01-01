@@ -33,7 +33,7 @@ export type GetEmployeeInput = z.infer<typeof GetEmployeeInputSchema>;
  * but we expose user-friendly names in the interface.
  */
 export interface Employee {
-  id: string;                    // Actual column: id (UUID)
+  employee_id: string;           // Aliased from id column (UUID)
   first_name: string;
   last_name: string;
   email: string;
@@ -73,7 +73,7 @@ export async function getEmployee(
         userContext,
         `
         SELECT
-          e.id,
+          e.id as employee_id,
           e.first_name,
           e.last_name,
           e.email,
