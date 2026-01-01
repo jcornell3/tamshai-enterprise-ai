@@ -310,38 +310,29 @@ When QA testing complete, update this document with:
 
 ### QA Summary
 - ✅ Phase 3 (Documentation Review): **Complete**
-- 🔴 Phase 1 (Workflow Validation): **BLOCKED - VPS secrets not configured**
-- 🔴 Phase 2 (Integration Verification): **BLOCKED - VPS secrets not configured**
+- ✅ Phase 1 (Workflow Validation): **UNBLOCKED - Secrets configured, firewall updated**
+- ✅ Phase 2 (Integration Verification): **UNBLOCKED - Ready for testing**
 
-### QA Blocker: Missing GitHub Secrets (2026-01-01)
+### Blocker Resolution (2026-01-01 17:31 UTC)
 
-**Issue**: Deployment workflows fail at "Setup SSH" step because VPS secrets are empty.
+**Issue**: Deployment workflows failed because VPS secrets were empty.
 
-**Evidence** (Workflow run 20642571781):
-```
-VPS_HOST:
-VPS_USER:
-SSH_PRIVATE_KEY:
-```
+**Resolution**:
+1. ✅ GitHub secrets configured:
+   - `VPS_HOST` = `5.78.159.29`
+   - `VPS_USER` = `tamshai` (non-root for security)
+   - `VPS_SSH_KEY` = Terraform-generated deploy key
 
-**Secrets Currently Configured**:
-- ✅ `STAGING_VAULT_ADDR`
-- ✅ `VAULT_ROOT_TOKEN`
-- ✅ `VAULT_UNSEAL_KEY_1-5`
+2. ✅ Terraform firewall updated:
+   - `allowed_ssh_ips = ["0.0.0.0/0", "::/0"]` (staging only)
+   - Protected by fail2ban (3 failed attempts = 1-hour ban)
+   - SSH key authentication only (no passwords)
 
-**Secrets Required for Deployment** (per INCREMENTAL_DEPLOYMENT_GUIDE.md):
-- ❌ `VPS_HOST` - VPS IP address (e.g., `5.78.159.29`)
-- ❌ `VPS_USER` - SSH username (e.g., `root` or `tamshai`)
-- ❌ `VPS_SSH_KEY` - Private SSH key for deployment
+3. ⏳ **Pending**: Run `terraform apply` to update Hetzner firewall
 
-**Action Required**: Dev needs to configure these secrets in GitHub:
-```bash
-gh secret set VPS_HOST --body "<vps-ip>"
-gh secret set VPS_USER --body "<ssh-user>"
-gh secret set VPS_SSH_KEY < ~/.ssh/id_rsa
-```
+**Security Documentation**: See `docs/security/VAULT_SSH_SECRETS_ENGINE.md` for long-term solution using short-lived certificates.
 
-**Status**: Waiting for Dev to configure secrets before QA can proceed with Phase 1-2 testing.
+**Status**: QA can proceed with Phase 1-2 testing after Terraform apply completes.
 
 ---
 
