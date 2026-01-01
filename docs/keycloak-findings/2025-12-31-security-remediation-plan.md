@@ -2,28 +2,30 @@
 
 **Date**: 2025-12-31
 **Author**: Claude-QA (claude-qa@tamshai.com)
-**Status**: 🔄 Phase 1 & 2 Complete - Awaiting Dev Deployment
+**Status**: 🔄 Phase 1, 2, & 5A Complete - VPS Suppressions Added
 **Source**: GitHub Code Scanning (Checkov)
-**Last Updated**: 2025-12-31 (after commit aafd05c)
+**Last Updated**: 2025-12-31 (after commits aafd05c, 5e9f6ef, fac1ddb)
 
 ---
 
 ## Executive Summary
 
 **Original Alerts**: 21 security issues (from 42 total open alerts, but ~21 unique concerns)
-**Current Status**: 10 issues resolved ✅, 11 issues still open ⚠️
+**Current Status**: 10 issues resolved ✅, 4 issues suppressed ✅, 2-3 issues deferred ⏸️
 **Scanner**: Checkov 3.2.497 (Terraform security scanner)
 **Severity**: All rated as "error" severity
-**Affected Areas**: GCP infrastructure modules + DigitalOcean VPS
+**Affected Areas**: GCP infrastructure modules + Hetzner VPS
 
 **Progress**:
-- ✅ **Resolved**: 10 issues (Phase 1 & 2 complete - commit aafd05c)
-- ⏸️ **Remaining**: 11 issues (awaiting analysis)
+- ✅ **Phase 1 & 2**: 10 GCP issues resolved (commit aafd05c)
+- ✅ **Phase 5**: Analyzed remaining issues (8 actual, 3 DigitalOcean N/A)
+- ✅ **Phase 5A**: 4 VPS suppressions added (commit fac1ddb)
+- ⏸️ **Deferred**: 2-3 issues (centralized logging, monitoring, dev enhancements)
 
-**Risk Assessment After Phase 1 & 2**:
-- 🔴 **High Risk**: 0 issues (was 4) ✅
-- 🟡 **Medium Risk**: ~11 issues remaining (need investigation)
-- 🟢 **Low Risk**: 0 issues addressed in this phase
+**Risk Assessment After Phase 5A**:
+- 🔴 **High Risk**: 0 issues ✅
+- 🟡 **Medium Risk**: 2 issues deferred (centralized logging, monitoring - Phase 6 work)
+- 🟢 **Low Risk**: 2 issues (dev environment - optional enhancements)
 
 **Actual Effort**: 2 hours (Phases 1 & 2)
 **Actual Cost Impact**: +$3.50-10/month (logging, versioning)
@@ -544,19 +546,26 @@ checkov -d . --framework terraform --compact
 
 ---
 
-### Phase 5: Investigate Remaining Issues 🔄 NEXT
+### Phase 5: Investigate Remaining Issues ✅ COMPLETE
 
-**Target**: Analyze and resolve the 11 remaining open issues
-**Estimated Duration**: 2-4 hours
+**Status**: Analysis and suppressions complete
+**Duration**: 3 hours (analysis + implementation)
+**Commit**: 5e9f6ef (analysis), fac1ddb (suppressions)
 
-**Steps**:
-1. Run Checkov with verbose output to identify specific issues
-2. Categorize remaining issues by severity
-3. Determine if issues are:
-   - False positives (suppress with justification)
-   - Valid security concerns (create remediation plan)
-   - Already resolved but not detected (verify fix)
-4. Create Phase 6 remediation plan for valid concerns
+**Results**:
+1. ✅ Manual analysis completed (Checkov not available locally)
+2. ✅ Identified 8 actual issues (3 DigitalOcean issues N/A - not deployed)
+3. ✅ **Phase 5A Complete**: Added 4 Checkov suppressions to VPS Terraform
+4. ⏸️ Deferred 2 issues to Phase 6 (monitoring/observability)
+5. ✅ Documented defense-in-depth strategy (fail2ban + Caddy + firewall)
+
+**Suppressions Added** (infrastructure/terraform/vps/main.tf):
+- Line 322: `hcloud_firewall.tamshai` - Defense-in-depth justification
+- Line 304: `hcloud_server.tamshai` - Platform-level encryption
+- Line 194: `tls_private_key.deploy_key` - Encrypted Terraform Cloud state
+- Line 179: `random_password.root_password` - Encrypted state, emergency use
+
+**Detailed Analysis**: See `docs/keycloak-findings/2025-12-31-phase5-remaining-issues.md`
 
 ---
 
