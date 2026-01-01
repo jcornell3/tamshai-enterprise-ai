@@ -25,9 +25,10 @@ import { storePendingConfirmation } from '../utils/redis';
 
 /**
  * Input schema for delete_invoice tool
+ * Accepts either UUID or invoice_number (e.g., 'INV-2024-001')
  */
 export const DeleteInvoiceInputSchema = z.object({
-  invoiceId: z.string().uuid('Invoice ID must be a valid UUID'),
+  invoiceId: z.string().min(1, 'Invoice ID or number is required'),
   reason: z.string().optional(),
 });
 
@@ -71,6 +72,8 @@ export async function deleteInvoice(
 
     try {
       // 2. Verify invoice exists and get details (using actual schema columns)
+      // Support lookup by either UUID (id) or invoice_number (e.g., 'INV-2024-001')
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invoiceId);
       const invoiceResult = await queryWithRLS(
         userContext,
         `
@@ -85,7 +88,7 @@ export async function deleteInvoice(
           i.status,
           i.description
         FROM finance.invoices i
-        WHERE i.id = $1
+        WHERE ${isUUID ? 'i.id = $1' : 'i.invoice_number = $1'}
         `,
         [invoiceId]
       );

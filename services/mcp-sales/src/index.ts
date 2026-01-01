@@ -92,7 +92,7 @@ function decodeCursor(encoded: string): PaginationCursor | null {
 }
 
 const ListOpportunitiesInputSchema = z.object({
-  status: z.enum(['open', 'won', 'lost']).optional(),
+  stage: z.string().optional(),  // CLOSED_WON, PROPOSAL, NEGOTIATION, DISCOVERY, QUALIFICATION
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
   limit: z.number().int().min(1).max(100).default(50),
@@ -101,7 +101,7 @@ const ListOpportunitiesInputSchema = z.object({
 
 async function listOpportunities(input: any, userContext: UserContext): Promise<MCPToolResponse<any[]>> {
   return withErrorHandling('list_opportunities', async () => {
-    const { status, minValue, maxValue, limit, cursor } = ListOpportunitiesInputSchema.parse(input);
+    const { stage, minValue, maxValue, limit, cursor } = ListOpportunitiesInputSchema.parse(input);
 
     // Decode cursor if provided
     const cursorData = cursor ? decodeCursor(cursor) : null;
@@ -111,7 +111,8 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
     const roleFilter = buildRoleFilter(userContext);
 
     const filter: any = { ...roleFilter };
-    if (status) filter.status = status;
+    // MongoDB stores stage in uppercase (CLOSED_WON, PROPOSAL, NEGOTIATION, etc.)
+    if (stage) filter.stage = stage.toUpperCase();
     if (minValue !== undefined) filter.value = { ...filter.value, $gte: minValue };
     if (maxValue !== undefined) filter.value = { ...filter.value, $lte: maxValue };
 
@@ -129,14 +130,23 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
       .toArray();
 
     const hasMore = opportunities.length > limit;
-    const results = hasMore ? opportunities.slice(0, limit) : opportunities;
+    const rawResults = hasMore ? opportunities.slice(0, limit) : opportunities;
+
+    // Normalize results: convert stage to lowercase, ObjectId to string
+    const results = rawResults.map((opp: any) => ({
+      ...opp,
+      _id: opp._id.toString(),
+      id: opp._id.toString(),
+      stage: opp.stage?.toLowerCase() || opp.stage,
+      customer_id: opp.customer_id?.toString(),
+    }));
 
     // Build pagination metadata
     let metadata: PaginationMetadata | undefined;
 
     if (hasMore || cursorData) {
       // Get the last record to build the next cursor
-      const lastOpportunity = results[results.length - 1];
+      const lastOpportunity = rawResults[rawResults.length - 1];
 
       metadata = {
         hasMore,
@@ -146,7 +156,7 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
             _id: lastOpportunity._id.toString(),
           }),
           totalEstimate: `${limit}+`,
-          hint: `To see more opportunities, say "show next page" or "get more opportunities". You can also use filters like status or value range to narrow results.`,
+          hint: `To see more opportunities, say "show next page" or "get more opportunities". You can also use filters like stage or value range to narrow results.`,
         }),
       };
     }

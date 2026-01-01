@@ -188,9 +188,15 @@ export async function listInvoices(
 
       // Check if more records exist
       const hasMore = result.rowCount! > limit;
-      const invoices = hasMore
+      const rawInvoices = hasMore
         ? result.rows.slice(0, limit)
         : result.rows;
+
+      // Normalize status to lowercase for API consistency
+      const invoices = rawInvoices.map(inv => ({
+        ...inv,
+        status: inv.status?.toLowerCase() || inv.status,
+      }));
 
       // Build pagination metadata
       let metadata: PaginationMetadata | undefined;

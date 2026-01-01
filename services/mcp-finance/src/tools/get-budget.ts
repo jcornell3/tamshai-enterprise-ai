@@ -113,12 +113,20 @@ export async function getBudget(
       }
 
       // Add full department name to each budget record for LLM clarity
+      const departmentName = department.charAt(0).toUpperCase() + department.slice(1).toLowerCase();
       const budgetsWithDepartmentName = result.rows.map(budget => ({
         ...budget,
-        department: department.charAt(0).toUpperCase() + department.slice(1).toLowerCase(), // Capitalize first letter
+        department: departmentName,
       }));
 
-      return createSuccessResponse(budgetsWithDepartmentName);
+      // Return response with top-level department and array of budget items
+      return createSuccessResponse({
+        department: departmentName,
+        fiscal_year: year,
+        budgets: budgetsWithDepartmentName,
+        total_budgeted: budgetsWithDepartmentName.reduce((sum, b) => sum + Number(b.budgeted_amount), 0),
+        total_actual: budgetsWithDepartmentName.reduce((sum, b) => sum + Number(b.actual_amount), 0),
+      });
     } catch (error) {
       return handleDatabaseError(error as Error, 'get_budget');
     }
