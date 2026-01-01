@@ -310,8 +310,44 @@ When QA testing complete, update this document with:
 
 ### QA Summary
 - ✅ Phase 3 (Documentation Review): **Complete**
-- ✅ Phase 1 (Workflow Validation): **UNBLOCKED - Secrets configured, firewall updated**
-- ✅ Phase 2 (Integration Verification): **UNBLOCKED - Ready for testing**
+- 🟡 Phase 1 (Workflow Validation): **BLOCKED - VPS bootstrap required**
+- 🟡 Phase 2 (Integration Verification): **BLOCKED - VPS bootstrap required**
+
+### Workflow Fixes Applied (2026-01-01 17:45 UTC)
+
+**Issue 1**: Boolean condition parsing in workflows
+- `gh workflow run -f rollback=false` passed string "false" which is truthy
+- Fix: Changed `!github.event.inputs.rollback` → `github.event.inputs.rollback != 'true'`
+- Commit: `6816152`
+
+**Issue 2**: SSH user authentication
+- `tamshai` user didn't have deploy key authorized
+- Fix: Changed VPS_USER secret to `root`
+- Status: ✅ SSH now working
+
+**Issue 3**: Git dubious ownership
+- Running as root but repo owned by another user
+- Fix: Added `git config --global --add safe.directory /opt/tamshai`
+- Commit: `1f53ece`
+
+### VPS Bootstrap Required (2026-01-01 17:52 UTC)
+
+**Root Cause**: Incremental deployment workflows use `--no-deps` flag to only restart the target service. This assumes dependencies (Redis, Keycloak, PostgreSQL, etc.) are already running.
+
+**Symptoms**: Health check fails after 30 attempts because MCP Gateway cannot connect to Redis/Keycloak.
+
+**Solution**: Run full stack bootstrap once via `deploy-vps.yml` workflow:
+```bash
+gh workflow run deploy-vps.yml -f environment=staging -f build=true -f branch=main
+```
+
+This starts all 12 services:
+1. postgres, mongodb, elasticsearch, redis
+2. keycloak (with realm import)
+3. mcp-gateway, mcp-hr, mcp-finance, mcp-sales, mcp-support
+4. tamshai-website, caddy
+
+**Status**: 🟡 Waiting for Dev to run VPS bootstrap. After bootstrap completes, incremental workflows will work.
 
 ### Blocker Resolution (2026-01-01 17:31 UTC)
 
