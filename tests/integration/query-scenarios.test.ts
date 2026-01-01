@@ -352,8 +352,9 @@ describe('List All Employees Query', () => {
       hrClient = createMcpHrClient(token);
     });
 
-    test('Returns all employees (59) without pagination prompt', async () => {
-      const response = await hrClient.post<MCPQueryResponse>('/query', {
+    test('Returns all 59 employees via cursor-based pagination', async () => {
+      // First page: 50 employees
+      const firstPage = await hrClient.post<MCPQueryResponse>('/query', {
         query: 'list all employees',
         userContext: {
           userId: '4d712a0b-21d0-46ec-99ea-89cf960bc679',
@@ -363,14 +364,45 @@ describe('List All Employees Query', () => {
         },
       });
 
-      expect(response.status).toBe(200);
-      expect(response.data.status).toBe('success');
-      expect(response.data.data).toBeDefined();
-      expect(Array.isArray(response.data.data)).toBe(true);
+      expect(firstPage.status).toBe(200);
+      expect(firstPage.data.status).toBe('success');
+      expect(firstPage.data.data).toBeDefined();
+      expect(Array.isArray(firstPage.data.data)).toBe(true);
 
-      // Should return more than 50 employees (auto-pagination working)
-      // We have 59 employees in the sample data
-      expect(response.data.data.length).toBe(59);
+      // list_employees has a default limit of 50 records
+      expect(firstPage.data.data.length).toBe(50);
+
+      // Verify truncation metadata with nextCursor (v1.4 cursor-based pagination)
+      expect(firstPage.data.metadata).toBeDefined();
+      expect(firstPage.data.metadata?.truncated).toBe(true);
+      expect(firstPage.data.metadata?.nextCursor).toBeDefined();
+
+      // Second page: remaining 9 employees using cursor
+      const secondPage = await hrClient.post<MCPQueryResponse>('/query', {
+        query: 'show more employees',
+        cursor: firstPage.data.metadata?.nextCursor,
+        userContext: {
+          userId: '4d712a0b-21d0-46ec-99ea-89cf960bc679',
+          username: TEST_USERS.executive.username,
+          email: TEST_USERS.executive.email,
+          roles: TEST_USERS.executive.roles,
+        },
+      });
+
+      expect(secondPage.status).toBe(200);
+      expect(secondPage.data.status).toBe('success');
+      expect(secondPage.data.data).toBeDefined();
+      expect(Array.isArray(secondPage.data.data)).toBe(true);
+
+      // Second page should have remaining employees (59 - 50 = 9)
+      expect(secondPage.data.data.length).toBe(9);
+
+      // No more pages - nextCursor should be undefined
+      expect(secondPage.data.metadata?.nextCursor).toBeUndefined();
+
+      // Total employees from both pages should be 59
+      const totalEmployees = firstPage.data.data.length + secondPage.data.data.length;
+      expect(totalEmployees).toBe(59);
     });
 
     test('Detects various employee listing phrasings', async () => {
@@ -460,7 +492,7 @@ describe('Query Routing', () => {
   });
 
   test('Routes UUID queries to get_employee', async () => {
-    const employeeUuid = 'e1000000-0000-0000-0000-000000000001'; // Eve Thompson's ID
+    const employeeUuid = 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b'; // Eve Thompson's ID (from hr-data.sql)
     const response = await hrClient.post<MCPQueryResponse>('/query', {
       query: `Show me employee ${employeeUuid}`,
       userContext: {
