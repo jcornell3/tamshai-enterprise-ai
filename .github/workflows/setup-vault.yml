@@ -76,7 +76,7 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VAULT_VERSION: ${{ github.event.inputs.vault_version }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'INSTALL_EOF'
+          ssh $VPS_USER@$VPS_HOST "VAULT_VERSION=$VAULT_VERSION bash -s" << 'INSTALL_EOF'
           set -e
 
           echo "Installing Vault ${VAULT_VERSION}..."
