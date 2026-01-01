@@ -238,6 +238,7 @@ jobs:
 
           docker compose up -d
           sleep 10  # Wait for services to be ready
+          docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE tamshai OWNER tamshai;" || true
           cd ../../tests/integration
           npm ci
           npm test
