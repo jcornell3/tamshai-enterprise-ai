@@ -285,7 +285,7 @@ async function getKnowledgeArticle(input: any, userContext: UserContext): Promis
       );
     }
 
-    const article = { id: result._id, ...result._source };
+    const article = { id: result._id, ...(result._source as Record<string, any>) };
     return createSuccessResponse(article);
   } catch (error: any) {
     if (error.meta?.body?.found === false) {
