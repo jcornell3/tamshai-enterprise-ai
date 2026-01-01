@@ -372,9 +372,9 @@ describe('List All Employees Query', () => {
       // list_employees has a default limit of 50 records
       expect(firstPage.data.data.length).toBe(50);
 
-      // Verify truncation metadata with nextCursor (v1.4 cursor-based pagination)
+      // Verify pagination metadata with nextCursor (v1.4 cursor-based pagination)
       expect(firstPage.data.metadata).toBeDefined();
-      expect(firstPage.data.metadata?.truncated).toBe(true);
+      expect(firstPage.data.metadata?.hasMore).toBe(true);
       expect(firstPage.data.metadata?.nextCursor).toBeDefined();
 
       // Second page: remaining 9 employees using cursor
@@ -397,8 +397,8 @@ describe('List All Employees Query', () => {
       // Second page should have remaining employees (59 - 50 = 9)
       expect(secondPage.data.data.length).toBe(9);
 
-      // No more pages - nextCursor should be undefined
-      expect(secondPage.data.metadata?.nextCursor).toBeUndefined();
+      // No more pages - hasMore should be false or undefined
+      expect(secondPage.data.metadata?.hasMore).toBeFalsy();
 
       // Total employees from both pages should be 59
       const totalEmployees = firstPage.data.data.length + secondPage.data.data.length;
