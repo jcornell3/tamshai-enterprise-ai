@@ -667,7 +667,12 @@ gh workflow run deploy-vps.yml --ref main
 **Phase 6**: ✅ Flutter unified desktop client (Windows complete)
 **Phase 7**: ⚠️ Monitoring & alerting (planned)
 **Phase 8**: ✅ VPS staging deployment (Hetzner Cloud)
-**Phase 9**: 🔄 Documentation (in progress - this file)
+**Phase 9**: ✅ Security remediation (Terraform infrastructure)
+  - 10 GCP issues resolved (SSL, logging, encryption, access controls)
+  - 4 VPS issues suppressed with defense-in-depth justifications
+  - Security documentation created (state security, firewall justification)
+  - Remaining: 2-3 low-priority items deferred to Phase 6 (monitoring)
+**Phase 10**: ✅ Documentation (this file, security docs)
 
 ---
 
@@ -810,6 +815,12 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 - [Architecture Specs](.specify/ARCHITECTURE_SPECS.md)
 - [V1.4 Update Status](.specify/V1.4_UPDATE_STATUS.md)
 
+### Security
+- [Terraform State Security](docs/security/TERRAFORM_STATE_SECURITY.md)
+- [VPS Firewall Justification](docs/security/VPS_FIREWALL_JUSTIFICATION.md)
+- [Security Remediation Plan](docs/keycloak-findings/2025-12-31-security-remediation-plan.md)
+- [Phase 5 Security Analysis](docs/keycloak-findings/2025-12-31-phase5-remaining-issues.md)
+
 ### Development
 - [Port Allocation](docs/development/PORT_ALLOCATION.md)
 - [Lessons Learned](docs/development/lessons-learned.md)
@@ -846,6 +857,6 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 
 ---
 
-*Last Updated: December 30, 2025*
-*Architecture Version: 1.4 (Flutter Desktop Complete, VPS Staging Deployed)*
-*Document Version: 2.0 (Condensed & Updated)*
+*Last Updated: December 31, 2025*
+*Architecture Version: 1.4 (Flutter Desktop Complete, VPS Staging Deployed, Security Hardened)*
+*Document Version: 2.1 (Security Remediation Complete)*
