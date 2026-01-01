@@ -305,13 +305,13 @@ When QA testing complete, update this document with:
 ---
 
 **Document Owner**: DevOps Team + QA Team
-**Last Updated**: 2026-01-01 (Access Model Clarification Added)
+**Last Updated**: 2026-01-01 (Bootstrap VPS Workflow Added)
 **Next Review**: QA can proceed with Phases 1-2 via GitHub Actions (no SSH required)
 
 ### QA Summary
 - ✅ Phase 3 (Documentation Review): **Complete**
-- 🟡 Phase 1 (Workflow Validation): **BLOCKED - VPS bootstrap required**
-- 🟡 Phase 2 (Integration Verification): **BLOCKED - VPS bootstrap required**
+- ✅ Phase 1 (Workflow Validation): **READY - Run Bootstrap VPS first**
+- ✅ Phase 2 (Integration Verification): **READY - Run Bootstrap VPS first**
 
 ### Workflow Fixes Applied (2026-01-01 17:45 UTC)
 
@@ -330,24 +330,39 @@ When QA testing complete, update this document with:
 - Fix: Added `git config --global --add safe.directory /opt/tamshai`
 - Commit: `1f53ece`
 
-### VPS Bootstrap Required (2026-01-01 17:52 UTC)
+### VPS Bootstrap Workflow Added (2026-01-01 18:15 UTC)
 
 **Root Cause**: Incremental deployment workflows use `--no-deps` flag to only restart the target service. This assumes dependencies (Redis, Keycloak, PostgreSQL, etc.) are already running.
 
 **Symptoms**: Health check fails after 30 attempts because MCP Gateway cannot connect to Redis/Keycloak.
 
-**Solution**: Run full stack bootstrap once via `deploy-vps.yml` workflow:
+**Solution**: New `bootstrap-vps.yml` workflow created to start all services.
+
+#### How to Bootstrap VPS (One-Time Setup)
+
+**Via GitHub Actions UI:**
+1. Go to GitHub → Actions → "Bootstrap VPS"
+2. Click "Run workflow"
+3. Select environment: `staging`
+4. Check "Force rebuild all images" if this is first deployment
+5. Click "Run workflow"
+6. Wait 5-10 minutes for all services to start
+
+**Via CLI:**
 ```bash
-gh workflow run deploy-vps.yml -f environment=staging -f build=true -f branch=main
+gh workflow run bootstrap-vps.yml -f environment=staging -f rebuild=true -f pull_latest=true
 ```
 
-This starts all 12 services:
-1. postgres, mongodb, elasticsearch, redis
-2. keycloak (with realm import)
-3. mcp-gateway, mcp-hr, mcp-finance, mcp-sales, mcp-support
-4. tamshai-website, caddy
+#### Services Started by Bootstrap (12 total)
 
-**Status**: 🟡 Waiting for Dev to run VPS bootstrap. After bootstrap completes, incremental workflows will work.
+| Category | Services |
+|----------|----------|
+| Databases | postgres (with sample data), mongodb (with sample data), elasticsearch, redis |
+| Identity | keycloak (with realm import) |
+| MCP Services | mcp-gateway, mcp-hr, mcp-finance, mcp-sales, mcp-support |
+| Frontend | tamshai-website, caddy (reverse proxy) |
+
+**Status**: ✅ Bootstrap workflow ready. Run once, then incremental workflows will work.
 
 ### Blocker Resolution (2026-01-01 17:31 UTC)
 
