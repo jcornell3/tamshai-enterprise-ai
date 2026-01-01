@@ -187,7 +187,7 @@ LIMIT $${paramIndex}`;
             nextCursor: encodeCursor({
               lastName: lastEmployee.last_name,
               firstName: lastEmployee.first_name,
-              id: lastEmployee.id,
+              id: lastEmployee.employee_id,
             }),
             totalEstimate: `${limit}+`,
             hint: `To see more employees, say "show next page" or "get more employees". You can also use filters like department, job title, or location to narrow results.`,

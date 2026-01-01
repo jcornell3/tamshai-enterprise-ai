@@ -276,6 +276,189 @@ async function executeDeleteOpportunity(confirmationData: Record<string, unknown
 }
 
 // =============================================================================
+// TOOL: close_opportunity (v1.4 with confirmation)
+// =============================================================================
+
+const CloseOpportunityInputSchema = z.object({
+  opportunityId: z.string(),
+  outcome: z.enum(['won', 'lost']),
+  reason: z.string().optional(),
+});
+
+async function closeOpportunity(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('close_opportunity', async () => {
+    if (!hasDeletePermission(userContext.roles)) {
+      return handleInsufficientPermissions('sales-write or executive', userContext.roles);
+    }
+
+    const { opportunityId, outcome, reason } = CloseOpportunityInputSchema.parse(input);
+
+    const collection = await getCollection('deals');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const opportunities = await collection.aggregate([
+      { $match: { ...roleFilter, _id: new ObjectId(opportunityId) } },
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customer_id',
+          foreignField: '_id',
+          as: 'customer_info'
+        }
+      },
+      {
+        $addFields: {
+          customer_name: { $arrayElemAt: ['$customer_info.company_name', 0] }
+        }
+      },
+      { $project: { customer_info: 0 } }
+    ]).toArray();
+
+    if (opportunities.length === 0) {
+      return handleOpportunityNotFound(opportunityId);
+    }
+
+    const opportunity = opportunities[0];
+
+    const confirmationId = uuidv4();
+    const newStage = outcome === 'won' ? 'CLOSED_WON' : 'CLOSED_LOST';
+    const confirmationData = {
+      action: 'close_opportunity',
+      mcpServer: 'sales',
+      userId: userContext.userId,
+      timestamp: Date.now(),
+      opportunityId,
+      customerName: opportunity.customer_name,
+      value: opportunity.value,
+      currentStage: opportunity.stage,
+      newStage,
+      outcome,
+      reason: reason || 'No reason provided',
+    };
+
+    await storePendingConfirmation(confirmationId, confirmationData, 300);
+
+    const message = `⚠️ Close opportunity for ${opportunity.customer_name} as ${outcome.toUpperCase()}?
+
+Value: $${opportunity.value.toLocaleString()}
+Current Stage: ${opportunity.stage}
+New Stage: ${newStage}
+${reason ? `Reason: ${reason}` : ''}
+
+This action will mark the opportunity as ${outcome === 'won' ? 'won' : 'lost'}.`;
+
+    return createPendingConfirmationResponse(confirmationId, message, confirmationData);
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+async function executeCloseOpportunity(confirmationData: Record<string, unknown>, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('execute_close_opportunity', async () => {
+    const opportunityId = confirmationData.opportunityId as string;
+    const newStage = confirmationData.newStage as string;
+
+    const collection = await getCollection('deals');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const result = await collection.updateOne(
+      { ...roleFilter, _id: new ObjectId(opportunityId) },
+      { $set: { stage: newStage, updated_at: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return handleOpportunityNotFound(opportunityId);
+    }
+
+    return createSuccessResponse({
+      success: true,
+      message: `Opportunity has been closed as ${newStage}`,
+      opportunityId,
+      stage: newStage,
+    });
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+// =============================================================================
+// TOOL: delete_customer (v1.4 with confirmation)
+// =============================================================================
+
+const DeleteCustomerInputSchema = z.object({
+  customerId: z.string(),
+  reason: z.string().optional(),
+});
+
+async function deleteCustomer(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('delete_customer', async () => {
+    if (!hasDeletePermission(userContext.roles)) {
+      return handleInsufficientPermissions('sales-write or executive', userContext.roles);
+    }
+
+    const { customerId, reason } = DeleteCustomerInputSchema.parse(input);
+
+    const collection = await getCollection('customers');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const customer = await collection.findOne({ ...roleFilter, customer_id: customerId });
+
+    if (!customer) {
+      return handleCustomerNotFound(customerId);
+    }
+
+    // Check if customer has active opportunities
+    const dealsCollection = await getCollection('deals');
+    const activeDeals = await dealsCollection.countDocuments({
+      ...roleFilter,
+      customer_id: customer._id,
+      stage: { $nin: ['CLOSED_WON', 'CLOSED_LOST'] }
+    });
+
+    const confirmationId = uuidv4();
+    const confirmationData = {
+      action: 'delete_customer',
+      mcpServer: 'sales',
+      userId: userContext.userId,
+      timestamp: Date.now(),
+      customerId,
+      customerName: customer.company_name,
+      activeDeals,
+      reason: reason || 'No reason provided',
+    };
+
+    await storePendingConfirmation(confirmationId, confirmationData, 300);
+
+    const message = `⚠️ Delete customer ${customer.company_name}?
+
+Customer ID: ${customerId}
+${activeDeals > 0 ? `⚠️ WARNING: Customer has ${activeDeals} active opportunity(s)` : 'No active opportunities'}
+${reason ? `Reason: ${reason}` : ''}
+
+This action will permanently delete the customer record and cannot be undone.`;
+
+    return createPendingConfirmationResponse(confirmationId, message, confirmationData);
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+async function executeDeleteCustomer(confirmationData: Record<string, unknown>, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('execute_delete_customer', async () => {
+    const customerId = confirmationData.customerId as string;
+
+    const collection = await getCollection('customers');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const result = await collection.deleteOne({ ...roleFilter, customer_id: customerId });
+
+    if (result.deletedCount === 0) {
+      return handleCustomerNotFound(customerId);
+    }
+
+    return createSuccessResponse({
+      success: true,
+      message: `Customer has been successfully deleted`,
+      customerId,
+    });
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+// =============================================================================
 // ENDPOINTS
 // =============================================================================
 
@@ -361,6 +544,26 @@ app.post('/tools/delete_opportunity', async (req: Request, res: Response) => {
   res.json(result);
 });
 
+app.post('/tools/close_opportunity', async (req: Request, res: Response) => {
+  const { userContext, opportunityId, outcome, reason } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+  const result = await closeOpportunity({ opportunityId, outcome, reason }, userContext);
+  res.json(result);
+});
+
+app.post('/tools/delete_customer', async (req: Request, res: Response) => {
+  const { userContext, customerId, reason } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+  const result = await deleteCustomer({ customerId, reason }, userContext);
+  res.json(result);
+});
+
 app.post('/execute', async (req: Request, res: Response) => {
   const { action, data, userContext } = req.body;
   if (!userContext?.userId) {
@@ -372,6 +575,12 @@ app.post('/execute', async (req: Request, res: Response) => {
   switch (action) {
     case 'delete_opportunity':
       result = await executeDeleteOpportunity(data, userContext);
+      break;
+    case 'close_opportunity':
+      result = await executeCloseOpportunity(data, userContext);
+      break;
+    case 'delete_customer':
+      result = await executeDeleteCustomer(data, userContext);
       break;
     default:
       result = createErrorResponse('UNKNOWN_ACTION', `Unknown action: ${action}`, 'Check the action name and try again');
