@@ -92,8 +92,13 @@ export class JWTValidator {
           const payload = decoded as jwt.JwtPayload;
 
           // Extract roles from Keycloak token structure
+          // Support both realm roles (legacy/global) and client roles (best practice)
           const realmRoles = payload.realm_access?.roles || [];
+          const clientRoles = payload.resource_access?.[this.config.clientId]?.roles || [];
           const groups = payload.groups || [];
+
+          // Merge and deduplicate roles from both sources
+          const allRoles = Array.from(new Set([...realmRoles, ...clientRoles]));
 
           // Log available claims for debugging
           this.logger.debug('JWT claims:', {
@@ -105,6 +110,10 @@ export class JWTValidator {
             family_name: payload.family_name,
             azp: payload.azp,
             realm_access: payload.realm_access,
+            resource_access: payload.resource_access,
+            realmRoles,
+            clientRoles,
+            mergedRoles: allRoles,
           });
 
           // Keycloak may not include preferred_username in access token
@@ -134,7 +143,7 @@ export class JWTValidator {
             userId: payload.sub || '',
             username: username,
             email: payload.email || '',
-            roles: realmRoles,
+            roles: allRoles,
             groups: groups,
           });
         }

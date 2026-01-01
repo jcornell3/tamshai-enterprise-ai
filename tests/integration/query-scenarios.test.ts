@@ -92,7 +92,7 @@ interface TokenResponse {
 
 interface MCPQueryResponse {
   status: 'success' | 'error';
-  data?: any[];
+  data?: any;  // Can be array or object depending on the query
   metadata?: {
     returnedCount?: number;
     totalCount?: number | string;
