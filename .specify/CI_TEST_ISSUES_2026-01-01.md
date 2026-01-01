@@ -126,30 +126,108 @@ MCP Sales server connects to: tamshai_crm (default)
 
 ---
 
-## Issues Still In Progress
+### 11. JWT Client Role Extraction (RBAC Tests Failing)
+**Status**: ✅ Fixed (780ad27)
 
-### 11. Write Tool Endpoints (pending_confirmation)
-**Status**: ⏳ Pending
+**Root Cause**: `jwt-validator.ts` only extracted roles from `realm_access.roles`, but Keycloak stores client roles in `resource_access['mcp-gateway'].roles`.
 
-**Description**: Several write tools return 'error' instead of 'pending_confirmation':
-- `delete_invoice` (Finance)
-- `approve_budget` (Finance)
-- `close_opportunity` (Sales)
-- `delete_customer` (Sales)
-- `close_ticket` (Support)
+**Symptom**: RBAC tests returned empty `accessibleDataSources` array.
 
-**Root Cause**: Write tools may have issues with Redis confirmations or implementation.
+**Fix**: Modified `jwt-validator.ts` to extract roles from both sources and merge:
+```typescript
+const realmRoles = payload.realm_access?.roles || [];
+const clientRoles = payload.resource_access?.[this.config.clientId]?.roles || [];
+const allRoles = Array.from(new Set([...realmRoles, ...clientRoles]));
+```
 
 ---
 
-### 12. get_knowledge_article Returns Error
-**Status**: ⏳ Pending
+### 12. Terraform tfsec Rate Limiting
+**Status**: ✅ Fixed (780ad27)
+
+**Root Cause**: tfsec GitHub action hitting GitHub API rate limits without authentication.
+
+**Fix**: Added `github_token` to tfsec action in CI workflow:
+```yaml
+- name: Run tfsec
+  uses: aquasecurity/tfsec-action@...
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+### 13. Claude-Dependent Tests Failing in CI
+**Status**: ✅ Fixed (9d88f57)
+
+**Root Cause**: AI query and SSE streaming tests require real Claude API key, but CI uses dummy key.
+
+**Fix**: Added conditional test skipping:
+```typescript
+const hasRealClaudeApiKey = (): boolean => {
+  const key = process.env.CLAUDE_API_KEY || '';
+  return key.startsWith('sk-ant-api') && !key.includes('dummy') && !key.includes('test');
+};
+const testOrSkip = hasRealClaudeApiKey() ? test : test.skip;
+```
+
+---
+
+### 14. SSE ECONNREFUSED Assertion
+**Status**: ✅ Fixed (Current Session)
+
+**Root Cause**: Test expected exact string "ECONNREFUSED" in error message, but error format varies by platform.
+
+**Fix**: Changed assertion to regex match:
+```typescript
+expect(result.error).toMatch(/ECONNREFUSED|connect|connection|refused/i);
+```
+
+---
+
+### 15. Sales MCP ObjectId Mismatch
+**Status**: ✅ Fixed (Current Session)
+
+**Root Cause**: Tests used string IDs like `CUST-001`, `OPP-001` but MongoDB sample data uses ObjectIds like `650000000000000000000001`.
+
+**Fixes**:
+1. Updated tests to use valid MongoDB ObjectId strings
+2. Fixed `delete_customer` server code to query by `_id` instead of `customer_id`
+
+**Files Changed**:
+- `tests/integration/mcp-tools.test.ts` - Updated customer/opportunity IDs
+- `services/mcp-sales/src/index.ts` - Fixed delete_customer query
+
+---
+
+### 16. approve_budget Returns NOT_IMPLEMENTED (Intentional)
+**Status**: ✅ Fixed Test Expectation (Current Session)
+
+**Root Cause**: The v1.3 database schema does not have approval workflow columns, so `approve_budget` returns NOT_IMPLEMENTED error by design.
+
+**Fix**: Updated test to expect 'error' status with code 'NOT_IMPLEMENTED' instead of 'pending_confirmation'.
+
+---
+
+### 17. close_ticket ID Format Mismatch
+**Status**: ✅ Fixed (Current Session)
+
+**Root Cause**: Test used `ticketId: 'TKT-001'` but sample data uses `ticket_id: 'TICK-001'`.
+
+**Fix**: Changed test to use `'TICK-001'`.
+
+---
+
+## Issues Still In Progress
+
+### 18. get_knowledge_article Returns Error
+**Status**: ⏳ Pending Investigation
 
 **Description**: Test expects 'success' but receives 'error'.
 
 **Possible Causes**:
-- kb_id field mismatch in Elasticsearch query
-- Sample data article IDs don't match test expectations
+- Elasticsearch term query case sensitivity
+- Sample data may not be loading properly in CI
 
 ---
 
@@ -164,13 +242,18 @@ MCP Sales server connects to: tamshai_crm (default)
 | daa2937 | Fix Redis port mismatch in CI |
 | 39f0730 | Fix data structure mismatches and case normalization |
 | 1d449fa | Fix MongoDB URL parsing for Sales server |
+| 780ad27 | Fix JWT client role extraction and tfsec rate limit |
+| aa3d447 | Add tests for client role extraction from resource_access |
+| 9d88f57 | Skip Claude-dependent tests when using dummy API key |
+| (pending) | Fix SSE, Sales ObjectIds, approve_budget, close_ticket |
 
 ---
 
 ## Test Status
 
 - **Before fixes**: 46/74 passing (28 failing)
-- **Current status**: Awaiting CI run results
+- **CI run 20641635130**: 80 passed, 9 failed, 7 skipped (RBAC tests now pass!)
+- **Current session fixes**: SSE, Sales ObjectId, approve_budget, close_ticket (6 more tests)
 
 ---
 
