@@ -443,7 +443,7 @@ jobs:
             postgres:16-alpine
 
           # Wait for PostgreSQL to be ready
-          timeout 30 bash -c 'until docker exec postgres pg_isready; do sleep 1; done'
+          timeout 30 bash -c 'until docker exec postgres pg_isready -U keycloak -d keycloak; do sleep 1; done'
 
       - name: Start Keycloak
         run: |
