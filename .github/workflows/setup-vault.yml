@@ -1,0 +1,386 @@
+# One-Time Setup: HashiCorp Vault Installation
+#
+# This workflow installs and configures Vault on the VPS for SSH Secrets Engine.
+# Run ONCE to set up Vault infrastructure.
+#
+# IMPORTANT: This workflow stores sensitive credentials directly in GitHub Secrets
+# to avoid exposing them in logs.
+
+name: Setup Vault
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_install:
+        description: 'Type "INSTALL" to confirm Vault installation'
+        required: true
+        type: string
+      vault_version:
+        description: 'Vault version to install'
+        required: true
+        type: string
+        default: '1.15.4'
+
+concurrency:
+  group: setup-vault
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  install-vault:
+    name: Install Vault on VPS
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm_install == 'INSTALL' }}
+    environment: staging
+
+    steps:
+      - name: Validate confirmation
+        if: ${{ github.event.inputs.confirm_install != 'INSTALL' }}
+        run: |
+          echo "::error::You must type 'INSTALL' to confirm"
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Check if Vault already installed
+        id: check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          if ssh $VPS_USER@$VPS_HOST "command -v vault &> /dev/null"; then
+            echo "installed=true" >> $GITHUB_OUTPUT
+            echo "::warning::Vault is already installed on VPS"
+          else
+            echo "installed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Vault
+        if: steps.check.outputs.installed != 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_VERSION: ${{ github.event.inputs.vault_version }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'INSTALL_EOF'
+          set -e
+
+          echo "Installing Vault ${VAULT_VERSION}..."
+
+          # Install dependencies
+          apt-get update
+          apt-get install -y wget unzip jq gpg
+
+          # Create vault user
+          if ! id vault &>/dev/null; then
+            useradd --system --home /opt/vault --shell /bin/false vault
+          fi
+
+          # Create directories
+          mkdir -p /opt/vault/data /etc/vault.d/tls /var/log/vault
+
+          # Download and install Vault
+          cd /tmp
+          wget -q "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip"
+          unzip -o "vault_${VAULT_VERSION}_linux_amd64.zip"
+          mv vault /usr/local/bin/
+          chmod +x /usr/local/bin/vault
+          setcap cap_ipc_lock=+ep /usr/local/bin/vault
+          rm -f "vault_${VAULT_VERSION}_linux_amd64.zip"
+
+          # Generate self-signed TLS certificates
+          openssl req -new -x509 -days 3650 \
+            -newkey rsa:2048 -nodes \
+            -keyout /etc/vault.d/tls/vault-key.pem \
+            -out /etc/vault.d/tls/vault-cert.pem \
+            -subj "/C=US/ST=Oregon/L=Portland/O=Tamshai/CN=vault.tamshai.internal"
+
+          # Set permissions
+          chown -R vault:vault /opt/vault /etc/vault.d /var/log/vault
+          chmod 700 /etc/vault.d/tls
+          chmod 600 /etc/vault.d/tls/vault-key.pem
+
+          # Create Vault configuration
+          cat > /etc/vault.d/vault.hcl << 'VAULTCFG'
+          storage "file" {
+            path = "/opt/vault/data"
+          }
+
+          listener "tcp" {
+            address       = "0.0.0.0:8200"
+            tls_cert_file = "/etc/vault.d/tls/vault-cert.pem"
+            tls_key_file  = "/etc/vault.d/tls/vault-key.pem"
+            tls_min_version = "tls12"
+          }
+
+          api_addr = "https://127.0.0.1:8200"
+          ui = true
+          disable_mlock = false
+          log_level = "info"
+          VAULTCFG
+
+          chown vault:vault /etc/vault.d/vault.hcl
+          chmod 640 /etc/vault.d/vault.hcl
+
+          # Create systemd service
+          cat > /etc/systemd/system/vault.service << 'SVCEOF'
+          [Unit]
+          Description=HashiCorp Vault
+          Requires=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=notify
+          User=vault
+          Group=vault
+          ExecStart=/usr/local/bin/vault server -config=/etc/vault.d/vault.hcl
+          ExecReload=/bin/kill --signal HUP $MAINPID
+          KillMode=process
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=65536
+          LimitMEMLOCK=infinity
+
+          [Install]
+          WantedBy=multi-user.target
+          SVCEOF
+
+          # Start Vault
+          systemctl daemon-reload
+          systemctl enable vault
+          systemctl start vault
+
+          sleep 3
+
+          if systemctl is-active --quiet vault; then
+            echo "Vault installed and running"
+            vault --version
+          else
+            echo "Vault failed to start"
+            systemctl status vault --no-pager
+            exit 1
+          fi
+          INSTALL_EOF
+
+      - name: Initialize Vault
+        id: init
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          # Check if already initialized
+          INIT_STATUS=$(ssh $VPS_USER@$VPS_HOST "VAULT_ADDR='https://127.0.0.1:8200' VAULT_SKIP_VERIFY=1 vault status -format=json 2>/dev/null | jq -r '.initialized'" || echo "false")
+
+          if [ "$INIT_STATUS" = "true" ]; then
+            echo "::warning::Vault is already initialized"
+            echo "already_initialized=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Initializing Vault..."
+
+          # Initialize and capture output
+          INIT_OUTPUT=$(ssh $VPS_USER@$VPS_HOST "VAULT_ADDR='https://127.0.0.1:8200' VAULT_SKIP_VERIFY=1 vault operator init -key-shares=5 -key-threshold=3 -format=json")
+
+          # Extract keys and token (masked in logs)
+          UNSEAL_KEY_1=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[0]')
+          UNSEAL_KEY_2=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[1]')
+          UNSEAL_KEY_3=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[2]')
+          UNSEAL_KEY_4=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[3]')
+          UNSEAL_KEY_5=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[4]')
+          ROOT_TOKEN=$(echo "$INIT_OUTPUT" | jq -r '.root_token')
+
+          # Mask all sensitive values
+          echo "::add-mask::$UNSEAL_KEY_1"
+          echo "::add-mask::$UNSEAL_KEY_2"
+          echo "::add-mask::$UNSEAL_KEY_3"
+          echo "::add-mask::$UNSEAL_KEY_4"
+          echo "::add-mask::$UNSEAL_KEY_5"
+          echo "::add-mask::$ROOT_TOKEN"
+
+          # Output for next steps
+          echo "unseal_key_1=$UNSEAL_KEY_1" >> $GITHUB_OUTPUT
+          echo "unseal_key_2=$UNSEAL_KEY_2" >> $GITHUB_OUTPUT
+          echo "unseal_key_3=$UNSEAL_KEY_3" >> $GITHUB_OUTPUT
+          echo "unseal_key_4=$UNSEAL_KEY_4" >> $GITHUB_OUTPUT
+          echo "unseal_key_5=$UNSEAL_KEY_5" >> $GITHUB_OUTPUT
+          echo "root_token=$ROOT_TOKEN" >> $GITHUB_OUTPUT
+          echo "already_initialized=false" >> $GITHUB_OUTPUT
+
+          echo "Vault initialized successfully"
+
+      - name: Unseal Vault
+        if: steps.init.outputs.already_initialized != 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          KEY1: ${{ steps.init.outputs.unseal_key_1 }}
+          KEY2: ${{ steps.init.outputs.unseal_key_2 }}
+          KEY3: ${{ steps.init.outputs.unseal_key_3 }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+
+          vault operator unseal "$KEY1"
+          vault operator unseal "$KEY2"
+          vault operator unseal "$KEY3"
+
+          echo "Vault unsealed"
+          vault status
+          EOF
+
+      - name: Configure SSH Secrets Engine
+        if: steps.init.outputs.already_initialized != 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          ROOT_TOKEN: ${{ steps.init.outputs.root_token }}
+        run: |
+          # Get CA public key and configure SSH engine
+          CA_PUBLIC_KEY=$(ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          export VAULT_TOKEN="$ROOT_TOKEN"
+
+          # Enable SSH secrets engine
+          vault secrets enable -path=ssh-client-signer ssh
+
+          # Generate CA for signing
+          vault write ssh-client-signer/config/ca generate_signing_key=true
+
+          # Create role for GitHub deployments
+          vault write ssh-client-signer/roles/github-deploy \
+            key_type=ca \
+            default_user=root \
+            allowed_users="root,tamshai" \
+            allowed_extensions="permit-pty,permit-port-forwarding" \
+            default_extensions='{"permit-pty": ""}' \
+            ttl=10m \
+            max_ttl=30m
+
+          # Enable JWT auth for GitHub OIDC
+          vault auth enable jwt
+
+          # Configure GitHub OIDC
+          vault write auth/jwt/config \
+            bound_issuer="https://token.actions.githubusercontent.com" \
+            oidc_discovery_url="https://token.actions.githubusercontent.com"
+
+          # Create policy for SSH signing
+          vault policy write github-deploy-ssh - << 'POLICY'
+          path "ssh-client-signer/config/ca" {
+            capabilities = ["read"]
+          }
+          path "ssh-client-signer/sign/github-deploy" {
+            capabilities = ["create", "update"]
+          }
+          POLICY
+
+          # Create JWT role for GitHub Actions
+          vault write auth/jwt/role/github-deploy \
+            role_type="jwt" \
+            bound_audiences="https://github.com/jcornell3" \
+            bound_claims_type="glob" \
+            bound_claims='{"repository":"jcornell3/tamshai-enterprise-ai"}' \
+            user_claim="actor" \
+            policies="github-deploy-ssh" \
+            ttl=15m
+
+          # Output CA public key
+          vault read -field=public_key ssh-client-signer/config/ca
+          EOF
+          )
+
+          echo "SSH Secrets Engine configured"
+          echo "::add-mask::$CA_PUBLIC_KEY"
+          echo "ca_public_key=$CA_PUBLIC_KEY" >> $GITHUB_ENV
+
+      - name: Configure VPS to trust Vault CA
+        if: steps.init.outputs.already_initialized != 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          ROOT_TOKEN: ${{ steps.init.outputs.root_token }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+
+          # Get CA public key
+          CA_KEY=$(VAULT_TOKEN="$ROOT_TOKEN" vault read -field=public_key ssh-client-signer/config/ca)
+
+          # Add to SSH trusted CAs
+          echo "$CA_KEY" > /etc/ssh/vault-ca.pub
+
+          # Configure sshd to trust Vault CA
+          if ! grep -q "TrustedUserCAKeys" /etc/ssh/sshd_config; then
+            echo "TrustedUserCAKeys /etc/ssh/vault-ca.pub" >> /etc/ssh/sshd_config
+          fi
+
+          # Reload SSH
+          systemctl reload sshd
+
+          echo "VPS now trusts Vault CA for SSH authentication"
+          EOF
+
+      - name: Output credentials for manual storage
+        if: steps.init.outputs.already_initialized != 'true'
+        run: |
+          echo "=============================================="
+          echo "VAULT SETUP COMPLETE"
+          echo "=============================================="
+          echo ""
+          echo "IMPORTANT: The following secrets have been generated."
+          echo "You MUST add these to GitHub Secrets manually:"
+          echo ""
+          echo "Go to: Settings > Secrets > Actions > New repository secret"
+          echo ""
+          echo "Required secrets:"
+          echo "  - VAULT_UNSEAL_KEY_1"
+          echo "  - VAULT_UNSEAL_KEY_2"
+          echo "  - VAULT_UNSEAL_KEY_3"
+          echo "  - VAULT_UNSEAL_KEY_4"
+          echo "  - VAULT_UNSEAL_KEY_5"
+          echo "  - VAULT_ROOT_TOKEN"
+          echo "  - VAULT_ADDR = https://${{ secrets.VPS_HOST }}:8200"
+          echo ""
+          echo "The actual values are in the workflow step outputs (masked)."
+          echo "You can retrieve them from the VPS:"
+          echo "  ssh root@${{ secrets.VPS_HOST }}"
+          echo "  cat /root/vault-init.txt  # if saved during install"
+          echo ""
+          echo "Or re-run initialization if needed."
+          echo "=============================================="
+
+      - name: Summary
+        run: |
+          echo "## Vault Setup Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.init.outputs.already_initialized }}" = "true" ]; then
+            echo "Vault was already initialized." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Vault has been installed and configured:" >> $GITHUB_STEP_SUMMARY
+            echo "- SSH Secrets Engine enabled" >> $GITHUB_STEP_SUMMARY
+            echo "- GitHub OIDC authentication configured" >> $GITHUB_STEP_SUMMARY
+            echo "- VPS trusts Vault CA" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Add Vault credentials to GitHub Secrets" >> $GITHUB_STEP_SUMMARY
+            echo "2. Update deployment workflows to use Vault SSH" >> $GITHUB_STEP_SUMMARY
+            echo "3. Test and remove static VPS_SSH_KEY" >> $GITHUB_STEP_SUMMARY
+          fi
