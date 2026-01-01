@@ -89,13 +89,13 @@ GitHub → Actions → [Workflow Name] → Run workflow
 
 | Workflow | Trigger | Expected Result | Status |
 |----------|---------|-----------------|--------|
-| deploy-mcp-gateway | ⬜ | "✅ MCP Gateway is healthy" in logs | ⬜ |
-| deploy-mcp-hr | ⬜ | "✅ MCP HR is healthy" in logs | ⬜ |
-| deploy-mcp-finance | ⬜ | "✅ MCP Finance is healthy" in logs | ⬜ |
-| deploy-mcp-sales | ⬜ | "✅ MCP Sales is healthy" in logs | ⬜ |
-| deploy-mcp-support | ⬜ | "✅ MCP Support is healthy" in logs | ⬜ |
-| deploy-kong | ⬜ | "✅ Kong Gateway is healthy" in logs | ⬜ |
-| deploy-keycloak | ⬜ | "✅ Keycloak is healthy" in logs | ⬜ |
+| deploy-mcp-gateway | ✅ | "✅ MCP Gateway is healthy" in logs | ✅ PASSED (Run 20646135651) |
+| deploy-mcp-hr | ✅ | "✅ MCP HR is healthy" in logs | ✅ PASSED (Run 20646253822) |
+| deploy-mcp-finance | ✅ | "✅ MCP Finance is healthy" in logs | ✅ PASSED (Run 20646254024) |
+| deploy-mcp-sales | ✅ | "✅ MCP Sales is healthy" in logs | ✅ PASSED (Run 20646254291) |
+| deploy-mcp-support | ✅ | "✅ MCP Support is healthy" in logs | ✅ PASSED (Run 20646254545) |
+| deploy-kong | ⬜ | N/A - Kong not in VPS deployment | ⬜ SKIPPED |
+| deploy-keycloak | ✅ | "✅ Keycloak is healthy" in logs | ✅ PASSED (Run 20646254756) |
 
 **Verification Method**: GitHub Actions → [Workflow Run] → "Deployment summary" step
 
@@ -133,8 +133,13 @@ Test rollback functionality for at least 2 services:
 
 | Service | Pre-Rollback Version | Post-Rollback Version | Health Check | Status |
 |---------|---------------------|----------------------|--------------|--------|
-| mcp-gateway | ⬜ | ⬜ | ⬜ | ⬜ |
-| mcp-hr | ⬜ | ⬜ | ⬜ | ⬜ |
+| mcp-gateway | N/A | N/A | N/A | ❌ FAILED - Image naming bug |
+| mcp-hr | N/A | N/A | N/A | ❌ FAILED - Image naming bug |
+
+**Rollback Bug Found (2026-01-01 22:02 UTC)**:
+- Workflows use `mcp-gateway:rollback` but VPS uses `tamshai/mcp-gateway:latest`
+- Error: `No such image: mcp-gateway:rollback`
+- Fix needed: Change to `tamshai/mcp-gateway:rollback` in all deploy workflows
 
 ### Phase 2: Integration Verification (2-3 hours)
 
@@ -308,10 +313,11 @@ When QA testing complete, update this document with:
 **Last Updated**: 2026-01-01 (Bootstrap VPS Workflow Added)
 **Next Review**: QA can proceed with Phases 1-2 via GitHub Actions (no SSH required)
 
-### QA Summary
+### QA Summary (Updated 2026-01-01 22:05 UTC)
 - ✅ Phase 3 (Documentation Review): **Complete**
-- ✅ Phase 1 (Workflow Validation): **READY - Run Bootstrap VPS first**
-- ✅ Phase 2 (Integration Verification): **READY - Run Bootstrap VPS first**
+- ✅ Phase 1.1 (Manual Trigger Testing): **Complete - 6/6 services deployed successfully**
+- ❌ Phase 1.3 (Rollback Testing): **FAILED - Image naming bug** (see Rollback Test Matrix)
+- 🟡 Phase 2 (Integration Verification): **BLOCKED - DNS/Cloudflare not configured**
 
 ### Workflow Fixes Applied (2026-01-01 17:45 UTC)
 
