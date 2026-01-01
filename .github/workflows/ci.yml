@@ -465,8 +465,8 @@ jobs:
           # Wait for Keycloak to be ready (can take 60-90 seconds)
           echo "Waiting for Keycloak to start..."
           for i in {1..60}; do
-            # Use Keycloak's /health endpoint (works in dev mode, unlike /health/ready)
-            if curl -sf http://localhost:8180/health > /dev/null 2>&1; then
+            # Check if Keycloak master realm is accessible (more reliable than /health in dev mode)
+            if curl -sf http://localhost:8180/realms/master > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               # Give it a few more seconds to fully initialize
               sleep 5
