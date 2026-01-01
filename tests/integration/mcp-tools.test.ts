@@ -22,7 +22,7 @@ const CONFIG = {
   mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
   mcpSalesUrl: process.env.MCP_SALES_URL || 'http://127.0.0.1:3103',
   mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
-  redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6380',
+  redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
   clientId: 'mcp-gateway',
   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
 };
