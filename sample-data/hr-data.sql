@@ -227,6 +227,80 @@ INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, wor
 ON CONFLICT (employee_number) DO NOTHING;
 
 -- =============================================================================
+-- ADDITIONAL EMPLOYEES (to reach 59 total)
+-- =============================================================================
+
+-- Marketing Department - Reports to CEO (Eve Thompson)
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000070', 'EMP070', 'Patricia', 'Morgan', 'patricia.m@tamshai.local', 'patricia.m@tamshai.local', '+1-555-800-0001', 'd1000000-0000-0000-0000-000000000007', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'VP of Marketing', 'L8', '2019-07-01', 190000.00, 30, 'San Francisco, CA', true)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Marketing Team - Reports to Patricia Morgan
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000071', 'EMP071', 'Steven', 'Harris', 'steven.h@tamshai.local', 'steven.h@tamshai.local', '+1-555-800-0002', 'd1000000-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000070', 'Marketing Manager', 'L5', '2020-08-01', 115000.00, 20, 'San Francisco, CA', true),
+    ('e1000000-0000-0000-0000-000000000072', 'EMP072', 'Linda', 'Thompson', 'linda.t@tamshai.local', 'linda.t@tamshai.local', '+1-555-800-0003', 'd1000000-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000071', 'Content Strategist', 'L4', '2021-03-01', 88000.00, 15, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000073', 'EMP073', 'Robert', 'Jackson', 'robert.j@tamshai.local', 'robert.j@tamshai.local', '+1-555-800-0004', 'd1000000-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000071', 'Digital Marketing Specialist', 'L3', '2021-09-01', 75000.00, 10, 'New York, NY', false),
+    ('e1000000-0000-0000-0000-000000000074', 'EMP074', 'Jessica', 'Lewis', 'jessica.l@tamshai.local', 'jessica.l@tamshai.local', '+1-555-800-0005', 'd1000000-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000071', 'Social Media Manager', 'L3', '2022-01-15', 72000.00, 10, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000075', 'EMP075', 'Andrew', 'Young', 'andrew.y@tamshai.local', 'andrew.y@tamshai.local', '+1-555-800-0006', 'd1000000-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000071', 'Marketing Coordinator', 'L2', '2023-03-01', 58000.00, 5, 'San Francisco, CA', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Operations Department - Reports to COO (James Wilson)
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000080', 'EMP080', 'William', 'Robinson', 'william.r@tamshai.local', 'william.r@tamshai.local', '+1-555-900-0001', 'd1000000-0000-0000-0000-000000000008', 'e1000000-0000-0000-0000-000000000004', 'Operations Director', 'L7', '2019-09-01', 155000.00, 25, 'Seattle, WA', true)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Operations Team - Reports to William Robinson
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000081', 'EMP081', 'Elizabeth', 'Hall', 'elizabeth.h@tamshai.local', 'elizabeth.h@tamshai.local', '+1-555-900-0002', 'd1000000-0000-0000-0000-000000000008', 'e1000000-0000-0000-0000-000000000080', 'Operations Manager', 'L5', '2020-04-01', 105000.00, 15, 'Seattle, WA', true),
+    ('e1000000-0000-0000-0000-000000000082', 'EMP082', 'Charles', 'Allen', 'charles.a@tamshai.local', 'charles.a@tamshai.local', '+1-555-900-0003', 'd1000000-0000-0000-0000-000000000008', 'e1000000-0000-0000-0000-000000000081', 'Business Analyst', 'L4', '2021-06-01', 85000.00, 10, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000083', 'EMP083', 'Dorothy', 'King', 'dorothy.k@tamshai.local', 'dorothy.k@tamshai.local', '+1-555-900-0004', 'd1000000-0000-0000-0000-000000000008', 'e1000000-0000-0000-0000-000000000081', 'Project Coordinator', 'L3', '2022-02-01', 68000.00, 10, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-000000000084', 'EMP084', 'Daniel', 'Wright', 'daniel.w@tamshai.local', 'daniel.w@tamshai.local', '+1-555-900-0005', 'd1000000-0000-0000-0000-000000000008', 'e1000000-0000-0000-0000-000000000081', 'Operations Associate', 'L2', '2023-01-15', 55000.00, 5, 'Seattle, WA', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Legal Department - Reports to CEO (Eve Thompson)
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000090', 'EMP090', 'Margaret', 'Scott', 'margaret.s@tamshai.local', 'margaret.s@tamshai.local', '+1-555-950-0001', 'd1000000-0000-0000-0000-000000000009', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'General Counsel', 'L8', '2019-04-01', 220000.00, 30, 'Seattle, WA', true)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Legal Team - Reports to Margaret Scott
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000091', 'EMP091', 'Joseph', 'Green', 'joseph.g@tamshai.local', 'joseph.g@tamshai.local', '+1-555-950-0002', 'd1000000-0000-0000-0000-000000000009', 'e1000000-0000-0000-0000-000000000090', 'Corporate Counsel', 'L6', '2020-06-01', 175000.00, 20, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-000000000092', 'EMP092', 'Susan', 'Adams', 'susan.a@tamshai.local', 'susan.a@tamshai.local', '+1-555-950-0003', 'd1000000-0000-0000-0000-000000000009', 'e1000000-0000-0000-0000-000000000090', 'Legal Coordinator', 'L3', '2021-11-01', 72000.00, 10, 'Seattle, WA', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Additional Engineering ICs - Reports to Nina Patel
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000055', 'EMP055', 'Benjamin', 'Carter', 'benjamin.c@tamshai.local', 'benjamin.c@tamshai.local', '+1-555-600-0006', 'd1000000-0000-0000-0000-000000000006', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'Senior Software Engineer', 'L4', '2020-09-01', 155000.00, 15, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-000000000056', 'EMP056', 'Olivia', 'Phillips', 'olivia.p@tamshai.local', 'olivia.p@tamshai.local', '+1-555-600-0007', 'd1000000-0000-0000-0000-000000000006', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'Software Engineer', 'L3', '2021-07-01', 125000.00, 12, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000057', 'EMP057', 'Ethan', 'Campbell', 'ethan.c@tamshai.local', 'ethan.c@tamshai.local', '+1-555-600-0008', 'd1000000-0000-0000-0000-000000000006', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'QA Engineer', 'L3', '2021-10-01', 105000.00, 10, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-000000000058', 'EMP058', 'Emma', 'Mitchell', 'emma.m@tamshai.local', 'emma.m@tamshai.local', '+1-555-600-0009', 'd1000000-0000-0000-0000-000000000006', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'DevOps Engineer', 'L4', '2020-12-01', 145000.00, 15, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000059', 'EMP059', 'Alexander', 'Roberts', 'alexander.r@tamshai.local', 'alexander.r@tamshai.local', '+1-555-600-0010', 'd1000000-0000-0000-0000-000000000006', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'Junior Developer', 'L2', '2023-06-01', 85000.00, 8, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-00000000005a', 'EMP05A', 'Isabella', 'Turner', 'isabella.t@tamshai.local', 'isabella.t@tamshai.local', '+1-555-600-0011', 'd1000000-0000-0000-0000-000000000006', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'Engineering Intern', 'L1', '2024-05-15', 48000.00, 0, 'Seattle, WA', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Additional Sales ICs - Reports to Ryan Garcia
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000035', 'EMP035', 'Matthew', 'Evans', 'matthew.e@tamshai.local', 'matthew.e@tamshai.local', '+1-555-400-0006', 'd1000000-0000-0000-0000-000000000004', 'e1000000-0000-0000-0000-000000000031', 'Account Executive', 'L4', '2021-08-01', 88000.00, 25, 'Boston, MA', false),
+    ('e1000000-0000-0000-0000-000000000036', 'EMP036', 'Samantha', 'Collins', 'samantha.c@tamshai.local', 'samantha.c@tamshai.local', '+1-555-400-0007', 'd1000000-0000-0000-0000-000000000004', 'e1000000-0000-0000-0000-000000000031', 'Account Executive', 'L4', '2022-03-01', 82000.00, 25, 'Los Angeles, CA', false),
+    ('e1000000-0000-0000-0000-000000000037', 'EMP037', 'Joshua', 'Stewart', 'joshua.s@tamshai.local', 'joshua.s@tamshai.local', '+1-555-400-0008', 'd1000000-0000-0000-0000-000000000004', 'e1000000-0000-0000-0000-000000000031', 'Sales Development Rep', 'L2', '2022-09-01', 62000.00, 20, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000038', 'EMP038', 'Ashley', 'Sanchez', 'ashley.s@tamshai.local', 'ashley.s@tamshai.local', '+1-555-400-0009', 'd1000000-0000-0000-0000-000000000004', 'e1000000-0000-0000-0000-000000000031', 'Sales Intern', 'L1', '2024-06-15', 42000.00, 10, 'San Francisco, CA', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Additional Support ICs - Reports to Dan Williams
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000044', 'EMP044', 'Brandon', 'Morris', 'brandon.m@tamshai.local', 'brandon.m@tamshai.local', '+1-555-500-0005', 'd1000000-0000-0000-0000-000000000005', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'Senior Support Engineer', 'L4', '2020-07-01', 82000.00, 12, 'Austin, TX', false),
+    ('e1000000-0000-0000-0000-000000000045', 'EMP045', 'Kimberly', 'Rogers', 'kimberly.r@tamshai.local', 'kimberly.r@tamshai.local', '+1-555-500-0006', 'd1000000-0000-0000-0000-000000000005', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'Support Engineer', 'L3', '2021-05-01', 70000.00, 10, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000046', 'EMP046', 'Justin', 'Reed', 'justin.r@tamshai.local', 'justin.r@tamshai.local', '+1-555-500-0007', 'd1000000-0000-0000-0000-000000000005', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'Support Associate', 'L2', '2022-08-01', 58000.00, 8, 'Remote', false),
+    ('e1000000-0000-0000-0000-000000000047', 'EMP047', 'Stephanie', 'Cook', 'stephanie.c@tamshai.local', 'stephanie.c@tamshai.local', '+1-555-500-0008', 'd1000000-0000-0000-0000-000000000005', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'Customer Success Rep', 'L2', '2023-02-01', 55000.00, 8, 'Austin, TX', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- Additional Finance ICs - Reports to Bob Martinez
+INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
+    ('e1000000-0000-0000-0000-000000000024', 'EMP024', 'Nicole', 'Bailey', 'nicole.b@tamshai.local', 'nicole.b@tamshai.local', '+1-555-300-0005', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Accounts Payable Specialist', 'L3', '2021-10-01', 72000.00, 10, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-000000000025', 'EMP025', 'Timothy', 'Murphy', 'timothy.m@tamshai.local', 'timothy.m@tamshai.local', '+1-555-300-0006', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Finance Intern', 'L1', '2024-06-01', 45000.00, 0, 'Seattle, WA', false)
+ON CONFLICT (employee_number) DO NOTHING;
+
+-- =============================================================================
 -- PERFORMANCE REVIEWS (CONFIDENTIAL - HR and Manager access only)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS hr.performance_reviews (
