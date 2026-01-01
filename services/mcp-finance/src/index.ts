@@ -44,6 +44,15 @@ const logger = winston.createLogger({
 const app = express();
 const PORT = parseInt(process.env.PORT || '3102');
 
+// Authorization helper - checks if user has Finance access
+function hasFinanceAccess(roles: string[]): boolean {
+  return roles.some(role =>
+    role === 'finance-read' ||
+    role === 'finance-write' ||
+    role === 'executive'
+  );
+}
+
 // Middleware
 app.use(express.json());
 
@@ -203,6 +212,17 @@ app.post('/tools/get_budget', async (req: Request, res: Response) => {
       return;
     }
 
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
+      });
+      return;
+    }
+
     const result = await getBudget({ department, year }, userContext);
     res.json(result);
   } catch (error) {
@@ -227,6 +247,17 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
       });
       return;
     }
@@ -259,6 +290,17 @@ app.post('/tools/list_budgets', async (req: Request, res: Response) => {
       return;
     }
 
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
+      });
+      return;
+    }
+
     const result = await listBudgets({ limit, cursor }, userContext);
     res.json(result);
   } catch (error) {
@@ -283,6 +325,17 @@ app.post('/tools/get_expense_report', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
       });
       return;
     }
@@ -315,6 +368,17 @@ app.post('/tools/delete_invoice', async (req: Request, res: Response) => {
       return;
     }
 
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
+      });
+      return;
+    }
+
     const result = await deleteInvoice({ invoiceId }, userContext);
     res.json(result);
   } catch (error) {
@@ -339,6 +403,17 @@ app.post('/tools/approve_budget', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
       });
       return;
     }
