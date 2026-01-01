@@ -310,8 +310,38 @@ When QA testing complete, update this document with:
 
 ### QA Summary
 - ✅ Phase 3 (Documentation Review): **Complete**
-- ✅ Phase 1 (Workflow Validation): **Can proceed via GitHub Actions** (no SSH needed)
-- ✅ Phase 2 (Integration Verification): **Can proceed via GitHub Actions** (no SSH needed)
+- 🔴 Phase 1 (Workflow Validation): **BLOCKED - VPS secrets not configured**
+- 🔴 Phase 2 (Integration Verification): **BLOCKED - VPS secrets not configured**
+
+### QA Blocker: Missing GitHub Secrets (2026-01-01)
+
+**Issue**: Deployment workflows fail at "Setup SSH" step because VPS secrets are empty.
+
+**Evidence** (Workflow run 20642571781):
+```
+VPS_HOST:
+VPS_USER:
+SSH_PRIVATE_KEY:
+```
+
+**Secrets Currently Configured**:
+- ✅ `STAGING_VAULT_ADDR`
+- ✅ `VAULT_ROOT_TOKEN`
+- ✅ `VAULT_UNSEAL_KEY_1-5`
+
+**Secrets Required for Deployment** (per INCREMENTAL_DEPLOYMENT_GUIDE.md):
+- ❌ `VPS_HOST` - VPS IP address (e.g., `5.78.159.29`)
+- ❌ `VPS_USER` - SSH username (e.g., `root` or `tamshai`)
+- ❌ `VPS_SSH_KEY` - Private SSH key for deployment
+
+**Action Required**: Dev needs to configure these secrets in GitHub:
+```bash
+gh secret set VPS_HOST --body "<vps-ip>"
+gh secret set VPS_USER --body "<ssh-user>"
+gh secret set VPS_SSH_KEY < ~/.ssh/id_rsa
+```
+
+**Status**: Waiting for Dev to configure secrets before QA can proceed with Phase 1-2 testing.
 
 ---
 
