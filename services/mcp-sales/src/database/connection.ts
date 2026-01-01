@@ -30,7 +30,7 @@ function extractDatabaseFromUrl(url: string): string | null {
   }
 }
 
-const DATABASE_NAME = process.env.MONGODB_DB || extractDatabaseFromUrl(MONGODB_URL) || 'tamshai_crm';
+const DATABASE_NAME = process.env.MONGODB_DB || extractDatabaseFromUrl(MONGODB_URL) || 'tamshai_sales';
 const MONGODB_URI = MONGODB_URL;
 
 let client: MongoClient | null = null;

@@ -19,7 +19,7 @@ const logger = winston.createLogger({
 
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6380'),
+  port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD,
   db: parseInt(process.env.REDIS_DB || '0'),
   retryStrategy(times: number) {
@@ -31,7 +31,7 @@ const redis = new Redis({
 redis.on('connect', () => {
   logger.info('Redis connected', {
     host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || '6380',
+    port: process.env.REDIS_PORT || '6379',
   });
 });
 
