@@ -1,0 +1,169 @@
+# Environment Promotion: Dev → Staging
+#
+# This workflow promotes code from development to staging environment.
+#
+# Strategy:
+#   1. Create Git tag for staging release
+#   2. Tag Docker images with staging version
+#   3. Deploy to staging VPS
+#   4. Run smoke tests
+#   5. Notify team of promotion
+#
+# Approval: Manual workflow_dispatch (no auto-promotion)
+# Deployment Time: 5-10 minutes (full stack deployment)
+
+name: Promote Dev to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.4.0-staging.1)'
+        required: true
+        type: string
+      services:
+        description: 'Services to promote (comma-separated, or "all")'
+        required: true
+        default: 'all'
+        type: string
+      run_smoke_tests:
+        description: 'Run smoke tests after promotion'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: promote-dev-to-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  deployments: write
+
+jobs:
+  promote:
+    name: Promote to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+        with:
+          fetch-depth: 0  # Full history for tagging
+
+      - name: Validate version tag
+        run: |
+          if [[ ! "${{ github.event.inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-staging\.[0-9]+$ ]]; then
+            echo "❌ Invalid version tag format. Expected: v1.4.0-staging.1"
+            exit 1
+          fi
+          echo "✅ Version tag valid: ${{ github.event.inputs.version }}"
+
+      - name: Create Git tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          git tag -a ${{ github.event.inputs.version }} -m "Staging release ${{ github.event.inputs.version }}"
+          git push origin ${{ github.event.inputs.version }}
+
+          echo "✅ Git tag created: ${{ github.event.inputs.version }}"
+
+      - name: Setup SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Promote services to staging
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VERSION: ${{ github.event.inputs.version }}
+          SERVICES: ${{ github.event.inputs.services }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << EOF
+          set -e
+          cd /opt/tamshai
+
+          echo "🚀 Promoting to staging: $VERSION"
+          echo "📦 Services: $SERVICES"
+
+          # Pull latest code
+          git fetch --all --tags
+          git checkout $VERSION
+
+          if [ "$SERVICES" == "all" ]; then
+            echo "📦 Deploying all services..."
+            docker compose -f docker-compose.vps.yml build
+            docker compose -f docker-compose.vps.yml up -d
+          else
+            echo "📦 Deploying selected services: $SERVICES"
+            IFS=',' read -ra SVC_ARRAY <<< "$SERVICES"
+            for svc in "\${SVC_ARRAY[@]}"; do
+              echo "  - Deploying \$svc..."
+              docker compose -f docker-compose.vps.yml build \$svc
+              docker compose -f docker-compose.vps.yml up -d --no-deps \$svc
+            done
+          fi
+
+          echo "✅ Deployment complete"
+          EOF
+
+      - name: Run smoke tests
+        if: github.event.inputs.run_smoke_tests == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          echo "🧪 Running smoke tests..."
+
+          # MCP Gateway health check
+          if curl -sf http://$VPS_HOST:3100/health | jq -e '.status == "healthy"'; then
+            echo "✅ MCP Gateway healthy"
+          else
+            echo "❌ MCP Gateway health check failed"
+            exit 1
+          fi
+
+          # Keycloak health check
+          if curl -sf http://$VPS_HOST:8180/health/ready; then
+            echo "✅ Keycloak healthy"
+          else
+            echo "❌ Keycloak health check failed"
+            exit 1
+          fi
+
+          # Kong health check
+          if curl -sf http://$VPS_HOST:8100/api/health; then
+            echo "✅ Kong healthy"
+          else
+            echo "❌ Kong health check failed"
+            exit 1
+          fi
+
+          echo "✅ All smoke tests passed"
+
+      - name: Promotion summary
+        if: success()
+        run: |
+          echo "## ✅ Promotion to Staging Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Services**: ${{ github.event.inputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Smoke Tests**: ${{ github.event.inputs.run_smoke_tests && 'PASSED' || 'SKIPPED' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Staging URL**: https://staging.tamshai.com" >> $GITHUB_STEP_SUMMARY
+
+      - name: Promotion failed
+        if: failure()
+        run: |
+          echo "## ❌ Promotion to Staging Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Services**: ${{ github.event.inputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Action**: Review logs and retry promotion" >> $GITHUB_STEP_SUMMARY
