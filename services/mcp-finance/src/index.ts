@@ -192,7 +192,7 @@ app.post('/query', async (req: Request, res: Response) => {
  */
 app.post('/tools/get_budget', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, department } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -203,7 +203,7 @@ app.post('/tools/get_budget', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await getBudget(input, userContext);
+    const result = await getBudget({ department }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('get_budget error:', error);
@@ -220,7 +220,7 @@ app.post('/tools/get_budget', async (req: Request, res: Response) => {
  */
 app.post('/tools/list_invoices', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, status, department, limit, cursor } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -231,7 +231,7 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await listInvoices(input || {}, userContext);
+    const result = await listInvoices({ status, department, limit, cursor }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('list_invoices error:', error);
@@ -248,7 +248,7 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
  */
 app.post('/tools/list_budgets', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, limit, cursor } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -259,7 +259,7 @@ app.post('/tools/list_budgets', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await listBudgets(input || {}, userContext);
+    const result = await listBudgets({ limit, cursor }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('list_budgets error:', error);
@@ -276,7 +276,7 @@ app.post('/tools/list_budgets', async (req: Request, res: Response) => {
  */
 app.post('/tools/get_expense_report', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, reportId } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -287,7 +287,7 @@ app.post('/tools/get_expense_report', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await getExpenseReport(input, userContext);
+    const result = await getExpenseReport({ reportId }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('get_expense_report error:', error);
@@ -304,7 +304,7 @@ app.post('/tools/get_expense_report', async (req: Request, res: Response) => {
  */
 app.post('/tools/delete_invoice', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, invoiceId } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -315,7 +315,7 @@ app.post('/tools/delete_invoice', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await deleteInvoice(input, userContext);
+    const result = await deleteInvoice({ invoiceId }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('delete_invoice error:', error);
@@ -332,7 +332,7 @@ app.post('/tools/delete_invoice', async (req: Request, res: Response) => {
  */
 app.post('/tools/approve_budget', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, budgetId, approvedAmount } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -343,7 +343,7 @@ app.post('/tools/approve_budget', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await approveBudget(input, userContext);
+    const result = await approveBudget({ budgetId, approvedAmount }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('approve_budget error:', error);
