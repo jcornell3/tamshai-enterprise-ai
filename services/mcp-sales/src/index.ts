@@ -427,7 +427,7 @@ async function deleteCustomer(input: any, userContext: UserContext): Promise<MCP
     const collection = await getCollection('customers');
     const roleFilter = buildRoleFilter(userContext);
 
-    const customer = await collection.findOne({ ...roleFilter, customer_id: customerId });
+    const customer = await collection.findOne({ ...roleFilter, _id: new ObjectId(customerId) });
 
     if (!customer) {
       return handleCustomerNotFound(customerId);
@@ -474,7 +474,7 @@ async function executeDeleteCustomer(confirmationData: Record<string, unknown>, 
     const collection = await getCollection('customers');
     const roleFilter = buildRoleFilter(userContext);
 
-    const result = await collection.deleteOne({ ...roleFilter, customer_id: customerId });
+    const result = await collection.deleteOne({ ...roleFilter, _id: new ObjectId(customerId) });
 
     if (result.deletedCount === 0) {
       return handleCustomerNotFound(customerId);

@@ -397,19 +397,22 @@ describe('MCP Finance Server - Write Tools (Confirmations)', () => {
   });
 
   describe('approve_budget', () => {
-    test('Returns pending_confirmation for budget approval', async () => {
+    test('Returns NOT_IMPLEMENTED error (v1.3 schema limitation)', async () => {
+      // The approve_budget tool is not implemented because the v1.3 schema
+      // does not have approval workflow columns (status, approved_by, approved_at)
       const response = await financeClient.post<MCPToolResponse>('/tools/approve_budget', {
         userContext: {
           userId: TEST_USERS.financeUser.userId,
           roles: TEST_USERS.financeUser.roles,
         },
-        department: 'Engineering',
-        amount: 500000,
+        budgetId: '00000000-0000-0000-0000-000000000001', // Dummy UUID
+        approvedAmount: 500000,
       });
 
       expect(response.status).toBe(200);
-      expect(response.data.status).toBe('pending_confirmation');
-      expect(response.data.confirmationId).toBeDefined();
+      expect(response.data.status).toBe('error');
+      expect(response.data.code).toBe('NOT_IMPLEMENTED');
+      expect(response.data.suggestedAction).toBeDefined();
     });
   });
 });
@@ -479,7 +482,7 @@ describe('MCP Sales Server - Read Tools', () => {
           userId: TEST_USERS.salesUser.userId,
           roles: TEST_USERS.salesUser.roles,
         },
-        customerId: 'CUST-001', // Sample customer ID from MongoDB
+        customerId: '650000000000000000000001', // Acme Corporation - valid MongoDB ObjectId
       });
 
       expect(response.status).toBe(200);
@@ -520,7 +523,7 @@ describe('MCP Sales Server - Write Tools (Confirmations)', () => {
           userId: TEST_USERS.salesUser.userId,
           roles: TEST_USERS.salesUser.roles,
         },
-        opportunityId: 'OPP-001',
+        opportunityId: '670000000000000000000002', // TechStart Growth Package - PROPOSAL stage
         outcome: 'won',
       });
 
@@ -537,7 +540,7 @@ describe('MCP Sales Server - Write Tools (Confirmations)', () => {
           userId: TEST_USERS.salesUser.userId,
           roles: TEST_USERS.salesUser.roles,
         },
-        customerId: 'CUST-002',
+        customerId: '650000000000000000000002', // TechStart Inc - valid MongoDB ObjectId
       });
 
       expect(response.status).toBe(200);
@@ -655,7 +658,7 @@ describe('MCP Support Server - Write Tools (Confirmations)', () => {
           userId: TEST_USERS.supportUser.userId,
           roles: TEST_USERS.supportUser.roles,
         },
-        ticketId: 'TKT-001',
+        ticketId: 'TICK-001', // Sample ticket ID from Elasticsearch
         resolution: 'User password reset successfully completed',
       });
 
