@@ -367,3 +367,4 @@ ENVFILE
           echo "2. Check logs: \`docker compose -f docker-compose.vps.yml logs\`" >> $GITHUB_STEP_SUMMARY
           echo "3. Check .env file exists and has required secrets" >> $GITHUB_STEP_SUMMARY
           echo "4. Verify disk space: \`df -h\`" >> $GITHUB_STEP_SUMMARY
+# Workflow refresh Thu, Jan  1, 2026 12:58:45 PM
