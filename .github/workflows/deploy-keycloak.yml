@@ -1,0 +1,121 @@
+# Incremental Deployment: Keycloak
+#
+# This workflow deploys ONLY the Keycloak service to VPS.
+# Other services are not restarted (--no-deps flag).
+#
+# IMPORTANT: Keycloak is a critical infrastructure service.
+# Downtime affects ALL authentication/authorization.
+# Existing user sessions may be invalidated.
+
+name: Deploy Keycloak
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/keycloak/**'
+      - '.github/workflows/deploy-keycloak.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: 'staging'
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-keycloak-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+  SERVICE_NAME: keycloak
+  HEALTH_CHECK_URL: http://localhost:8180/health/ready
+  HEALTH_CHECK_TIMEOUT: 60
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: Deploy Keycloak to ${{ github.event.inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout code
+        if: ${{ !github.event.inputs.rollback }}
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Deploy Keycloak
+        if: ${{ !github.event.inputs.rollback }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          set -e
+          cd /opt/tamshai
+          echo "📦 Deploying Keycloak..."
+          echo "⚠️  WARNING: Keycloak downtime affects authentication for ALL users"
+          echo "⚠️  Existing sessions may be invalidated"
+          docker tag keycloak:latest keycloak:rollback || true
+          git pull origin main
+          docker compose -f docker-compose.vps.yml build keycloak
+          docker compose -f docker-compose.vps.yml up -d --no-deps keycloak
+          echo "⏳ Waiting for Keycloak to start (can take 30-60 seconds)..."
+          for i in {1..60}; do
+            if curl -sf ${{ env.HEALTH_CHECK_URL }} > /dev/null 2>&1; then
+              echo "✅ Keycloak is healthy"
+              exit 0
+            fi
+            echo "   Attempt $i/60..."
+            sleep 1
+          done
+          echo "❌ Health check failed - rolling back..."
+          docker tag keycloak:rollback keycloak:latest
+          docker compose -f docker-compose.vps.yml up -d --no-deps keycloak
+          exit 1
+          EOF
+
+      - name: Rollback Keycloak
+        if: ${{ github.event.inputs.rollback }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          set -e
+          cd /opt/tamshai
+          docker tag keycloak:rollback keycloak:latest
+          docker compose -f docker-compose.vps.yml up -d --no-deps keycloak
+          for i in {1..60}; do
+            if curl -sf ${{ env.HEALTH_CHECK_URL }} > /dev/null 2>&1; then
+              echo "✅ Rollback successful"
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+          EOF
