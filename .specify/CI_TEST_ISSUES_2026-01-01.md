@@ -218,16 +218,25 @@ expect(result.error).toMatch(/ECONNREFUSED|connect|connection|refused/i);
 
 ---
 
-## Issues Still In Progress
+### 18. Elasticsearch Term Query Case Sensitivity
+**Status**: ✅ Fixed (Current Session)
 
-### 18. get_knowledge_article Returns Error
-**Status**: ⏳ Pending Investigation
+**Root Cause**: The `get_knowledge_article` and `close_ticket` functions used Elasticsearch `term` queries on text fields (`kb_id`, `ticket_id`). Text fields are analyzed by default, so `KB-001` becomes `kb` and `001` tokens. The `term` query requires exact match against the stored value.
 
-**Description**: Test expects 'success' but receives 'error'.
+**Additional Issue**: `close_ticket` used `esClient.get({ id: ticketId })` which retrieves by ES document `_id`, but the sample data uses auto-generated `_id` values.
 
-**Possible Causes**:
-- Elasticsearch term query case sensitivity
-- Sample data may not be loading properly in CI
+**Fixes**:
+1. Changed `term: { kb_id: articleId }` to `term: { 'kb_id.keyword': articleId }`
+2. Changed `term: { ticket_id: ticketId }` to `term: { 'ticket_id.keyword': ticketId }`
+3. Changed `close_ticket` to use `esClient.search` instead of `esClient.get`
+4. Stored ES document `_id` in confirmationData for use in `executeCloseTicket` update
+
+**Files Changed**:
+- `services/mcp-support/src/index.ts`
+
+---
+
+## Issues Remaining
 
 ---
 
@@ -253,7 +262,14 @@ expect(result.error).toMatch(/ECONNREFUSED|connect|connection|refused/i);
 
 - **Before fixes**: 46/74 passing (28 failing)
 - **CI run 20641635130**: 80 passed, 9 failed, 7 skipped (RBAC tests now pass!)
-- **Current session fixes**: SSE, Sales ObjectId, approve_budget, close_ticket (6 more tests)
+- **Current session fixes**:
+  - SSE ECONNREFUSED assertion (regex match)
+  - Sales ObjectId mismatch (3 tests)
+  - approve_budget test expectation (1 test)
+  - close_ticket ID format (1 test)
+  - Elasticsearch keyword query (2 tests)
+  - **Total: 8 test fixes applied**
+- **Expected after fixes**: 88+ passed, ~1 failed (query-scenarios employee count)
 
 ---
 

@@ -282,11 +282,12 @@ async function getKnowledgeArticle(input: any, userContext: UserContext): Promis
     const { articleId } = GetKnowledgeArticleInputSchema.parse(input);
 
     // Search by kb_id field (not Elasticsearch document _id)
+    // Use kb_id.keyword for exact match (text fields are analyzed by default)
     const result = await esClient.search({
       index: 'knowledge_base',
       body: {
         query: {
-          term: { kb_id: articleId }
+          term: { 'kb_id.keyword': articleId }
         }
       }
     });
@@ -332,14 +333,24 @@ async function closeTicket(input: any, userContext: UserContext): Promise<MCPToo
 
     const { ticketId, resolution } = CloseTicketInputSchema.parse(input);
 
-    // Fetch ticket
-    const ticket = await esClient.get({ index: 'support_tickets', id: ticketId });
+    // Fetch ticket by ticket_id field (not Elasticsearch _id)
+    // Use ticket_id.keyword for exact match (text fields are analyzed by default)
+    const searchResult = await esClient.search({
+      index: 'support_tickets',
+      body: {
+        query: {
+          term: { 'ticket_id.keyword': ticketId }
+        }
+      }
+    });
 
-    if (!ticket.found) {
+    if (searchResult.hits.hits.length === 0) {
       return createErrorResponse('TICKET_NOT_FOUND', `Ticket with ID "${ticketId}" was not found`, 'Please verify the ticket ID.', { ticketId });
     }
 
+    const ticket = searchResult.hits.hits[0];
     const ticketData: any = ticket._source;
+    const esDocId = ticket._id; // Store Elasticsearch document _id for update
 
     const confirmationId = uuidv4();
     const confirmationData = {
@@ -348,6 +359,7 @@ async function closeTicket(input: any, userContext: UserContext): Promise<MCPToo
       userId: userContext.userId,
       timestamp: Date.now(),
       ticketId,
+      esDocId, // Elasticsearch document _id for update operation
       ticketTitle: ticketData.title,
       currentStatus: ticketData.status,
       resolution,
@@ -372,11 +384,12 @@ This action will close the ticket and mark it as resolved.`;
 async function executeCloseTicket(confirmationData: Record<string, unknown>, userContext: UserContext): Promise<MCPToolResponse<any>> {
   try {
     const ticketId = confirmationData.ticketId as string;
+    const esDocId = confirmationData.esDocId as string; // Use ES document _id for update
     const resolution = confirmationData.resolution as string;
 
     await esClient.update({
       index: 'support_tickets',
-      id: ticketId,
+      id: esDocId, // Use Elasticsearch document _id, not ticket_id field
       body: {
         doc: {
           status: 'closed',
