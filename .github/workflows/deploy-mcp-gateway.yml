@@ -96,7 +96,7 @@ jobs:
 
           # Tag current version for rollback
           echo "🏷️  Tagging current version..."
-          docker tag mcp-gateway:latest mcp-gateway:rollback || true
+          docker tag tamshai/mcp-gateway:latest tamshai/mcp-gateway:rollback || true
 
           # Pull latest code
           echo "📥 Pulling latest code..."
@@ -124,7 +124,7 @@ jobs:
           # Health check failed - rollback
           echo "❌ Health check failed after ${{ env.HEALTH_CHECK_TIMEOUT }} seconds"
           echo "🔄 Rolling back to previous version..."
-          docker tag mcp-gateway:rollback mcp-gateway:latest
+          docker tag tamshai/mcp-gateway:rollback tamshai/mcp-gateway:latest
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway
 
           # Verify rollback succeeded
@@ -152,7 +152,7 @@ jobs:
           echo "🔄 Rolling back MCP Gateway..."
 
           # Restore rollback tag
-          docker tag mcp-gateway:rollback mcp-gateway:latest
+          docker tag tamshai/mcp-gateway:rollback tamshai/mcp-gateway:latest
 
           # Redeploy with rollback version
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway

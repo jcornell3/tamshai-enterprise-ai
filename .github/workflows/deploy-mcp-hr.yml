@@ -96,7 +96,7 @@ jobs:
 
           # Tag current version for rollback
           echo "🏷️  Tagging current version..."
-          docker tag mcp-hr:latest mcp-hr:rollback || true
+          docker tag tamshai/mcp-hr:latest tamshai/mcp-hr:rollback || true
 
           # Pull latest code
           echo "📥 Pulling latest code..."
@@ -124,7 +124,7 @@ jobs:
           # Health check failed - rollback
           echo "❌ Health check failed after 30 seconds"
           echo "🔄 Rolling back to previous version..."
-          docker tag mcp-hr:rollback mcp-hr:latest
+          docker tag tamshai/mcp-hr:rollback tamshai/mcp-hr:latest
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
 
           # Verify rollback succeeded
@@ -152,7 +152,7 @@ jobs:
           echo "🔄 Rolling back MCP HR..."
 
           # Restore rollback tag
-          docker tag mcp-hr:rollback mcp-hr:latest
+          docker tag tamshai/mcp-hr:rollback tamshai/mcp-hr:latest
 
           # Redeploy with rollback version
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr

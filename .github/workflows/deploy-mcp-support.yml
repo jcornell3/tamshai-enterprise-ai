@@ -75,7 +75,7 @@ jobs:
           cd /opt/tamshai
           echo "📦 Deploying MCP Support..."
           git config --global --add safe.directory /opt/tamshai
-          docker tag mcp-support:latest mcp-support:rollback || true
+          docker tag tamshai/mcp-support:latest tamshai/mcp-support:rollback || true
           git pull origin main
           docker compose -f docker-compose.vps.yml build mcp-support
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-support
@@ -89,7 +89,7 @@ jobs:
             sleep 1
           done
           echo "❌ Health check failed - rolling back..."
-          docker tag mcp-support:rollback mcp-support:latest
+          docker tag tamshai/mcp-support:rollback tamshai/mcp-support:latest
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-support
           exit 1
           EOF
@@ -103,7 +103,7 @@ jobs:
           ssh $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
-          docker tag mcp-support:rollback mcp-support:latest
+          docker tag tamshai/mcp-support:rollback tamshai/mcp-support:latest
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-support
           # Health check (use docker exec - ports not exposed to host)
           for i in {1..30}; do

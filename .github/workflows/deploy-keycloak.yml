@@ -81,9 +81,10 @@ jobs:
           echo "⚠️  WARNING: Keycloak downtime affects authentication for ALL users"
           echo "⚠️  Existing sessions may be invalidated"
           git config --global --add safe.directory /opt/tamshai
-          docker tag keycloak:latest keycloak:rollback || true
+          # Note: Keycloak uses official image (quay.io/keycloak/keycloak:24.0)
+          # Rollback is handled by docker compose pulling the pinned version
           git pull origin main
-          docker compose -f docker-compose.vps.yml build keycloak
+          docker compose -f docker-compose.vps.yml pull keycloak
           docker compose -f docker-compose.vps.yml up -d --no-deps keycloak
           # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for Keycloak to start (can take 30-60 seconds)..."
@@ -95,9 +96,8 @@ jobs:
             echo "   Attempt $i/60..."
             sleep 1
           done
-          echo "❌ Health check failed - rolling back..."
-          docker tag keycloak:rollback keycloak:latest
-          docker compose -f docker-compose.vps.yml up -d --no-deps keycloak
+          echo "❌ Health check failed - restarting Keycloak..."
+          docker compose -f docker-compose.vps.yml restart keycloak
           exit 1
           EOF
 
@@ -110,12 +110,14 @@ jobs:
           ssh $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
-          docker tag keycloak:rollback keycloak:latest
-          docker compose -f docker-compose.vps.yml up -d --no-deps keycloak
+          # Keycloak uses official pinned image - restart the service
+          echo "🔄 Restarting Keycloak..."
+          docker compose -f docker-compose.vps.yml restart keycloak
           # Health check (use docker exec - ports not exposed to host)
+          echo "⏳ Waiting for Keycloak to restart..."
           for i in {1..60}; do
             if docker exec tamshai-keycloak bash -c 'exec 3<>/dev/tcp/localhost/8080' 2>/dev/null; then
-              echo "✅ Rollback successful"
+              echo "✅ Keycloak restart successful"
               exit 0
             fi
             sleep 1
