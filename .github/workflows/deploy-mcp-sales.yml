@@ -79,9 +79,10 @@ jobs:
           git pull origin main
           docker compose -f docker-compose.vps.yml build mcp-sales
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-sales
+          # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for health check..."
           for i in {1..30}; do
-            if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+            if docker exec tamshai-mcp-sales wget -q -O- http://localhost:3103/health 2>/dev/null | grep -q '"healthy"'; then
               echo "✅ MCP Sales is healthy"
               exit 0
             fi
@@ -104,8 +105,9 @@ jobs:
           cd /opt/tamshai
           docker tag mcp-sales:rollback mcp-sales:latest
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-sales
+          # Health check (use docker exec - ports not exposed to host)
           for i in {1..30}; do
-            if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+            if docker exec tamshai-mcp-sales wget -q -O- http://localhost:3103/health 2>/dev/null | grep -q '"healthy"'; then
               echo "✅ Rollback successful"
               exit 0
             fi
