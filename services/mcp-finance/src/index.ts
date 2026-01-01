@@ -192,7 +192,7 @@ app.post('/query', async (req: Request, res: Response) => {
  */
 app.post('/tools/get_budget', async (req: Request, res: Response) => {
   try {
-    const { userContext, department } = req.body;
+    const { userContext, department, year } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -203,7 +203,7 @@ app.post('/tools/get_budget', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await getBudget({ department }, userContext);
+    const result = await getBudget({ department, year }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('get_budget error:', error);

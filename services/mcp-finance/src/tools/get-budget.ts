@@ -21,7 +21,8 @@ import {
  * Input schema for get_budget tool
  */
 export const GetBudgetInputSchema = z.object({
-  budgetId: z.string().uuid('Budget ID must be a valid UUID'),
+  department: z.string(),
+  year: z.number().int().optional().default(2024),
 });
 
 export type GetBudgetInput = z.infer<typeof GetBudgetInputSchema>;
@@ -43,7 +44,7 @@ export interface Budget {
 }
 
 /**
- * Get a single department budget by ID
+ * Get department budgets by department name and fiscal year
  *
  * Uses actual v1.3 table: finance.department_budgets (not finance.budgets)
  *
@@ -55,13 +56,31 @@ export interface Budget {
 export async function getBudget(
   input: GetBudgetInput,
   userContext: UserContext
-): Promise<MCPToolResponse<Budget>> {
+): Promise<MCPToolResponse<Budget[]>> {
   return withErrorHandling('get_budget', async () => {
     // Validate input
-    const { budgetId } = GetBudgetInputSchema.parse(input);
+    const { department, year } = GetBudgetInputSchema.parse(input);
+
+    // Map department name to code (Engineering -> ENG, etc.)
+    const deptCodeMap: Record<string, string> = {
+      'engineering': 'ENG',
+      'finance': 'FIN',
+      'hr': 'HR',
+      'human resources': 'HR',
+      'sales': 'SALES',
+      'support': 'SUPPORT',
+      'customer support': 'SUPPORT',
+      'marketing': 'MKT',
+      'it': 'IT',
+      'legal': 'LEGAL',
+      'operations': 'OPS',
+      'executive': 'EXEC',
+    };
+
+    const deptCode = deptCodeMap[department.toLowerCase()] || department.toUpperCase();
 
     try {
-      // Query with RLS enforcement
+      // Query with RLS enforcement - get all budget categories for this department
       const result = await queryWithRLS<Budget>(
         userContext,
         `
@@ -77,18 +96,25 @@ export async function getBudget(
           b.created_at::text as created_at,
           b.updated_at::text as updated_at
         FROM finance.department_budgets b
-        WHERE b.id = $1
+        WHERE b.department_code = $1
+          AND b.fiscal_year = $2
+        ORDER BY b.budgeted_amount DESC
         `,
-        [budgetId]
+        [deptCode, year]
       );
 
       if (result.rowCount === 0) {
-        return handleBudgetNotFound(budgetId);
+        return {
+          status: 'error',
+          code: 'BUDGET_NOT_FOUND',
+          message: `No budget found for department ${department} in fiscal year ${year}`,
+          suggestedAction: 'Use list_budgets to see available department budgets, or verify the department name and year are correct.',
+        };
       }
 
-      return createSuccessResponse(result.rows[0]);
+      return createSuccessResponse(result.rows);
     } catch (error) {
       return handleDatabaseError(error as Error, 'get_budget');
     }
-  }) as Promise<MCPToolResponse<Budget>>;
+  }) as Promise<MCPToolResponse<Budget[]>>;
 }

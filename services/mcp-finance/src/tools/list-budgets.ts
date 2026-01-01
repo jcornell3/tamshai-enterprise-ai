@@ -25,6 +25,7 @@ export const ListBudgetsInputSchema = z.object({
   fiscalYear: z.number().optional(),
   department: z.string().optional(),
   limit: z.number().min(1).max(100).optional().default(50),
+  cursor: z.string().optional(),
 });
 
 export type ListBudgetsInput = z.infer<typeof ListBudgetsInputSchema>;

@@ -40,6 +40,7 @@ import { storePendingConfirmation } from '../utils/redis';
  */
 export const ApproveBudgetInputSchema = z.object({
   budgetId: z.string().uuid('Budget ID must be a valid UUID'),
+  approvedAmount: z.number().optional(),
   comments: z.string().optional(),
 });
 
