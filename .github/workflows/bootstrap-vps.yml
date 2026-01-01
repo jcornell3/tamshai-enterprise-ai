@@ -30,6 +30,10 @@
 name: Bootstrap VPS
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-vps.yml'
   workflow_dispatch:
     inputs:
       environment:
@@ -145,7 +149,7 @@ ENVFILE
           PULL_LATEST: ${{ github.event.inputs.pull_latest }}
           FRESH_START: ${{ github.event.inputs.fresh_start }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh $VPS_USER@$VPS_HOST "PULL_LATEST='$PULL_LATEST' REBUILD='$REBUILD' FRESH_START='$FRESH_START' bash -s" << 'EOF'
           set -e  # Exit on error
 
           cd /opt/tamshai
@@ -153,6 +157,8 @@ ENVFILE
           echo "=========================================="
           echo "🚀 Bootstrap VPS - Starting All Services"
           echo "=========================================="
+          echo ""
+          echo "Options: PULL_LATEST=$PULL_LATEST, REBUILD=$REBUILD, FRESH_START=$FRESH_START"
           echo ""
 
           # Fix git ownership check
