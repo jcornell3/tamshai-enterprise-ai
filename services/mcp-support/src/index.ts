@@ -261,6 +261,46 @@ async function searchKnowledgeBase(input: any, userContext: UserContext): Promis
 }
 
 // =============================================================================
+// TOOL: get_knowledge_article
+// =============================================================================
+
+const GetKnowledgeArticleInputSchema = z.object({
+  articleId: z.string(),
+});
+
+async function getKnowledgeArticle(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  try {
+    const { articleId } = GetKnowledgeArticleInputSchema.parse(input);
+
+    const result = await esClient.get({
+      index: 'knowledge_base',
+      id: articleId,
+    });
+
+    if (!result.found) {
+      return createErrorResponse(
+        'ARTICLE_NOT_FOUND',
+        `Knowledge base article with ID ${articleId} not found.`,
+        'Use search_knowledge_base tool to find relevant articles, or verify the article ID is correct.'
+      );
+    }
+
+    const article = { id: result._id, ...result._source };
+    return createSuccessResponse(article);
+  } catch (error: any) {
+    if (error.meta?.body?.found === false) {
+      return createErrorResponse(
+        'ARTICLE_NOT_FOUND',
+        `Knowledge base article with ID ${input.articleId} not found.`,
+        'Use search_knowledge_base tool to find relevant articles, or verify the article ID is correct.'
+      );
+    }
+    logger.error('get_knowledge_article error:', error);
+    return createErrorResponse('DATABASE_ERROR', 'Failed to get knowledge article', 'Please try again or contact support', { errorMessage: error.message });
+  }
+}
+
+// =============================================================================
 // TOOL: close_ticket (v1.4 with confirmation)
 // =============================================================================
 
@@ -422,32 +462,42 @@ app.post('/query', async (req: Request, res: Response) => {
 });
 
 app.post('/tools/search_tickets', async (req: Request, res: Response) => {
-  const { input, userContext } = req.body;
+  const { userContext, query, status, priority, assignedTo, limit, cursor } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
-  const result = await searchTickets(input || {}, userContext);
+  const result = await searchTickets({ query, status, priority, assignedTo, limit, cursor }, userContext);
   res.json(result);
 });
 
 app.post('/tools/search_knowledge_base', async (req: Request, res: Response) => {
-  const { input, userContext } = req.body;
+  const { userContext, query, category, limit, cursor } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
-  const result = await searchKnowledgeBase(input, userContext);
+  const result = await searchKnowledgeBase({ query, category, limit, cursor }, userContext);
+  res.json(result);
+});
+
+app.post('/tools/get_knowledge_article', async (req: Request, res: Response) => {
+  const { userContext, articleId } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+  const result = await getKnowledgeArticle({ articleId }, userContext);
   res.json(result);
 });
 
 app.post('/tools/close_ticket', async (req: Request, res: Response) => {
-  const { input, userContext } = req.body;
+  const { userContext, ticketId, resolution } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
-  const result = await closeTicket(input, userContext);
+  const result = await closeTicket({ ticketId, resolution }, userContext);
   res.json(result);
 });
 
