@@ -1,0 +1,187 @@
+# Fix Vault SSH and JWT roles
+# Run after setup-vault.yml to complete configuration
+
+name: Fix Vault Roles
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix-roles:
+    name: Fix Vault Roles
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Setup SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Get Vault root token from init file
+        id: token
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          # Try to get token from the init output saved during setup
+          TOKEN=$(ssh $VPS_USER@$VPS_HOST "cat /root/vault-init.txt 2>/dev/null | grep 'Initial Root Token' | awk '{print \$NF}'" || echo "")
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Could not find Vault root token. Check /root/vault-init.txt on VPS"
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Unseal Vault if sealed
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+
+          # Check if sealed
+          SEALED=$(vault status -format=json 2>/dev/null | jq -r '.sealed')
+          if [ "$SEALED" = "true" ]; then
+            echo "Vault is sealed, unsealing..."
+            KEY1=$(grep 'Unseal Key 1:' /root/vault-init.txt | awk '{print $NF}')
+            KEY2=$(grep 'Unseal Key 2:' /root/vault-init.txt | awk '{print $NF}')
+            KEY3=$(grep 'Unseal Key 3:' /root/vault-init.txt | awk '{print $NF}')
+            vault operator unseal "$KEY1"
+            vault operator unseal "$KEY2"
+            vault operator unseal "$KEY3"
+          else
+            echo "Vault is already unsealed"
+          fi
+          EOF
+
+      - name: Create SSH signing role
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          export VAULT_TOKEN="$VAULT_TOKEN"
+
+          # Create SSH role with proper JSON escaping
+          vault write ssh-client-signer/roles/github-deploy \
+            key_type=ca \
+            default_user=root \
+            allowed_users="root,tamshai" \
+            allowed_extensions="permit-pty,permit-port-forwarding" \
+            ttl=10m \
+            max_ttl=30m
+
+          echo "SSH role created successfully"
+          vault read ssh-client-signer/roles/github-deploy
+          EOF
+
+      - name: Create JWT role for GitHub Actions
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          export VAULT_TOKEN="$VAULT_TOKEN"
+
+          # Create JWT role - use @ for JSON file input
+          cat > /tmp/jwt-role.json << 'JSONEOF'
+          {
+            "role_type": "jwt",
+            "bound_audiences": ["https://github.com/jcornell3"],
+            "bound_claims": {"repository": "jcornell3/tamshai-enterprise-ai"},
+            "user_claim": "actor",
+            "policies": ["github-deploy-ssh"],
+            "ttl": "15m"
+          }
+          JSONEOF
+
+          vault write auth/jwt/role/github-deploy @/tmp/jwt-role.json
+          rm /tmp/jwt-role.json
+
+          echo "JWT role created successfully"
+          vault read auth/jwt/role/github-deploy
+          EOF
+
+      - name: Configure VPS to trust Vault CA
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          export VAULT_TOKEN="$VAULT_TOKEN"
+
+          # Get CA public key
+          vault read -field=public_key ssh-client-signer/config/ca > /etc/ssh/vault-ca.pub
+
+          # Add to sshd config if not already there
+          if ! grep -q "TrustedUserCAKeys" /etc/ssh/sshd_config; then
+            echo "TrustedUserCAKeys /etc/ssh/vault-ca.pub" >> /etc/ssh/sshd_config
+            systemctl reload sshd
+            echo "Added Vault CA to SSH trusted keys"
+          else
+            echo "Vault CA already configured in sshd"
+          fi
+          EOF
+
+      - name: Test Vault configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          export VAULT_TOKEN="$VAULT_TOKEN"
+
+          echo "=== Vault Status ==="
+          vault status
+
+          echo ""
+          echo "=== SSH Secrets Engine ==="
+          vault secrets list | grep ssh
+
+          echo ""
+          echo "=== JWT Auth ==="
+          vault auth list | grep jwt
+
+          echo ""
+          echo "=== SSH Role ==="
+          vault read ssh-client-signer/roles/github-deploy
+
+          echo ""
+          echo "=== Configuration Complete ==="
+          EOF
+
+      - name: Summary
+        run: |
+          echo "## Vault Roles Fixed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- SSH signing role created" >> $GITHUB_STEP_SUMMARY
+          echo "- JWT role for GitHub Actions created" >> $GITHUB_STEP_SUMMARY
+          echo "- VPS configured to trust Vault CA" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Add Vault credentials to GitHub Secrets" >> $GITHUB_STEP_SUMMARY
+          echo "2. Update deployment workflows to use Vault SSH" >> $GITHUB_STEP_SUMMARY
