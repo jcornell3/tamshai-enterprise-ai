@@ -174,9 +174,18 @@ function streamSSEQuery(
   });
 }
 
+// Check if we have a real Claude API key (not a dummy/test key)
+const hasRealClaudeApiKey = (): boolean => {
+  const key = process.env.CLAUDE_API_KEY || '';
+  return key.startsWith('sk-ant-api') && !key.includes('dummy') && !key.includes('test');
+};
+
 describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
+  // Skip tests that require Claude to generate responses
+  const testOrSkip = hasRealClaudeApiKey() ? test : test.skip;
+
   describe('POST /api/query Endpoint', () => {
-    test('Executive user can stream AI query about reports', async () => {
+    testOrSkip('Executive user can stream AI query about reports', async () => {
       const token = await getAccessToken(
         TEST_USERS.executive.username,
         TEST_USERS.executive.password
@@ -196,7 +205,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       expect(textEvents.length).toBeGreaterThan(0);
     }, 90000); // 90 second timeout for Claude response
 
-    test('HR user can query employee data via SSE', async () => {
+    testOrSkip('HR user can query employee data via SSE', async () => {
       const token = await getAccessToken(
         TEST_USERS.hrUser.username,
         TEST_USERS.hrUser.password
@@ -211,7 +220,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       expect(result.fullContent.length).toBeGreaterThan(0);
     }, 90000);
 
-    test('Intern receives response but with limited data access', async () => {
+    testOrSkip('Intern receives response but with limited data access', async () => {
       const token = await getAccessToken(
         TEST_USERS.intern.username,
         TEST_USERS.intern.password
@@ -254,7 +263,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       }
     });
 
-    test('Chunks are received progressively during streaming', async () => {
+    testOrSkip('Chunks are received progressively during streaming', async () => {
       const token = await getAccessToken(
         TEST_USERS.executive.username,
         TEST_USERS.executive.password
@@ -343,7 +352,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
   });
 
   describe('GET /api/query Endpoint (EventSource compatible)', () => {
-    test('GET endpoint works with query parameter', async () => {
+    testOrSkip('GET endpoint works with query parameter', async () => {
       const token = await getAccessToken(
         TEST_USERS.executive.username,
         TEST_USERS.executive.password
