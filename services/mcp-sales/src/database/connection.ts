@@ -17,8 +17,21 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27018';
-const DATABASE_NAME = process.env.MONGODB_DB || 'tamshai_crm';
+// Support both MONGODB_URI and MONGODB_URL (CI uses MONGODB_URL)
+const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27018';
+
+// Extract database name from URL if present, otherwise use env var or default
+function extractDatabaseFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/\/([^/?]+)(\?|$)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+const DATABASE_NAME = process.env.MONGODB_DB || extractDatabaseFromUrl(MONGODB_URL) || 'tamshai_crm';
+const MONGODB_URI = MONGODB_URL;
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
