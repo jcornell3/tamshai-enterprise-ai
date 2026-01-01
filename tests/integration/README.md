@@ -65,16 +65,16 @@ Comprehensive integration test suite for the Tamshai Enterprise AI system, cover
 
 **Example**:
 ```typescript
-// Test: list_employees returns truncation metadata
+// Test: list_employees returns pagination metadata
 const response = await hrClient.post('/tools/list_employees', {
   userContext: { userId, roles },
   limit: 50
 });
 
 expect(response.data.status).toBe('success');
-if (response.data.metadata?.truncated) {
-  expect(response.data.metadata.warning).toContain('TRUNCATION WARNING');
-  expect(response.data.metadata.totalCount).toMatch(/\d+\+/);
+if (response.data.metadata?.hasMore) {
+  expect(response.data.metadata.nextCursor).toBeDefined();
+  expect(response.data.metadata.totalEstimate).toMatch(/\d+\+/);
 }
 ```
 
@@ -155,25 +155,26 @@ try {
 - ✅ Authorization errors explain access requirements
 - ✅ Errors are always status 200 (tool-level errors, not HTTP errors)
 
-### 5. Truncation Warnings (v1.4)
+### 5. Pagination & Truncation (v1.4)
 **Coverage**: All list/search tools
 
-**Metadata Schema**:
+**Metadata Schema** (cursor-based pagination):
 ```typescript
 {
   metadata: {
-    truncated: true,
-    totalCount: '50+',  // Exact count or "50+" for >50
-    warning: 'TRUNCATION WARNING: Only 50 of 50+ records returned. AI must inform user that results are incomplete.'
+    hasMore: true,            // More records available
+    nextCursor: 'abc123...',  // Base64 cursor for next page
+    totalEstimate: '50+',     // Estimated total count
+    hint: 'Use nextCursor to fetch more records'
   }
 }
 ```
 
 **Scenarios**:
-- ✅ Results >50 records include truncation metadata
-- ✅ AI-visible warnings in metadata
+- ✅ Results >50 records include pagination metadata with nextCursor
+- ✅ AI-visible hints in metadata for pagination
 - ✅ Exact count provided for ≤50 results
-- ✅ "50+" displayed for >50 results (LIMIT+1 pattern)
+- ✅ Cursor-based pagination for retrieving all results (tested with 59 employees)
 
 ### 6. Performance Tests
 **Coverage**: Concurrent requests, large datasets
@@ -210,7 +211,7 @@ docker compose ps
 - ✅ PostgreSQL (port 5433)
 - ✅ MongoDB (port 27018)
 - ✅ Elasticsearch (port 9201)
-- ✅ Redis (port 6380)
+- ✅ Redis (port 6379)
 - ✅ MCP HR (port 3101)
 - ✅ MCP Finance (port 3102)
 - ✅ MCP Sales (port 3103)
@@ -242,7 +243,7 @@ Databases must contain sample data:
 ```bash
 # PostgreSQL - HR & Finance
 docker compose exec postgres psql -U tamshai -d tamshai_hr -c "SELECT COUNT(*) FROM hr.employees;"
-# Expected: 20 employees
+# Expected: 59 employees (as of Jan 2026)
 
 # MongoDB - Sales/CRM
 docker compose exec mongodb mongosh -u admin -p [REDACTED-DEV-PASSWORD] --eval "db.customers.countDocuments()" tamshai_sales
@@ -364,25 +365,28 @@ docker compose logs mcp-hr --tail=50
 - Check tool endpoint path: `/tools/{tool_name}`
 - Review MCP server logs for routing errors
 
-#### 4. Truncation Metadata Missing
-**Error**: Test expects `metadata.truncated` but it's undefined
+#### 4. Pagination Metadata Missing
+**Error**: Test expects `metadata.hasMore` or `metadata.nextCursor` but it's undefined
 
 **Fix**:
-- Ensure MCP server implements LIMIT+1 pattern:
+- Ensure MCP server implements LIMIT+1 pattern with cursor-based pagination:
   ```typescript
   const result = await db.query('SELECT * FROM employees LIMIT $1', [limit + 1]);
-  const truncated = result.rows.length > limit;
+  const hasMore = result.rows.length > limit;
+  const data = result.rows.slice(0, limit);
+  const lastRecord = data[data.length - 1];
   ```
-- Add metadata to response:
+- Add pagination metadata to response:
   ```typescript
   return {
     status: 'success',
-    data: result.rows.slice(0, limit),
-    metadata: {
-      truncated,
-      totalCount: truncated ? `${limit}+` : result.rows.length.toString(),
-      warning: truncated ? 'TRUNCATION WARNING: ...' : null
-    }
+    data: data,
+    metadata: hasMore ? {
+      hasMore: true,
+      nextCursor: encodeCursor({ id: lastRecord.id, ... }),
+      totalEstimate: `${limit}+`,
+      hint: 'Use nextCursor to fetch more records'
+    } : undefined
   };
   ```
 
@@ -616,6 +620,6 @@ When adding new integration tests:
 
 ---
 
-**Last Updated**: December 12, 2025
-**Test Count**: 78 tests (18 RBAC + 60 MCP tools)
-**Coverage**: All 19 MCP tools, 5 user roles, 4 v1.4 features
+**Last Updated**: January 1, 2026
+**Test Count**: 96 tests (89 passed, 7 skipped in CI)
+**Coverage**: All 19 MCP tools, 5 user roles, 4 v1.4 features, cursor-based pagination
