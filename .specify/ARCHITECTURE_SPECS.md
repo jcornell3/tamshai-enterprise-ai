@@ -154,7 +154,7 @@ Expose enterprise data (HR, Finance, Sales, Support) to AI via Model Context Pro
 |--------|------|-------|-------------|----------------|
 | **mcp-hr** | 3101 | `get_employee`, `list_employees`, `get_org_chart`, `get_performance_reviews` | PostgreSQL (tamshai_hr) | hr-read, hr-write, executive |
 | **mcp-finance** | 3102 | `get_budget`, `list_invoices`, `get_expense_report` | PostgreSQL (tamshai_finance) | finance-read, finance-write, executive |
-| **mcp-sales** | 3103 | `get_customer`, `list_opportunities`, `get_pipeline` | MongoDB (tamshai_crm) | sales-read, sales-write, executive |
+| **mcp-sales** | 3103 | `get_customer`, `list_opportunities`, `get_pipeline` | MongoDB (tamshai_sales) | sales-read, sales-write, executive |
 | **mcp-support** | 3104 | `search_tickets`, `get_knowledge_article` | Elasticsearch | support-read, support-write, executive |
 
 **PII Masking Pattern** (Article I.3):

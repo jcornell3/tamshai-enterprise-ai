@@ -244,8 +244,8 @@ Databases must contain sample data:
 docker compose exec postgres psql -U tamshai -d tamshai_hr -c "SELECT COUNT(*) FROM hr.employees;"
 # Expected: 20 employees
 
-# MongoDB - CRM
-docker compose exec mongodb mongosh -u admin -p [REDACTED-DEV-PASSWORD] --eval "db.customers.countDocuments()" tamshai_crm
+# MongoDB - Sales/CRM
+docker compose exec mongodb mongosh -u admin -p [REDACTED-DEV-PASSWORD] --eval "db.customers.countDocuments()" tamshai_sales
 # Expected: 15 customers
 
 # Elasticsearch - Support
