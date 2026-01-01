@@ -78,6 +78,7 @@ jobs:
           cd /opt/tamshai
           echo "📦 Deploying Kong Gateway..."
           echo "⚠️  WARNING: Kong downtime affects ALL API requests"
+          git config --global --add safe.directory /opt/tamshai
           docker tag kong:latest kong:rollback || true
           git pull origin main
           docker compose -f docker-compose.vps.yml build kong

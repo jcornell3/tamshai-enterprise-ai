@@ -80,6 +80,7 @@ jobs:
           echo "📦 Deploying Keycloak..."
           echo "⚠️  WARNING: Keycloak downtime affects authentication for ALL users"
           echo "⚠️  Existing sessions may be invalidated"
+          git config --global --add safe.directory /opt/tamshai
           docker tag keycloak:latest keycloak:rollback || true
           git pull origin main
           docker compose -f docker-compose.vps.yml build keycloak

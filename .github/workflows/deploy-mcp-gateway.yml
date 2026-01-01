@@ -91,6 +91,9 @@ jobs:
 
           echo "📦 Deploying MCP Gateway..."
 
+          # Fix git ownership check (running as root but repo may be owned by another user)
+          git config --global --add safe.directory /opt/tamshai
+
           # Tag current version for rollback
           echo "🏷️  Tagging current version..."
           docker tag mcp-gateway:latest mcp-gateway:rollback || true
