@@ -227,7 +227,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: ./services/mcp-gateway
-        run: npm test -- --coverage --coverageReporters=xml
+        run: npm test -- --coverage --coverageReporters=cobertura
 
       - name: Run integration tests
         working-directory: ./infrastructure/docker

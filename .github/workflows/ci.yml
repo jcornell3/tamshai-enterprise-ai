@@ -376,17 +376,28 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-        ports:
-          - 9201:9200
-        env:
-          discovery.type: single-node
-          xpack.security.enabled: false
-          ES_JAVA_OPTS: -Xms512m -Xmx512m
-
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Configure system for Elasticsearch
+        run: |
+          sudo sysctl -w vm.max_map_count=262144
+          echo "✅ Set vm.max_map_count=262144"
+
+      - name: Start Elasticsearch
+        run: |
+          docker run -d \
+            --name elasticsearch \
+            -p 9201:9200 \
+            -e discovery.type=single-node \
+            -e xpack.security.enabled=false \
+            -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
+            docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+
+          # Wait for Elasticsearch (up to 3 minutes)
+          echo "Waiting for Elasticsearch to start..."
+          timeout 180 bash -c 'until curl -sf http://localhost:9201/_cluster/health | grep -q "yellow\|green"; do echo "Waiting..."; sleep 5; done'
+          echo "✅ Elasticsearch is ready"
 
       - name: Create additional PostgreSQL databases
         run: |
@@ -415,12 +426,7 @@ jobs:
             mongosh "mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin" /data/sales-data.js
           echo "✅ Loaded Sales sample data"
 
-          # Load Support sample data (Elasticsearch)
-          # Wait for Elasticsearch to be ready (can take 2-3 minutes)
-          echo "Waiting for Elasticsearch to start..."
-          timeout 180 bash -c 'until curl -s http://localhost:9201/_cluster/health | grep -q "yellow\|green"; do echo "Waiting for Elasticsearch..."; sleep 5; done'
-          echo "✅ Elasticsearch is ready"
-
+          # Load Support sample data (Elasticsearch - already started in earlier step)
           # Bulk load support tickets and knowledge base
           curl -X POST "http://localhost:9201/_bulk" \
             -H 'Content-Type: application/x-ndjson' \
