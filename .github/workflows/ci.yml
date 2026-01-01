@@ -356,7 +356,7 @@ jobs:
         env:
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: changeme
-          POSTGRES_DB: tamshai_hr
+          POSTGRES_DB: tamshai
         options: >-
           --health-cmd "pg_isready -U tamshai"
           --health-interval 10s
@@ -401,15 +401,15 @@ jobs:
 
       - name: Create additional PostgreSQL databases
         run: |
-          # Wait for postgres-mcp service to be ready
-          timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai -d tamshai_hr; do sleep 1; done'
+          # Wait for postgres-mcp service to be ready (tamshai database is created by default)
+          timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai -d tamshai; do sleep 1; done'
 
-          # Create tamshai database (main database for integration tests)
-          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr -c "CREATE DATABASE tamshai OWNER tamshai;"
-          echo "✅ Created tamshai database"
+          # Create tamshai_hr database (for HR sample data)
+          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_hr OWNER tamshai;"
+          echo "✅ Created tamshai_hr database"
 
           # Create tamshai_finance database
-          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr -c "CREATE DATABASE tamshai_finance;"
+          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_finance;"
           echo "✅ Created tamshai_finance database"
 
       - name: Load sample data
