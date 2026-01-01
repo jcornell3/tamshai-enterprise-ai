@@ -21,6 +21,11 @@ import {
   executeDeleteEmployee,
   DeleteEmployeeInputSchema,
 } from './tools/delete-employee';
+import {
+  updateSalary,
+  executeUpdateSalary,
+  UpdateSalaryInputSchema,
+} from './tools/update-salary';
 import { MCPToolResponse } from './types/response';
 
 dotenv.config();
@@ -325,6 +330,34 @@ app.post('/tools/delete_employee', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Update Salary Tool (v1.4 with confirmation)
+ */
+app.post('/tools/update_salary', async (req: Request, res: Response) => {
+  try {
+    const { userContext, employeeId, newSalary, reason } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await updateSalary({ employeeId, newSalary, reason }, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('update_salary error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to update salary',
+    });
+  }
+});
+
 // =============================================================================
 // EXECUTE ENDPOINT (v1.4 - Called by Gateway after confirmation)
 // =============================================================================
@@ -358,6 +391,10 @@ app.post('/execute', async (req: Request, res: Response) => {
     switch (action) {
       case 'delete_employee':
         result = await executeDeleteEmployee(data, userContext);
+        break;
+
+      case 'update_salary':
+        result = await executeUpdateSalary(data, userContext);
         break;
 
       default:
