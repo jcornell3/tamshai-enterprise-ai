@@ -1,0 +1,114 @@
+# Incremental Deployment: MCP Support Service
+#
+# This workflow deploys ONLY the MCP Support service to VPS.
+# Other services are not restarted (--no-deps flag).
+
+name: Deploy MCP Support
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/mcp-support/**'
+      - '.github/workflows/deploy-mcp-support.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: 'staging'
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-mcp-support-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+  SERVICE_NAME: mcp-support
+  HEALTH_CHECK_URL: http://localhost:3104/health
+  HEALTH_CHECK_TIMEOUT: 30
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    name: Deploy MCP Support to ${{ github.event.inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout code
+        if: ${{ !github.event.inputs.rollback }}
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Deploy MCP Support
+        if: ${{ !github.event.inputs.rollback }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          set -e
+          cd /opt/tamshai
+          echo "📦 Deploying MCP Support..."
+          docker tag mcp-support:latest mcp-support:rollback || true
+          git pull origin main
+          docker compose -f docker-compose.vps.yml build mcp-support
+          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-support
+          echo "⏳ Waiting for health check..."
+          for i in {1..30}; do
+            if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+              echo "✅ MCP Support is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Health check failed - rolling back..."
+          docker tag mcp-support:rollback mcp-support:latest
+          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-support
+          exit 1
+          EOF
+
+      - name: Rollback MCP Support
+        if: ${{ github.event.inputs.rollback }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          set -e
+          cd /opt/tamshai
+          docker tag mcp-support:rollback mcp-support:latest
+          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-support
+          for i in {1..30}; do
+            if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+              echo "✅ Rollback successful"
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+          EOF
