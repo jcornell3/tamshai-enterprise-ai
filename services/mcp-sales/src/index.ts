@@ -332,32 +332,32 @@ app.post('/query', async (req: Request, res: Response) => {
 });
 
 app.post('/tools/list_opportunities', async (req: Request, res: Response) => {
-  const { input, userContext } = req.body;
+  const { userContext, stage, status, limit, cursor } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
-  const result = await listOpportunities(input || {}, userContext);
+  const result = await listOpportunities({ stage, status, limit, cursor }, userContext);
   res.json(result);
 });
 
 app.post('/tools/get_customer', async (req: Request, res: Response) => {
-  const { input, userContext } = req.body;
+  const { userContext, customerId } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
-  const result = await getCustomer(input, userContext);
+  const result = await getCustomer({ customerId }, userContext);
   res.json(result);
 });
 
 app.post('/tools/delete_opportunity', async (req: Request, res: Response) => {
-  const { input, userContext } = req.body;
+  const { userContext, opportunityId } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
-  const result = await deleteOpportunity(input, userContext);
+  const result = await deleteOpportunity({ opportunityId }, userContext);
   res.json(result);
 });
 
