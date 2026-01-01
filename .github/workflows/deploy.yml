@@ -232,6 +232,10 @@ jobs:
       - name: Run integration tests
         working-directory: ./infrastructure/docker
         run: |
+          # Configure kernel parameter for Elasticsearch
+          sudo sysctl -w vm.max_map_count=262144
+          echo "✅ Set vm.max_map_count=262144 (required for Elasticsearch)"
+
           docker compose up -d
           sleep 10  # Wait for services to be ready
           cd ../../tests/integration

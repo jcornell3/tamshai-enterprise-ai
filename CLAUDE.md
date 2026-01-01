@@ -480,6 +480,33 @@ See `.specify/specs/011-qa-testing/TESTING_CI_CD_CONFIG.md` for complete CI/CD d
 - 8GB RAM minimum (16GB recommended)
 - 20GB free disk space
 
+**IMPORTANT: Elasticsearch Kernel Parameter**
+
+Elasticsearch requires `vm.max_map_count` to be set to at least 262144:
+
+```bash
+# Linux
+sudo sysctl -w vm.max_map_count=262144
+
+# Persist across reboots
+echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+# Windows (WSL2)
+# In WSL2 terminal
+sudo sysctl -w vm.max_map_count=262144
+
+# macOS (Docker Desktop)
+# Docker Desktop handles this automatically
+# If issues persist, increase Docker memory to 4GB+
+```
+
+**Verification**:
+```bash
+sysctl vm.max_map_count
+# Should output: vm.max_map_count = 262144
+```
+
 ### Port Allocation
 
 **Network**: `172.30.0.0/16` (avoids conflicts with MCP dev at `172.28.0.0/16`)

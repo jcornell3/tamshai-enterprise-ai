@@ -382,22 +382,7 @@ jobs:
       - name: Configure system for Elasticsearch
         run: |
           sudo sysctl -w vm.max_map_count=262144
-          echo "✅ Set vm.max_map_count=262144"
-
-      - name: Start Elasticsearch
-        run: |
-          docker run -d \
-            --name elasticsearch \
-            -p 9201:9200 \
-            -e discovery.type=single-node \
-            -e xpack.security.enabled=false \
-            -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
-            docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-
-          # Wait for Elasticsearch (up to 3 minutes)
-          echo "Waiting for Elasticsearch to start..."
-          timeout 180 bash -c 'until curl -sf http://localhost:9201/_cluster/health | grep -q "yellow\|green"; do echo "Waiting..."; sleep 5; done'
-          echo "✅ Elasticsearch is ready"
+          echo "✅ Set vm.max_map_count=262144 (required for Elasticsearch)"
 
       - name: Create additional PostgreSQL databases
         run: |
