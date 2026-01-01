@@ -313,13 +313,13 @@ When QA testing complete, update this document with:
 **Last Updated**: 2026-01-01 (Bootstrap VPS Workflow Added)
 **Next Review**: QA can proceed with Phases 1-2 via GitHub Actions (no SSH required)
 
-### QA Summary (Updated 2026-01-01 22:35 UTC)
+### QA Summary (Updated 2026-01-01 22:45 UTC)
 - ✅ Phase 3 (Documentation Review): **Complete**
 - ✅ Phase 1.1 (Manual Trigger Testing): **Complete - 6/6 services deployed successfully**
 - ✅ Phase 1.3 (Rollback Testing): **Complete - Rollback works after bug fix (bdd9009)**
-- 🔴 Phase 2 (Integration Verification): **BLOCKED - JWT Audience Configuration Issue**
+- 🔴 Phase 2 (Integration Verification): **BLOCKED - JWT Issuer Mismatch**
 
-### Phase 2 Integration Test Results (2026-01-01 22:35 UTC)
+### Phase 2 Integration Test Results (2026-01-01 22:45 UTC)
 
 **Test Environment**:
 - VPS IP: `5.78.159.29`
@@ -334,7 +334,7 @@ Result: Access token obtained successfully
 Token expires_in: 300 seconds
 ```
 
-**Phase 2.2 - MCP Gateway API Call**: 🔴 **FAILED**
+**Phase 2.2 - MCP Gateway API Call**: 🔴 **FAILED** (Re-tested after audience fix)
 ```
 Endpoint: POST http://5.78.159.29/api/query
 Authorization: Bearer <valid_token>
@@ -342,33 +342,44 @@ Payload: {"query": "list employees", "limit": 5}
 Response: 401 Unauthorized - {"error":"Invalid or expired token"}
 ```
 
-**Root Cause Analysis**:
-1. Decoded JWT token shows **no `aud` (audience) claim**
-2. MCP Gateway's JWT validation expects: `audience: ['mcp-gateway', 'account']`
-3. Without matching audience, token validation fails
+**Re-Test Results (2026-01-01 22:45 UTC)**:
+- ✅ Audience mapper added successfully
+- ✅ Token now contains `aud: "mcp-gateway"`
+- 🔴 Still getting 401 - likely **issuer mismatch**
 
-**Token Payload (decoded)**:
+**Current Token Payload (after audience fix)**:
 ```json
 {
   "iss": "https://5.78.159.29/auth/realms/tamshai-corp",
+  "aud": "mcp-gateway",  // ✅ Now present
   "azp": "mcp-gateway",
-  "aud": undefined,  // <-- MISSING
   "realm_access": {"roles": ["hr-write", "manager", "hr-read"]}
 }
 ```
 
-**Fix Required (Dev Team)**:
-Add audience mapper to `mcp-gateway` client in Keycloak:
-1. Keycloak Admin → Clients → `mcp-gateway` → Client Scopes → Dedicated scope
-2. Add mapper: Type = "Audience", Included Client Audience = `mcp-gateway`
-3. Or: Update `keycloak/realm-export-dev.json` with audience protocol mapper
+**Suspected Root Cause - Issuer Mismatch**:
+The MCP Gateway validates the token issuer against `KEYCLOAK_ISSUER` env var (line 205 in index.ts):
+```javascript
+issuer: config.keycloak.issuer || `${config.keycloak.url}/realms/${config.keycloak.realm}`
+```
 
-**Workaround Options**:
-1. Add audience mapper via Keycloak Admin Console on VPS
-2. Modify MCP Gateway to accept tokens without audience (not recommended - security risk)
-3. Redeploy Keycloak with updated realm export
+**Dev Team: Please verify on VPS**:
+```bash
+# Check what KEYCLOAK_ISSUER is actually set to
+docker exec tamshai-mcp-gateway printenv KEYCLOAK_ISSUER
+docker exec tamshai-mcp-gateway printenv KEYCLOAK_URL
 
-**Status**: Waiting for Dev to fix Keycloak client configuration
+# Expected values (should match token issuer):
+# KEYCLOAK_ISSUER=https://5.78.159.29/auth/realms/tamshai-corp
+# KEYCLOAK_URL=https://5.78.159.29/auth
+```
+
+**Alternative Causes to Check**:
+1. JWKS endpoint not reachable from MCP Gateway container
+2. Clock skew between containers (token `exp` check)
+3. Algorithm mismatch (RS256 expected)
+
+**Status**: Waiting for Dev to check KEYCLOAK_ISSUER on VPS
 
 ### Workflow Fixes Applied (2026-01-01 17:45 UTC)
 
