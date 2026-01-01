@@ -74,6 +74,7 @@ jobs:
           set -e
           cd /opt/tamshai
           echo "📦 Deploying MCP Finance..."
+          git config --global --add safe.directory /opt/tamshai
           docker tag mcp-finance:latest mcp-finance:rollback || true
           git pull origin main
           docker compose -f docker-compose.vps.yml build mcp-finance
