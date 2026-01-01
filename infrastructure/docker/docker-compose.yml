@@ -465,7 +465,7 @@ services:
     ports:
       - "9201:9200"
     healthcheck:
-      test: ["CMD-SHELL", "/usr/share/elasticsearch/bin/elasticsearch-node health"]
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/9200' && echo 'ES is up'"]
       interval: 10s
       timeout: 5s
       retries: 30
