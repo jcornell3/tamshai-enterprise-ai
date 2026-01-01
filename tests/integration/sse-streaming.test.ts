@@ -13,6 +13,7 @@
 
 import axios from 'axios';
 import http from 'http';
+import { fail } from 'assert';
 
 // Test configuration
 // Uses mcp-gateway client which has directAccessGrantsEnabled=true
