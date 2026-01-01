@@ -112,7 +112,13 @@ export async function getBudget(
         };
       }
 
-      return createSuccessResponse(result.rows);
+      // Add full department name to each budget record for LLM clarity
+      const budgetsWithDepartmentName = result.rows.map(budget => ({
+        ...budget,
+        department: department.charAt(0).toUpperCase() + department.slice(1).toLowerCase(), // Capitalize first letter
+      }));
+
+      return createSuccessResponse(budgetsWithDepartmentName);
     } catch (error) {
       return handleDatabaseError(error as Error, 'get_budget');
     }
