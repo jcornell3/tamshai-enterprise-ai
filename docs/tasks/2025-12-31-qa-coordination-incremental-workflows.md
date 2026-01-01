@@ -1,568 +1,278 @@
 # QA Coordination: Incremental Deployment Workflows
 
-**Date**: 2025-12-31
+**Date**: 2025-12-31 (Updated: 2026-01-01)
 **Author**: Claude-Dev (claude-dev@tamshai.com)
-**Status**: 📋 Impact Assessment
+**Status**: ✅ Ready for QA Testing
 **Target Audience**: QA Lead, Project Sponsor
 
 ---
 
-## Executive Summary
+## Status Update (2026-01-01)
 
-**Question**: Will creating incremental deployment workflow files (`.github/workflows/deploy-*.yml`) conflict with QA's current CI/CD remediation work?
+| Issue | Title | Status |
+|-------|-------|--------|
+| #60 | MCP Integration Test Remediation | ✅ **Closed** |
+| #61 | Incremental Deployment Workflows | ✅ **Complete** (13 workflows created) |
+| #62 | Keycloak Atomic Migration | 🔴 Open (blocker for data seeding automation) |
 
-**Answer**: ✅ **NO CONFLICTS** - QA is working on different workflows (testing, not deployment)
-
-**Additional QA Work Required**: 🟡 **MINIMAL** (4-6 hours) - Organize tests by service, verify health checks
-
----
-
-## Current QA Work (MCP Integration Test Remediation)
-
-### Files QA is Working On
-
-**1. `.github/workflows/ci.yml`** - Integration Test Workflow
-- **Purpose**: Run unit + integration tests on push/PR
-- **QA's Work**: Fix 21 failing MCP integration tests (Issue #60)
-- **Scope**:
-  - Fix tool response status errors (10 tests)
-  - Add filtering logic (4 tests)
-  - Implement human-in-the-loop confirmations (6 tests)
-  - Fix authorization checks (5 tests)
-- **Estimated Time**: 16-24 hours
-- **Status**: In Progress
-
-**2. `.github/workflows/deploy.yml`** - DevSecOps Security Scanning
-- **Purpose**: Code quality, SAST, dependency scanning, Terraform scanning
-- **QA's Work**: Ensure security scans pass (CodeQL, npm audit, Checkov)
-- **Scope**: Fix security findings, not deployment logic
-- **Status**: Maintenance/monitoring
-
-**3. MCP Server Source Files**
-- `services/mcp-hr/src/tools/*.ts` - Fix tool response formats
-- `services/mcp-hr/src/middleware/rbac.ts` - Fix authorization logic
-- `services/mcp-hr/tests/integration/*.test.ts` - Update integration tests
-
-### QA Work Does NOT Touch
-
-- ❌ Deployment workflows (`deploy-vps.yml`)
-- ❌ Deployment scripts (`scripts/deploy-vps.sh`)
-- ❌ Docker Compose configurations
-- ❌ SSH deployment logic
+**Test Results (Latest CI Run)**:
+- 89 tests passed
+- 7 tests skipped (Claude API-dependent)
+- 0 tests failing
 
 ---
 
-## Proposed Incremental Workflow Files (Dev Work)
+## Incremental Workflows Created
 
-### New Workflow Files (13 total)
+All 13 workflows are now in `.github/workflows/`:
 
-**Service-Specific Deployments** (7 files):
-1. `.github/workflows/deploy-mcp-gateway.yml`
-2. `.github/workflows/deploy-mcp-hr.yml`
-3. `.github/workflows/deploy-mcp-finance.yml`
-4. `.github/workflows/deploy-mcp-sales.yml`
-5. `.github/workflows/deploy-mcp-support.yml`
-6. `.github/workflows/deploy-kong.yml`
-7. `.github/workflows/deploy-keycloak.yml`
+### Service-Specific Deployments (7 files)
 
-**Frontend Deployments** (2 files):
-8. `.github/workflows/deploy-frontend-desktop.yml`
-9. `.github/workflows/deploy-frontend-web.yml`
+| Workflow | Health Endpoint | Port |
+|----------|-----------------|------|
+| `deploy-mcp-gateway.yml` | `/health` | 3100 |
+| `deploy-mcp-hr.yml` | `/health` | 3101 |
+| `deploy-mcp-finance.yml` | `/health` | 3102 |
+| `deploy-mcp-sales.yml` | `/health` | 3103 |
+| `deploy-mcp-support.yml` | `/health` | 3104 |
+| `deploy-kong.yml` | `/api/health` | 8100 |
+| `deploy-keycloak.yml` | `/health/ready` | 8180 |
 
-**Database Migrations** (2 files):
-10. `.github/workflows/deploy-migrations-hr.yml`
-11. `.github/workflows/deploy-migrations-finance.yml`
+### Frontend Deployments (2 files)
 
-**Environment Promotion** (2 files):
-12. `.github/workflows/promote-dev-to-staging.yml`
-13. `.github/workflows/promote-staging-to-production.yml`
+| Workflow | Platform |
+|----------|----------|
+| `deploy-frontend-desktop.yml` | Cloudflare Pages (Flutter) |
+| `deploy-frontend-web.yml` | Cloudflare Pages (React/Vue) |
 
-### Potential Conflicts with QA Work
+### Database Migrations (2 files)
 
-**Analysis**: ✅ **NO CONFLICTS**
+| Workflow | Database |
+|----------|----------|
+| `deploy-migrations-hr.yml` | PostgreSQL (tamshai_hr) |
+| `deploy-migrations-finance.yml` | PostgreSQL (tamshai_finance) |
 
-| File | QA Touching? | Dev Creating? | Conflict? |
-|------|-------------|---------------|-----------|
-| `.github/workflows/ci.yml` | ✅ YES | ❌ NO | ✅ No conflict |
-| `.github/workflows/deploy.yml` | 🟡 Monitoring | ❌ NO | ✅ No conflict |
-| `.github/workflows/deploy-vps.yml` | ❌ NO | 🟡 Maybe update | ⚠️ Coordination needed |
-| `.github/workflows/deploy-*.yml` (new) | ❌ NO | ✅ YES | ✅ No conflict (new files) |
+### Environment Promotion (2 files)
 
-**Rationale**:
-- QA is fixing **test logic** (integration tests for MCP servers)
-- Dev is creating **deployment logic** (how to deploy services to VPS)
-- These are SEPARATE concerns (testing ≠ deployment)
+| Workflow | Flow |
+|----------|------|
+| `promote-dev-to-staging.yml` | Dev → Staging |
+| `promote-staging-to-production.yml` | Staging → Production |
 
 ---
 
-## Impact on `.github/workflows/deploy-vps.yml`
+## QA Actions Required
 
-### Current State
+### Phase 1: Workflow Validation (4-6 hours)
 
-**File**: `.github/workflows/deploy-vps.yml`
-**Purpose**: Monolithic deployment of ALL 13 services to VPS
-**Triggers**:
-- Push to `main` branch (auto-deploy)
-- Manual workflow_dispatch
-- Release published
+#### 1.1 Manual Trigger Testing
 
-**Deployment Logic**:
-```bash
-# SSH to VPS
-ssh $VPS_USER@$VPS_HOST << 'EOF'
-  cd /opt/tamshai
-  git pull origin main
-  docker compose -f docker-compose.vps.yml up -d --build
-EOF
+Test each service workflow via GitHub Actions:
+
+```
+GitHub → Actions → [Workflow Name] → Run workflow
 ```
 
-**Characteristics**:
-- Deploys ALL services (mcp-gateway, mcp-hr, keycloak, kong, postgres, etc.)
-- 10-15 minute deployment time
-- 30-60 second downtime (services restart)
+**Test Matrix**:
 
-### Options for Handling `deploy-vps.yml`
+| Workflow | Manual Trigger | Health Check | Status |
+|----------|----------------|--------------|--------|
+| deploy-mcp-gateway | ⬜ | `curl http://<staging>:3100/health` | ⬜ |
+| deploy-mcp-hr | ⬜ | `curl http://<staging>:3101/health` | ⬜ |
+| deploy-mcp-finance | ⬜ | `curl http://<staging>:3102/health` | ⬜ |
+| deploy-mcp-sales | ⬜ | `curl http://<staging>:3103/health` | ⬜ |
+| deploy-mcp-support | ⬜ | `curl http://<staging>:3104/health` | ⬜ |
+| deploy-kong | ⬜ | `curl http://<staging>:8100/api/health` | ⬜ |
+| deploy-keycloak | ⬜ | `curl http://<staging>:8180/health/ready` | ⬜ |
 
-**Option 1: Keep as "Full Stack Deploy"** (RECOMMENDED)
-- Keep `deploy-vps.yml` unchanged
-- Use for emergency full-stack deployments
-- Use incremental workflows for normal deployments
-
-**Pros**:
-- ✅ Safety net for critical issues requiring full redeploy
-- ✅ No changes to existing workflow (QA work unaffected)
-- ✅ Backward compatibility
-
-**Cons**:
-- ⚠️ Two deployment methods (monolithic + incremental)
-
-**Option 2: Deprecate `deploy-vps.yml`**
-- Rename to `deploy-vps-legacy.yml`
-- Remove auto-trigger (manual only)
-- Use incremental workflows exclusively
-
-**Pros**:
-- ✅ Single deployment method (cleaner)
-
-**Cons**:
-- ⚠️ Requires updating existing deployment docs
-- ⚠️ No full-stack deploy option
-
-**Option 3: Update `deploy-vps.yml` to Orchestrate Incremental Workflows**
-- Change `deploy-vps.yml` to trigger all service-specific workflows
-- Use GitHub API to dispatch workflows
-
-**Pros**:
-- ✅ Maintains "deploy all" capability
-- ✅ Uses incremental infrastructure
-
-**Cons**:
-- ⚠️ Complex implementation (workflow orchestration)
-- ⚠️ Harder to debug
-
-### Recommendation: Option 1 (Keep as Full Stack Deploy)
-
-**Rationale**:
-- Minimal disruption to QA work
-- Provides emergency full-stack deployment option
-- Incremental workflows used for 95% of deployments
-
-**Changes to `deploy-vps.yml`**:
-```yaml
-# Add comment to header
-name: Deploy to VPS (Full Stack)
-
-# NOTE: This workflow deploys ALL services (monolithic deployment).
-# For service-specific deployments, use:
-#   - deploy-mcp-gateway.yml
-#   - deploy-mcp-hr.yml
-#   - etc.
-# Use this workflow only for:
-#   - Emergency full-stack redeployments
-#   - Major infrastructure changes affecting multiple services
-```
-
-**Impact on QA**: ✅ **ZERO** (no changes to workflow logic, just documentation)
-
----
-
-## Additional QA Work Required for Incremental Workflows
-
-### 1. Service-Specific Test Organization (4 hours)
-
-**Current State**: All integration tests run together
-
-**Required**: Organize tests by service for targeted test runs
-
-**Example**:
+**Expected Health Response**:
 ```json
-// services/mcp-hr/package.json
 {
-  "scripts": {
-    "test": "jest",
-    "test:integration": "jest --testPathPattern=tests/integration",
-    "test:integration:hr": "jest --testPathPattern=tests/integration/hr",
-    "test:integration:auth": "jest --testPathPattern=tests/integration/auth",
-    "test:integration:identity": "jest --testPathPattern=tests/integration/identity"
-  }
+  "status": "healthy",
+  "service": "<service-name>",
+  "timestamp": "2026-01-01T..."
 }
 ```
 
-**Usage in Workflow**:
-```yaml
-# .github/workflows/deploy-mcp-hr.yml
-- name: Run HR-specific integration tests
-  run: npm run test:integration:hr
+#### 1.2 Path-Based Trigger Testing
+
+Verify workflows trigger on correct file changes:
+
+| Workflow | Trigger Path | Test Method |
+|----------|--------------|-------------|
+| deploy-mcp-gateway | `services/mcp-gateway/**` | Modify file, push, verify workflow runs |
+| deploy-mcp-hr | `services/mcp-hr/**` | Modify file, push, verify workflow runs |
+| deploy-mcp-finance | `services/mcp-finance/**` | Modify file, push, verify workflow runs |
+
+**Test Procedure**:
+1. Create branch `test/incremental-trigger-<service>`
+2. Modify trivial file (e.g., add comment to `src/index.ts`)
+3. Push branch
+4. Verify ONLY that service's workflow triggers
+5. Verify OTHER service workflows do NOT trigger
+
+#### 1.3 Rollback Testing
+
+Test rollback functionality for at least 2 services:
+
+**Test Procedure**:
+1. Note current deployed version (Docker image tag)
+2. Deploy a change via workflow
+3. Trigger manual rollback via workflow_dispatch with `rollback: true`
+4. Verify previous version restored
+5. Verify health check passes after rollback
+
+**Rollback Test Matrix**:
+
+| Service | Pre-Rollback Version | Post-Rollback Version | Health Check | Status |
+|---------|---------------------|----------------------|--------------|--------|
+| mcp-gateway | ⬜ | ⬜ | ⬜ | ⬜ |
+| mcp-hr | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### Phase 2: Integration Verification (2-3 hours)
+
+#### 2.1 Cross-Service Communication
+
+After incremental deployment, verify services can still communicate:
+
+```bash
+# Test MCP Gateway can route to MCP HR
+curl -X POST http://<staging>:3100/api/query \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "list employees", "userContext": {...}}'
 ```
 
-**QA Tasks**:
-- [ ] Review current test file structure
-- [ ] Group tests by service domain (hr, finance, sales, support)
-- [ ] Add test scripts to `package.json` for each service
-- [ ] Verify tests can run in isolation (no cross-service dependencies)
+#### 2.2 JWT Validation Still Works
 
-**Estimated Time**: 4 hours
+Verify Keycloak integration after incremental Keycloak deployment:
 
-### 2. Health Check Endpoint Verification (1 hour)
+```bash
+# Get token from Keycloak
+TOKEN=$(curl -X POST http://<staging>:8180/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-gateway" \
+  -d "client_secret=<secret>" \
+  -d "username=alice@tamshai.local" \
+  -d "password=<password>" \
+  -d "grant_type=password" | jq -r '.access_token')
 
-**Current State**: Health checks exist but may not be comprehensive
-
-**Required**: Verify all services have robust health checks for deployment verification
-
-**Example**:
-```typescript
-// services/mcp-hr/src/index.ts
-app.get('/health', async (req, res) => {
-  try {
-    // Check database connectivity
-    await db.query('SELECT 1');
-
-    // Check Redis connectivity
-    await redis.ping();
-
-    // Check Keycloak connectivity (if applicable)
-    // await fetch('http://keycloak:8080/health/ready');
-
-    res.json({
-      status: 'healthy',
-      service: 'mcp-hr',
-      timestamp: new Date().toISOString(),
-      dependencies: {
-        database: 'connected',
-        redis: 'connected'
-      }
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      error: error.message
-    });
-  }
-});
+# Use token with MCP Gateway
+curl http://<staging>:3100/health -H "Authorization: Bearer $TOKEN"
 ```
 
-**QA Tasks**:
-- [ ] Verify health check endpoints return 200 when healthy
-- [ ] Verify health check endpoints return 503 when unhealthy
-- [ ] Test health checks with dependency failures (DB down, Redis down)
-- [ ] Document expected health check response format
+### Phase 3: Documentation Review (1 hour)
 
-**Estimated Time**: 1 hour
+#### 3.1 Review Deployment Guide
 
-### 3. Rollback Scenario Testing (1-2 hours)
+Review `docs/deployment/INCREMENTAL_DEPLOYMENT_GUIDE.md` for:
+- [ ] Accuracy of health check endpoints
+- [ ] Clarity of rollback procedures
+- [ ] Completeness of troubleshooting section
 
-**Current State**: No rollback testing
+#### 3.2 Update Test Documentation
 
-**Required**: Verify rollback mechanism works for each service
-
-**Test Scenarios**:
-1. **Healthy Deployment → Rollback**: Deploy new version, manually trigger rollback, verify old version restored
-2. **Failed Health Check → Auto-Rollback**: Deploy broken version, verify auto-rollback occurs
-3. **Database Migration Rollback**: Run migration, trigger rollback, verify schema reverted
-
-**QA Tasks**:
-- [ ] Test manual rollback via workflow_dispatch
-- [ ] Test automatic rollback on health check failure
-- [ ] Verify rollback restores previous Docker image tag
-- [ ] Document rollback procedure
-
-**Estimated Time**: 2 hours
-
-### Total Additional QA Work: 6-7 hours
+Update `tests/integration/README.md` if needed:
+- [ ] Document how to run tests against incrementally-deployed services
+- [ ] Add section on verifying deployments
 
 ---
 
-## Timeline Coordination
+## Environment Promotion Testing (Future)
 
-### Scenario 1: Sequential Work (QA First, Then Dev)
+Once staging is stable, test environment promotion:
 
-**Timeline**:
+### Dev → Staging
+
 ```
-Week 1: QA fixes MCP integration tests (16-24 hours)
-  ├─ Fix tool response status errors
-  ├─ Add filtering logic
-  ├─ Implement confirmations
-  └─ Fix authorization checks
-
-Week 2: Dev implements incremental workflows (24 hours)
-  ├─ Service-specific workflows (4h)
-  ├─ Frontend deployment pipeline (8h)
-  ├─ Database migration workflows (8h)
-  └─ Environment promotion (4h)
-
-Week 3: QA adapts tests for incremental workflows (6-7 hours)
-  ├─ Organize tests by service (4h)
-  ├─ Verify health checks (1h)
-  └─ Test rollback scenarios (2h)
+GitHub → Actions → "Promote Dev to Staging" → Run workflow
+  - version: v1.5.0-staging
+  - services: all
 ```
 
-**Total Time**: 46-55 hours (QA: 22-31h, Dev: 24h)
+**Verification**:
+- [ ] All services healthy on staging
+- [ ] Sample data intact
+- [ ] Integration tests pass
 
-**Pros**:
-- ✅ No workflow file conflicts (QA finishes before Dev starts)
-- ✅ Clear separation of work
+### Staging → Production (Requires Approval)
 
-**Cons**:
-- ⚠️ Slower overall completion (3 weeks vs 2 weeks parallel)
-
-### Scenario 2: Parallel Work (QA and Dev Simultaneously)
-
-**Timeline**:
 ```
-Week 1 (Parallel):
-  QA: Fix MCP integration tests (16-24 hours)
-  Dev: Implement incremental workflows (24 hours)
-
-Week 2 (QA Adaptation):
-  QA: Adapt tests for incremental workflows (6-7 hours)
-  QA: Test incremental deployments with fixed tests
+GitHub → Actions → "Promote Staging to Production" → Run workflow
+  - version: v1.5.0
+  - services: all
+  - skip_tests: false
 ```
 
-**Total Time**: 30-38 hours (overlapping work)
-
-**Pros**:
-- ✅ Faster completion (2 weeks vs 3 weeks)
-- ✅ Incremental workflows ready when integration tests fixed
-
-**Cons**:
-- ⚠️ Requires coordination on file changes
-- ⚠️ QA may need to adapt tests mid-stream
-
-**Coordination Required**:
-1. **Communication**: Dev notifies QA when workflow files created
-2. **Testing**: QA tests incremental workflows once Dev completes Phase 1 (service-specific workflows)
-3. **Feedback Loop**: QA provides feedback on health check requirements, Dev adjusts workflows
-
-### Scenario 3: Phased Parallel (RECOMMENDED)
-
-**Timeline**:
-```
-Week 1 (Phase 1 - No Overlap):
-  Day 1-3: QA fixes critical integration tests (12h)
-    ├─ Fix tool response status errors (highest priority)
-    ├─ Fix authorization checks
-
-  Day 4-5: Dev implements service-specific workflows (4h)
-    ├─ deploy-mcp-gateway.yml
-    ├─ deploy-mcp-hr.yml
-    ├─ deploy-mcp-finance.yml
-    └─ etc.
-
-Week 2 (Phase 2 - Parallel):
-  QA: Finish integration test fixes (8-12h) + Adapt tests (6-7h)
-  Dev: Frontend + migrations + promotion workflows (20h)
-
-Week 3 (Phase 3 - QA Validation):
-  QA: Test incremental deployments end-to-end
-  Dev: Fix issues found by QA
-```
-
-**Total Time**: 34-42 hours (optimized overlap)
-
-**Pros**:
-- ✅ Balances speed with coordination
-- ✅ QA completes critical test fixes before workflows deployed
-- ✅ Dev and QA work on independent concerns after Phase 1
-
-**Cons**:
-- ⚠️ Requires clear Phase 1 checkpoint
+**Verification**:
+- [ ] Pre-deployment tests pass
+- [ ] Manual approval received
+- [ ] Production smoke tests pass
 
 ---
 
-## Coordination Checklist
+## Known Limitations
 
-### Before Dev Starts Incremental Workflow Work
+### 1. Keycloak Atomic Migration Not Complete
 
-- [ ] **Confirm QA Timeline**: When will integration test fixes be complete?
-- [ ] **Review Health Checks**: Are current health check endpoints sufficient?
-- [ ] **Identify Test Dependencies**: Which tests require services to be deployed together?
+**Issue**: #62
 
-### During Dev Implementation
+**Impact**: Fresh Terraform builds may have broken Keycloak configuration.
 
-- [ ] **Notify QA**: When service-specific workflow files are created
-- [ ] **Provide Examples**: Share `deploy-mcp-gateway.yml` for QA review
-- [ ] **Request Feedback**: Ask QA to verify health check requirements
+**Workaround**: Test on existing staging environment (Keycloak already configured).
 
-### After Dev Completes Phase 1 (Service-Specific Workflows)
+### 2. Sample Data Seeding Not Automated
 
-- [ ] **QA Test Run**: QA deploys mcp-hr using `deploy-mcp-hr.yml`
-- [ ] **Health Check Validation**: QA verifies health checks work as expected
-- [ ] **Rollback Test**: QA tests rollback mechanism
+**Impact**: New environments won't have 59 employees automatically.
 
-### Before Merging to Main
-
-- [ ] **Integration Test**: Full integration test run with incremental workflows
-- [ ] **Rollback Test**: QA validates rollback for at least 2 services
-- [ ] **Documentation**: Update deployment docs with new workflow usage
+**Workaround**: Manually run sample data SQL after deployment:
+```bash
+PGPASSWORD=<password> psql -h <host> -p 5433 -U tamshai -d tamshai_hr < sample-data/hr-data.sql
+```
 
 ---
 
-## Risk Mitigation
+## Estimated QA Effort
 
-### Risk 1: QA Commits to `ci.yml` While Dev Commits Workflow Files
-
-**Likelihood**: 🟢 LOW (different files)
-
-**Impact**: 🟢 LOW (Git merge handles independent files)
-
-**Mitigation**:
-- Dev creates NEW files (no edits to `ci.yml`)
-- QA edits EXISTING file (`ci.yml`)
-- No merge conflicts expected
-
-### Risk 2: Incremental Workflows Require Changes to Integration Tests
-
-**Likelihood**: 🟡 MEDIUM (tests may assume monolithic deployment)
-
-**Impact**: 🟡 MEDIUM (6-7 hours additional QA work)
-
-**Mitigation**:
-- QA organizes tests by service (4 hours)
-- Tests can run in isolation (no cross-service dependencies)
-- Health checks updated (1 hour)
-
-### Risk 3: `deploy-vps.yml` Changes Break QA's Deployment Testing
-
-**Likelihood**: 🟢 LOW (recommend keeping `deploy-vps.yml` unchanged)
-
-**Impact**: 🔴 HIGH (blocks QA integration testing)
-
-**Mitigation**:
-- **Option 1 (Recommended)**: Keep `deploy-vps.yml` unchanged
-- Dev creates NEW workflow files (no changes to existing)
-- QA continues using `deploy-vps.yml` for full-stack testing
+| Phase | Task | Hours |
+|-------|------|-------|
+| 1.1 | Manual trigger testing (7 services) | 2 |
+| 1.2 | Path-based trigger testing (3 services) | 1 |
+| 1.3 | Rollback testing (2 services) | 1-2 |
+| 2.1 | Cross-service communication | 1 |
+| 2.2 | JWT validation | 0.5 |
+| 3 | Documentation review | 1 |
+| **Total** | | **6-8 hours** |
 
 ---
 
-## Recommended Implementation Order
+## Communication
 
-### Phase 1: QA Completes Critical Test Fixes (Week 1)
+### QA Findings
 
-**QA Work** (12 hours):
-- Fix tool response status errors (10 tests)
-- Fix authorization checks (5 tests)
+Report issues via GitHub Issues with label `deployment`:
+- Workflow failures
+- Health check issues
+- Rollback problems
 
-**Why First**:
-- Unblocks CI pipeline (21 failing tests → 6 failing tests)
-- No dependency on incremental workflows
-- Provides stable test baseline
+### Completion Checkpoint
 
-### Phase 2: Dev Implements Service-Specific Workflows (Week 1)
-
-**Dev Work** (4 hours):
-- Create 7 service-specific workflows
-- Use existing `deploy-vps.yml` as template
-- Test with low-risk service (mcp-gateway logging change)
-
-**Why Second**:
-- QA has stable test baseline (critical tests fixed)
-- Dev can test workflows independently
-- No disruption to QA work
-
-**Checkpoint**: QA reviews and tests `deploy-mcp-hr.yml`
-
-### Phase 3: QA Adapts Tests, Dev Completes Workflows (Week 2)
-
-**QA Work** (6-7 hours):
-- Organize tests by service (4h)
-- Verify health checks (1h)
-- Test rollback scenarios (2h)
-
-**Dev Work** (20 hours):
-- Frontend deployment pipeline (8h)
-- Database migration workflows (8h)
-- Environment promotion (4h)
-
-**Why Parallel**:
-- Independent work (no file conflicts)
-- QA can provide feedback on health checks
-- Dev can incorporate feedback into remaining workflows
-
-### Phase 4: QA Validation (Week 3)
-
-**QA Work** (4 hours):
-- End-to-end test of incremental deployments
-- Validate rollback for each service
-- Document deployment procedures
-
-**Dev Work** (2 hours):
-- Fix issues found by QA
-- Update workflow documentation
+When QA testing complete, update this document with:
+- [ ] Test matrix results (Phase 1)
+- [ ] Integration verification results (Phase 2)
+- [ ] Any documentation updates needed (Phase 3)
 
 ---
 
-## Conclusion
+## References
 
-### Will Incremental Workflow Files Conflict with QA's CI/CD Work?
-
-**Answer**: ✅ **NO**
-
-**Rationale**:
-- QA is working on **ci.yml** (testing workflow)
-- Dev is creating **deploy-*.yml** (deployment workflows)
-- Different files, different concerns (testing ≠ deployment)
-
-### Will Incremental Workflows Require Additional QA Work?
-
-**Answer**: 🟡 **YES - MINIMAL (6-7 hours)**
-
-**Required QA Work**:
-1. Organize tests by service (4h)
-2. Verify health checks (1h)
-3. Test rollback scenarios (2h)
-
-**Not Required**:
-- ❌ Rewrite integration tests (existing tests work)
-- ❌ Change test framework (Jest continues to work)
-- ❌ Update CI workflow (ci.yml unchanged)
-
-### Recommended Approach
-
-**Timeline**: 3 weeks (phased parallel work)
-
-**Week 1**:
-- Days 1-3: QA fixes critical integration tests (12h)
-- Days 4-5: Dev implements service-specific workflows (4h)
-
-**Week 2**:
-- QA: Finishes test fixes (8-12h) + adapts for incremental (6-7h)
-- Dev: Frontend, migrations, promotion workflows (20h)
-
-**Week 3**:
-- QA: Validates incremental deployments (4h)
-- Dev: Fixes QA findings (2h)
-
-**Total Time**: 34-42 hours (optimized)
-
----
-
-**Next Steps**:
-1. ✅ **Confirm with QA Lead**: Verify timeline and coordination plan
-2. ✅ **Checkpoint Agreement**: QA completes critical tests before Dev starts workflows
-3. ✅ **Communication Channel**: Establish daily sync for Phase 2 (parallel work)
+- **Deployment Guide**: `docs/deployment/INCREMENTAL_DEPLOYMENT_GUIDE.md`
+- **Workflow Files**: `.github/workflows/deploy-*.yml`
+- **Health Check Docs**: `docs/architecture/overview.md`
+- **Issue #61**: Incremental Deployment Workflows
+- **Issue #62**: Keycloak Atomic Migration (blocker for automation)
 
 ---
 
 **Document Owner**: DevOps Team + QA Team
-**Review Required**: QA Lead approval
-**Decision Point**: Proceed with phased parallel approach?
+**Last Updated**: 2026-01-01
+**Next Review**: After QA completes Phase 1-3 testing
