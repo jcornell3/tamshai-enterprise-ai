@@ -550,7 +550,8 @@ jobs:
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_CLIENT_ID: mcp-gateway
           KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
-          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
           CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
           NODE_ENV: test
 
@@ -603,7 +604,8 @@ jobs:
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: changeme
           POSTGRES_DB: tamshai_hr
-          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
           NODE_ENV: test
 
       - name: Install MCP Finance dependencies
@@ -626,7 +628,8 @@ jobs:
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: changeme
           POSTGRES_DB: tamshai_finance
-          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
           NODE_ENV: test
 
       - name: Install MCP Sales dependencies
@@ -645,7 +648,8 @@ jobs:
           KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
           MONGODB_URL: mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin
-          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
           NODE_ENV: test
 
       - name: Install MCP Support dependencies
@@ -664,7 +668,8 @@ jobs:
           KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
           ELASTICSEARCH_URL: http://localhost:9201
-          REDIS_URL: redis://localhost:6379
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
           NODE_ENV: test
 
       - name: Wait for MCP Servers
