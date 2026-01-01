@@ -50,7 +50,7 @@
     * Configure connection pooling
 * [x] **MongoDB:**
     * Deploy MongoDB 7.0 on port 27018
-    * Create database: `tamshai_crm`
+    * Create database: `tamshai_sales`
     * Configure authentication
     * Set up collections for sales data
 * [x] **Elasticsearch:**

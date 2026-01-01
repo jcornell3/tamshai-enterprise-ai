@@ -21,7 +21,7 @@
 - [x] Add PostgreSQL service to docker-compose.yml (port 5433). [P]
 - [x] Create initialization script for databases: keycloak, tamshai_hr, tamshai_finance. [P]
 - [x] Add MongoDB service to docker-compose.yml (port 27018). [P]
-- [x] Configure MongoDB authentication and create tamshai_crm database. [P]
+- [x] Configure MongoDB authentication and create tamshai_sales database. [P]
 - [x] Add Elasticsearch service to docker-compose.yml (port 9201). [P]
 - [x] Create index mappings for support_tickets and knowledge_base. [P]
 - [x] Add Redis service to docker-compose.yml (port 6380). [P]

@@ -25,7 +25,7 @@ No MCP tools are exposed in this phase. This is pure infrastructure setup.
 - [x] Test users (Alice, Bob, Eve, Carol, Dan, Nina, Marcus, Frank) can log in
 - [x] Redis is available for token revocation
 - [x] PostgreSQL databases initialized (keycloak, tamshai_hr, tamshai_finance)
-- [x] MongoDB initialized with tamshai_crm database
+- [x] MongoDB initialized with tamshai_sales database
 - [x] Elasticsearch initialized with support indices
 - [x] MinIO initialized with finance-docs and public-docs buckets
 - [x] Kong Gateway accessible at `localhost:8100`

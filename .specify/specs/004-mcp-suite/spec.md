@@ -232,7 +232,7 @@ USING (...);
 * **Four MCP Servers:** HR, Finance, Sales, Support
 * **Data Sources:**
   - PostgreSQL: HR and Finance data (with `hr.` and `finance.` schemas)
-  - MongoDB: Sales/CRM data (database: `tamshai_crm`)
+  - MongoDB: Sales/CRM data (database: `tamshai_sales`)
   - Elasticsearch: Support tickets and knowledge base
 * **Authentication:** JWT validation from MCP Gateway
 * **Authorization:** RLS policies + application-level filtering
