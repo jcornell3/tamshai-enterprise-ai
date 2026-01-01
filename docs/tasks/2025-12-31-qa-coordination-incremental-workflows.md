@@ -313,11 +313,62 @@ When QA testing complete, update this document with:
 **Last Updated**: 2026-01-01 (Bootstrap VPS Workflow Added)
 **Next Review**: QA can proceed with Phases 1-2 via GitHub Actions (no SSH required)
 
-### QA Summary (Updated 2026-01-01 22:20 UTC)
+### QA Summary (Updated 2026-01-01 22:35 UTC)
 - ✅ Phase 3 (Documentation Review): **Complete**
 - ✅ Phase 1.1 (Manual Trigger Testing): **Complete - 6/6 services deployed successfully**
 - ✅ Phase 1.3 (Rollback Testing): **Complete - Rollback works after bug fix (bdd9009)**
-- 🟡 Phase 2 (Integration Verification): **BLOCKED - DNS/Cloudflare not configured**
+- 🔴 Phase 2 (Integration Verification): **BLOCKED - JWT Audience Configuration Issue**
+
+### Phase 2 Integration Test Results (2026-01-01 22:35 UTC)
+
+**Test Environment**:
+- VPS IP: `5.78.159.29`
+- DNS: `staging-api.tamshai.com` (not yet propagated, tested via IP)
+- Protocol: HTTP (HTTPS requires domain for Let's Encrypt)
+
+**Phase 2.1 - Keycloak Token Acquisition**: ✅ **PASSED**
+```
+Endpoint: POST http://5.78.159.29/auth/realms/tamshai-corp/protocol/openid-connect/token
+User: alice.chen (HR role)
+Result: Access token obtained successfully
+Token expires_in: 300 seconds
+```
+
+**Phase 2.2 - MCP Gateway API Call**: 🔴 **FAILED**
+```
+Endpoint: POST http://5.78.159.29/api/query
+Authorization: Bearer <valid_token>
+Payload: {"query": "list employees", "limit": 5}
+Response: 401 Unauthorized - {"error":"Invalid or expired token"}
+```
+
+**Root Cause Analysis**:
+1. Decoded JWT token shows **no `aud` (audience) claim**
+2. MCP Gateway's JWT validation expects: `audience: ['mcp-gateway', 'account']`
+3. Without matching audience, token validation fails
+
+**Token Payload (decoded)**:
+```json
+{
+  "iss": "https://5.78.159.29/auth/realms/tamshai-corp",
+  "azp": "mcp-gateway",
+  "aud": undefined,  // <-- MISSING
+  "realm_access": {"roles": ["hr-write", "manager", "hr-read"]}
+}
+```
+
+**Fix Required (Dev Team)**:
+Add audience mapper to `mcp-gateway` client in Keycloak:
+1. Keycloak Admin → Clients → `mcp-gateway` → Client Scopes → Dedicated scope
+2. Add mapper: Type = "Audience", Included Client Audience = `mcp-gateway`
+3. Or: Update `keycloak/realm-export-dev.json` with audience protocol mapper
+
+**Workaround Options**:
+1. Add audience mapper via Keycloak Admin Console on VPS
+2. Modify MCP Gateway to accept tokens without audience (not recommended - security risk)
+3. Redeploy Keycloak with updated realm export
+
+**Status**: Waiting for Dev to fix Keycloak client configuration
 
 ### Workflow Fixes Applied (2026-01-01 17:45 UTC)
 
