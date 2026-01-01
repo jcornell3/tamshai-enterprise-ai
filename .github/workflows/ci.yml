@@ -384,6 +384,21 @@ jobs:
           sudo sysctl -w vm.max_map_count=262144
           echo "✅ Set vm.max_map_count=262144 (required for Elasticsearch)"
 
+      - name: Start Elasticsearch
+        run: |
+          docker run -d \
+            --name elasticsearch \
+            -p 9201:9200 \
+            -e discovery.type=single-node \
+            -e xpack.security.enabled=false \
+            -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
+            docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+
+          # Wait for Elasticsearch using built-in health command (up to 3 minutes)
+          echo "Waiting for Elasticsearch to start..."
+          timeout 180 bash -c 'until docker exec elasticsearch /usr/share/elasticsearch/bin/elasticsearch-node health 2>/dev/null; do echo "Waiting..."; sleep 5; done'
+          echo "✅ Elasticsearch is ready"
+
       - name: Create additional PostgreSQL databases
         run: |
           # Wait for postgres-mcp service to be ready
