@@ -404,9 +404,12 @@ jobs:
           # Wait for postgres-mcp service to be ready
           timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai -d tamshai_hr; do sleep 1; done'
 
+          # Create tamshai database (main database for integration tests)
+          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr -c "CREATE DATABASE tamshai OWNER tamshai;"
+          echo "✅ Created tamshai database"
+
           # Create tamshai_finance database
           PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr -c "CREATE DATABASE tamshai_finance;"
-
           echo "✅ Created tamshai_finance database"
 
       - name: Load sample data
