@@ -394,9 +394,9 @@ jobs:
             -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
             docker.elastic.co/elasticsearch/elasticsearch:8.11.0
 
-          # Wait for Elasticsearch using built-in health command (up to 3 minutes)
+          # Wait for Elasticsearch using TCP socket check (up to 3 minutes)
           echo "Waiting for Elasticsearch to start..."
-          timeout 180 bash -c 'until docker exec elasticsearch /usr/share/elasticsearch/bin/elasticsearch-node health 2>/dev/null; do echo "Waiting..."; sleep 5; done'
+          timeout 180 bash -c 'until docker exec elasticsearch timeout 1 bash -c "</dev/tcp/localhost/9200" 2>/dev/null; do echo "Waiting..."; sleep 5; done'
           echo "✅ Elasticsearch is ready"
 
       - name: Create additional PostgreSQL databases
