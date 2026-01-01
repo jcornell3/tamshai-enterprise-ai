@@ -53,7 +53,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        if: ${{ !github.event.inputs.rollback }}
+        if: ${{ github.event.inputs.rollback != 'true' }}
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
       - name: Setup SSH
@@ -68,7 +68,7 @@ jobs:
           ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
 
       - name: Deploy Kong Gateway
-        if: ${{ !github.event.inputs.rollback }}
+        if: ${{ github.event.inputs.rollback != 'true' }}
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -97,7 +97,7 @@ jobs:
           EOF
 
       - name: Rollback Kong Gateway
-        if: ${{ github.event.inputs.rollback }}
+        if: ${{ github.event.inputs.rollback == 'true' }}
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
