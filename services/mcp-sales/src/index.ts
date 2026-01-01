@@ -167,7 +167,18 @@ async function getCustomer(input: any, userContext: UserContext): Promise<MCPToo
       return handleCustomerNotFound(customerId);
     }
 
-    return createSuccessResponse(customer);
+    // Convert ObjectId to string and ensure contacts array ObjectIds are also converted
+    const customerData = {
+      ...customer,
+      _id: customer._id.toString(),
+      id: customer._id.toString(), // Add id field for consistency
+      contacts: customer.contacts?.map((contact: any) => ({
+        ...contact,
+        _id: contact._id?.toString(),
+      })) || [],
+    };
+
+    return createSuccessResponse(customerData);
   }) as Promise<MCPToolResponse<any>>;
 }
 

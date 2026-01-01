@@ -272,12 +272,17 @@ async function getKnowledgeArticle(input: any, userContext: UserContext): Promis
   try {
     const { articleId } = GetKnowledgeArticleInputSchema.parse(input);
 
-    const result = await esClient.get({
+    // Search by kb_id field (not Elasticsearch document _id)
+    const result = await esClient.search({
       index: 'knowledge_base',
-      id: articleId,
+      body: {
+        query: {
+          term: { kb_id: articleId }
+        }
+      }
     });
 
-    if (!result.found) {
+    if (result.hits.hits.length === 0) {
       return createErrorResponse(
         'ARTICLE_NOT_FOUND',
         `Knowledge base article with ID ${articleId} not found.`,
@@ -285,16 +290,13 @@ async function getKnowledgeArticle(input: any, userContext: UserContext): Promis
       );
     }
 
-    const article = { id: result._id, ...(result._source as Record<string, any>) };
+    const hit = result.hits.hits[0];
+    const article = {
+      id: hit._id,
+      ...(hit._source as Record<string, any>)
+    };
     return createSuccessResponse(article);
   } catch (error: any) {
-    if (error.meta?.body?.found === false) {
-      return createErrorResponse(
-        'ARTICLE_NOT_FOUND',
-        `Knowledge base article with ID ${input.articleId} not found.`,
-        'Use search_knowledge_base tool to find relevant articles, or verify the article ID is correct.'
-      );
-    }
     logger.error('get_knowledge_article error:', error);
     return createErrorResponse('DATABASE_ERROR', 'Failed to get knowledge article', 'Please try again or contact support', { errorMessage: error.message });
   }
