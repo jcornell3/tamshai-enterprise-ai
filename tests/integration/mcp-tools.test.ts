@@ -10,6 +10,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
+import { fail } from 'assert';
 
 // Test configuration
 // Use 127.0.0.1 instead of localhost for Windows compatibility

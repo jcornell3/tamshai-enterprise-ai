@@ -19,6 +19,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
+import { fail } from 'assert';
 
 // Test configuration
 // Ports configured to avoid conflicts with existing MCP dev environment (8443, 172.28.0.0/16)
