@@ -328,11 +328,11 @@ When QA testing complete, update this document with:
    - Protected by fail2ban (3 failed attempts = 1-hour ban)
    - SSH key authentication only (no passwords)
 
-3. ⏳ **Pending**: Run `terraform apply` to update Hetzner firewall
+3. ✅ **Complete**: Terraform applied - Hetzner firewall updated
 
 **Security Documentation**: See `docs/security/VAULT_SSH_SECRETS_ENGINE.md` for long-term solution using short-lived certificates.
 
-**Status**: QA can proceed with Phase 1-2 testing after Terraform apply completes.
+**Status**: ✅ QA can proceed with Phase 1-2 testing immediately.
 
 ---
 
