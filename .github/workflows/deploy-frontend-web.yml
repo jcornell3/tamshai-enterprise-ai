@@ -1,0 +1,134 @@
+# Incremental Deployment: Web Frontend (Static Assets)
+#
+# This workflow builds and deploys the React/Vue web frontend
+# as static assets to Cloudflare Pages or CDN.
+#
+# Strategy:
+#   1. Build web app (npm run build)
+#   2. Deploy to Cloudflare Pages
+#   3. Invalidate cache
+#   4. No downtime (CDN serves new version immediately)
+#
+# Deployment Time: 2-3 minutes
+# Downtime: 0 seconds (CDN cutover)
+
+name: Deploy Frontend - Web App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/web/**'
+      - '.github/workflows/deploy-frontend-web.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: 'staging'
+
+concurrency:
+  group: deploy-frontend-web-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+  NODE_VERSION: '20'
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Web Frontend
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: clients/web
+        run: npm ci
+
+      - name: Build web app (Staging)
+        if: env.ENVIRONMENT == 'staging'
+        working-directory: clients/web
+        env:
+          VITE_API_URL: https://staging-api.tamshai.com
+          VITE_KEYCLOAK_URL: https://staging-auth.tamshai.com
+        run: npm run build
+
+      - name: Build web app (Production)
+        if: env.ENVIRONMENT == 'production'
+        working-directory: clients/web
+        env:
+          VITE_API_URL: https://api.tamshai.com
+          VITE_KEYCLOAK_URL: https://auth.tamshai.com
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages (Staging)
+        if: env.ENVIRONMENT == 'staging'
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: tamshai-web-staging
+          directory: clients/web/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to Cloudflare Pages (Production)
+        if: env.ENVIRONMENT == 'production'
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: tamshai-web-production
+          directory: clients/web/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+      - name: Purge Cloudflare cache
+        if: env.ENVIRONMENT == 'production'
+        run: |
+          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CLOUDFLARE_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "## ✅ Web Frontend Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**App**: Web Frontend" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ env.ENVIRONMENT }}" == "staging" ]; then
+            echo "**URL**: https://tamshai-web-staging.pages.dev" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**URL**: https://app.tamshai.com" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Deployment failed
+        if: failure()
+        run: |
+          echo "## ❌ Web Frontend Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**App**: Web Frontend" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
