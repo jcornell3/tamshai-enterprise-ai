@@ -72,6 +72,7 @@ resource "google_compute_firewall" "allow_internal" {
 }
 
 # Allow HTTP/HTTPS from anywhere
+#checkov:skip=CKV_GCP_106:HTTP port 80 required for HTTPS redirect (Caddy/nginx). All traffic redirected to HTTPS.
 resource "google_compute_firewall" "allow_http" {
   name    = "tamshai-${var.environment}-allow-http"
   network = google_compute_network.vpc.name

@@ -2,6 +2,7 @@
 # Manages GCE instances for Keycloak and MCP Gateway
 
 # Keycloak Instance
+#checkov:skip=CKV_GCP_40:Public IP required for VPS web server access. Protected by firewall rules.
 resource "google_compute_instance" "keycloak" {
   name         = "tamshai-${var.environment}-keycloak"
   machine_type = var.machine_type_medium
@@ -24,6 +25,10 @@ resource "google_compute_instance" "keycloak" {
     access_config {
       # Ephemeral public IP
     }
+  }
+
+  metadata = {
+    block-project-ssh-keys = "true" # Security: Force instance-specific SSH keys (CKV_GCP_32)
   }
 
   # SECURITY: Startup script fetches secrets from Secret Manager at runtime
@@ -52,6 +57,7 @@ resource "google_compute_instance" "keycloak" {
 }
 
 # MCP Gateway Instance
+#checkov:skip=CKV_GCP_40:Public IP required for VPS web server access. Protected by firewall rules.
 resource "google_compute_instance" "mcp_gateway" {
   name         = "tamshai-${var.environment}-mcp-gateway"
   machine_type = var.machine_type
@@ -74,6 +80,10 @@ resource "google_compute_instance" "mcp_gateway" {
     access_config {
       # Ephemeral public IP
     }
+  }
+
+  metadata = {
+    block-project-ssh-keys = "true" # Security: Force instance-specific SSH keys (CKV_GCP_32)
   }
 
   # SECURITY: Startup script fetches secrets from Secret Manager at runtime

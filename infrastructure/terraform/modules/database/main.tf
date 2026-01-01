@@ -34,6 +34,7 @@ resource "google_sql_database_instance" "postgres" {
     ip_configuration {
       ipv4_enabled    = false # Use private IP only
       private_network = var.network_id
+      require_ssl     = true # Security: Enforce SSL for all connections (CKV_GCP_6)
     }
 
     backup_configuration {
@@ -59,6 +60,43 @@ resource "google_sql_database_instance" "postgres" {
     database_flags {
       name  = "log_disconnections"
       value = "on"
+    }
+
+    # Security: Enhanced audit logging for SOC 2 compliance (CKV2_GCP_13, CKV_GCP_54, CKV_GCP_108-111)
+    database_flags {
+      name  = "log_duration"
+      value = "on"
+    }
+
+    database_flags {
+      name  = "log_lock_waits"
+      value = "on"
+    }
+
+    database_flags {
+      name  = "log_hostname"
+      value = "on"
+    }
+
+    database_flags {
+      name  = "log_min_messages"
+      value = "ERROR"
+    }
+
+    database_flags {
+      name  = "log_statement"
+      value = "ddl" # Log DDL statements (CREATE, ALTER, DROP)
+    }
+
+    # pgAudit extension for comprehensive audit logging
+    database_flags {
+      name  = "cloudsql.enable_pgaudit"
+      value = "on"
+    }
+
+    database_flags {
+      name  = "pgaudit.log"
+      value = "ddl, write" # Log DDL and write operations (less verbose than "all")
     }
   }
 
