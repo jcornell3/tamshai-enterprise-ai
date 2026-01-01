@@ -40,7 +40,7 @@ export interface Employee {
   phone: string | null;
   hire_date: string;
   title: string;                 // Actual column: title (not job_title)
-  department_name: string | null; // Computed from JOIN with departments
+  department: string | null;      // Computed from JOIN with departments (d.name)
   department_id: string | null;  // Actual column: department_id (UUID FK)
   manager_id: string | null;
   manager_name: string | null;
@@ -80,7 +80,7 @@ export async function getEmployee(
           e.phone,
           e.hire_date::text as hire_date,
           e.title,
-          d.name as department_name,
+          d.name as department,
           e.department_id,
           e.manager_id,
           m.first_name || ' ' || m.last_name as manager_name,

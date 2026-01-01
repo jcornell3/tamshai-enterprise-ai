@@ -246,7 +246,7 @@ app.post('/query', async (req: Request, res: Response) => {
  */
 app.post('/tools/get_employee', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, employeeId } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -257,7 +257,7 @@ app.post('/tools/get_employee', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await getEmployee(input, userContext);
+    const result = await getEmployee({ employeeId }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('get_employee error:', error);
@@ -274,7 +274,7 @@ app.post('/tools/get_employee', async (req: Request, res: Response) => {
  */
 app.post('/tools/list_employees', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, department, location, managerId, limit, cursor } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -285,7 +285,7 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await listEmployees(input || {}, userContext);
+    const result = await listEmployees({ department, location, managerId, limit, cursor }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('list_employees error:', error);
@@ -302,7 +302,7 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
  */
 app.post('/tools/delete_employee', async (req: Request, res: Response) => {
   try {
-    const { input, userContext } = req.body;
+    const { userContext, employeeId } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -313,7 +313,7 @@ app.post('/tools/delete_employee', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await deleteEmployee(input, userContext);
+    const result = await deleteEmployee({ employeeId }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('delete_employee error:', error);

@@ -142,7 +142,7 @@ export async function listEmployees(
   e.phone,
   e.hire_date::text as hire_date,
   e.title,
-  d.name as department_name,
+  d.name as department,
   e.department_id,
   e.manager_id,
   m.first_name || ' ' || m.last_name as manager_name,
