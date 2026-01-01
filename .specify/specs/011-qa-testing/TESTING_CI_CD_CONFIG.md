@@ -1,7 +1,7 @@
 # Testing CI/CD Configuration - Tamshai Enterprise AI
 
-**Document Version:** 1.0
-**Last Updated:** December 2025
+**Document Version:** 1.1
+**Last Updated:** January 2026
 **Status:** Active
 
 ---
@@ -210,11 +210,11 @@ env:
   REDIS_PORT: 6379
 ```
 
-**Test Files:**
+**Test Files (96 tests total, 89 passed, 7 skipped):**
 - `rbac.test.ts` - Role-based access control flows
-- `mcp-tools.test.ts` - MCP tool integration
-- `query-scenarios.test.ts` - Query handling scenarios
-- `sse-streaming.test.ts` - SSE response streaming
+- `mcp-tools.test.ts` - MCP tool integration (19 tools)
+- `query-scenarios.test.ts` - Query handling and cursor-based pagination
+- `sse-streaming.test.ts` - SSE response streaming and error handling
 
 **Configuration:**
 - `jest.config.js` in `tests/integration/`

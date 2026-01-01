@@ -1,7 +1,7 @@
 # Test Coverage Strategy - Tamshai Enterprise AI
 
-**Document Version:** 1.0
-**Last Updated:** December 2025
+**Document Version:** 1.1
+**Last Updated:** January 2026
 **Status:** Active
 
 ---
@@ -127,12 +127,13 @@ This document explains our test coverage strategy, current baselines, rationale 
 ### 1.5 Integration Tests
 
 **Coverage:** N/A (functional coverage, not line coverage)
+**Status:** ✅ All tests passing (CI run 20642174604)
 
-**Test Files:**
+**Test Files (96 tests total, 89 passed, 7 skipped):**
 - `rbac.test.ts` - Role-based access control
-- `mcp-tools.test.ts` - MCP tool integration
-- `query-scenarios.test.ts` - Query handling
-- `sse-streaming.test.ts` - SSE streaming
+- `mcp-tools.test.ts` - MCP tool integration (19 tools)
+- `query-scenarios.test.ts` - Query handling, cursor-based pagination (59 employees)
+- `sse-streaming.test.ts` - SSE streaming, cross-platform error handling
 
 **Purpose:** Verify system behavior, not code execution paths
 
