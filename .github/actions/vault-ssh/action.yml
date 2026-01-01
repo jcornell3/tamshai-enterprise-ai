@@ -81,10 +81,13 @@ runs:
       id: vault-auth
       shell: bash
       env:
-        VAULT_ADDR: ${{ inputs.vault-addr }}
+        VAULT_ADDR_RAW: ${{ inputs.vault-addr }}
         OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         VAULT_ROLE: ${{ inputs.vault-role }}
       run: |
+        # Trim whitespace from VAULT_ADDR
+        VAULT_ADDR=$(echo "$VAULT_ADDR_RAW" | tr -d '[:space:]')
+
         # Authenticate to Vault using GitHub OIDC
         VAULT_RESPONSE=$(curl -sS --insecure -X POST \
           "$VAULT_ADDR/v1/auth/jwt/login" \
@@ -107,11 +110,14 @@ runs:
       id: sign
       shell: bash
       env:
-        VAULT_ADDR: ${{ inputs.vault-addr }}
+        VAULT_ADDR_RAW: ${{ inputs.vault-addr }}
         VAULT_TOKEN: ${{ steps.vault-auth.outputs.token }}
         SSH_ROLE: ${{ inputs.ssh-role }}
         SSH_USER: ${{ inputs.ssh-user }}
       run: |
+        # Trim whitespace from VAULT_ADDR
+        VAULT_ADDR=$(echo "$VAULT_ADDR_RAW" | tr -d '[:space:]')
+
         # Read public key
         PUBLIC_KEY=$(cat ~/.ssh/id_ed25519.pub)
 
