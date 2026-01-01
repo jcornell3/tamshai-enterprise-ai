@@ -85,26 +85,21 @@ Test each service workflow via GitHub Actions:
 GitHub → Actions → [Workflow Name] → Run workflow
 ```
 
-**Test Matrix**:
+**Test Matrix** (verify via GitHub Actions workflow summary):
 
-| Workflow | Manual Trigger | Health Check | Status |
-|----------|----------------|--------------|--------|
-| deploy-mcp-gateway | ⬜ | `curl http://<staging>:3100/health` | ⬜ |
-| deploy-mcp-hr | ⬜ | `curl http://<staging>:3101/health` | ⬜ |
-| deploy-mcp-finance | ⬜ | `curl http://<staging>:3102/health` | ⬜ |
-| deploy-mcp-sales | ⬜ | `curl http://<staging>:3103/health` | ⬜ |
-| deploy-mcp-support | ⬜ | `curl http://<staging>:3104/health` | ⬜ |
-| deploy-kong | ⬜ | `curl http://<staging>:8100/api/health` | ⬜ |
-| deploy-keycloak | ⬜ | `curl http://<staging>:8180/health/ready` | ⬜ |
+| Workflow | Trigger | Expected Result | Status |
+|----------|---------|-----------------|--------|
+| deploy-mcp-gateway | ⬜ | "✅ MCP Gateway is healthy" in logs | ⬜ |
+| deploy-mcp-hr | ⬜ | "✅ MCP HR is healthy" in logs | ⬜ |
+| deploy-mcp-finance | ⬜ | "✅ MCP Finance is healthy" in logs | ⬜ |
+| deploy-mcp-sales | ⬜ | "✅ MCP Sales is healthy" in logs | ⬜ |
+| deploy-mcp-support | ⬜ | "✅ MCP Support is healthy" in logs | ⬜ |
+| deploy-kong | ⬜ | "✅ Kong Gateway is healthy" in logs | ⬜ |
+| deploy-keycloak | ⬜ | "✅ Keycloak is healthy" in logs | ⬜ |
 
-**Expected Health Response**:
-```json
-{
-  "status": "healthy",
-  "service": "<service-name>",
-  "timestamp": "2026-01-01T..."
-}
-```
+**Verification Method**: GitHub Actions → [Workflow Run] → "Deployment summary" step
+
+> **Note**: Health check endpoints (ports 3100-3104) are internal only. Workflows verify health via SSH and report results in the GitHub Actions step summary. See "Access Model Clarification" section below for details.
 
 #### 1.2 Path-Based Trigger Testing
 
@@ -143,34 +138,49 @@ Test rollback functionality for at least 2 services:
 
 ### Phase 2: Integration Verification (2-3 hours)
 
+> **Note**: Use the **public HTTPS endpoints** (via Cloudflare/Caddy), not internal ports.
+
 #### 2.1 Cross-Service Communication
 
-After incremental deployment, verify services can still communicate:
+After incremental deployment, verify services can still communicate via public API:
 
 ```bash
-# Test MCP Gateway can route to MCP HR
-curl -X POST http://<staging>:3100/api/query \
-  -H "Authorization: Bearer <token>" \
+# Get token from public Keycloak endpoint
+TOKEN=$(curl -X POST https://<domain>/auth/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-gateway" \
+  -d "client_secret=<secret>" \
+  -d "username=alice.chen@tamshai.local" \
+  -d "password=<password>" \
+  -d "grant_type=password" | jq -r '.access_token')
+
+# Test MCP Gateway can route to MCP HR (via public /api/* path)
+curl -X POST https://<domain>/api/query \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query": "list employees", "userContext": {...}}'
+  -d '{"query": "list employees", "limit": 5}'
 ```
+
+**Expected Response**: JSON with employee data (proves Gateway → HR routing works)
 
 #### 2.2 JWT Validation Still Works
 
 Verify Keycloak integration after incremental Keycloak deployment:
 
 ```bash
-# Get token from Keycloak
-TOKEN=$(curl -X POST http://<staging>:8180/realms/tamshai-corp/protocol/openid-connect/token \
+# Get token (same as above)
+TOKEN=$(curl -X POST https://<domain>/auth/realms/tamshai-corp/protocol/openid-connect/token \
   -d "client_id=mcp-gateway" \
   -d "client_secret=<secret>" \
-  -d "username=alice@tamshai.local" \
+  -d "username=alice.chen@tamshai.local" \
   -d "password=<password>" \
   -d "grant_type=password" | jq -r '.access_token')
 
-# Use token with MCP Gateway
-curl http://<staging>:3100/health -H "Authorization: Bearer $TOKEN"
+# Verify token works with MCP Gateway API
+curl -X POST https://<domain>/api/user-info \
+  -H "Authorization: Bearer $TOKEN"
 ```
+
+**Expected Response**: User info with roles, accessible data sources
 
 ### Phase 3: Documentation Review (1 hour)
 
@@ -226,7 +236,17 @@ GitHub → Actions → "Promote Staging to Production" → Run workflow
 
 ## Known Limitations
 
-### 1. Keycloak Atomic Migration Not Complete
+### 1. No Direct SSH Access (By Design)
+
+**Status**: ✅ Intentional security hardening
+
+**Details**: SSH access is restricted to IP whitelist (`allowed_ssh_ips` in Terraform). Default is empty = no SSH.
+
+**Impact**: QA cannot directly SSH to VPS to run commands.
+
+**Workaround**: All testing done via GitHub Actions UI (see "Access Model Clarification" section).
+
+### 2. Keycloak Atomic Migration Not Complete
 
 **Issue**: #62
 
@@ -234,14 +254,11 @@ GitHub → Actions → "Promote Staging to Production" → Run workflow
 
 **Workaround**: Test on existing staging environment (Keycloak already configured).
 
-### 2. Sample Data Seeding Not Automated
+### 3. Sample Data Seeding Not Automated
 
 **Impact**: New environments won't have 59 employees automatically.
 
-**Workaround**: Manually run sample data SQL after deployment:
-```bash
-PGPASSWORD=<password> psql -h <host> -p 5433 -U tamshai -d tamshai_hr < sample-data/hr-data.sql
-```
+**Workaround**: Manually run sample data SQL after deployment (requires SSH access or database migration workflow).
 
 ---
 
@@ -288,10 +305,79 @@ When QA testing complete, update this document with:
 ---
 
 **Document Owner**: DevOps Team + QA Team
-**Last Updated**: 2026-01-01 (QA Verification Complete)
-**Next Review**: Phase 1.1-1.3 require staging environment access for live testing
+**Last Updated**: 2026-01-01 (Access Model Clarification Added)
+**Next Review**: QA can proceed with Phases 1-2 via GitHub Actions (no SSH required)
 
 ### QA Summary
 - ✅ Phase 3 (Documentation Review): **Complete**
-- ⏸️ Phase 1 (Workflow Validation): Requires staging environment access
-- ⏸️ Phase 2 (Integration Verification): Requires staging environment access
+- ✅ Phase 1 (Workflow Validation): **Can proceed via GitHub Actions** (no SSH needed)
+- ✅ Phase 2 (Integration Verification): **Can proceed via GitHub Actions** (no SSH needed)
+
+---
+
+## Access Model Clarification (Updated 2026-01-01)
+
+### Why No Direct SSH Access?
+
+Per security hardening (VPS Firewall Justification), SSH is restricted to a whitelist of IPs (`allowed_ssh_ips`). This is intentional:
+
+- **GitHub Actions has SSH access** via `VPS_SSH_KEY` secret (for deployment workflows)
+- **Direct human SSH access is disabled** by default (no IPs in whitelist)
+- **Health check endpoints are internal** (ports 3100-3104 not publicly exposed)
+
+### How QA Tests Without SSH
+
+**All testing can be done through GitHub Actions UI:**
+
+| Action | How To Do It |
+|--------|--------------|
+| Trigger deployment | GitHub → Actions → [Workflow] → "Run workflow" |
+| View health check results | Check workflow run's "Deployment summary" step |
+| Verify success/failure | Green checkmark = success, red X = failure |
+| Check rollback | Workflow summary shows "Auto-rollback performed" if health check failed |
+| View logs | Click on workflow run → "Deploy [Service]" step for full output |
+
+### What's Publicly Accessible (via Caddy)
+
+Only these paths are exposed through Cloudflare/Caddy:
+
+| Public Path | Internal Service | Notes |
+|-------------|------------------|-------|
+| `https://<domain>/auth/*` | Keycloak (8080) | Authentication |
+| `https://<domain>/api/*` | MCP Gateway (3100) | AI API |
+| `https://<domain>/` | Website | Corporate site |
+
+**Health endpoints (localhost:3100/health, etc.) are NOT publicly accessible.** The workflows verify health internally via SSH and report results in GitHub Actions summaries.
+
+### Revised Test Procedures
+
+**Phase 1.1 - Manual Trigger Testing:**
+1. Go to GitHub → Actions → "Deploy MCP Gateway"
+2. Click "Run workflow" → Select "staging" → Run
+3. Wait for workflow to complete (~2 minutes)
+4. Check ✅/❌ status and read "Deployment summary" step
+5. Expected: "✅ MCP Gateway Deployment Successful" with "Health Check: PASSED"
+
+**Phase 1.3 - Rollback Testing:**
+1. Go to GitHub → Actions → "Deploy MCP Gateway"
+2. Click "Run workflow" → Check "Rollback to previous version" → Run
+3. Wait for workflow to complete
+4. Expected: "✅ Rollback successful" in logs
+
+**Phase 2 - Integration Verification:**
+Use the public API endpoint to verify services work:
+```bash
+# Get token from public Keycloak endpoint
+TOKEN=$(curl -X POST https://<domain>/auth/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-gateway" \
+  -d "client_secret=<secret>" \
+  -d "username=alice.chen@tamshai.local" \
+  -d "password=<password>" \
+  -d "grant_type=password" | jq -r '.access_token')
+
+# Test MCP Gateway through public API
+curl -X POST https://<domain>/api/query \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "list employees", "limit": 5}'
+```
