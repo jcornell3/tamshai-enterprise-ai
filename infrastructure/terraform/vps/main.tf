@@ -338,6 +338,15 @@ resource "hcloud_firewall" "tamshai" {
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
+  # Vault HTTPS API - required for GitHub Actions OIDC authentication
+  # before SSH certificates can be obtained
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "8200"
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
+
   dynamic "rule" {
     for_each = length(var.allowed_ssh_ips) > 0 ? [1] : []
     content {
