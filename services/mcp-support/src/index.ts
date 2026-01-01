@@ -48,6 +48,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Authorization helper - checks if user has Support access
+function hasSupportAccess(roles: string[]): boolean {
+  return roles.some(role =>
+    role === 'support-read' ||
+    role === 'support-write' ||
+    role === 'executive'
+  );
+}
+
 // =============================================================================
 // HEALTH CHECK
 // =============================================================================
@@ -469,6 +478,18 @@ app.post('/tools/search_tickets', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Support access
+  if (!hasSupportAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Support access permissions.',
+    });
+    return;
+  }
+
   const result = await searchTickets({ query, status, priority, assignedTo, limit, cursor }, userContext);
   res.json(result);
 });
@@ -479,6 +500,18 @@ app.post('/tools/search_knowledge_base', async (req: Request, res: Response) => 
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Support access
+  if (!hasSupportAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Support access permissions.',
+    });
+    return;
+  }
+
   const result = await searchKnowledgeBase({ query, category, limit, cursor }, userContext);
   res.json(result);
 });
@@ -489,6 +522,18 @@ app.post('/tools/get_knowledge_article', async (req: Request, res: Response) => 
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Support access
+  if (!hasSupportAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Support access permissions.',
+    });
+    return;
+  }
+
   const result = await getKnowledgeArticle({ articleId }, userContext);
   res.json(result);
 });
@@ -499,6 +544,18 @@ app.post('/tools/close_ticket', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Support access
+  if (!hasSupportAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Support access permissions.',
+    });
+    return;
+  }
+
   const result = await closeTicket({ ticketId, resolution }, userContext);
   res.json(result);
 });

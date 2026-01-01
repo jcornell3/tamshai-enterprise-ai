@@ -42,6 +42,17 @@ const logger = winston.createLogger({
 const app = express();
 const PORT = parseInt(process.env.PORT || '3101');
 
+// Authorization helper - checks if user has HR access
+function hasHRAccess(roles: string[]): boolean {
+  return roles.some(role =>
+    role === 'hr-read' ||
+    role === 'hr-write' ||
+    role === 'executive' ||
+    role === 'manager' ||
+    role === 'user'  // Users can see their own data via RLS
+  );
+}
+
 // Middleware
 app.use(express.json());
 
@@ -262,6 +273,17 @@ app.post('/tools/get_employee', async (req: Request, res: Response) => {
       return;
     }
 
+    // Authorization check - must have HR access
+    if (!hasHRAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires HR access (hr-read, hr-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request HR access permissions.',
+      });
+      return;
+    }
+
     const result = await getEmployee({ employeeId }, userContext);
     res.json(result);
   } catch (error) {
@@ -286,6 +308,17 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have HR access
+    if (!hasHRAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires HR access (hr-read, hr-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request HR access permissions.',
       });
       return;
     }

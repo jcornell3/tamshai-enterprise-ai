@@ -38,6 +38,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Authorization helper - checks if user has Sales access
+function hasSalesAccess(roles: string[]): boolean {
+  return roles.some(role =>
+    role === 'sales-read' ||
+    role === 'sales-write' ||
+    role === 'executive'
+  );
+}
+
 // =============================================================================
 // HEALTH CHECK
 // =============================================================================
@@ -531,6 +540,18 @@ app.post('/tools/list_opportunities', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
   const result = await listOpportunities({ stage, status, limit, cursor }, userContext);
   res.json(result);
 });
@@ -541,6 +562,18 @@ app.post('/tools/get_customer', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
   const result = await getCustomer({ customerId }, userContext);
   res.json(result);
 });
@@ -551,6 +584,18 @@ app.post('/tools/delete_opportunity', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
   const result = await deleteOpportunity({ opportunityId }, userContext);
   res.json(result);
 });
@@ -561,6 +606,18 @@ app.post('/tools/close_opportunity', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
   const result = await closeOpportunity({ opportunityId, outcome, reason }, userContext);
   res.json(result);
 });
@@ -571,6 +628,18 @@ app.post('/tools/delete_customer', async (req: Request, res: Response) => {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
   const result = await deleteCustomer({ customerId, reason }, userContext);
   res.json(result);
 });
