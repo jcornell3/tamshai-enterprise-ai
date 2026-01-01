@@ -41,6 +41,7 @@ env:
 permissions:
   contents: read
   deployments: write
+  id-token: write  # Required for Vault OIDC authentication
 
 jobs:
   deploy:
@@ -53,16 +54,11 @@ jobs:
         if: ${{ github.event.inputs.rollback != 'true' }}
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup SSH
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+      - name: Setup Vault SSH
+        uses: ./.github/actions/vault-ssh
+        with:
+          vault-addr: ${{ secrets.VAULT_ADDR }}
+          vps-host: ${{ secrets.VPS_HOST }}
 
       - name: Deploy MCP Sales
         if: ${{ github.event.inputs.rollback != 'true' }}

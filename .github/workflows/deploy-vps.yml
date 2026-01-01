@@ -62,10 +62,11 @@ env:
   BUILD_FLAG: ${{ github.event.inputs.build && '--build' || '' }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
-# Minimal permissions - deployment uses SSH, not GitHub token
+# Minimal permissions - deployment uses SSH via Vault certificates
 permissions:
   contents: read
   deployments: write
+  id-token: write  # Required for Vault OIDC authentication
   packages: none
   statuses: write
   actions: none
@@ -99,8 +100,8 @@ jobs:
             echo "should_deploy=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
-            echo "::warning::VPS_SSH_KEY secret is not configured - skipping deployment"
+          if [ -z "${{ secrets.VAULT_ADDR }}" ]; then
+            echo "::warning::VAULT_ADDR secret is not configured - skipping deployment"
             echo "should_deploy=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -180,12 +181,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      - name: Setup Vault SSH
+        uses: ./.github/actions/vault-ssh
+        with:
+          vault-addr: ${{ secrets.VAULT_ADDR }}
+          vps-host: ${{ secrets.VPS_HOST }}
 
       - name: Deploy to VPS
         env:
@@ -197,8 +197,7 @@ jobs:
           echo "   Branch: $DEPLOY_BRANCH"
           echo "   Build: $BUILD_FLAG"
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
-            $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
+          ssh -o ConnectTimeout=30 $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
           set -e
 
           cd /opt/tamshai

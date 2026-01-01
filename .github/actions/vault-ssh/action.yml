@@ -1,0 +1,161 @@
+# Vault SSH Certificate Authentication
+#
+# This composite action authenticates with HashiCorp Vault using GitHub OIDC
+# and obtains a signed SSH certificate for VPS access.
+#
+# Benefits over static SSH keys:
+#   - Short-lived certificates (10 minutes TTL)
+#   - No long-lived secrets to rotate
+#   - Full audit trail in Vault
+#   - Automatic revocation on token expiry
+#
+# Prerequisites:
+#   - Vault configured with SSH Secrets Engine
+#   - Vault JWT auth configured for GitHub OIDC
+#   - VPS configured to trust Vault CA
+#
+# Usage:
+#   - uses: ./.github/actions/vault-ssh
+#     with:
+#       vault-addr: ${{ secrets.VAULT_ADDR }}
+#       vps-host: ${{ secrets.VPS_HOST }}
+
+name: 'Vault SSH Authentication'
+description: 'Authenticate with Vault and obtain signed SSH certificate'
+
+inputs:
+  vault-addr:
+    description: 'Vault server address (e.g., https://vault.example.com:8200)'
+    required: true
+  vps-host:
+    description: 'VPS hostname or IP for SSH host key verification'
+    required: true
+  vault-role:
+    description: 'Vault JWT role name'
+    required: false
+    default: 'github-deploy'
+  ssh-role:
+    description: 'Vault SSH signing role name'
+    required: false
+    default: 'github-deploy'
+  ssh-user:
+    description: 'SSH username for certificate'
+    required: false
+    default: 'root'
+
+outputs:
+  ssh-ready:
+    description: 'Whether SSH is ready to use'
+    value: ${{ steps.sign.outputs.ready }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate ephemeral SSH key
+      id: keygen
+      shell: bash
+      run: |
+        # Generate a fresh key pair for this deployment
+        ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "github-deploy-$(date +%s)"
+        chmod 600 ~/.ssh/id_ed25519
+        echo "Generated ephemeral SSH key"
+
+    - name: Get GitHub OIDC token
+      id: oidc
+      shell: bash
+      run: |
+        # Request OIDC token from GitHub
+        OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/jcornell3" | jq -r '.value')
+
+        if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
+          echo "::error::Failed to get GitHub OIDC token"
+          exit 1
+        fi
+
+        echo "::add-mask::$OIDC_TOKEN"
+        echo "token=$OIDC_TOKEN" >> $GITHUB_OUTPUT
+        echo "Got GitHub OIDC token"
+
+    - name: Authenticate with Vault
+      id: vault-auth
+      shell: bash
+      env:
+        VAULT_ADDR: ${{ inputs.vault-addr }}
+        OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        VAULT_ROLE: ${{ inputs.vault-role }}
+      run: |
+        # Authenticate to Vault using GitHub OIDC
+        VAULT_RESPONSE=$(curl -sS --insecure -X POST \
+          "$VAULT_ADDR/v1/auth/jwt/login" \
+          -H "Content-Type: application/json" \
+          -d "{\"role\": \"$VAULT_ROLE\", \"jwt\": \"$OIDC_TOKEN\"}")
+
+        VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r '.auth.client_token')
+
+        if [ -z "$VAULT_TOKEN" ] || [ "$VAULT_TOKEN" = "null" ]; then
+          echo "::error::Failed to authenticate with Vault"
+          echo "Response: $VAULT_RESPONSE"
+          exit 1
+        fi
+
+        echo "::add-mask::$VAULT_TOKEN"
+        echo "token=$VAULT_TOKEN" >> $GITHUB_OUTPUT
+        echo "Authenticated with Vault"
+
+    - name: Sign SSH public key
+      id: sign
+      shell: bash
+      env:
+        VAULT_ADDR: ${{ inputs.vault-addr }}
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.token }}
+        SSH_ROLE: ${{ inputs.ssh-role }}
+        SSH_USER: ${{ inputs.ssh-user }}
+      run: |
+        # Read public key
+        PUBLIC_KEY=$(cat ~/.ssh/id_ed25519.pub)
+
+        # Request signed certificate from Vault
+        SIGN_RESPONSE=$(curl -sS --insecure -X POST \
+          "$VAULT_ADDR/v1/ssh-client-signer/sign/$SSH_ROLE" \
+          -H "X-Vault-Token: $VAULT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"public_key\": \"$PUBLIC_KEY\", \"valid_principals\": \"$SSH_USER\"}")
+
+        SIGNED_KEY=$(echo "$SIGN_RESPONSE" | jq -r '.data.signed_key')
+
+        if [ -z "$SIGNED_KEY" ] || [ "$SIGNED_KEY" = "null" ]; then
+          echo "::error::Failed to sign SSH key"
+          echo "Response: $SIGN_RESPONSE"
+          exit 1
+        fi
+
+        # Save signed certificate
+        echo "$SIGNED_KEY" > ~/.ssh/id_ed25519-cert.pub
+        chmod 600 ~/.ssh/id_ed25519-cert.pub
+
+        echo "ready=true" >> $GITHUB_OUTPUT
+        echo "SSH certificate signed (valid for 10 minutes)"
+
+    - name: Setup SSH known hosts
+      shell: bash
+      env:
+        VPS_HOST: ${{ inputs.vps-host }}
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts 2>/dev/null
+        echo "Added VPS to known hosts"
+
+    - name: Verify SSH connection
+      shell: bash
+      env:
+        VPS_HOST: ${{ inputs.vps-host }}
+        SSH_USER: ${{ inputs.ssh-user }}
+      run: |
+        # Test SSH connection with certificate
+        if ssh -o BatchMode=yes -o ConnectTimeout=10 $SSH_USER@$VPS_HOST "echo 'SSH certificate authentication successful'"; then
+          echo "✅ Vault SSH authentication verified"
+        else
+          echo "::error::SSH connection test failed"
+          exit 1
+        fi

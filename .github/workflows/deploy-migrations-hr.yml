@@ -54,6 +54,7 @@ env:
 permissions:
   contents: read
   deployments: write
+  id-token: write  # Required for Vault OIDC authentication
 
 jobs:
   migrate:
@@ -71,19 +72,18 @@ jobs:
           sudo ln -s $(pwd)/flyway-${{ env.FLYWAY_VERSION }}/flyway /usr/local/bin/flyway
           flyway -v
 
-      - name: Setup SSH tunnel to VPS
+      - name: Setup Vault SSH
+        uses: ./.github/actions/vault-ssh
+        with:
+          vault-addr: ${{ secrets.VAULT_ADDR }}
+          vps-host: ${{ secrets.VPS_HOST }}
+
+      - name: Create SSH tunnel to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
-
           # Create SSH tunnel to PostgreSQL (5433 → localhost:5432)
-          ssh -f -N -L 5433:localhost:5433 $VPS_USER@$VPS_HOST
+          ssh -f -N -L 5433:localhost:5433 root@$VPS_HOST
           echo "SSH tunnel established: localhost:5433 → VPS:5433"
 
       - name: Backup database
