@@ -176,6 +176,9 @@ resource "random_password" "jwt_secret" {
   special = false
 }
 
+# SECURITY: Root password stored in encrypted Terraform Cloud state.
+# Only used for emergency console access. SSH key auth preferred.
+#checkov:skip=CKV_SECRET_6:Password stored in encrypted Terraform Cloud state. Access restricted via workspace RBAC.
 resource "random_password" "root_password" {
   length  = 20
   special = true
@@ -188,6 +191,10 @@ resource "random_password" "root_password" {
 # SSH KEY (for emergency access only)
 # =============================================================================
 
+# SECURITY: This private key is stored in Terraform state.
+# Ensure Terraform Cloud workspace has encryption enabled.
+# State access should be restricted via RBAC.
+#checkov:skip=CKV_SECRET_6:Private key stored in encrypted Terraform Cloud state. Access restricted via workspace RBAC.
 resource "tls_private_key" "deploy_key" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -294,6 +301,7 @@ resource "hcloud_ssh_key" "deploy" {
   public_key = tls_private_key.deploy_key.public_key_openssh
 }
 
+#checkov:skip=CKV_HETZNER_2:Hetzner Cloud provides disk encryption at platform level by default. Explicit customer-managed encryption not required for this use case.
 resource "hcloud_server" "tamshai" {
   count       = var.cloud_provider == "hetzner" ? 1 : 0
   name        = "tamshai-${var.environment}"
@@ -311,6 +319,7 @@ resource "hcloud_server" "tamshai" {
   }
 }
 
+#checkov:skip=CKV_HETZNER_1:Public web server requires open HTTP/HTTPS (0.0.0.0/0). Defense-in-depth: (1) SSH restricted to allowed_ssh_ips, (2) fail2ban blocks brute-force attempts (3 failed SSH attempts), (3) Caddy enforces HTTPS redirect and handles TLS termination.
 resource "hcloud_firewall" "tamshai" {
   count = var.cloud_provider == "hetzner" ? 1 : 0
   name  = "tamshai-${var.environment}-firewall"
