@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS finance.invoices (
 );
 
 INSERT INTO finance.invoices (invoice_number, vendor_name, vendor_id, description, amount, invoice_date, due_date, paid_date, status, department_code) VALUES
+    ('INV-001', 'Test Vendor Inc', 'TV-001', 'Test invoice for integration testing', 5000.00, '2024-11-01', '2024-12-01', NULL, 'PENDING', 'ENG'),
     ('INV-2024-001', 'Amazon Web Services', 'AWS-001', 'Cloud infrastructure - October 2024', 45000.00, '2024-10-01', '2024-10-31', '2024-10-28', 'PAID', 'IT'),
     ('INV-2024-002', 'Salesforce', 'SF-001', 'CRM licenses - Q4 2024', 28500.00, '2024-10-01', '2024-10-15', '2024-10-12', 'PAID', 'SALES'),
     ('INV-2024-003', 'WeWork', 'WW-001', 'Office space - November 2024', 35000.00, '2024-11-01', '2024-11-15', NULL, 'APPROVED', 'OPS'),
