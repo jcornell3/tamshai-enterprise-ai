@@ -110,10 +110,10 @@ jobs:
           echo "🚀 Deploying MCP HR (no dependency restart)..."
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
 
-          # Health check with timeout
+          # Health check with timeout (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for health check..."
           for i in {1..30}; do
-            if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+            if docker exec tamshai-mcp-hr wget -q -O- http://localhost:3101/health 2>/dev/null | grep -q '"healthy"'; then
               echo "✅ MCP HR is healthy"
               exit 0
             fi
@@ -122,14 +122,14 @@ jobs:
           done
 
           # Health check failed - rollback
-          echo "❌ Health check failed after ${{ env.HEALTH_CHECK_TIMEOUT }} seconds"
+          echo "❌ Health check failed after 30 seconds"
           echo "🔄 Rolling back to previous version..."
           docker tag mcp-hr:rollback mcp-hr:latest
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
 
           # Verify rollback succeeded
           sleep 5
-          if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+          if docker exec tamshai-mcp-hr wget -q -O- http://localhost:3101/health 2>/dev/null | grep -q '"healthy"'; then
             echo "✅ Rollback successful"
           else
             echo "❌ Rollback failed - manual intervention required"
@@ -157,10 +157,10 @@ jobs:
           # Redeploy with rollback version
           docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
 
-          # Health check
+          # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Verifying rollback..."
           for i in {1..30}; do
-            if curl -sf ${{ env.HEALTH_CHECK_URL }} | jq -e '.status == "healthy"' > /dev/null 2>&1; then
+            if docker exec tamshai-mcp-hr wget -q -O- http://localhost:3101/health 2>/dev/null | grep -q '"healthy"'; then
               echo "✅ Rollback successful"
               exit 0
             fi
