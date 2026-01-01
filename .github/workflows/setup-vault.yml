@@ -20,6 +20,11 @@ on:
         required: true
         type: string
         default: '1.15.4'
+      reset_vault:
+        description: 'Reset Vault (delete all data and re-initialize)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: setup-vault
@@ -68,6 +73,29 @@ jobs:
           else
             echo "installed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Reset Vault (if requested)
+        if: ${{ github.event.inputs.reset_vault == 'true' }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "::warning::Resetting Vault - all data will be deleted!"
+          ssh $VPS_USER@$VPS_HOST << 'RESETEOF'
+          set -e
+          echo "Stopping Vault service..."
+          systemctl stop vault || true
+
+          echo "Removing Vault data..."
+          rm -rf /opt/vault/data/*
+          rm -f /root/vault-init.txt
+
+          echo "Starting Vault service..."
+          systemctl start vault
+          sleep 3
+
+          echo "Vault reset complete - ready for re-initialization"
+          RESETEOF
 
       - name: Install Vault
         if: steps.check.outputs.installed != 'true'
@@ -193,16 +221,29 @@ jobs:
 
           echo "Initializing Vault..."
 
-          # Initialize and capture output
-          INIT_OUTPUT=$(ssh $VPS_USER@$VPS_HOST "VAULT_ADDR='https://127.0.0.1:8200' VAULT_SKIP_VERIFY=1 vault operator init -key-shares=5 -key-threshold=3 -format=json")
+          # Initialize and save output to file on VPS for recovery
+          ssh $VPS_USER@$VPS_HOST << 'INITEOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
 
-          # Extract keys and token (masked in logs)
-          UNSEAL_KEY_1=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[0]')
-          UNSEAL_KEY_2=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[1]')
-          UNSEAL_KEY_3=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[2]')
-          UNSEAL_KEY_4=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[3]')
-          UNSEAL_KEY_5=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[4]')
-          ROOT_TOKEN=$(echo "$INIT_OUTPUT" | jq -r '.root_token')
+          # Initialize and save output
+          vault operator init -key-shares=5 -key-threshold=3 > /root/vault-init.txt
+          chmod 600 /root/vault-init.txt
+
+          # Also output JSON format for parsing
+          vault operator init -key-shares=5 -key-threshold=3 -format=json 2>/dev/null || true
+          INITEOF
+
+          # Get JSON output for parsing
+          INIT_OUTPUT=$(ssh $VPS_USER@$VPS_HOST "cat /root/vault-init.txt")
+
+          # Extract keys and token from text format
+          UNSEAL_KEY_1=$(echo "$INIT_OUTPUT" | grep 'Unseal Key 1:' | awk '{print $NF}')
+          UNSEAL_KEY_2=$(echo "$INIT_OUTPUT" | grep 'Unseal Key 2:' | awk '{print $NF}')
+          UNSEAL_KEY_3=$(echo "$INIT_OUTPUT" | grep 'Unseal Key 3:' | awk '{print $NF}')
+          UNSEAL_KEY_4=$(echo "$INIT_OUTPUT" | grep 'Unseal Key 4:' | awk '{print $NF}')
+          UNSEAL_KEY_5=$(echo "$INIT_OUTPUT" | grep 'Unseal Key 5:' | awk '{print $NF}')
+          ROOT_TOKEN=$(echo "$INIT_OUTPUT" | grep 'Initial Root Token:' | awk '{print $NF}')
 
           # Mask all sensitive values
           echo "::add-mask::$UNSEAL_KEY_1"
@@ -222,6 +263,7 @@ jobs:
           echo "already_initialized=false" >> $GITHUB_OUTPUT
 
           echo "Vault initialized successfully"
+          echo "Credentials saved to /root/vault-init.txt on VPS"
 
       - name: Unseal Vault
         if: steps.init.outputs.already_initialized != 'true'
@@ -251,30 +293,28 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           ROOT_TOKEN: ${{ steps.init.outputs.root_token }}
         run: |
-          # Get CA public key and configure SSH engine
-          CA_PUBLIC_KEY=$(ssh $VPS_USER@$VPS_HOST << EOF
+          ssh $VPS_USER@$VPS_HOST "ROOT_TOKEN=$ROOT_TOKEN bash -s" << 'SSHEOF'
           export VAULT_ADDR='https://127.0.0.1:8200'
           export VAULT_SKIP_VERIFY=1
           export VAULT_TOKEN="$ROOT_TOKEN"
 
           # Enable SSH secrets engine
-          vault secrets enable -path=ssh-client-signer ssh
+          vault secrets enable -path=ssh-client-signer ssh || echo "SSH engine may already be enabled"
 
           # Generate CA for signing
-          vault write ssh-client-signer/config/ca generate_signing_key=true
+          vault write ssh-client-signer/config/ca generate_signing_key=true || echo "CA may already exist"
 
-          # Create role for GitHub deployments
+          # Create role for GitHub deployments (simpler without JSON maps)
           vault write ssh-client-signer/roles/github-deploy \
             key_type=ca \
             default_user=root \
             allowed_users="root,tamshai" \
             allowed_extensions="permit-pty,permit-port-forwarding" \
-            default_extensions='{"permit-pty": ""}' \
             ttl=10m \
             max_ttl=30m
 
           # Enable JWT auth for GitHub OIDC
-          vault auth enable jwt
+          vault auth enable jwt || echo "JWT auth may already be enabled"
 
           # Configure GitHub OIDC
           vault write auth/jwt/config \
@@ -282,33 +322,34 @@ jobs:
             oidc_discovery_url="https://token.actions.githubusercontent.com"
 
           # Create policy for SSH signing
-          vault policy write github-deploy-ssh - << 'POLICY'
+          cat > /tmp/github-deploy-ssh.hcl << 'POLICYEOF'
           path "ssh-client-signer/config/ca" {
             capabilities = ["read"]
           }
           path "ssh-client-signer/sign/github-deploy" {
             capabilities = ["create", "update"]
           }
-          POLICY
+          POLICYEOF
+          vault policy write github-deploy-ssh /tmp/github-deploy-ssh.hcl
+          rm /tmp/github-deploy-ssh.hcl
 
-          # Create JWT role for GitHub Actions
-          vault write auth/jwt/role/github-deploy \
-            role_type="jwt" \
-            bound_audiences="https://github.com/jcornell3" \
-            bound_claims_type="glob" \
-            bound_claims='{"repository":"jcornell3/tamshai-enterprise-ai"}' \
-            user_claim="actor" \
-            policies="github-deploy-ssh" \
-            ttl=15m
+          # Create JWT role for GitHub Actions using JSON file
+          cat > /tmp/jwt-role.json << 'JSONEOF'
+          {
+            "role_type": "jwt",
+            "bound_audiences": ["https://github.com/jcornell3"],
+            "bound_claims": {"repository": "jcornell3/tamshai-enterprise-ai"},
+            "user_claim": "actor",
+            "policies": ["github-deploy-ssh"],
+            "ttl": "15m"
+          }
+          JSONEOF
+          vault write auth/jwt/role/github-deploy @/tmp/jwt-role.json
+          rm /tmp/jwt-role.json
 
-          # Output CA public key
+          echo "SSH Secrets Engine configured successfully"
           vault read -field=public_key ssh-client-signer/config/ca
-          EOF
-          )
-
-          echo "SSH Secrets Engine configured"
-          echo "::add-mask::$CA_PUBLIC_KEY"
-          echo "ca_public_key=$CA_PUBLIC_KEY" >> $GITHUB_ENV
+          SSHEOF
 
       - name: Configure VPS to trust Vault CA
         if: steps.init.outputs.already_initialized != 'true'
