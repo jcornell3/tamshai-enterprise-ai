@@ -251,6 +251,68 @@ describe('JWTValidator', () => {
       expect(result.roles).toEqual([]);
     });
 
+    it('should extract client roles from resource_access', async () => {
+      mockJwksClient.getSigningKey.mockImplementation((kid, callback) => {
+        callback(null, {
+          getPublicKey: () => mockPublicKey,
+        } as jwksRsa.SigningKey);
+      });
+
+      const mockPayload: jwt.JwtPayload = {
+        sub: 'user-client-roles',
+        preferred_username: 'client.user',
+        email: 'client@tamshai.com',
+        resource_access: {
+          'mcp-gateway': {
+            roles: ['hr-read', 'finance-read'],
+          },
+        },
+        groups: [],
+      };
+
+      (jwt.verify as jest.Mock).mockImplementation((token, getKey, options, callback) => {
+        callback(null, mockPayload);
+      });
+
+      const result = await validator.validateToken(mockToken);
+
+      expect(result.roles).toEqual(expect.arrayContaining(['hr-read', 'finance-read']));
+      expect(result.roles).toHaveLength(2);
+    });
+
+    it('should merge realm and client roles without duplicates', async () => {
+      mockJwksClient.getSigningKey.mockImplementation((kid, callback) => {
+        callback(null, {
+          getPublicKey: () => mockPublicKey,
+        } as jwksRsa.SigningKey);
+      });
+
+      const mockPayload: jwt.JwtPayload = {
+        sub: 'user-merged',
+        preferred_username: 'merged.user',
+        email: 'merged@tamshai.com',
+        realm_access: {
+          roles: ['hr-read', 'executive'],
+        },
+        resource_access: {
+          'mcp-gateway': {
+            roles: ['hr-read', 'finance-write'],  // hr-read is duplicate
+          },
+        },
+        groups: [],
+      };
+
+      (jwt.verify as jest.Mock).mockImplementation((token, getKey, options, callback) => {
+        callback(null, mockPayload);
+      });
+
+      const result = await validator.validateToken(mockToken);
+
+      // Should contain all unique roles from both sources
+      expect(result.roles).toEqual(expect.arrayContaining(['hr-read', 'executive', 'finance-write']));
+      expect(result.roles).toHaveLength(3);  // No duplicates
+    });
+
     it('should reject token with invalid signature', async () => {
       mockJwksClient.getSigningKey.mockImplementation((kid, callback) => {
         callback(null, {
