@@ -83,15 +83,15 @@ jobs:
           MCP_GATEWAY_CLIENT_SECRET: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
         run: |
           echo "Creating .env file on VPS..."
-          ssh $VPS_USER@$VPS_HOST "cat > /opt/tamshai/.env << 'ENVEOF'
+          ssh $VPS_USER@$VPS_HOST "cat > /opt/tamshai/.env << ENVEOF
           # Tamshai Enterprise AI - VPS Environment Configuration
           CLAUDE_API_KEY=$CLAUDE_API_KEY
           KEYCLOAK_ADMIN=admin
           KEYCLOAK_ADMIN_PASSWORD=$KEYCLOAK_ADMIN_PASSWORD
           KC_HOSTNAME=$VPS_HOST
           KC_HTTP_RELATIVE_PATH=/auth
-          KEYCLOAK_URL=http://keycloak:8080
-          KEYCLOAK_ISSUER=http://keycloak:8080/auth/realms/tamshai-corp
+          KEYCLOAK_URL=https://$VPS_HOST/auth
+          KEYCLOAK_ISSUER=https://$VPS_HOST/auth/realms/tamshai-corp
           POSTGRES_PASSWORD=$POSTGRES_PASSWORD
           KEYCLOAK_DB_PASSWORD=$KEYCLOAK_DB_PASSWORD
           TAMSHAI_DB_PASSWORD=$TAMSHAI_DB_PASSWORD
