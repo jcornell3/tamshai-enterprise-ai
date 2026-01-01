@@ -1,0 +1,73 @@
+# Open Vault port on VPS firewall
+# One-time fix to allow GitHub Actions to reach Vault for SSH certificate signing
+
+name: Open Vault Port
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  open-port:
+    name: Open Vault Port 8200
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Setup SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Open Vault port
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          # Check if ufw is active
+          if command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+            echo "Opening port 8200 via ufw..."
+            ufw allow 8200/tcp
+            ufw status | grep 8200
+          # Check if firewalld is active
+          elif command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+            echo "Opening port 8200 via firewalld..."
+            firewall-cmd --permanent --add-port=8200/tcp
+            firewall-cmd --reload
+            firewall-cmd --list-ports
+          # Check if iptables is used
+          elif command -v iptables &> /dev/null; then
+            echo "Opening port 8200 via iptables..."
+            iptables -A INPUT -p tcp --dport 8200 -j ACCEPT
+            iptables -L INPUT -n | grep 8200
+          else
+            echo "No firewall detected, port should be open"
+          fi
+
+          # Verify Vault is listening
+          echo ""
+          echo "Verifying Vault is running..."
+          ss -tlnp | grep 8200 || netstat -tlnp | grep 8200 || echo "Vault port not detected"
+
+          # Test local connection
+          echo ""
+          echo "Testing local Vault connection..."
+          curl -sk https://127.0.0.1:8200/v1/sys/health | head -c 100
+          echo ""
+          EOF
+
+      - name: Verify external access
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          echo "Testing external Vault connection..."
+          curl -sk --connect-timeout 10 https://$VPS_HOST:8200/v1/sys/health || echo "External connection failed - may need cloud firewall update"
