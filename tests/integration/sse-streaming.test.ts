@@ -308,8 +308,9 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
           }
         );
 
-        req.on('error', (err) => {
-          resolve({ error: err.message });
+        req.on('error', (err: NodeJS.ErrnoException) => {
+          // On Linux, err.message can be empty but err.code has 'ECONNREFUSED'
+          resolve({ error: err.message || err.code || 'connection_failed' });
         });
 
         req.write(postData);
@@ -318,9 +319,11 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
 
       // Should get a connection error, not a crash
       expect(result.error).toBeDefined();
-      // Error message format varies by platform: ECONNREFUSED, connect ECONNREFUSED, etc.
+      // Error message/code format varies by platform:
+      // - Windows: "connect ECONNREFUSED 127.0.0.1:9999"
+      // - Linux: err.message empty, err.code = "ECONNREFUSED"
       // Just verify we got a connection-related error
-      expect(result.error).toMatch(/ECONNREFUSED|connect|connection|refused/i);
+      expect(result.error).toMatch(/ECONNREFUSED|connect|connection|refused|connection_failed/i);
     });
 
     test('Request with missing query returns 400', async () => {
