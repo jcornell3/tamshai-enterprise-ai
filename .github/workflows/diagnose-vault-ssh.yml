@@ -1,0 +1,210 @@
+# Diagnose Vault SSH Certificate Authentication
+# Run this to troubleshoot why SSH certificates aren't being accepted
+
+name: Diagnose Vault SSH
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Diagnose SSH Certificate Auth
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Setup SSH (static key for diagnosis)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $VPS_HOST >> ~/.ssh/known_hosts
+
+      - name: Check VPS SSH Configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "=== VPS SSH Diagnostics ==="
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          echo ""
+          echo "=== 1. TrustedUserCAKeys in sshd_config ==="
+          grep -n "TrustedUserCAKeys" /etc/ssh/sshd_config || echo "TrustedUserCAKeys NOT FOUND in sshd_config!"
+
+          echo ""
+          echo "=== 2. Vault CA Public Key File ==="
+          if [ -f /etc/ssh/vault-ca.pub ]; then
+            echo "File exists:"
+            ls -la /etc/ssh/vault-ca.pub
+            echo "Contents:"
+            cat /etc/ssh/vault-ca.pub
+          else
+            echo "ERROR: /etc/ssh/vault-ca.pub does NOT exist!"
+          fi
+
+          echo ""
+          echo "=== 3. sshd_config AuthenticationMethods ==="
+          grep -n "AuthenticationMethods\|PubkeyAuthentication\|PasswordAuthentication\|ChallengeResponseAuthentication" /etc/ssh/sshd_config || echo "No auth method restrictions found"
+
+          echo ""
+          echo "=== 4. sshd_config AuthorizedPrincipalsFile ==="
+          grep -n "AuthorizedPrincipalsFile\|AuthorizedPrincipals" /etc/ssh/sshd_config || echo "No AuthorizedPrincipalsFile configured (should be OK)"
+
+          echo ""
+          echo "=== 5. sshd service status ==="
+          systemctl status sshd --no-pager | head -20
+
+          echo ""
+          echo "=== 6. Recent auth.log entries ==="
+          tail -50 /var/log/auth.log 2>/dev/null | grep -i "ssh\|sshd" | tail -20 || echo "No auth.log or no SSH entries"
+
+          echo ""
+          echo "=== 7. Test sshd config syntax ==="
+          sshd -t 2>&1 || echo "sshd config syntax error!"
+          EOF
+
+      - name: Get Vault CA and Compare
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+        run: |
+          echo "=== Comparing Vault CA with VPS CA ==="
+
+          # Get CA from Vault (unauthenticated endpoint)
+          echo "Fetching CA from Vault..."
+          VAULT_CA=$(curl -sS --insecure "$VAULT_ADDR/v1/ssh-client-signer/public_key" 2>/dev/null || echo "FAILED")
+
+          if [ "$VAULT_CA" = "FAILED" ]; then
+            echo "ERROR: Could not fetch CA from Vault. Trying authenticated endpoint..."
+          else
+            echo "Vault CA public key:"
+            echo "$VAULT_CA"
+          fi
+
+          echo ""
+          echo "VPS CA public key:"
+          VPS_CA=$(ssh $VPS_USER@$VPS_HOST "cat /etc/ssh/vault-ca.pub 2>/dev/null" || echo "FAILED")
+          echo "$VPS_CA"
+
+          echo ""
+          if [ "$VAULT_CA" = "$VPS_CA" ]; then
+            echo "✅ CA keys MATCH"
+          else
+            echo "❌ CA keys DO NOT MATCH - this is the problem!"
+            echo ""
+            echo "Vault CA length: $(echo "$VAULT_CA" | wc -c)"
+            echo "VPS CA length: $(echo "$VPS_CA" | wc -c)"
+          fi
+
+      - name: Check Vault SSH Role
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "=== Vault SSH Role Configuration ==="
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+
+          # Get root token
+          TOKEN=$(grep 'Initial Root Token' /root/vault-init.txt | awk '{print $NF}')
+          export VAULT_TOKEN="$TOKEN"
+
+          echo "SSH Role 'github-deploy':"
+          vault read ssh-client-signer/roles/github-deploy 2>&1 || echo "Role not found!"
+
+          echo ""
+          echo "JWT Role 'github-deploy':"
+          vault read auth/jwt/role/github-deploy 2>&1 || echo "JWT role not found!"
+          EOF
+
+      - name: Test Certificate Signing
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "=== Test Certificate Signing Locally ==="
+
+          # Generate test key
+          ssh-keygen -t ed25519 -f /tmp/test_key -N "" -C "test-key"
+
+          ssh $VPS_USER@$VPS_HOST << 'SIGNEOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          TOKEN=$(grep 'Initial Root Token' /root/vault-init.txt | awk '{print $NF}')
+          export VAULT_TOKEN="$TOKEN"
+
+          # Read the test public key that will be passed
+          cat > /tmp/test_key.pub << 'KEYEOF'
+          SIGNEOF
+
+          cat /tmp/test_key.pub >> /tmp/ssh_commands
+          echo "KEYEOF" >> /tmp/ssh_commands
+
+          cat >> /tmp/ssh_commands << 'SIGNEOF2'
+
+          echo "Test public key:"
+          cat /tmp/test_key.pub
+
+          echo ""
+          echo "Signing with Vault..."
+          vault write -field=signed_key ssh-client-signer/sign/github-deploy \
+            public_key=@/tmp/test_key.pub \
+            valid_principals="root" > /tmp/test_cert.pub 2>&1
+
+          RESULT=$?
+          if [ $RESULT -eq 0 ]; then
+            echo "✅ Certificate signing successful!"
+            echo ""
+            echo "Certificate info:"
+            ssh-keygen -L -f /tmp/test_cert.pub
+          else
+            echo "❌ Certificate signing failed!"
+            cat /tmp/test_cert.pub
+          fi
+
+          rm -f /tmp/test_key.pub /tmp/test_cert.pub
+          SIGNEOF2
+
+          # Actually run the signing test
+          ssh $VPS_USER@$VPS_HOST << EOF
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          TOKEN=\$(grep 'Initial Root Token' /root/vault-init.txt | awk '{print \$NF}')
+          export VAULT_TOKEN="\$TOKEN"
+
+          echo "Signing test certificate..."
+          echo "$(cat /tmp/test_key.pub)" > /tmp/test_key.pub
+
+          SIGNED=\$(vault write -field=signed_key ssh-client-signer/sign/github-deploy \
+            public_key=@/tmp/test_key.pub \
+            valid_principals="root" 2>&1)
+
+          if [ \$? -eq 0 ]; then
+            echo "✅ Certificate signing successful!"
+            echo "\$SIGNED" > /tmp/test_cert.pub
+            ssh-keygen -L -f /tmp/test_cert.pub
+          else
+            echo "❌ Certificate signing failed:"
+            echo "\$SIGNED"
+          fi
+          rm -f /tmp/test_key.pub /tmp/test_cert.pub
+          EOF
+
+      - name: Summary
+        run: |
+          echo "## Vault SSH Diagnostics Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for:" >> $GITHUB_STEP_SUMMARY
+          echo "1. TrustedUserCAKeys configuration" >> $GITHUB_STEP_SUMMARY
+          echo "2. CA key mismatch between Vault and VPS" >> $GITHUB_STEP_SUMMARY
+          echo "3. SSH role configuration" >> $GITHUB_STEP_SUMMARY
+          echo "4. auth.log entries for rejection reason" >> $GITHUB_STEP_SUMMARY
