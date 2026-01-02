@@ -1,8 +1,8 @@
 # MCP Gateway Refactoring Plan
 ## Breaking Up index.ts for Improved Test Coverage
 
-**Status**: **IN PROGRESS** - Phase 1 & 2 Complete, Phase 3 & 4 Remaining
-**Current Coverage**: 49.06% on services/mcp-gateway (374 tests passing)
+**Status**: **IN PROGRESS** - Phase 1, 2 & 3 Complete, Phase 4 Remaining (Wire-up)
+**Current Coverage**: ~52% on services/mcp-gateway (415 tests passing)
 **Target Coverage**: 70% overall (90% diff coverage on new code)
 **File Size**: index.ts - 1,533 lines → target <200 lines
 
@@ -19,6 +19,8 @@
 | JWT Validator | `src/auth/jwt-validator.ts` | 19 tests | 95%+ | DI for jwksClient (ADDENDUM #5) |
 | MCP Client | `src/mcp/mcp-client.ts` | ✅ | 85%+ | Pagination, timeouts |
 | Claude Client | `src/ai/claude-client.ts` | ✅ | 90%+ | Streaming support |
+| **Auth Middleware** | `src/middleware/auth.middleware.ts` | 19 tests | 95%+ | DI for JWT validator, token revocation |
+| **Streaming Routes** | `src/routes/streaming.routes.ts` | 22 tests | 95%+ | SSE heartbeat, client disconnect handling |
 | Mock Factories | `src/test-utils/*` | N/A | N/A | mock-logger, mock-user-context, mock-mcp-server |
 
 ### ADDENDUM #5 Fixes Applied ✅
@@ -29,23 +31,27 @@
 | JWKS client DI | ✅ Fixed | Optional `jwksClient` param in constructor |
 | Safe parseInt | ✅ Fixed | `safeParseInt()` returns default on NaN |
 
+### ADDENDUM #6 Fixes Applied ✅
+
+| Issue | Status | Implementation |
+|-------|--------|----------------|
+| SSE Heartbeat | ✅ Fixed | 15-second heartbeat in streaming routes (configurable) |
+| Client Disconnect | ✅ Fixed | AbortController pattern to stop Claude API calls |
+
 ### Remaining Work
 
 | Phase | Task | Status | Priority |
 |-------|------|--------|----------|
-| Phase 3 | Extract streaming routes | Pending | High |
-| Phase 3 | Extract auth middleware | Pending | High |
-| Phase 3 | SSE heartbeat (ADDENDUM #6) | Pending | **Critical** |
+| Phase 4 | Wire up extracted modules in index.ts | **In Progress** | High |
 | Phase 4 | Graceful shutdown | Pending | High |
-| Phase 4 | Wire up extracted modules in index.ts | Pending | High |
 | Phase 4 | Type coverage CI enforcement | Pending | Medium |
 
 ### Test Results (Local)
 
 ```
-Test Suites: 15 passed
-Tests:       374 passed
-Time:        8.394s
+Test Suites: 17 passed
+Tests:       415 passed
+Time:        8.434s
 ```
 
 ---
