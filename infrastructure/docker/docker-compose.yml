@@ -536,7 +536,7 @@ services:
       KEYCLOAK_URL: http://keycloak:8080/auth
       KEYCLOAK_REALM: tamshai-corp
       KEYCLOAK_CLIENT_ID: mcp-hr-service
-      KEYCLOAK_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-dev-secret}
+      KEYCLOAK_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-secret}
       # Redis for BullMQ cleanup queue
       REDIS_HOST: redis
       REDIS_PORT: 6379
