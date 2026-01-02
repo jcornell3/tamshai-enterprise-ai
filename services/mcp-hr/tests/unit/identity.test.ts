@@ -125,7 +125,7 @@ describe('IdentityService', () => {
       );
 
       expect(mockClient.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE hr.employees SET keycloak_user_id'),
+        expect.stringContaining('keycloak_user_id = $1'),
         ['kc-user-123', 'emp-123']
       );
     });
@@ -371,9 +371,10 @@ describe('IdentityService', () => {
 
       await identityService.deleteUserPermanently('kc-user-789', 'emp-789');
 
+      // USER_DELETED is passed as a parameter ($3), so check args array
       expect(mockDb.query).toHaveBeenCalledWith(
-        expect.stringContaining('USER_DELETED'),
-        expect.arrayContaining(['emp-789', 'kc-user-789'])
+        expect.stringContaining('INSERT INTO hr.audit_access_logs'),
+        expect.arrayContaining(['emp-789', 'kc-user-789', 'USER_DELETED'])
       );
     });
 
@@ -415,9 +416,10 @@ describe('IdentityService', () => {
       expect(mockKcAdmin.users.del).not.toHaveBeenCalled();
 
       // Verify audit log records the blocked deletion attempt
+      // DELETION_BLOCKED is passed as a parameter ($3), so check args array
       expect(mockDb.query).toHaveBeenCalledWith(
-        expect.stringContaining('DELETION_BLOCKED'),
-        expect.arrayContaining(['emp-reversed', 'kc-user-reversed'])
+        expect.stringContaining('INSERT INTO hr.audit_access_logs'),
+        expect.arrayContaining(['emp-reversed', 'kc-user-reversed', 'DELETION_BLOCKED'])
       );
     });
   });

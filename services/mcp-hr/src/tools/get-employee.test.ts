@@ -39,14 +39,14 @@ describe('get-employee tool', () => {
   };
 
   const mockEmployee: Employee = {
-    id: '123e4567-e89b-12d3-a456-426614174000',
+    employee_id: '123e4567-e89b-12d3-a456-426614174000',
     first_name: 'John',
     last_name: 'Doe',
     email: 'john.doe@test.com',
     phone: '555-0001',
     hire_date: '2020-01-15',
     title: 'Software Engineer',
-    department_name: 'Engineering',
+    department: 'Engineering',
     department_id: '823e4567-e89b-12d3-a456-426614174000',
     manager_id: '923e4567-e89b-12d3-a456-426614174000',
     manager_name: 'Bob Manager',
@@ -77,7 +77,7 @@ describe('get-employee tool', () => {
       expect(result.status).toBe('success');
       if (result.status === 'success') {
         expect(result.data).toEqual(mockEmployee);
-        expect(result.data.id).toBe('123e4567-e89b-12d3-a456-426614174000');
+        expect(result.data.employee_id).toBe('123e4567-e89b-12d3-a456-426614174000');
         expect(result.data.first_name).toBe('John');
         expect(result.data.last_name).toBe('Doe');
       }
@@ -277,14 +277,14 @@ describe('get-employee tool', () => {
 
       expect(result.status).toBe('success');
       if (result.status === 'success') {
-        expect(result.data).toHaveProperty('id');
+        expect(result.data).toHaveProperty('employee_id');
         expect(result.data).toHaveProperty('first_name');
         expect(result.data).toHaveProperty('last_name');
         expect(result.data).toHaveProperty('email');
         expect(result.data).toHaveProperty('phone');
         expect(result.data).toHaveProperty('hire_date');
         expect(result.data).toHaveProperty('title');
-        expect(result.data).toHaveProperty('department_name');
+        expect(result.data).toHaveProperty('department');
         expect(result.data).toHaveProperty('department_id');
         expect(result.data).toHaveProperty('manager_id');
         expect(result.data).toHaveProperty('manager_name');
@@ -470,7 +470,7 @@ describe('get-employee tool', () => {
       // Employee without department or manager
       const soloEmployee = {
         ...mockEmployee,
-        department_name: null,
+        department: null,
         department_id: null,
         manager_id: null,
         manager_name: null,
@@ -490,7 +490,7 @@ describe('get-employee tool', () => {
 
       expect(result.status).toBe('success');
       if (result.status === 'success') {
-        expect(result.data.department_name).toBeNull();
+        expect(result.data.department).toBeNull();
         expect(result.data.manager_name).toBeNull();
       }
     });

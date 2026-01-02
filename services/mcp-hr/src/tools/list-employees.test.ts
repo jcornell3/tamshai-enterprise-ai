@@ -23,14 +23,14 @@ describe('list-employees tool', () => {
 
   const mockEmployees = [
     {
-      id: '123e4567-e89b-12d3-a456-426614174000',
+      employee_id: '123e4567-e89b-12d3-a456-426614174000',
       first_name: 'Alice',
       last_name: 'Anderson',
       email: 'alice@test.com',
       phone: '555-0001',
       hire_date: '2020-01-15',
       title: 'Engineer',
-      department_name: 'Engineering',
+      department: 'Engineering',
       department_id: '823e4567-e89b-12d3-a456-426614174000',
       manager_id: '923e4567-e89b-12d3-a456-426614174000',
       manager_name: 'Bob Manager',
@@ -39,14 +39,14 @@ describe('list-employees tool', () => {
       status: 'ACTIVE',
     },
     {
-      id: '223e4567-e89b-12d3-a456-426614174000',
+      employee_id: '223e4567-e89b-12d3-a456-426614174000',
       first_name: 'Bob',
       last_name: 'Brown',
       email: 'bob@test.com',
       phone: '555-0002',
       hire_date: '2021-03-20',
       title: 'Senior Engineer',
-      department_name: 'Engineering',
+      department: 'Engineering',
       department_id: '823e4567-e89b-12d3-a456-426614174000',
       manager_id: '923e4567-e89b-12d3-a456-426614174000',
       manager_name: 'Bob Manager',
@@ -77,7 +77,7 @@ describe('list-employees tool', () => {
       expect(result.status).toBe('success');
       if (result.status === 'success') {
         expect(result.data).toHaveLength(2);
-        expect(result.data[0].id).toBe('123e4567-e89b-12d3-a456-426614174000');
+        expect(result.data[0].employee_id).toBe('123e4567-e89b-12d3-a456-426614174000');
         expect(result.metadata).toBeUndefined(); // No pagination metadata when not truncated
       }
 
@@ -143,7 +143,7 @@ describe('list-employees tool', () => {
       // Mock 51 rows (limit + 1) to indicate more data exists
       const paginatedEmployees = Array.from({ length: 51 }, (_, i) => ({
         ...mockEmployees[0],
-        id: `${String(i).padStart(3, '0')}e4567-e89b-12d3-a456-426614174000`,
+        employee_id: `${String(i).padStart(3, '0')}e4567-e89b-12d3-a456-426614174000`,
         first_name: `Employee${i}`,
       }));
 
@@ -495,11 +495,11 @@ describe('list-employees tool', () => {
       expect(result.status).toBe('success');
       if (result.status === 'success') {
         const employee = result.data[0];
-        expect(employee).toHaveProperty('id');
+        expect(employee).toHaveProperty('employee_id');
         expect(employee).toHaveProperty('first_name');
         expect(employee).toHaveProperty('last_name');
         expect(employee).toHaveProperty('email');
-        expect(employee).toHaveProperty('department_name');
+        expect(employee).toHaveProperty('department');
         expect(employee).toHaveProperty('title');
       }
     });
