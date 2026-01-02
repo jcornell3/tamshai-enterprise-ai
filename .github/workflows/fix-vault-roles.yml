@@ -141,17 +141,22 @@ jobs:
           export VAULT_SKIP_VERIFY=1
           export VAULT_TOKEN="$VAULT_TOKEN"
 
-          # Get CA public key
+          # Always update CA public key (may have changed after Vault reset)
+          echo "Updating Vault CA public key..."
           vault read -field=public_key ssh-client-signer/config/ca > /etc/ssh/vault-ca.pub
+          chmod 644 /etc/ssh/vault-ca.pub
+          echo "CA public key:"
+          cat /etc/ssh/vault-ca.pub
 
-          # Add to sshd config if not already there
+          # Add TrustedUserCAKeys to sshd config if not already there
           if ! grep -q "TrustedUserCAKeys" /etc/ssh/sshd_config; then
             echo "TrustedUserCAKeys /etc/ssh/vault-ca.pub" >> /etc/ssh/sshd_config
-            systemctl reload sshd
-            echo "Added Vault CA to SSH trusted keys"
-          else
-            echo "Vault CA already configured in sshd"
+            echo "Added TrustedUserCAKeys to sshd_config"
           fi
+
+          # Always reload sshd to pick up new CA key
+          systemctl reload sshd
+          echo "sshd reloaded with updated CA"
           EOF
 
       - name: Test Vault configuration
