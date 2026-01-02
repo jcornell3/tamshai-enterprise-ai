@@ -36,6 +36,11 @@ output "kong_proxy_url" {
   value       = local.services.kong_proxy.url
 }
 
+output "tamshai_local_url" {
+  description = "Primary HTTPS access URL (requires hosts file entry)"
+  value       = local.services.caddy.url
+}
+
 # =============================================================================
 # KEYCLOAK REALM OUTPUTS (from module)
 # =============================================================================
@@ -110,6 +115,10 @@ output "next_steps" {
     ║ Tamshai Dev Environment - Successfully Deployed!                         ║
     ╚══════════════════════════════════════════════════════════════════════════╝
 
+    🌐 Primary Access URL:
+    └─ ${local.services.caddy.url}
+       (Accept the self-signed certificate warning in your browser)
+
     🌐 Service URLs:
     ├─ Keycloak Admin:   ${local.services.keycloak.url}
     ├─ MCP Gateway:      ${local.services.mcp_gateway.url}
@@ -124,10 +133,10 @@ output "next_steps" {
     └─ Password: ${var.keycloak_admin_password}
 
     📋 Next Steps:
-    1. Verify services: docker compose ps
-    2. Check logs: docker compose logs -f mcp-gateway
-    3. Test authentication: curl ${local.services.mcp_gateway.url}/health
-    4. Access web portal: ${local.services.web_portal.url}
+    1. Open browser: ${local.services.caddy.url}
+    2. Accept the self-signed certificate warning
+    3. Verify services: docker compose ps
+    4. Check logs: docker compose logs -f mcp-gateway
 
     📚 Documentation:
     - Terraform Guide: infrastructure/terraform/dev/README.md
