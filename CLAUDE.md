@@ -739,6 +739,86 @@ See `docs/architecture/security-model.md` for complete security documentation.
 
 ---
 
+## Keycloak Configuration Management
+
+### Overview
+
+Keycloak configuration (clients, roles, etc.) is managed through:
+1. **Source of Truth**: `keycloak/realm-export-dev.json` (dev) and `keycloak/realm-export.json` (prod)
+2. **Sync Scripts**: `keycloak/scripts/sync-realm.sh` - idempotent script to sync configuration
+3. **CI/CD Integration**: `deploy-vps.yml` automatically syncs Keycloak on deployment
+
+### Adding a New Keycloak Client
+
+1. **Add to realm export** (`keycloak/realm-export-dev.json`):
+```json
+{
+  "clientId": "my-new-app",
+  "name": "My New Application",
+  "enabled": true,
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "redirectUris": ["http://localhost:3000/*"],
+  "webOrigins": ["http://localhost:3000"],
+  "attributes": {"pkce.code.challenge.method": "S256"},
+  "defaultClientScopes": ["openid", "profile", "email", "roles"]
+}
+```
+
+2. **Add to sync script** (`keycloak/scripts/sync-realm.sh`):
+```bash
+sync_my_new_app_client() {
+    local client_json='{...}'
+    create_or_update_client "my-new-app" "$client_json"
+}
+```
+
+3. **Apply locally**:
+```bash
+# Option 1: Run sync script (updates existing Keycloak)
+cd keycloak/scripts
+./docker-sync-realm.sh dev
+
+# Option 2: Full reimport (resets Keycloak data)
+cd infrastructure/docker
+docker compose down keycloak
+docker volume rm $(docker volume ls -q | grep keycloak) 2>/dev/null
+docker compose up -d keycloak
+```
+
+4. **Deploy to stage**: Push to main - CI/CD will sync automatically
+
+### Manual Keycloak Sync
+
+**Local Development:**
+```bash
+cd keycloak/scripts
+./docker-sync-realm.sh dev tamshai-keycloak
+```
+
+**Stage/VPS (via SSH):**
+```bash
+ssh root@5.78.159.29
+cd /opt/tamshai
+docker cp keycloak/scripts/sync-realm.sh keycloak:/tmp/
+docker exec keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh'
+docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
+  keycloak /tmp/sync-realm.sh stage
+```
+
+### Keycloak Admin Access
+
+**Local Dev:**
+- URL: http://localhost:8180/auth/admin
+- Username: admin
+- Password: admin
+
+**Stage/Prod:**
+- URL: https://[VPS_IP]/auth/admin
+- Credentials: Stored in Terraform state or secrets manager
+
+---
+
 ## Troubleshooting
 
 ### Common Issues
