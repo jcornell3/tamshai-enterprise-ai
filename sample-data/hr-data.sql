@@ -106,6 +106,9 @@ CREATE TABLE IF NOT EXISTS hr.employees (
     location VARCHAR(100),
     work_email VARCHAR(255),  -- Same as email for SSO matching
     is_manager BOOLEAN DEFAULT false,  -- Flag for manager role assignment
+    keycloak_user_id VARCHAR(255),  -- Link to Keycloak identity
+    terminated_at TIMESTAMP WITH TIME ZONE,  -- Timestamp when employee was terminated
+    deleted_at TIMESTAMP WITH TIME ZONE,  -- Soft delete timestamp
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
