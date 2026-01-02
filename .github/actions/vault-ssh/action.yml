@@ -65,8 +65,21 @@ runs:
       shell: bash
       run: |
         # Request OIDC token from GitHub
-        # The URL already contains query params, so we need to add audience properly
-        # Use --data-urlencode to safely add the audience parameter
+        # Requires: permissions: id-token: write in the calling workflow
+
+        # Verify OIDC environment variables are available
+        if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ]; then
+          echo "::error::ACTIONS_ID_TOKEN_REQUEST_URL is not set"
+          echo "::error::Ensure the workflow has 'permissions: id-token: write'"
+          echo "::error::This is required for GitHub OIDC authentication with Vault"
+          exit 1
+        fi
+
+        if [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
+          echo "::error::ACTIONS_ID_TOKEN_REQUEST_TOKEN is not set"
+          exit 1
+        fi
+
         AUDIENCE="https://github.com/jcornell3"
 
         # Check if URL already has query parameters
@@ -76,15 +89,15 @@ runs:
           TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}?audience=${AUDIENCE}"
         fi
 
-        # Debug URL structure (hide sensitive parts)
-        echo "Token URL structure: ${TOKEN_URL%%\?*}?..."
+        # Debug: show URL host (hide query params for security)
+        echo "Token URL host: ${ACTIONS_ID_TOKEN_REQUEST_URL%%\?*}"
 
         OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
           "$TOKEN_URL" | jq -r '.value')
 
         if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
-          echo "::error::Failed to get GitHub OIDC token"
-          echo "URL used (masked): ${TOKEN_URL%%\?*}?..."
+          echo "::error::Failed to get GitHub OIDC token from GitHub"
+          echo "::error::Check that id-token permission is granted"
           exit 1
         fi
 
