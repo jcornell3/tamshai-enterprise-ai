@@ -3827,6 +3827,362 @@ Before starting any refactoring work, verify:
 
 **Next Steps**:
 1. Project Sponsor reviews this updated plan
-2. Dev team confirms understanding of all 4 addendums
+2. Dev team confirms understanding of all 5 addendums
 3. Start with P1 (Auth Middleware extraction) as proof-of-concept
 4. Iterate based on learnings from P1
+
+---
+
+## ADDENDUM #5: Architecture Review Corrections (2026-01-01)
+
+Architecture review identified **1 critical regression**, **1 testability flaw**, and **1 safety gap** in the proposed refactoring code. These MUST be addressed before implementation.
+
+---
+
+### Issue #1: 🔴 CRITICAL - Client Roles Regression
+
+**Severity**: CRITICAL - Will cause immediate 401 failures in integration tests
+
+**What's Wrong**: The proposed `JWTValidator` class (Phase 2.1) reverts a recent bug fix. It only checks `realm_access` for roles, ignoring `resource_access` (client-specific roles).
+
+**Context**: Previous troubleshooting revealed that Keycloak roles assigned to the `mcp-gateway` client are stored in `resource_access['mcp-gateway'].roles`, NOT in `realm_access.roles`. The current working code merges both.
+
+**Proposed Code (INCORRECT)**:
+```typescript
+// ❌ WRONG: Only checks realm_access
+const payload = decoded as jwt.JwtPayload;
+resolve({
+  roles: payload.realm_access?.roles || [],  // Missing client roles!
+});
+```
+
+**REQUIRED FIX**:
+```typescript
+// ✅ CORRECT: Merge Realm Roles AND Client Roles (Architecture v1.4 Requirement)
+const payload = decoded as jwt.JwtPayload;
+
+const realmRoles = payload.realm_access?.roles || [];
+const clientRoles = payload.resource_access?.[this.config.clientId]?.roles || [];
+const combinedRoles = Array.from(new Set([...realmRoles, ...clientRoles]));
+
+resolve({
+  userId: payload.sub || '',
+  username: payload.preferred_username || '',
+  roles: combinedRoles,  // Use merged array
+  email: payload.email,
+  jti: payload.jti,
+});
+```
+
+**Config Addition Required**:
+```typescript
+// In JWTValidatorConfig interface
+export interface JWTValidatorConfig {
+  issuer: string;
+  audience: string[];
+  jwksUri: string;
+  clientId: string;  // ADD THIS - needed for resource_access lookup
+}
+```
+
+---
+
+### Issue #2: 🟡 Testability Flaw - Hardcoded JWKS Client
+
+**Severity**: HIGH - Makes unit testing difficult, violates DI principle
+
+**What's Wrong**: The proposed `JWTValidator` constructor creates `jwksClient` internally:
+
+```typescript
+// ❌ WRONG: Hardcoded dependency
+constructor(private config: JWTValidatorConfig, private logger: Logger) {
+  this.jwksClient = jwksRsa({
+    cache: true,
+    cacheMaxAge: 86400000,
+    jwksUri: config.jwksUri,
+  });
+}
+```
+
+**Impact**:
+- Cannot mock `jwksClient` without global `jest.mock('jwks-rsa')` calls
+- Tests may make real network calls to JWKS endpoint
+- Violates the Dependency Injection principle established in the project
+
+**REQUIRED FIX**: Inject `JwksClient` (or factory) into constructor:
+
+```typescript
+import { JwksClient } from 'jwks-rsa';
+
+export class JWTValidator {
+  private jwksClient: JwksClient;
+
+  /**
+   * @param config - JWT validation configuration
+   * @param logger - Winston logger instance
+   * @param jwksClient - JWKS client for fetching signing keys (injectable for testing)
+   */
+  constructor(
+    private config: JWTValidatorConfig,
+    private logger: Logger,
+    jwksClient?: JwksClient  // ✅ Optional injection
+  ) {
+    // Use provided client or create default
+    this.jwksClient = jwksClient || jwksRsa({
+      cache: true,
+      cacheMaxAge: 86400000,
+      jwksUri: config.jwksUri,
+    });
+  }
+}
+```
+
+**Test Update Required**:
+```typescript
+// ✅ CORRECT: Inject mock JWKS client
+const mockJwksClient = {
+  getSigningKey: jest.fn().mockImplementation((kid, callback) => {
+    callback(null, { getPublicKey: () => 'mock-public-key' });
+  }),
+} as unknown as JwksClient;
+
+const validator = new JWTValidator(config, mockLogger, mockJwksClient);
+```
+
+---
+
+### Issue #3: 🟡 Config Safety - NaN Risk
+
+**Severity**: MEDIUM - Can cause unpredictable behavior in production
+
+**What's Wrong**: Direct `parseInt` on environment variables without NaN handling:
+
+```typescript
+// ❌ RISKY: NaN if env var is invalid string
+mcpRead: parseInt(process.env.MCP_READ_TIMEOUT_MS || '5000'),
+```
+
+**Impact**: If `MCP_READ_TIMEOUT_MS` is set to `"five-seconds"` (invalid), `parseInt` returns `NaN`, causing:
+- Axios timeouts to fail immediately or behave unpredictably
+- Silent failures that are hard to debug
+
+**REQUIRED FIX**: Add safe parsing helper:
+
+```typescript
+/**
+ * Safely parse integer from string with fallback to default.
+ * Returns defaultVal if parsing fails or results in NaN.
+ */
+const safeParseInt = (val: string | undefined, defaultVal: number): number => {
+  if (!val) return defaultVal;
+  const parsed = parseInt(val, 10);
+  return isNaN(parsed) ? defaultVal : parsed;
+};
+
+// Usage
+export const config = {
+  timeouts: {
+    mcpRead: safeParseInt(process.env.MCP_READ_TIMEOUT_MS, 5000),
+    mcpWrite: safeParseInt(process.env.MCP_WRITE_TIMEOUT_MS, 30000),
+    claudeApi: safeParseInt(process.env.CLAUDE_API_TIMEOUT_MS, 120000),
+  },
+};
+```
+
+---
+
+### Updated JWTValidator Implementation
+
+With all fixes applied, here is the corrected `src/auth/jwt-validator.ts`:
+
+```typescript
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwksRsa, { JwksClient } from 'jwks-rsa';
+import { Logger } from 'winston';
+
+export interface JWTValidatorConfig {
+  issuer: string;
+  audience: string[];
+  jwksUri: string;
+  clientId: string;  // For resource_access lookup
+}
+
+export interface ValidatedToken {
+  userId: string;
+  username: string;
+  roles: string[];
+  email?: string;
+  jti?: string;
+}
+
+export class JWTValidator {
+  private jwksClient: JwksClient;
+
+  constructor(
+    private config: JWTValidatorConfig,
+    private logger: Logger,
+    jwksClient?: JwksClient  // Injectable for testing
+  ) {
+    this.jwksClient = jwksClient || jwksRsa({
+      cache: true,
+      cacheMaxAge: 86400000,
+      jwksUri: config.jwksUri,
+    });
+  }
+
+  async validate(token: string): Promise<ValidatedToken> {
+    return new Promise((resolve, reject) => {
+      jwt.verify(
+        token,
+        (header, callback) => {
+          this.jwksClient.getSigningKey(header.kid, (err, key) => {
+            if (err) {
+              this.logger.error('Failed to get signing key', { error: err.message });
+              return callback(err);
+            }
+            callback(null, key?.getPublicKey());
+          });
+        },
+        {
+          issuer: this.config.issuer,
+          audience: this.config.audience,
+          algorithms: ['RS256'],
+        },
+        (err, decoded) => {
+          if (err) {
+            this.logger.warn('JWT validation failed', { error: err.message });
+            return reject(err);
+          }
+
+          const payload = decoded as JwtPayload;
+
+          // CRITICAL: Merge realm roles AND client roles
+          const realmRoles = payload.realm_access?.roles || [];
+          const clientRoles = payload.resource_access?.[this.config.clientId]?.roles || [];
+          const combinedRoles = Array.from(new Set([...realmRoles, ...clientRoles]));
+
+          resolve({
+            userId: payload.sub || '',
+            username: payload.preferred_username || '',
+            roles: combinedRoles,
+            email: payload.email,
+            jti: payload.jti,
+          });
+        }
+      );
+    });
+  }
+}
+```
+
+---
+
+### Updated Test for JWTValidator
+
+```typescript
+import jwt from 'jsonwebtoken';
+import { JwksClient } from 'jwks-rsa';
+import { JWTValidator, JWTValidatorConfig } from '../../src/auth/jwt-validator';
+import { createMockLogger } from '../test-utils/mock-logger';
+
+describe('JWTValidator', () => {
+  let validator: JWTValidator;
+  let mockLogger: ReturnType<typeof createMockLogger>;
+  let mockJwksClient: jest.Mocked<JwksClient>;
+
+  const config: JWTValidatorConfig = {
+    issuer: 'https://keycloak.example.com/realms/test',
+    audience: ['mcp-gateway'],
+    jwksUri: 'https://keycloak.example.com/realms/test/protocol/openid-connect/certs',
+    clientId: 'mcp-gateway',  // For resource_access lookup
+  };
+
+  beforeEach(() => {
+    mockLogger = createMockLogger();
+
+    // ✅ CORRECT: Inject mock JWKS client
+    mockJwksClient = {
+      getSigningKey: jest.fn(),
+    } as unknown as jest.Mocked<JwksClient>;
+
+    validator = new JWTValidator(config, mockLogger, mockJwksClient);
+  });
+
+  describe('validate', () => {
+    it('should merge realm and client roles', async () => {
+      // Setup mock signing key
+      const mockKey = { getPublicKey: () => 'test-public-key' };
+      mockJwksClient.getSigningKey.mockImplementation((kid, callback) => {
+        callback(null, mockKey as any);
+      });
+
+      // Create token with both realm and client roles
+      const payload = {
+        sub: 'user-123',
+        preferred_username: 'alice',
+        realm_access: { roles: ['realm-role'] },
+        resource_access: {
+          'mcp-gateway': { roles: ['hr-read', 'hr-write'] },
+        },
+        iss: config.issuer,
+        aud: config.audience,
+      };
+
+      // Mock jwt.verify to return our payload
+      jest.spyOn(jwt, 'verify').mockImplementation((token, getKey, options, callback) => {
+        (callback as Function)(null, payload);
+      });
+
+      const result = await validator.validate('test-token');
+
+      // Should have BOTH realm and client roles
+      expect(result.roles).toContain('realm-role');
+      expect(result.roles).toContain('hr-read');
+      expect(result.roles).toContain('hr-write');
+      expect(result.roles).toHaveLength(3);
+    });
+
+    it('should handle missing resource_access gracefully', async () => {
+      const mockKey = { getPublicKey: () => 'test-public-key' };
+      mockJwksClient.getSigningKey.mockImplementation((kid, callback) => {
+        callback(null, mockKey as any);
+      });
+
+      const payload = {
+        sub: 'user-123',
+        preferred_username: 'bob',
+        realm_access: { roles: ['user'] },
+        // No resource_access
+        iss: config.issuer,
+        aud: config.audience,
+      };
+
+      jest.spyOn(jwt, 'verify').mockImplementation((token, getKey, options, callback) => {
+        (callback as Function)(null, payload);
+      });
+
+      const result = await validator.validate('test-token');
+
+      expect(result.roles).toEqual(['user']);
+    });
+  });
+});
+```
+
+---
+
+### Pre-Implementation Checklist (Updated)
+
+Before starting any refactoring work, verify:
+
+- [ ] Read this entire REFACTORING_PLAN.md (all **5** addendums)
+- [ ] Understand the client roles fix (Issue #1, **Addendum #5**)
+- [ ] Understand the JWKS client injection pattern (Issue #2, **Addendum #5**)
+- [ ] Add `safeParseInt` helper before using config values (Issue #3, **Addendum #5**)
+- [ ] Run `npm test` locally - all tests pass
+- [ ] Run `npm run typecheck` - no errors
+- [ ] Run `npm run lint` - no errors
+
+---
+
+**Last Updated**: 2026-01-01 (Architecture Review Corrections)
