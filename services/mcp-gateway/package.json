@@ -59,6 +59,7 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "maxWorkers": 1,
     "testMatch": [
       "**/*.test.ts",
       "**/*.spec.ts"

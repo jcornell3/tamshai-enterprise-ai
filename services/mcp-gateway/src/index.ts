@@ -51,6 +51,9 @@ import {
 import gdprRoutes from './routes/gdpr';
 import healthRoutes from './routes/health.routes';
 import userRoutes from './routes/user.routes';
+import { JWTValidator } from './auth/jwt-validator';
+import { createAuthMiddleware, AuthenticatedRequest as AuthReq } from './middleware/auth.middleware';
+import { createStreamingRoutes } from './routes/streaming.routes';
 
 dotenv.config();
 
@@ -105,6 +108,29 @@ const logger = winston.createLogger({
       ),
     }),
   ],
+});
+
+// =============================================================================
+// JWT VALIDATOR (Extracted for testability - Phase 3 Refactoring)
+// =============================================================================
+
+const jwtValidator = new JWTValidator(
+  {
+    jwksUri: config.keycloak.jwksUri || `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`,
+    issuer: config.keycloak.issuer || `${config.keycloak.url}/realms/${config.keycloak.realm}`,
+    clientId: config.keycloak.clientId,
+  },
+  logger
+);
+
+// =============================================================================
+// AUTH MIDDLEWARE (Extracted for testability - Phase 3 Refactoring)
+// =============================================================================
+
+const authMiddleware = createAuthMiddleware({
+  jwtValidator,
+  logger,
+  isTokenRevoked,
 });
 
 // =============================================================================
@@ -649,52 +675,8 @@ try {
 // Health check routes (no auth required) - extracted to routes/health.routes.ts
 app.use(healthRoutes);
 
-// Authentication middleware
-async function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  const tokenFromQuery = req.query.token as string | undefined;
-
-  // Accept token from either Authorization header or query param
-  // SECURITY NOTE: Query param tokens are DEPRECATED due to URL logging risks
-  // Prefer POST /api/query with Authorization header for SSE streaming
-  let token: string;
-
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else if (tokenFromQuery) {
-    // DEPRECATED: Token in URL is logged and visible in browser history
-    // This is kept for backwards compatibility with EventSource clients
-    // New clients should use POST /api/query with fetch() streaming
-    token = tokenFromQuery;
-    logger.warn('Token passed via query parameter (deprecated)', {
-      path: req.path,
-      method: req.method,
-      // Don't log the actual token for security
-      warning: 'Query param tokens are visible in logs and browser history',
-    });
-  } else {
-    res.status(401).json({ error: 'Missing or invalid authorization header' });
-    return;
-  }
-
-  try {
-    const userContext = await validateToken(token);
-
-    // v1.4: Check token revocation in Redis
-    const payload = jwt.decode(token) as jwt.JwtPayload;
-    if (payload?.jti && await isTokenRevoked(payload.jti)) {
-      logger.warn('Revoked token attempted', { jti: payload.jti, userId: userContext.userId });
-      res.status(401).json({ error: 'Token has been revoked' });
-      return;
-    }
-
-    (req as AuthenticatedRequest).userContext = userContext;
-    next();
-  } catch (error) {
-    logger.error('Token validation failed:', error);
-    res.status(401).json({ error: 'Invalid or expired token' });
-  }
-}
+// Note: authMiddleware is now created via factory at the top of the file
+// using createAuthMiddleware() for testability (Phase 3 Refactoring)
 
 // =============================================================================
 // GDPR COMPLIANCE ROUTES (v1.5)
@@ -805,270 +787,32 @@ app.post('/internal/audit', express.json(), (req: Request, res: Response) => {
 });
 
 // =============================================================================
-// v1.4 ENDPOINTS
+// v1.4 STREAMING ROUTES (Extracted for testability - Phase 3 Refactoring)
 // =============================================================================
 
 /**
- * v1.4 SSE Streaming Query Handler (Section 6.1)
+ * SSE Streaming Query Routes with dependency injection
  *
- * Shared handler for both GET and POST streaming endpoints.
- * Streams Claude responses using Server-Sent Events to prevent timeouts
- * during long-running queries (30-60 seconds).
+ * Features:
+ * - 15-second heartbeat to prevent proxy timeouts (ADDENDUM #6)
+ * - Client disconnect detection with AbortController
+ * - Truncation warning injection (Section 5.3)
+ * - Pagination metadata (Section 5.2)
+ * - Human-in-the-loop confirmations (Section 5.6)
  */
-async function handleStreamingQuery(
-  req: Request,
-  res: Response,
-  query: string,
-  cursor?: string
-): Promise<void> {
-  const startTime = Date.now();
-  const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-
-  logger.info('SSE Query received', {
-    requestId,
-    username: sanitizeForLog(userContext.username),
-    query: scrubPII(query.substring(0, 100)),  // Scrub PII from query before logging
-    roles: userContext.roles,
-    hasCursor: !!cursor,
-  });
-
-  // Set headers for SSE
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  try {
-    // Determine accessible MCP servers
-    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
-
-    // Query all accessible MCP servers in parallel (with cursor for pagination)
-    const mcpPromises = accessibleServers.map((server) =>
-      queryMCPServer(server, query, userContext, cursor)
-    );
-    const mcpResults = await Promise.all(mcpPromises);
-
-    // v1.5: Detect timeouts and send service unavailability warnings
-    const successfulResults = mcpResults.filter((r) => r.status === 'success');
-    const timedOutResults = mcpResults.filter((r) => r.status === 'timeout');
-    const errorResults = mcpResults.filter((r) => r.status === 'error');
-
-    // Send SSE events for service unavailability (v1.5 partial response)
-    if (timedOutResults.length > 0 || errorResults.length > 0) {
-      const warnings = [
-        ...timedOutResults.map((r) => ({
-          server: r.server,
-          code: 'TIMEOUT',
-          message: r.error || 'Service did not respond in time',
-        })),
-        ...errorResults.map((r) => ({
-          server: r.server,
-          code: 'ERROR',
-          message: r.error || 'Service error',
-        })),
-      ];
-
-      res.write(`data: ${JSON.stringify({
-        type: 'service_unavailable',
-        warnings,
-        successfulServers: successfulResults.map((r) => r.server),
-        failedServers: [...timedOutResults, ...errorResults].map((r) => r.server),
-      })}\n\n`);
-
-      logger.warn('Partial response due to service failures', {
-        requestId,
-        timedOut: timedOutResults.map((r) => r.server),
-        errors: errorResults.map((r) => r.server),
-        successful: successfulResults.map((r) => r.server),
-      });
-    }
-
-    // v1.4: Check for pagination metadata and pending confirmations
-    const paginationInfo: { server: string; hasMore: boolean; nextCursor?: string; hint?: string }[] = [];
-
-    mcpResults.forEach((result) => {
-      const mcpResponse = result.data as MCPToolResponse;
-      if (isSuccessResponse(mcpResponse) && mcpResponse.metadata?.hasMore) {
-        paginationInfo.push({
-          server: result.server,
-          hasMore: mcpResponse.metadata.hasMore,
-          nextCursor: mcpResponse.metadata.nextCursor,
-          hint: mcpResponse.metadata.hint,
-        });
-      }
-    });
-
-    const hasPagination = paginationInfo.length > 0;
-
-    // v1.4: Extract truncation warnings (Article III.2, Section 5.3)
-    const truncationWarnings: string[] = [];
-    mcpResults.forEach((result) => {
-      const mcpResponse = result.data as MCPToolResponse;
-      if (isSuccessResponse(mcpResponse) && mcpResponse.metadata?.truncated) {
-        const returnedCount = mcpResponse.metadata.returnedCount || 50;
-        truncationWarnings.push(
-          `TRUNCATION WARNING: Data from ${result.server} returned only ${returnedCount} of ${returnedCount}+ records. ` +
-          `You MUST inform the user that results are incomplete and may not represent the full dataset.`
-        );
-        logger.info('Truncation detected in MCP response', {
-          requestId,
-          server: result.server,
-          returnedCount,
-        });
-      }
-    });
-
-    const pendingConfirmations = mcpResults.filter((result) => {
-      const mcpResponse = result.data as MCPToolResponse;
-      return isPendingConfirmationResponse(mcpResponse);
-    });
-
-    // If there are pending confirmations, return them immediately (no Claude call)
-    if (pendingConfirmations.length > 0) {
-      const confirmationResponse = pendingConfirmations[0].data as MCPToolResponse;
-      res.write(`data: ${JSON.stringify(confirmationResponse)}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
-
-    // Build context from MCP data
-    const dataContext = mcpResults
-      .filter((d) => d.data !== null)
-      .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
-      .join('\n\n');
-
-    // v1.4: Build pagination instructions for Claude
-    let paginationInstructions = '';
-    if (hasPagination) {
-      const hints = paginationInfo.map(p => p.hint).filter(Boolean);
-      paginationInstructions = `\n\nPAGINATION INFO: More data is available. ${hints.join(' ')} You MUST inform the user that they are viewing a partial result set and can request more data.`;
-    }
-
-    const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization.
-You have access to enterprise data based on the user's role permissions.
-The current user is "${userContext.username}" (email: ${userContext.email || 'unknown'}) with system roles: ${userContext.roles.join(', ')}.
-
-IMPORTANT - User Identity Context:
-- First, look for this user in the employee data to understand their position and department
-- Use their employee record to determine who their team members or direct reports are
-- If the user asks about "my team" or "my employees", find the user in the data first, then find employees who report to them or are in their department
-
-When answering questions:
-1. Only use the data provided in the context below
-2. If the data doesn't contain information to answer the question, say so
-3. Never make up or infer sensitive information not in the data
-4. Be concise and professional
-5. If asked about data you don't have access to, explain that the user's role doesn't have permission
-6. When asked about "my team", first identify the user in the employee data, then find their direct reports${paginationInstructions}${truncationWarnings.length > 0 ? '\n\n' + truncationWarnings.join('\n') : ''}
-
-Available data context:
-${dataContext || 'No relevant data available for this query.'}`;
-
-    // Stream Claude response
-    const stream = await anthropic.messages.stream({
-      model: config.claude.model,
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: query,
-        },
-      ],
-    });
-
-    // Stream each chunk to the client
-    for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-        res.write(`data: ${JSON.stringify({ type: 'text', text: chunk.delta.text })}\n\n`);
-      }
-    }
-
-    // Send pagination metadata if more data is available
-    if (hasPagination) {
-      res.write(`data: ${JSON.stringify({
-        type: 'pagination',
-        hasMore: true,
-        cursors: paginationInfo.map(p => ({ server: p.server, cursor: p.nextCursor })),
-        hint: 'More data available. Request next page to continue.',
-      })}\n\n`);
-    }
-
-    // Send completion signal
-    res.write('data: [DONE]\n\n');
-    res.end();
-
-    const durationMs = Date.now() - startTime;
-    logger.info('SSE query completed', { requestId, durationMs });
-  } catch (error) {
-    logger.error('SSE query error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to process query' })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-  }
-}
-
-/**
- * v1.4 SSE Streaming Query Endpoint - GET (Section 6.1)
- *
- * @deprecated Use POST /api/query instead for better security.
- *
- * SECURITY WARNING: This endpoint accepts tokens via query parameter
- * which causes tokens to appear in:
- * - Server access logs
- * - Browser history
- * - Proxy logs
- * - Network monitoring tools
- *
- * Kept for backwards compatibility with EventSource clients.
- * New clients should use POST /api/query with fetch() streaming.
- */
-app.get('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
-  const query = req.query.q as string;
-  const cursor = req.query.cursor as string | undefined;
-
-  if (!query || typeof query !== 'string') {
-    res.status(400).json({ error: 'Query parameter "q" is required' });
-    return;
-  }
-
-  await handleStreamingQuery(req, res, query, cursor);
+const streamingRouter = createStreamingRoutes({
+  logger,
+  anthropic,
+  config: {
+    claudeModel: config.claude.model,
+    heartbeatIntervalMs: 15000,
+  },
+  getAccessibleServers: getAccessibleMCPServersForUser,
+  queryMCPServer,
 });
 
-/**
- * v1.4 SSE Streaming Query Endpoint - POST (Section 6.1) - RECOMMENDED
- *
- * This is the preferred endpoint for AI queries. Supports:
- * - fetch() API with streaming response
- * - Proper Authorization header (not exposed in logs)
- * - JSON body for complex queries
- *
- * Example usage with fetch():
- * ```javascript
- * const response = await fetch('/api/query', {
- *   method: 'POST',
- *   headers: {
- *     'Authorization': `Bearer ${token}`,
- *     'Content-Type': 'application/json',
- *   },
- *   body: JSON.stringify({ query: 'Your question here' }),
- * });
- * const reader = response.body.getReader();
- * // Read SSE chunks...
- * ```
- */
-app.post('/api/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
-  const { query, cursor } = req.body;
-
-  if (!query || typeof query !== 'string') {
-    res.status(400).json({ error: 'Field "query" is required' });
-    return;
-  }
-
-  await handleStreamingQuery(req, res, query, cursor);
-});
+// Mount streaming routes at /api with auth and rate limiting
+app.use('/api', authMiddleware, aiQueryLimiter, streamingRouter);
 
 /**
  * v1.4 Confirmation Endpoint (Section 5.6)
