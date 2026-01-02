@@ -71,10 +71,10 @@ test_step() {
 
     if [ "$result" = "0" ]; then
         log_info "$name"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     else
         log_error "$name"
-        ((FAILED++))
+        FAILED=$((FAILED + 1))
     fi
 }
 
@@ -167,7 +167,8 @@ test_sso_redirect() {
     local code_verifier="test-verifier-$(date +%s)"
     local code_challenge=$(echo -n "$code_verifier" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -d '=')
 
-    local oauth_url="${auth_url}?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=openid%20profile%20email&state=${state}&code_challenge=${code_challenge}&code_challenge_method=S256"
+    # Note: Using only 'openid' scope since profile/email may not be configured as default scopes in all realms
+    local oauth_url="${auth_url}?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=openid&state=${state}&code_challenge=${code_challenge}&code_challenge_method=S256"
 
     # Follow redirect to Keycloak login page
     local response
@@ -200,19 +201,20 @@ test_sso_redirect() {
 test_login_with_credentials() {
     log_step "Testing login with test credentials..."
 
-    # This test requires a proper browser session due to CSRF tokens
-    # We'll just verify the login endpoint accepts POST
+    # Test that the token endpoint responds (we expect an error since direct grants are disabled)
     local login_url="$KEYCLOAK_URL/realms/tamshai-corp/protocol/openid-connect/token"
 
     local response
-    response=$(curl $INSECURE -sf --max-time 10 -X POST -o /dev/null -w "%{http_code}" \
+    # Note: Don't use -f flag since we expect HTTP 400/401 errors
+    response=$(curl $INSECURE -s --max-time 10 -X POST -o /dev/null -w "%{http_code}" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
         -d "client_id=tamshai-website" \
         -d "grant_type=password" \
         -d "username=test" \
         -d "password=test" \
         "$login_url" 2>/dev/null) || response="000"
 
-    # We expect 401 (unauthorized) because credentials are wrong, but endpoint should respond
+    # We expect 400/401 (unauthorized_client since direct grants are disabled for public clients)
     if [ "$response" = "401" ] || [ "$response" = "400" ]; then
         test_step "Keycloak token endpoint responds" 0
     elif [ "$response" = "200" ]; then

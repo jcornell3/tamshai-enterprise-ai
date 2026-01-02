@@ -29,8 +29,6 @@
 
 name: tamshai-dev
 
-version: '3.8'
-
 services:
   # =============================================================================
   # TOKEN REVOCATION CACHE (Redis)
