@@ -113,6 +113,29 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 # MCP health check
 ./scripts/mcp/health-check.sh dev        # Check all MCP servers
 ./scripts/mcp/health-check.sh stage      # Check stage MCP servers
+
+# MCP server restart
+./scripts/mcp/restart.sh dev             # Restart all MCP servers
+./scripts/mcp/restart.sh dev gateway     # Restart only MCP Gateway
+./scripts/mcp/restart.sh stage all       # Restart all on stage
+
+# Database backup/restore
+./scripts/db/backup.sh dev               # Backup all databases
+./scripts/db/backup.sh dev postgres      # Backup only PostgreSQL
+./scripts/db/restore.sh dev ./backups/dev/20250102_120000/  # Restore from backup
+
+# Rollback deployments
+./scripts/infra/rollback.sh dev --list   # List recent commits
+./scripts/infra/rollback.sh dev --steps=1 --backup  # Rollback 1 commit with backup
+
+# Vault secrets management
+./scripts/vault/vault.sh status dev      # Check Vault status
+./scripts/vault/vault.sh secrets dev     # List secrets
+./scripts/vault/vault.sh ui dev          # Open Vault UI
+
+# Login journey testing
+./scripts/test/login-journey.sh dev      # Test SSO login flow on dev
+./scripts/test/login-journey.sh stage    # Test SSO login flow on stage
 ```
 
 **Environment Variables for Stage Scripts:**
@@ -571,6 +594,7 @@ sysctl vm.max_map_count
 | MinIO API | 9100 | Object Storage |
 | MinIO Console | 9102 | MinIO UI |
 | Redis | 6380 | Token Cache |
+| Vault | 8200 | Secrets Management |
 
 ### Environment Variables
 
