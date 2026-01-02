@@ -1,0 +1,79 @@
+# Tamshai Enterprise AI - Local Development Caddy Configuration
+# HTTPS with self-signed certificates for *.tamshai.local
+#
+# Prerequisites:
+# 1. Add to hosts file (C:\Windows\System32\drivers\etc\hosts):
+#    127.0.0.1  tamshai.local www.tamshai.local
+#
+# 2. Accept the self-signed certificate warning in your browser
+#    OR install mkcert for trusted local certificates
+
+{
+  # Enable local HTTPS with self-signed certs
+  local_certs
+}
+
+# HTTPS on tamshai.local and www.tamshai.local
+tamshai.local, www.tamshai.local {
+  encode gzip
+
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+
+  # Keycloak authentication (/auth/*)
+  handle /auth/* {
+    reverse_proxy keycloak:8080
+  }
+
+  # API Gateway (Kong handles rate limiting, CORS, security headers)
+  handle /api/* {
+    # SSE streaming support
+    @sse {
+      path /api/query*
+      header Accept text/event-stream
+    }
+    reverse_proxy @sse kong:8000 {
+      flush_interval -1
+      transport http {
+        read_timeout 120s
+        write_timeout 120s
+      }
+    }
+
+    reverse_proxy kong:8000
+  }
+
+  # HR App (/hr/*)
+  handle_path /hr/* {
+    reverse_proxy web-hr:80
+  }
+
+  # Finance App (/finance/*)
+  handle_path /finance/* {
+    reverse_proxy web-finance:80
+  }
+
+  # Sales App (/sales/*)
+  handle_path /sales/* {
+    reverse_proxy web-sales:80
+  }
+
+  # Support App (/support/*)
+  handle_path /support/* {
+    reverse_proxy web-support:80
+  }
+
+  # Web Portal (/app/*)
+  handle_path /app/* {
+    reverse_proxy web-portal:80
+  }
+
+  # Corporate website (default - static site at root)
+  handle {
+    reverse_proxy tamshai-website:80
+  }
+}
