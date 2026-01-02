@@ -28,14 +28,20 @@ export class JWTValidator {
   private config: JWTValidatorConfig;
   private logger: Logger;
 
-  constructor(config: JWTValidatorConfig, logger: Logger) {
+  /**
+   * @param config - JWT validation configuration
+   * @param logger - Winston logger instance
+   * @param jwksClient - Optional JWKS client for testing (injectable for DI)
+   */
+  constructor(config: JWTValidatorConfig, logger: Logger, jwksClient?: JwksClient) {
     this.config = {
       ...config,
       algorithms: config.algorithms || ['RS256'],
     };
     this.logger = logger;
 
-    this.jwksClient = jwksRsa({
+    // Use provided client or create default (ADDENDUM #5: DI for testability)
+    this.jwksClient = jwksClient || jwksRsa({
       jwksUri: config.jwksUri,
       cache: true,
       rateLimit: true,

@@ -64,6 +64,25 @@ describe('JWTValidator', () => {
         rateLimit: true,
       });
     });
+
+    it('should accept injected jwksClient for testability (ADDENDUM #5)', () => {
+      // Create a custom mock client
+      const injectedClient = {
+        getSigningKey: jest.fn(),
+      } as unknown as jwksRsa.JwksClient;
+
+      // Clear previous calls
+      (jwksRsa as unknown as jest.Mock).mockClear();
+
+      // Create validator with injected client
+      const validatorWithDI = new JWTValidator(config, mockLogger, injectedClient);
+
+      // jwksRsa should NOT be called when client is injected
+      expect(jwksRsa).not.toHaveBeenCalled();
+
+      // The validator should use the injected client
+      expect(validatorWithDI).toBeDefined();
+    });
   });
 
   describe('validateToken', () => {
