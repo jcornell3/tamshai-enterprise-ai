@@ -11,8 +11,59 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
-import type { MockKcAdminClient } from '../../tests/test-utils/mock-keycloak-admin';
-import type { MockQueue, MockDeleteUserJobData } from '../../tests/test-utils/mock-queue';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * S-OX Compliance: Terminated users remain disabled for 72 hours before
+ * permanent deletion. This allows for termination reversal if needed.
+ */
+export const RETENTION_PERIOD_MS = 72 * 60 * 60 * 1000; // 72 hours
+export const RETENTION_PERIOD_HOURS = 72;
+
+/**
+ * Audit action types for access logs
+ */
+export const AuditAction = {
+  USER_CREATED: 'USER_CREATED',
+  USER_TERMINATED: 'USER_TERMINATED',
+  USER_DELETED: 'USER_DELETED',
+  DELETION_BLOCKED: 'DELETION_BLOCKED',
+} as const;
+
+export type AuditActionType = (typeof AuditAction)[keyof typeof AuditAction];
+
+/**
+ * BullMQ job names
+ */
+export const JobName = {
+  DELETE_USER_FINAL: 'delete_user_final',
+} as const;
+
+/**
+ * Department to Keycloak role mapping
+ */
+export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
+  HR: 'hr-read',
+  Finance: 'finance-read',
+  Sales: 'sales-read',
+  Support: 'support-read',
+  Engineering: 'engineering-read',
+};
+
+/**
+ * Keycloak client configuration
+ */
+export const KeycloakConfig = {
+  MCP_GATEWAY_CLIENT_ID: 'mcp-gateway',
+  HR_SERVICE_CLIENT_ID: 'mcp-hr-service',
+} as const;
+
+// ============================================================================
+// Types
+// ============================================================================
 
 /**
  * Employee data for Keycloak user creation
@@ -36,20 +87,115 @@ export interface TerminationResult {
 }
 
 /**
- * Department to role mapping
+ * Keycloak user representation (subset used by IdentityService)
  */
-const DEPARTMENT_ROLE_MAP: Record<string, string> = {
-  HR: 'hr-read',
-  Finance: 'finance-read',
-  Sales: 'sales-read',
-  Support: 'support-read',
-  Engineering: 'engineering-read',
-};
+export interface KcUserRepresentation {
+  id?: string;
+  username?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  enabled?: boolean;
+  emailVerified?: boolean;
+  attributes?: Record<string, string[]>;
+}
 
 /**
- * Client ID for MCP Gateway (where roles are defined)
+ * Keycloak role representation
  */
-const MCP_GATEWAY_CLIENT_ID = 'mcp-gateway';
+export interface KcRoleRepresentation {
+  id?: string;
+  name?: string;
+}
+
+/**
+ * Keycloak session representation
+ */
+export interface KcSessionRepresentation {
+  id: string;
+}
+
+/**
+ * Keycloak Admin Client interface
+ * Abstracts the @keycloak/keycloak-admin-client for testability
+ */
+export interface KcAdminClient {
+  users: {
+    create(user: Partial<KcUserRepresentation>): Promise<{ id: string }>;
+    update(query: { id: string }, user: Partial<KcUserRepresentation>): Promise<void>;
+    del(query: { id: string }): Promise<void>;
+    findOne(query: { id: string }): Promise<KcUserRepresentation | null>;
+    addClientRoleMappings(params: {
+      id: string;
+      clientUniqueId: string;
+      roles: KcRoleRepresentation[];
+    }): Promise<void>;
+    listClientRoleMappings(params: {
+      id: string;
+      clientUniqueId: string;
+    }): Promise<KcRoleRepresentation[]>;
+    listSessions(query: { id: string }): Promise<KcSessionRepresentation[]>;
+    logout(query: { id: string }): Promise<void>;
+  };
+  clients: {
+    listRoles(query: { id: string }): Promise<KcRoleRepresentation[]>;
+  };
+  auth(credentials: {
+    grantType: string;
+    clientId: string;
+    clientSecret: string;
+  }): Promise<void>;
+}
+
+/**
+ * Job data for user deletion
+ */
+export interface DeleteUserJobData {
+  keycloakUserId: string;
+  employeeId: string;
+}
+
+/**
+ * BullMQ Queue interface (subset used by IdentityService)
+ */
+export interface CleanupQueue {
+  add(
+    name: string,
+    data: DeleteUserJobData,
+    opts?: { delay?: number }
+  ): Promise<unknown>;
+}
+
+// ============================================================================
+// SQL Queries
+// ============================================================================
+
+const SQL = {
+  UPDATE_EMPLOYEE_KEYCLOAK_ID:
+    'UPDATE hr.employees SET keycloak_user_id = $1 WHERE id = $2',
+
+  INSERT_AUDIT_LOG:
+    'INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, details, created_at) VALUES ($1, $2, $3, $4, NOW())',
+
+  INSERT_AUDIT_LOG_WITH_SNAPSHOT:
+    'INSERT INTO hr.audit_access_logs (employee_id, action, keycloak_user_id, permissions_snapshot, created_at) VALUES ($1, $2, $3, $4, NOW())',
+
+  INSERT_AUDIT_LOG_SIMPLE:
+    'INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, created_at) VALUES ($1, $2, $3, NOW())',
+
+  SELECT_EMPLOYEE_BY_ID:
+    'SELECT id, email, keycloak_user_id FROM hr.employees WHERE id = $1',
+
+  UPDATE_EMPLOYEE_TERMINATED:
+    "UPDATE hr.employees SET status = 'terminated', terminated_at = NOW() WHERE id = $1",
+
+  UPDATE_EMPLOYEE_DELETED:
+    "UPDATE hr.employees SET status = 'deleted', deleted_at = NOW() WHERE id = $1",
+} as const;
+
+// ============================================================================
+// IdentityService
+// ============================================================================
 
 /**
  * IdentityService manages Keycloak user provisioning and de-provisioning.
@@ -58,24 +204,19 @@ const MCP_GATEWAY_CLIENT_ID = 'mcp-gateway';
  * with mocks. When not provided, creates default instances from config.
  */
 export class IdentityService {
-  private db: Pool;
-  private kcAdmin: MockKcAdminClient;
-  private cleanupQueue: MockQueue<MockDeleteUserJobData>;
+  private readonly db: Pool;
+  private readonly kcAdmin: KcAdminClient;
+  private readonly cleanupQueue: CleanupQueue;
 
   /**
    * @param db - PostgreSQL connection pool
-   * @param kcAdmin - Optional KcAdminClient instance (for testing)
-   * @param cleanupQueue - Optional BullMQ queue (for testing)
+   * @param kcAdmin - KcAdminClient instance (required)
+   * @param cleanupQueue - BullMQ queue for scheduled deletions (required)
    */
-  constructor(
-    db: Pool,
-    kcAdmin?: MockKcAdminClient,
-    cleanupQueue?: MockQueue<MockDeleteUserJobData>
-  ) {
+  constructor(db: Pool, kcAdmin: KcAdminClient, cleanupQueue: CleanupQueue) {
     this.db = db;
-    // In production, these would be created from config if not provided
-    this.kcAdmin = kcAdmin!;
-    this.cleanupQueue = cleanupQueue!;
+    this.kcAdmin = kcAdmin;
+    this.cleanupQueue = cleanupQueue;
   }
 
   /**
@@ -85,7 +226,7 @@ export class IdentityService {
   async authenticate(): Promise<void> {
     await this.kcAdmin.auth({
       grantType: 'client_credentials',
-      clientId: 'mcp-hr-service',
+      clientId: KeycloakConfig.HR_SERVICE_CLIENT_ID,
       clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
     });
   }
@@ -106,7 +247,7 @@ export class IdentityService {
     let keycloakUserId: string | undefined;
 
     try {
-      // 1. Create user in Keycloak
+      // Step 1: Create user in Keycloak
       const createResult = await this.kcAdmin.users.create({
         username: employeeData.email,
         email: employeeData.email,
@@ -122,51 +263,60 @@ export class IdentityService {
 
       keycloakUserId = createResult.id;
 
-      // 2. Find and assign department role
-      const roleName = DEPARTMENT_ROLE_MAP[employeeData.department];
-      if (roleName) {
-        const roles = await this.kcAdmin.clients.listRoles({ id: MCP_GATEWAY_CLIENT_ID });
-        const departmentRole = roles.find((r) => r.name === roleName);
+      // Step 2: Assign department role (if applicable)
+      await this.assignDepartmentRole(keycloakUserId, employeeData.department);
 
-        if (departmentRole) {
-          try {
-            await this.kcAdmin.users.addClientRoleMappings({
-              id: keycloakUserId,
-              clientUniqueId: MCP_GATEWAY_CLIENT_ID,
-              roles: [{ id: departmentRole.id!, name: departmentRole.name! }],
-            });
-          } catch (roleError) {
-            // COMPENSATING TRANSACTION: Delete Keycloak user if role assignment fails
-            await this.kcAdmin.users.del({ id: keycloakUserId });
-            throw roleError;
-          }
-        }
-      }
+      // Step 3: Update employee record with Keycloak user ID
+      await client.query(SQL.UPDATE_EMPLOYEE_KEYCLOAK_ID, [
+        keycloakUserId,
+        employeeData.id,
+      ]);
 
-      // 3. Update employee record with Keycloak user ID
-      await client.query(
-        'UPDATE hr.employees SET keycloak_user_id = $1 WHERE id = $2',
-        [keycloakUserId, employeeData.id]
-      );
-
-      // 4. Write audit log
-      await client.query(
-        `INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, details, created_at)
-         VALUES ($1, $2, 'USER_CREATED', $3, NOW())`,
-        [
-          employeeData.id,
-          keycloakUserId,
-          JSON.stringify({
-            email: employeeData.email,
-            department: employeeData.department,
-          }),
-        ]
-      );
+      // Step 4: Write audit log
+      await client.query(SQL.INSERT_AUDIT_LOG, [
+        employeeData.id,
+        keycloakUserId,
+        AuditAction.USER_CREATED,
+        JSON.stringify({
+          email: employeeData.email,
+          department: employeeData.department,
+        }),
+      ]);
 
       return keycloakUserId;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to provision Keycloak user: ${message}`);
+    }
+  }
+
+  /**
+   * Assign department-specific role to user.
+   * Implements compensating transaction: deletes user if role assignment fails.
+   */
+  private async assignDepartmentRole(
+    keycloakUserId: string,
+    department: string
+  ): Promise<void> {
+    const roleName = DEPARTMENT_ROLE_MAP[department];
+    if (!roleName) return;
+
+    const roles = await this.kcAdmin.clients.listRoles({
+      id: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
+    });
+    const departmentRole = roles.find((r) => r.name === roleName);
+    if (!departmentRole) return;
+
+    try {
+      await this.kcAdmin.users.addClientRoleMappings({
+        id: keycloakUserId,
+        clientUniqueId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
+        roles: [{ id: departmentRole.id!, name: departmentRole.name! }],
+      });
+    } catch (roleError) {
+      // COMPENSATING TRANSACTION: Delete Keycloak user if role assignment fails
+      await this.kcAdmin.users.del({ id: keycloakUserId });
+      throw roleError;
     }
   }
 
@@ -181,66 +331,54 @@ export class IdentityService {
    * @returns Termination result with session count and scheduled deletion time
    */
   async terminateUser(employeeId: string): Promise<TerminationResult> {
-    // 1. Get employee record
-    const employeeResult = await this.db.query(
-      'SELECT id, email, keycloak_user_id FROM hr.employees WHERE id = $1',
-      [employeeId]
-    );
-
-    if (employeeResult.rows.length === 0) {
-      throw new Error(`Employee ${employeeId} not found`);
-    }
-
-    const employee = employeeResult.rows[0];
+    // Step 1: Get and validate employee record
+    const employee = await this.getEmployeeOrThrow(employeeId);
     const keycloakUserId = employee.keycloak_user_id;
 
     if (!keycloakUserId) {
       throw new Error(`Employee ${employeeId} has no Keycloak user`);
     }
 
-    // 2. Get current roles for permissions snapshot
+    // Step 2: Capture permissions snapshot before disabling
     const roles = await this.kcAdmin.users.listClientRoleMappings({
       id: keycloakUserId,
-      clientUniqueId: MCP_GATEWAY_CLIENT_ID,
+      clientUniqueId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
     });
 
-    // 3. Get active sessions count
+    // Step 3: Get active sessions count
     const sessions = await this.kcAdmin.users.listSessions({ id: keycloakUserId });
     const sessionsRevoked = sessions.length;
 
-    // 4. Disable user in Keycloak (immediate)
+    // Step 4: KILL SWITCH - Disable user immediately
     await this.kcAdmin.users.update({ id: keycloakUserId }, { enabled: false });
 
-    // 5. Revoke all active sessions
+    // Step 5: Revoke all active sessions
     await this.kcAdmin.users.logout({ id: keycloakUserId });
 
-    // 6. Write audit log with permissions snapshot
+    // Step 6: Write audit log with permissions snapshot
     const permissionsSnapshot = JSON.stringify({
       timestamp: new Date().toISOString(),
       roles: roles.map((r) => r.name),
       sessionsRevoked,
     });
 
-    await this.db.query(
-      `INSERT INTO hr.audit_access_logs (employee_id, action, keycloak_user_id, permissions_snapshot, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
-      [employeeId, 'USER_TERMINATED', keycloakUserId, permissionsSnapshot]
-    );
+    await this.db.query(SQL.INSERT_AUDIT_LOG_WITH_SNAPSHOT, [
+      employeeId,
+      AuditAction.USER_TERMINATED,
+      keycloakUserId,
+      permissionsSnapshot,
+    ]);
 
-    // 7. Update employee status
-    await this.db.query(
-      `UPDATE hr.employees SET status = 'terminated', terminated_at = NOW() WHERE id = $1`,
-      [employeeId]
-    );
+    // Step 7: Update employee status
+    await this.db.query(SQL.UPDATE_EMPLOYEE_TERMINATED, [employeeId]);
 
-    // 8. Schedule deletion job for 72 hours later
-    const delayMs = 72 * 60 * 60 * 1000; // 72 hours in milliseconds
-    const scheduledDeletionAt = new Date(Date.now() + delayMs);
+    // Step 8: Schedule deletion job for 72 hours later
+    const scheduledDeletionAt = new Date(Date.now() + RETENTION_PERIOD_MS);
 
     await this.cleanupQueue.add(
-      'delete_user_final',
+      JobName.DELETE_USER_FINAL,
       { keycloakUserId, employeeId },
-      { delay: delayMs }
+      { delay: RETENTION_PERIOD_MS }
     );
 
     return {
@@ -264,7 +402,7 @@ export class IdentityService {
     keycloakUserId: string,
     employeeId: string
   ): Promise<void> {
-    // 1. Check if user still exists in Keycloak
+    // Step 1: Check if user still exists in Keycloak
     const kcUser = await this.kcAdmin.users.findOne({ id: keycloakUserId });
 
     if (!kcUser) {
@@ -272,39 +410,57 @@ export class IdentityService {
       return;
     }
 
-    // 2. Safety check: Don't delete if user was re-enabled
+    // Step 2: Safety check - Don't delete if user was re-enabled
     if (kcUser.enabled) {
-      // Log blocked deletion for audit trail
-      await this.db.query(
-        `INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, details, created_at)
-         VALUES ($1, $2, 'DELETION_BLOCKED', $3, NOW())`,
-        [
-          employeeId,
-          keycloakUserId,
-          JSON.stringify({
-            reason: 'User was re-enabled after termination',
-            email: kcUser.email,
-          }),
-        ]
-      );
-
+      await this.logBlockedDeletion(employeeId, keycloakUserId, kcUser.email);
       throw new Error('Cannot delete enabled user');
     }
 
-    // 3. Delete user from Keycloak
+    // Step 3: Delete user from Keycloak
     await this.kcAdmin.users.del({ id: keycloakUserId });
 
-    // 4. Update employee status
-    await this.db.query(
-      `UPDATE hr.employees SET status = 'deleted', deleted_at = NOW() WHERE id = $1`,
-      [employeeId]
-    );
+    // Step 4: Update employee status
+    await this.db.query(SQL.UPDATE_EMPLOYEE_DELETED, [employeeId]);
 
-    // 5. Write audit log
-    await this.db.query(
-      `INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, created_at)
-       VALUES ($1, $2, 'USER_DELETED', NOW())`,
-      [employeeId, keycloakUserId]
-    );
+    // Step 5: Write audit log
+    await this.db.query(SQL.INSERT_AUDIT_LOG_SIMPLE, [
+      employeeId,
+      keycloakUserId,
+      AuditAction.USER_DELETED,
+    ]);
+  }
+
+  /**
+   * Get employee by ID or throw if not found
+   */
+  private async getEmployeeOrThrow(
+    employeeId: string
+  ): Promise<{ id: string; email: string; keycloak_user_id: string | null }> {
+    const result = await this.db.query(SQL.SELECT_EMPLOYEE_BY_ID, [employeeId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Employee ${employeeId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Log when deletion is blocked due to user re-enablement
+   */
+  private async logBlockedDeletion(
+    employeeId: string,
+    keycloakUserId: string,
+    email?: string
+  ): Promise<void> {
+    await this.db.query(SQL.INSERT_AUDIT_LOG, [
+      employeeId,
+      keycloakUserId,
+      AuditAction.DELETION_BLOCKED,
+      JSON.stringify({
+        reason: 'User was re-enabled after termination',
+        email,
+      }),
+    ]);
   }
 }
