@@ -70,7 +70,7 @@ jobs:
           sshd -t 2>&1 || echo "sshd config syntax error!"
           EOF
 
-      - name: Get Vault CA and Compare
+      - name: Get Vault CA and Compare Fingerprints
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -78,31 +78,68 @@ jobs:
         run: |
           echo "=== Comparing Vault CA with VPS CA ==="
 
-          # Get CA from Vault (unauthenticated endpoint)
-          echo "Fetching CA from Vault..."
-          VAULT_CA=$(curl -sS --insecure "$VAULT_ADDR/v1/ssh-client-signer/public_key" 2>/dev/null || echo "FAILED")
+          # Get CA fingerprint from VPS trusted file
+          echo "1. VPS TrustedUserCAKeys fingerprint:"
+          VPS_CA_FP=$(ssh $VPS_USER@$VPS_HOST "ssh-keygen -lf /etc/ssh/vault-ca.pub 2>/dev/null" || echo "FAILED")
+          echo "$VPS_CA_FP"
 
-          if [ "$VAULT_CA" = "FAILED" ]; then
-            echo "ERROR: Could not fetch CA from Vault. Trying authenticated endpoint..."
-          else
-            echo "Vault CA public key:"
-            echo "$VAULT_CA"
-          fi
+          # Get CA from Vault via VPS (local access)
+          echo ""
+          echo "2. Vault CA fingerprint (from VPS local access):"
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          TOKEN=$(grep 'Initial Root Token' /root/vault-init.txt | awk '{print $NF}')
+          export VAULT_TOKEN="$TOKEN"
+
+          vault read -field=public_key ssh-client-signer/config/ca > /tmp/vault-ca-check.pub
+          ssh-keygen -lf /tmp/vault-ca-check.pub
+          rm /tmp/vault-ca-check.pub
+          EOF
 
           echo ""
-          echo "VPS CA public key:"
-          VPS_CA=$(ssh $VPS_USER@$VPS_HOST "cat /etc/ssh/vault-ca.pub 2>/dev/null" || echo "FAILED")
-          echo "$VPS_CA"
+          echo "If the fingerprints above match, the CA is correctly synced."
+
+      - name: Test Certificate Auth Locally on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "=== Testing Certificate Auth Locally on VPS ==="
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          TOKEN=$(grep 'Initial Root Token' /root/vault-init.txt | awk '{print $NF}')
+          export VAULT_TOKEN="$TOKEN"
+
+          # Generate test key
+          ssh-keygen -t ed25519 -f /tmp/test_local_key -N "" -C "local-test" -q
+
+          echo "Test public key:"
+          cat /tmp/test_local_key.pub
 
           echo ""
-          if [ "$VAULT_CA" = "$VPS_CA" ]; then
-            echo "✅ CA keys MATCH"
-          else
-            echo "❌ CA keys DO NOT MATCH - this is the problem!"
-            echo ""
-            echo "Vault CA length: $(echo "$VAULT_CA" | wc -c)"
-            echo "VPS CA length: $(echo "$VPS_CA" | wc -c)"
-          fi
+          echo "Getting signed certificate..."
+          vault write -field=signed_key ssh-client-signer/sign/github-deploy \
+            public_key=@/tmp/test_local_key.pub \
+            valid_principals="root" > /tmp/test_local_key-cert.pub
+
+          echo ""
+          echo "Certificate info:"
+          ssh-keygen -L -f /tmp/test_local_key-cert.pub
+
+          echo ""
+          echo "Testing local SSH connection with certificate..."
+          chmod 600 /tmp/test_local_key
+          chmod 600 /tmp/test_local_key-cert.pub
+
+          # Test connection to localhost
+          ssh -v -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+            -i /tmp/test_local_key root@127.0.0.1 "echo '✅ Local certificate auth works!'" 2>&1 || \
+            echo "❌ Local certificate auth FAILED"
+
+          rm -f /tmp/test_local_key /tmp/test_local_key.pub /tmp/test_local_key-cert.pub
+          EOF
 
       - name: Check Vault SSH Role
         env:
