@@ -230,6 +230,50 @@ export default function LandingPage() {
           </div>
         )}
 
+        {/* Downloads Section */}
+        <div className="mt-12">
+          <h2 className="text-xl font-bold text-secondary-900 mb-4">Desktop & Mobile Apps</h2>
+          <a
+            href="/downloads"
+            className="card-hover group flex items-center gap-6 p-6"
+          >
+            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white shadow-lg">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-secondary-900 mb-1">
+                Tamshai AI Desktop & Mobile Clients
+              </h3>
+              <p className="text-sm text-secondary-600 mb-2">
+                Download native apps for Windows, macOS, iOS, and Android for the best AI experience
+              </p>
+              <div className="flex items-center text-primary-600 text-sm font-medium">
+                View Downloads
+                <svg
+                  className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </div>
+            </div>
+          </a>
+        </div>
+
         {/* Info Banner */}
         <div className="mt-8 alert-info">
           <h4 className="font-semibold mb-1">Architecture v1.4 Features</h4>

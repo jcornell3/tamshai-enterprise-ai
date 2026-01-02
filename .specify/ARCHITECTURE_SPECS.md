@@ -234,6 +234,33 @@ function maskSalary(employee: Employee, userRoles: string[]): Employee {
 
 ### Frontend (In Progress ⚡)
 
+#### Client Technology Strategy (ADR-007)
+
+**Decision**: Use **React for web applications** and **Flutter for native desktop/mobile applications**.
+
+| Platform | Technology | Location | Rationale |
+|----------|------------|----------|-----------|
+| **Web Browser** | React + TypeScript | `clients/web/` | Lightweight, fast load times, existing expertise |
+| **Windows Desktop** | Flutter | `clients/unified_flutter/` | Native performance, single codebase for desktop/mobile |
+| **macOS Desktop** | Flutter | `clients/unified_flutter/` | Native performance, single codebase for desktop/mobile |
+| **iOS** | Flutter | `clients/unified_flutter/` | Native performance, single codebase for desktop/mobile |
+| **Android** | Flutter | `clients/unified_flutter/` | Native performance, single codebase for desktop/mobile |
+
+**Why Two Technologies?**
+1. **React excels at web**: Smaller bundle size, faster initial load, SEO-friendly, mature ecosystem
+2. **Flutter excels at native**: True native compilation, platform-specific optimizations, offline-first capable
+3. **Clear separation**: Web apps stay in browser, downloadable clients are Flutter
+4. **No Flutter Web**: We intentionally avoid Flutter Web to keep web apps lightweight
+
+**User Journey**:
+1. Employee visits `tamshai.local` → **React** corporate website
+2. Clicks "Employee Login" → Redirects to Keycloak SSO
+3. After SSO → **React** portal with HR/Finance/Sales/Support web apps
+4. Portal includes "Downloads" page → Links to **Flutter** native clients
+5. Native clients authenticate via same Keycloak SSO
+
+---
+
 #### 005-sample-apps: Web Portal & Dashboards
 **Status**: IN PROGRESS ⚡
 **Feature Branch**: `005-sample-apps`
@@ -698,9 +725,21 @@ final result = await appAuth.authorizeAndExchangeCode(
 - [x] Human-in-the-loop ApprovalCard
 - [x] Token refresh via interceptor
 - [x] Logout clears all tokens
-- [ ] macOS build and test
-- [ ] iOS build and test
-- [ ] Android build and test
+- [x] CI/CD workflow for all platforms (`.github/workflows/build-flutter-native.yml`)
+- [x] Downloads page in React portal (`clients/web/apps/portal/src/pages/DownloadsPage.tsx`)
+- [ ] macOS build and test (CI ready, needs manual verification)
+- [ ] iOS build and test (CI ready, needs Apple signing for distribution)
+- [ ] Android build and test (CI ready, needs Play Store setup)
+- [ ] App Store / Play Store listings
+
+**Build Artifacts** (from `build-flutter-native.yml`):
+
+| Platform | Installer | Portable |
+|----------|-----------|----------|
+| Windows | `.msix` (double-click install) | `.zip` (extract and run) |
+| macOS | `.dmg` (drag to Applications) | `.zip` (extract .app) |
+| Android | Google Play (coming soon) | `.apk` (sideload) |
+| iOS | App Store (coming soon) | `.ipa` (requires signing) |
 
 **Known Limitations**:
 
@@ -1140,6 +1179,64 @@ docker run ... --import-realm ...
 
 ---
 
+### ADR-007: Client Technology Split (React Web + Flutter Native)
+**Decision**: Use React for web applications, Flutter for native desktop/mobile applications.
+**Status**: APPROVED & IMPLEMENTED
+**Date**: 2026-01-02
+
+**Context**:
+The project requires both web-based access (browser) and native desktop/mobile applications. Two technology choices were evaluated:
+
+| Option | Approach | Trade-offs |
+|--------|----------|------------|
+| **Flutter Everywhere** | Flutter for web, desktop, mobile | Larger web bundle (~2MB+), slower initial load, less SEO-friendly |
+| **React Web + Flutter Native** | React for web, Flutter for native | Two codebases, but each optimized for its platform |
+
+**Decision Rationale**:
+1. **Web Performance**: React produces smaller bundles (~200KB) vs Flutter Web (~2MB+)
+2. **Native Performance**: Flutter compiles to true native code, not web wrappers
+3. **Expertise Alignment**: React for web is industry standard; Flutter for mobile/desktop is growing
+4. **Clear User Journey**: Browser users get React, download users get Flutter
+5. **No Hybrid Confusion**: Avoids Flutter Web which has known performance limitations
+
+**Implementation**:
+
+| Component | Technology | Location | Purpose |
+|-----------|------------|----------|---------|
+| Corporate Website | Static HTML/CSS | `apps/tamshai-website/` | Public-facing website |
+| Employee Login | Static HTML + JS | `apps/tamshai-website/src/employee-login.html` | SSO redirect to Keycloak |
+| Web Portal | React + TypeScript | `clients/web/apps/portal/` | Post-login services dashboard |
+| HR Web App | React + TypeScript | `clients/web/apps/hr/` | Browser-based HR access |
+| Finance Web App | React + TypeScript | `clients/web/apps/finance/` | Browser-based Finance access |
+| Downloads Page | React + TypeScript | `clients/web/apps/portal/src/pages/DownloadsPage.tsx` | Links to native clients |
+| Desktop/Mobile Client | Flutter + Dart | `clients/unified_flutter/` | Native Windows, macOS, iOS, Android |
+
+**User Journey**:
+```
+Employee → tamshai.local → [React] Corporate Site
+                        ↓
+               Employee Login → Keycloak SSO
+                        ↓
+               [React] Portal (HR, Finance, Sales, Support web apps)
+                        ↓
+               Downloads Page → Download [Flutter] Native Client
+                        ↓
+               [Flutter] Native App → Same Keycloak SSO
+```
+
+**CI/CD Implications**:
+- React web apps: `clients/web/` - standard npm/Vite build
+- Flutter native: `clients/unified_flutter/` - `build-flutter-native.yml` workflow
+- Both authenticate via same Keycloak instance
+
+**Files Created/Modified**:
+- `apps/tamshai-website/src/employee-login.html` - SSO redirect page
+- `clients/web/apps/portal/src/pages/DownloadsPage.tsx` - Downloads page
+- `clients/web/apps/portal/src/pages/LandingPage.tsx` - Added downloads link
+- `.github/workflows/build-flutter-native.yml` - Native build workflow
+
+---
+
 ## Next Actions
 
 ### Completed
@@ -1158,6 +1255,10 @@ docker run ... --import-realm ...
 13. ✅ VPS staging environment deployed (Hetzner Cloud)
 14. ✅ Terraform dev environment with Caddy HTTPS
 15. ✅ CI/CD alignment verified across all environments
+16. ✅ Client technology split documented - React web + Flutter native (ADR-007)
+17. ✅ Flutter native build workflow with MSIX/DMG installers
+18. ✅ Downloads page added to React portal
+19. ✅ Employee SSO login page updated
 
 ### Current Sprint
 16. ⚡ Complete MCP Gateway token revocation (003-mcp-core)
