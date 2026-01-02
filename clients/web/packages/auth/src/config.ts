@@ -20,16 +20,16 @@ export const oidcConfig = {
   response_type: 'code',
   scope: 'openid profile email',
 
-  // Silent refresh configuration
-  automaticSilentRenew: true,
-  silent_redirect_uri: `${window.location.origin}/silent-renew.html`,
+  // Silent refresh configuration - DISABLED for debugging
+  automaticSilentRenew: false,
+  // silent_redirect_uri: `${window.location.origin}/silent-renew.html`,
 
   // Storage: sessionStorage for refresh token only
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
 
   // Token validation
   loadUserInfo: true,
-  monitorSession: true,
+  monitorSession: false, // Disabled - can cause iframe issues
 
   // Timeout settings
   silentRequestTimeoutInSeconds: 10,
