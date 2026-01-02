@@ -221,20 +221,30 @@ jobs:
           docker image prune -f
 
           echo "=== Waiting for services ==="
-          sleep 30
+          sleep 45
 
           echo "=== Health check ==="
-          curl -sf http://localhost:3100/health && echo "[OK] MCP Gateway: healthy" || echo "[FAIL] MCP Gateway: unhealthy"
-          curl -sf http://localhost:8080/auth/health/ready && echo "[OK] Keycloak: healthy" || echo "[FAIL] Keycloak: unhealthy"
+          curl -sf http://localhost:3100/health && echo "[OK] MCP Gateway: healthy" || echo "[WARN] MCP Gateway: still starting..."
+          curl -sf http://localhost:8080/auth/health/ready && echo "[OK] Keycloak: healthy" || echo "[WARN] Keycloak: still starting..."
+
+          echo "=== Waiting for Keycloak to be ready ==="
+          for i in 1 2 3 4 5; do
+            if curl -sf http://localhost:8080/auth/health/ready >/dev/null 2>&1; then
+              echo "[OK] Keycloak is ready"
+              break
+            fi
+            echo "Waiting for Keycloak... attempt $i/5"
+            sleep 15
+          done
 
           echo "=== Syncing Keycloak configuration ==="
           # Copy sync script to Keycloak container
-          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh keycloak:/tmp/sync-realm.sh
+          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
           # Fix line endings and execute
-          docker exec keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh 2>/dev/null || true'
-          docker exec keycloak chmod +x /tmp/sync-realm.sh
+          docker exec tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh 2>/dev/null || true'
+          docker exec tamshai-keycloak chmod +x /tmp/sync-realm.sh
           docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
-            keycloak /tmp/sync-realm.sh stage
+            tamshai-keycloak /tmp/sync-realm.sh stage
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
