@@ -39,7 +39,7 @@ const config = {
     port: parseInt(process.env.POSTGRES_PORT || '5433', 10),
     database: process.env.POSTGRES_DB || 'tamshai_hr',
     user: process.env.POSTGRES_USER || 'tamshai',
-    password: process.env.POSTGRES_PASSWORD || 'changeme',
+    password: process.env.POSTGRES_PASSWORD || 'tamshai_password',
   },
 };
 
@@ -63,7 +63,7 @@ class TestKcAdminClient implements KcAdminClient {
     clientSecret: string;
   }): Promise<void> {
     const response = await fetch(
-      `${this.baseUrl}/realms/master/protocol/openid-connect/token`,
+      `${this.baseUrl}/auth/realms/master/protocol/openid-connect/token`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -80,7 +80,7 @@ class TestKcAdminClient implements KcAdminClient {
       throw new Error(`Keycloak auth failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { access_token: string };
     this.accessToken = data.access_token;
   }
 
@@ -94,7 +94,7 @@ class TestKcAdminClient implements KcAdminClient {
     }
 
     const response = await fetch(
-      `${this.baseUrl}/admin/realms/${this.realm}${path}`,
+      `${this.baseUrl}/auth/admin/realms/${this.realm}${path}`,
       {
         method,
         headers: {
@@ -114,13 +114,13 @@ class TestKcAdminClient implements KcAdminClient {
       return undefined as T;
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   users = {
     create: async (user: Record<string, unknown>): Promise<{ id: string }> => {
       const response = await fetch(
-        `${this.baseUrl}/admin/realms/${this.realm}/users`,
+        `${this.baseUrl}/auth/admin/realms/${this.realm}/users`,
         {
           method: 'POST',
           headers: {
