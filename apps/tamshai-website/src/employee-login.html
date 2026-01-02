@@ -137,13 +137,14 @@
                 // Dev environment with Caddy
                 keycloakUrl = window.location.origin + '/auth';
                 redirectUri = window.location.origin + '/employee-services.html';
-            } else if (hostname.includes('5.78.159.29') || hostname.includes('stage')) {
-                // Stage environment (VPS)
-                keycloakUrl = 'https://5.78.159.29/auth';
+            } else if (hostname.includes('5.78.159.29') || hostname.includes('tamshai.com')) {
+                // Stage/Production environment (VPS)
+                // Use same-origin /auth path (via Caddy reverse proxy)
+                keycloakUrl = window.location.origin + '/auth';
                 redirectUri = window.location.origin + '/employee-services.html';
             } else {
-                // Production (future)
-                keycloakUrl = 'https://auth.tamshai.com';
+                // Unknown environment - try same-origin
+                keycloakUrl = window.location.origin + '/auth';
                 redirectUri = window.location.origin + '/employee-services.html';
             }
 
