@@ -123,6 +123,56 @@ get_scope_id() {
     $KCADM get client-scopes -r "$REALM" -q "name=$scope_name" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1
 }
 
+# Create standard OIDC client scopes if they don't exist
+create_standard_scopes() {
+    log_info "Ensuring standard OIDC client scopes exist..."
+
+    # Profile scope - for user profile claims
+    local profile_id=$(get_scope_id "profile")
+    if [ -z "$profile_id" ]; then
+        log_info "  Creating 'profile' scope..."
+        $KCADM create client-scopes -r "$REALM" -s name=profile -s protocol=openid-connect -s description="OpenID Connect built-in scope: profile" -s attributes.'include.in.token.scope'=true -s attributes.'display.on.consent.screen'=true 2>/dev/null || log_warn "  Failed to create profile scope"
+    else
+        log_info "  Scope 'profile' already exists"
+    fi
+
+    # Email scope - for email claims
+    local email_id=$(get_scope_id "email")
+    if [ -z "$email_id" ]; then
+        log_info "  Creating 'email' scope..."
+        $KCADM create client-scopes -r "$REALM" -s name=email -s protocol=openid-connect -s description="OpenID Connect built-in scope: email" -s attributes.'include.in.token.scope'=true -s attributes.'display.on.consent.screen'=true 2>/dev/null || log_warn "  Failed to create email scope"
+    else
+        log_info "  Scope 'email' already exists"
+    fi
+
+    # Web-origins scope - for web origin claims (CORS)
+    local weborigins_id=$(get_scope_id "web-origins")
+    if [ -z "$weborigins_id" ]; then
+        log_info "  Creating 'web-origins' scope..."
+        $KCADM create client-scopes -r "$REALM" -s name=web-origins -s protocol=openid-connect -s description="OpenID Connect scope for allowed web origins" -s attributes.'include.in.token.scope'=false 2>/dev/null || log_warn "  Failed to create web-origins scope"
+    else
+        log_info "  Scope 'web-origins' already exists"
+    fi
+
+    # Address scope - for address claims (optional but standard)
+    local address_id=$(get_scope_id "address")
+    if [ -z "$address_id" ]; then
+        log_info "  Creating 'address' scope..."
+        $KCADM create client-scopes -r "$REALM" -s name=address -s protocol=openid-connect -s description="OpenID Connect built-in scope: address" -s attributes.'include.in.token.scope'=true -s attributes.'display.on.consent.screen'=true 2>/dev/null || log_warn "  Failed to create address scope"
+    else
+        log_info "  Scope 'address' already exists"
+    fi
+
+    # Phone scope - for phone claims (optional but standard)
+    local phone_id=$(get_scope_id "phone")
+    if [ -z "$phone_id" ]; then
+        log_info "  Creating 'phone' scope..."
+        $KCADM create client-scopes -r "$REALM" -s name=phone -s protocol=openid-connect -s description="OpenID Connect built-in scope: phone" -s attributes.'include.in.token.scope'=true -s attributes.'display.on.consent.screen'=true 2>/dev/null || log_warn "  Failed to create phone scope"
+    else
+        log_info "  Scope 'phone' already exists"
+    fi
+}
+
 assign_client_scopes() {
     local client_id="$1"
     local uuid=$(get_client_uuid "$client_id")
@@ -134,8 +184,9 @@ assign_client_scopes() {
     for scope in "${scopes[@]}"; do
         local scope_id=$(get_scope_id "$scope")
         if [ -n "$scope_id" ]; then
-            # Add the scope to client's default scopes
-            $KCADM update "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
+            # Add the scope to client's default scopes using PUT request
+            # The kcadm update requires -f for body, use create with -f /dev/null for PUT-like behavior
+            $KCADM create "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
             log_info "  Assigned scope '$scope' to client '$client_id'"
         else
             log_warn "  Scope '$scope' not found in realm"
@@ -267,6 +318,9 @@ main() {
 
     configure_environment
     kcadm_login
+
+    # Ensure standard OIDC scopes exist
+    create_standard_scopes
 
     # Sync all clients
     sync_website_client
