@@ -204,14 +204,15 @@ const SQL = {
   UPDATE_EMPLOYEE_KEYCLOAK_ID:
     'UPDATE hr.employees SET keycloak_user_id = $1 WHERE id = $2',
 
+  // Audit log columns: user_email, action, resource, target_id, access_decision, access_justification
   INSERT_AUDIT_LOG:
-    'INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, details, created_at) VALUES ($1, $2, $3, $4, NOW())',
+    'INSERT INTO hr.access_audit_log (user_email, action, resource, target_id, access_decision, access_justification) VALUES ($1, $2, $3, $4, $5, $6)',
 
   INSERT_AUDIT_LOG_WITH_SNAPSHOT:
-    'INSERT INTO hr.audit_access_logs (employee_id, action, keycloak_user_id, permissions_snapshot, created_at) VALUES ($1, $2, $3, $4, NOW())',
+    'INSERT INTO hr.access_audit_log (user_email, action, resource, target_id, access_decision, access_justification) VALUES ($1, $2, $3, $4, $5, $6)',
 
   INSERT_AUDIT_LOG_SIMPLE:
-    'INSERT INTO hr.audit_access_logs (employee_id, keycloak_user_id, action, created_at) VALUES ($1, $2, $3, NOW())',
+    'INSERT INTO hr.access_audit_log (user_email, action, resource, target_id, access_decision) VALUES ($1, $2, $3, $4, $5)',
 
   SELECT_EMPLOYEE_BY_ID:
     'SELECT id, email, keycloak_user_id FROM hr.employees WHERE id = $1',
@@ -221,7 +222,7 @@ const SQL = {
             COALESCE(d.code, 'Unknown') AS department
      FROM hr.employees e
      LEFT JOIN hr.departments d ON e.department_id = d.id
-     WHERE e.status = 'active' AND e.keycloak_user_id IS NULL
+     WHERE UPPER(e.status) = 'ACTIVE' AND e.keycloak_user_id IS NULL
      ORDER BY e.id`,
 
   UPDATE_EMPLOYEE_TERMINATED:
@@ -311,12 +312,15 @@ export class IdentityService {
       ]);
 
       // Step 4: Write audit log
+      // Params: user_email, action, resource, target_id, access_decision, access_justification
       await client.query(SQL.INSERT_AUDIT_LOG, [
-        employeeData.id,
-        keycloakUserId,
+        employeeData.email,
         AuditAction.USER_CREATED,
+        'employee',
+        employeeData.id,
+        'GRANTED',
         JSON.stringify({
-          email: employeeData.email,
+          keycloakUserId,
           department: employeeData.department,
         }),
       ]);
@@ -400,10 +404,13 @@ export class IdentityService {
       sessionsRevoked,
     });
 
+    // Params: user_email, action, resource, target_id, access_decision, access_justification
     await this.db.query(SQL.INSERT_AUDIT_LOG_WITH_SNAPSHOT, [
-      employeeId,
+      employee.email,
       AuditAction.USER_TERMINATED,
-      keycloakUserId,
+      'employee',
+      employeeId,
+      'GRANTED',
       permissionsSnapshot,
     ]);
 
@@ -461,10 +468,13 @@ export class IdentityService {
     await this.db.query(SQL.UPDATE_EMPLOYEE_DELETED, [employeeId]);
 
     // Step 5: Write audit log
+    // Params: user_email, action, resource, target_id, access_decision
     await this.db.query(SQL.INSERT_AUDIT_LOG_SIMPLE, [
-      employeeId,
-      keycloakUserId,
+      kcUser.email || 'unknown',
       AuditAction.USER_DELETED,
+      'employee',
+      employeeId,
+      'GRANTED',
     ]);
   }
 
@@ -491,13 +501,16 @@ export class IdentityService {
     keycloakUserId: string,
     email?: string
   ): Promise<void> {
+    // Params: user_email, action, resource, target_id, access_decision, access_justification
     await this.db.query(SQL.INSERT_AUDIT_LOG, [
-      employeeId,
-      keycloakUserId,
+      email || 'unknown',
       AuditAction.DELETION_BLOCKED,
+      'employee',
+      employeeId,
+      'DENIED',
       JSON.stringify({
         reason: 'User was re-enabled after termination',
-        email,
+        keycloakUserId,
       }),
     ]);
   }
@@ -530,10 +543,13 @@ export class IdentityService {
     let skipped = 0;
 
     // Log sync start
+    // Params: user_email, action, resource, target_id, access_decision, access_justification
     await this.db.query(SQL.INSERT_AUDIT_LOG, [
-      null,
-      null,
+      'system@identity-sync',
       AuditAction.BULK_SYNC_STARTED,
+      'bulk_sync',
+      null,
+      'GRANTED',
       JSON.stringify({ timestamp: new Date().toISOString() }),
     ]);
 
@@ -563,10 +579,13 @@ export class IdentityService {
     const duration = Date.now() - startTime;
 
     // Log sync completion
+    // Params: user_email, action, resource, target_id, access_decision, access_justification
     await this.db.query(SQL.INSERT_AUDIT_LOG, [
-      null,
-      null,
+      'system@identity-sync',
       AuditAction.BULK_SYNC_COMPLETED,
+      'bulk_sync',
+      null,
+      errors.length === 0 ? 'GRANTED' : 'PARTIAL',
       JSON.stringify({
         totalEmployees: employees.length,
         created,
@@ -626,7 +645,7 @@ export class IdentityService {
    */
   async getPendingSyncCount(): Promise<number> {
     const result = await this.db.query(
-      `SELECT COUNT(*) FROM hr.employees WHERE status = 'active' AND keycloak_user_id IS NULL`
+      `SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE' AND keycloak_user_id IS NULL`
     );
     return parseInt(result.rows[0].count, 10);
   }

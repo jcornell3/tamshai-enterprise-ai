@@ -532,7 +532,8 @@ services:
       POSTGRES_USER: tamshai
       POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:-tamshai_password}
       # Keycloak connection (uses internal Docker network)
-      KEYCLOAK_URL: http://keycloak:8080
+      # Note: /auth path required because KC_HTTP_RELATIVE_PATH=/auth in keycloak service
+      KEYCLOAK_URL: http://keycloak:8080/auth
       KEYCLOAK_REALM: tamshai-corp
       KEYCLOAK_CLIENT_ID: mcp-hr-service
       KEYCLOAK_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-dev-secret}

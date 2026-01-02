@@ -185,11 +185,11 @@ describe('IdentityService', () => {
       const calls = (pool.query as jest.Mock).mock.calls;
 
       // First call: BULK_SYNC_STARTED
-      expect(calls[0][0]).toContain('audit_access_logs');
+      expect(calls[0][0]).toContain('access_audit_log');
       expect(calls[0][1]).toContain(AuditAction.BULK_SYNC_STARTED);
 
       // Last call: BULK_SYNC_COMPLETED
-      expect(calls[2][0]).toContain('audit_access_logs');
+      expect(calls[2][0]).toContain('access_audit_log');
       expect(calls[2][1]).toContain(AuditAction.BULK_SYNC_COMPLETED);
     });
 
@@ -272,7 +272,7 @@ describe('IdentityService', () => {
       await service.createUserInKeycloak(employee, poolClient);
 
       const auditCalls = (poolClient.query as jest.Mock).mock.calls.filter(
-        (call: any[]) => call[0].includes('audit_access_logs')
+        (call: any[]) => call[0].includes('access_audit_log')
       );
       expect(auditCalls.length).toBeGreaterThan(0);
       expect(auditCalls[0][1]).toContain(AuditAction.USER_CREATED);
@@ -395,7 +395,7 @@ describe('IdentityService', () => {
 
       // Should log the blocked deletion
       expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining('audit_access_logs'),
+        expect.stringContaining('access_audit_log'),
         expect.arrayContaining([AuditAction.DELETION_BLOCKED])
       );
     });
@@ -421,7 +421,7 @@ describe('IdentityService', () => {
 
       expect(count).toBe(5);
       expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("status = 'active'")
+        expect.stringContaining("UPPER(status) = 'ACTIVE'")
       );
     });
   });
