@@ -86,6 +86,42 @@ curl http://localhost:3100/health        # MCP Gateway
 curl http://localhost:8100/api/health    # Kong Gateway
 ```
 
+### Service Management Scripts
+
+Scripts for managing services in dev and stage environments. All scripts are idempotent and safe to run multiple times.
+
+```bash
+# Check service status (dev or stage)
+./scripts/infra/status.sh dev            # Check local dev services
+./scripts/infra/status.sh stage          # Check stage VPS services
+
+# Deploy services
+./scripts/infra/deploy.sh dev            # Deploy all dev services
+./scripts/infra/deploy.sh dev --build    # Rebuild containers
+./scripts/infra/deploy.sh dev --sync     # Deploy and sync Keycloak
+./scripts/infra/deploy.sh stage          # Deploy to stage VPS
+
+# Keycloak management
+./scripts/infra/keycloak.sh sync dev     # Sync Keycloak clients/config
+./scripts/infra/keycloak.sh sync stage   # Sync stage Keycloak
+./scripts/infra/keycloak.sh status dev   # Check Keycloak status
+./scripts/infra/keycloak.sh clients dev  # List all clients
+./scripts/infra/keycloak.sh users dev    # List all users
+./scripts/infra/keycloak.sh scopes dev   # List client scopes
+./scripts/infra/keycloak.sh logs dev     # View Keycloak logs
+
+# MCP health check
+./scripts/mcp/health-check.sh dev        # Check all MCP servers
+./scripts/mcp/health-check.sh stage      # Check stage MCP servers
+```
+
+**Environment Variables for Stage Scripts:**
+```bash
+export VPS_HOST="5.78.159.29"            # VPS IP address
+export VPS_SSH_USER="root"               # SSH user
+export KEYCLOAK_ADMIN_PASSWORD="xxx"     # For Keycloak admin commands
+```
+
 ### MCP Gateway Development
 
 ```bash
