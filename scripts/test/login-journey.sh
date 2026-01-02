@@ -167,8 +167,8 @@ test_sso_redirect() {
     local code_verifier="test-verifier-$(date +%s)"
     local code_challenge=$(echo -n "$code_verifier" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -d '=')
 
-    # Note: Using only 'openid' scope since profile/email may not be configured as default scopes in all realms
-    local oauth_url="${auth_url}?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=openid&state=${state}&code_challenge=${code_challenge}&code_challenge_method=S256"
+    # Use the same scopes as the website JavaScript
+    local oauth_url="${auth_url}?client_id=${client_id}&redirect_uri=${redirect_uri}&response_type=code&scope=openid%20profile%20email&state=${state}&code_challenge=${code_challenge}&code_challenge_method=S256"
 
     # Follow redirect to Keycloak login page
     local response
