@@ -52,7 +52,7 @@ const createMockCleanupQueue = () => ({
 }) as unknown as CleanupQueue;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const createQueryResult = <T = any>(rows: T[]): QueryResult<T> => ({
+const createQueryResult = <T extends Record<string, any> = Record<string, any>>(rows: T[]): QueryResult<T> => ({
   rows,
   rowCount: rows.length,
   command: '',
