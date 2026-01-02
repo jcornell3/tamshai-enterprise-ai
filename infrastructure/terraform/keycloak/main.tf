@@ -345,7 +345,8 @@ resource "keycloak_user" "alice_chen" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "alice_chen_roles" {
@@ -374,7 +375,8 @@ resource "keycloak_user" "bob_martinez" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "bob_martinez_roles" {
@@ -403,7 +405,8 @@ resource "keycloak_user" "carol_johnson" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "carol_johnson_roles" {
@@ -432,7 +435,8 @@ resource "keycloak_user" "dan_williams" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "dan_williams_roles" {
@@ -461,7 +465,8 @@ resource "keycloak_user" "eve_thompson" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "eve_thompson_roles" {
@@ -489,7 +494,8 @@ resource "keycloak_user" "frank_davis" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 # Nina Patel - Engineering Manager (no roles yet)
@@ -508,7 +514,8 @@ resource "keycloak_user" "nina_patel" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
 # Marcus Johnson - Software Engineer (no roles yet)
@@ -527,5 +534,6 @@ resource "keycloak_user" "marcus_johnson" {
     temporary = false
   }
 
-  required_actions = ["CONFIGURE_TOTP"]
+  # Require TOTP in all environments except CI (where automated testing needs direct login)
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
