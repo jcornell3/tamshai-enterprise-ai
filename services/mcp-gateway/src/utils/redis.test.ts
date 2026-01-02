@@ -449,3 +449,70 @@ describe('Edge Cases and Error Handling', () => {
     }, 10000);
   });
 });
+
+describe('Redis Error Events', () => {
+  afterAll(async () => {
+    stopTokenRevocationSync();
+  });
+
+  test('handles Redis error events without crashing', () => {
+    expect(() => {
+      redis.emit('error', new Error('Connection refused'));
+    }).not.toThrow();
+  });
+
+  test('handles multiple error events', () => {
+    expect(() => {
+      redis.emit('error', new Error('Connection reset'));
+      redis.emit('error', new Error('ECONNREFUSED'));
+    }).not.toThrow();
+  });
+});
+
+describe('Sync Failure Handling', () => {
+  afterAll(async () => {
+    stopTokenRevocationSync();
+  });
+
+  test('handles Redis.keys() failure gracefully', async () => {
+    const keysSpy = jest.spyOn(redis, 'keys').mockRejectedValueOnce(
+      new Error('Redis connection timeout')
+    );
+
+    // Wait for background sync cycle
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
+    keysSpy.mockRestore();
+
+    // Should not crash - stats should still be available
+    const stats = getTokenRevocationStats();
+    expect(stats).toBeDefined();
+    expect(stats.cacheSize).toBeGreaterThanOrEqual(0);
+  }, 10000);
+
+  test('handles non-Error exceptions in sync', async () => {
+    const keysSpy = jest.spyOn(redis, 'keys').mockRejectedValueOnce(
+      'String error message'
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
+    keysSpy.mockRestore();
+
+    expect(getTokenRevocationStats()).toBeDefined();
+  }, 10000);
+
+  test('recovers after temporary failure', async () => {
+    const keysSpy = jest
+      .spyOn(redis, 'keys')
+      .mockRejectedValueOnce(new Error('Temporary'))
+      .mockResolvedValueOnce([]);
+
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    keysSpy.mockRestore();
+
+    const stats = getTokenRevocationStats();
+    expect(stats.consecutiveFailures).toBe(0);
+  }, 10000);
+});

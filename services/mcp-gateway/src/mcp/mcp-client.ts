@@ -160,24 +160,7 @@ export class MCPClient {
           }
         } while (autoPaginate && pageCount < this.config.maxPages);
 
-        // Return aggregated data if we exited the loop normally
-        if (allData.length > 0) {
-          return {
-            server: server.name,
-            status: 'success',
-            data: {
-              status: 'success',
-              data: allData,
-              metadata: {
-                returnedCount: allData.length,
-                totalCount: allData.length,
-                pagesRetrieved: pageCount,
-              },
-            },
-            durationMs: Date.now() - startTime,
-          };
-        }
-
+        // Loop exited with no data accumulated (empty responses)
         return {
           server: server.name,
           status: 'success',
