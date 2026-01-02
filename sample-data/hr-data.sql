@@ -26,6 +26,10 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA hr TO tamshai;
 ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON TABLES TO tamshai;
 ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON SEQUENCES TO tamshai;
 
+-- IMPORTANT: Allow tamshai to bypass Row-Level Security policies
+-- Required for identity-sync service account to read all employees
+ALTER USER tamshai BYPASSRLS;
+
 -- =============================================================================
 -- DEPARTMENTS
 -- =============================================================================
