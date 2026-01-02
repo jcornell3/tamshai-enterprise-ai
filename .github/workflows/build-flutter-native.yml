@@ -1,0 +1,535 @@
+# Flutter Native Builds - Windows, macOS, iOS, Android
+#
+# This workflow builds native Flutter applications for all supported platforms.
+# It produces release artifacts that can be distributed to users.
+#
+# Triggers:
+#   - Push to main (changes to Flutter client)
+#   - Release published (production builds)
+#   - Manual dispatch (with environment selection)
+#
+# Outputs (uploaded as artifacts):
+#   - Windows: tamshai-{env}-windows.zip (.exe + dependencies)
+#   - macOS: tamshai-{env}-macos.zip (.app bundle)
+#   - Android: tamshai-{env}.apk (debug), tamshai-{env}.aab (release)
+#   - iOS: tamshai-{env}.ipa (requires Apple signing secrets)
+#
+# Environment Configuration:
+#   - dev: Points to localhost Docker (for local testing)
+#   - stage: Points to VPS (5.78.159.29)
+#   - prod: Points to production GCP (api.tamshai.com)
+#
+# References:
+#   - docs/deployment/FLUTTER_MULTI_ENVIRONMENT_BUILDS.md
+#   - .specify/specs/009-flutter-unified/spec.md
+
+name: Build Flutter Native Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/unified_flutter/**'
+      - '.github/workflows/build-flutter-native.yml'
+
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+        default: 'stage'
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        type: choice
+        options:
+          - all
+          - windows
+          - macos
+          - android
+          - ios
+          - desktop
+          - mobile
+        default: 'all'
+
+concurrency:
+  group: build-flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+  # Default to stage for push builds, can be overridden by workflow_dispatch
+  BUILD_ENV: ${{ github.event.inputs.environment || 'stage' }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # =============================================================================
+  # DETERMINE BUILD MATRIX
+  # =============================================================================
+  setup:
+    name: Setup Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      build_windows: ${{ steps.matrix.outputs.build_windows }}
+      build_macos: ${{ steps.matrix.outputs.build_macos }}
+      build_android: ${{ steps.matrix.outputs.build_android }}
+      build_ios: ${{ steps.matrix.outputs.build_ios }}
+      environment: ${{ steps.matrix.outputs.environment }}
+      app_suffix: ${{ steps.matrix.outputs.app_suffix }}
+
+    steps:
+      - name: Determine build matrix
+        id: matrix
+        run: |
+          PLATFORMS="${{ github.event.inputs.platforms || 'all' }}"
+          ENV="${{ github.event.inputs.environment || 'stage' }}"
+
+          # Determine app suffix based on environment
+          case $ENV in
+            dev)
+              APP_SUFFIX="Dev"
+              ;;
+            stage)
+              APP_SUFFIX="Stage"
+              ;;
+            prod)
+              APP_SUFFIX=""
+              ;;
+          esac
+
+          # Determine which platforms to build
+          case $PLATFORMS in
+            all)
+              echo "build_windows=true" >> $GITHUB_OUTPUT
+              echo "build_macos=true" >> $GITHUB_OUTPUT
+              echo "build_android=true" >> $GITHUB_OUTPUT
+              echo "build_ios=true" >> $GITHUB_OUTPUT
+              ;;
+            desktop)
+              echo "build_windows=true" >> $GITHUB_OUTPUT
+              echo "build_macos=true" >> $GITHUB_OUTPUT
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_ios=false" >> $GITHUB_OUTPUT
+              ;;
+            mobile)
+              echo "build_windows=false" >> $GITHUB_OUTPUT
+              echo "build_macos=false" >> $GITHUB_OUTPUT
+              echo "build_android=true" >> $GITHUB_OUTPUT
+              echo "build_ios=true" >> $GITHUB_OUTPUT
+              ;;
+            windows)
+              echo "build_windows=true" >> $GITHUB_OUTPUT
+              echo "build_macos=false" >> $GITHUB_OUTPUT
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_ios=false" >> $GITHUB_OUTPUT
+              ;;
+            macos)
+              echo "build_windows=false" >> $GITHUB_OUTPUT
+              echo "build_macos=true" >> $GITHUB_OUTPUT
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_ios=false" >> $GITHUB_OUTPUT
+              ;;
+            android)
+              echo "build_windows=false" >> $GITHUB_OUTPUT
+              echo "build_macos=false" >> $GITHUB_OUTPUT
+              echo "build_android=true" >> $GITHUB_OUTPUT
+              echo "build_ios=false" >> $GITHUB_OUTPUT
+              ;;
+            ios)
+              echo "build_windows=false" >> $GITHUB_OUTPUT
+              echo "build_macos=false" >> $GITHUB_OUTPUT
+              echo "build_android=false" >> $GITHUB_OUTPUT
+              echo "build_ios=true" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "app_suffix=$APP_SUFFIX" >> $GITHUB_OUTPUT
+
+          echo "## Build Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: $ENV" >> $GITHUB_STEP_SUMMARY
+          echo "- **App Suffix**: $APP_SUFFIX" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms**: $PLATFORMS" >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # WINDOWS BUILD
+  # =============================================================================
+  build-windows:
+    name: Build Windows
+    needs: setup
+    if: needs.setup.outputs.build_windows == 'true'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@44ac965b96f18d999802d4b807e3256d5a3f9fa1 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter installation
+        run: |
+          flutter --version
+          flutter doctor -v
+
+      - name: Get dependencies
+        working-directory: clients/unified_flutter
+        run: flutter pub get
+
+      - name: Generate code (Freezed, JSON serialization)
+        working-directory: clients/unified_flutter
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build Windows release
+        working-directory: clients/unified_flutter
+        run: |
+          flutter build windows --release `
+            --dart-define=ENV=${{ needs.setup.outputs.environment }} `
+            --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
+
+      - name: Create Windows archive
+        shell: pwsh
+        run: |
+          $env = "${{ needs.setup.outputs.environment }}"
+          $suffix = "${{ needs.setup.outputs.app_suffix }}"
+          $archiveName = "tamshai-$env-windows"
+
+          # Create archive of release folder
+          Compress-Archive `
+            -Path "clients/unified_flutter/build/windows/x64/runner/Release/*" `
+            -DestinationPath "$archiveName.zip"
+
+          echo "Created $archiveName.zip"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-windows
+          path: tamshai-${{ needs.setup.outputs.environment }}-windows.zip
+          retention-days: 30
+
+      - name: Build summary
+        run: |
+          echo "## Windows Build Complete" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **App Name**: Tamshai ${{ needs.setup.outputs.app_suffix }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Artifact**: tamshai-${{ needs.setup.outputs.environment }}-windows.zip" >> $env:GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # MACOS BUILD
+  # =============================================================================
+  build-macos:
+    name: Build macOS
+    needs: setup
+    if: needs.setup.outputs.build_macos == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@44ac965b96f18d999802d4b807e3256d5a3f9fa1 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter installation
+        run: |
+          flutter --version
+          flutter doctor -v
+
+      - name: Get dependencies
+        working-directory: clients/unified_flutter
+        run: flutter pub get
+
+      - name: Generate code (Freezed, JSON serialization)
+        working-directory: clients/unified_flutter
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build macOS release
+        working-directory: clients/unified_flutter
+        run: |
+          flutter build macos --release \
+            --dart-define=ENV=${{ needs.setup.outputs.environment }} \
+            --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
+
+      - name: Create macOS archive
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+          ARCHIVE_NAME="tamshai-$ENV-macos"
+
+          # Create archive of .app bundle
+          cd clients/unified_flutter/build/macos/Build/Products/Release
+          zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME.zip" *.app
+
+          echo "Created $ARCHIVE_NAME.zip"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-macos
+          path: tamshai-${{ needs.setup.outputs.environment }}-macos.zip
+          retention-days: 30
+
+      - name: Build summary
+        run: |
+          echo "## macOS Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **App Name**: Tamshai ${{ needs.setup.outputs.app_suffix }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact**: tamshai-${{ needs.setup.outputs.environment }}-macos.zip" >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # ANDROID BUILD
+  # =============================================================================
+  build-android:
+    name: Build Android
+    needs: setup
+    if: needs.setup.outputs.build_android == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup Java
+        uses: actions/setup-java@7a6d8a8234af8eb26422e24e3006232cccaa061b # v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@44ac965b96f18d999802d4b807e3256d5a3f9fa1 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter installation
+        run: |
+          flutter --version
+          flutter doctor -v
+
+      - name: Get dependencies
+        working-directory: clients/unified_flutter
+        run: flutter pub get
+
+      - name: Generate code (Freezed, JSON serialization)
+        working-directory: clients/unified_flutter
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build Android APK (debug-signed)
+        working-directory: clients/unified_flutter
+        run: |
+          flutter build apk --release \
+            --dart-define=ENV=${{ needs.setup.outputs.environment }} \
+            --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
+
+      - name: Build Android App Bundle (for Play Store)
+        working-directory: clients/unified_flutter
+        run: |
+          flutter build appbundle --release \
+            --dart-define=ENV=${{ needs.setup.outputs.environment }} \
+            --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
+
+      - name: Rename artifacts
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+
+          # Rename APK
+          mv clients/unified_flutter/build/app/outputs/flutter-apk/app-release.apk \
+             tamshai-$ENV.apk
+
+          # Rename AAB
+          mv clients/unified_flutter/build/app/outputs/bundle/release/app-release.aab \
+             tamshai-$ENV.aab
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-android-apk
+          path: tamshai-${{ needs.setup.outputs.environment }}.apk
+          retention-days: 30
+
+      - name: Upload Android App Bundle
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-android-aab
+          path: tamshai-${{ needs.setup.outputs.environment }}.aab
+          retention-days: 30
+
+      - name: Build summary
+        run: |
+          echo "## Android Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **App Name**: Tamshai ${{ needs.setup.outputs.app_suffix }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **APK**: tamshai-${{ needs.setup.outputs.environment }}.apk" >> $GITHUB_STEP_SUMMARY
+          echo "- **AAB**: tamshai-${{ needs.setup.outputs.environment }}.aab (Play Store)" >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # IOS BUILD
+  # =============================================================================
+  build-ios:
+    name: Build iOS
+    needs: setup
+    if: needs.setup.outputs.build_ios == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@44ac965b96f18d999802d4b807e3256d5a3f9fa1 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter installation
+        run: |
+          flutter --version
+          flutter doctor -v
+
+      - name: Get dependencies
+        working-directory: clients/unified_flutter
+        run: flutter pub get
+
+      - name: Generate code (Freezed, JSON serialization)
+        working-directory: clients/unified_flutter
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Build iOS (no codesign)
+        working-directory: clients/unified_flutter
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=ENV=${{ needs.setup.outputs.environment }} \
+            --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
+
+      # Note: For actual distribution, you need:
+      # 1. Apple Developer account
+      # 2. Provisioning profile and certificates
+      # 3. Secrets: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_PROVISIONING_PROFILE
+      # Then use: flutter build ipa --release
+
+      - name: Create iOS archive (unsigned)
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+          ARCHIVE_NAME="tamshai-$ENV-ios-unsigned"
+
+          # Archive the build output (unsigned .app)
+          cd clients/unified_flutter/build/ios/iphoneos
+          zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME.zip" Runner.app
+
+          echo "Created $ARCHIVE_NAME.zip (unsigned - for development only)"
+
+      - name: Upload iOS artifact (unsigned)
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-ios-unsigned
+          path: tamshai-${{ needs.setup.outputs.environment }}-ios-unsigned.zip
+          retention-days: 30
+
+      - name: Build summary
+        run: |
+          echo "## iOS Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **App Name**: Tamshai ${{ needs.setup.outputs.app_suffix }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact**: tamshai-${{ needs.setup.outputs.environment }}-ios-unsigned.zip" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note**: This is an unsigned build for development purposes." >> $GITHUB_STEP_SUMMARY
+          echo "For App Store distribution, configure Apple signing secrets." >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # BUILD SUMMARY
+  # =============================================================================
+  summary:
+    name: Build Summary
+    needs: [setup, build-windows, build-macos, build-android, build-ios]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate final summary
+        run: |
+          echo "# Flutter Native Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Windows status
+          if [ "${{ needs.setup.outputs.build_windows }}" == "true" ]; then
+            if [ "${{ needs.build-windows.result }}" == "success" ]; then
+              echo "| Windows | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Windows | :x: ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Windows | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # macOS status
+          if [ "${{ needs.setup.outputs.build_macos }}" == "true" ]; then
+            if [ "${{ needs.build-macos.result }}" == "success" ]; then
+              echo "| macOS | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| macOS | :x: ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| macOS | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Android status
+          if [ "${{ needs.setup.outputs.build_android }}" == "true" ]; then
+            if [ "${{ needs.build-android.result }}" == "success" ]; then
+              echo "| Android | :white_check_mark: Success |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Android | :x: ${{ needs.build-android.result }} |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Android | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # iOS status
+          if [ "${{ needs.setup.outputs.build_ios }}" == "true" ]; then
+            if [ "${{ needs.build-ios.result }}" == "success" ]; then
+              echo "| iOS | :white_check_mark: Success (unsigned) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| iOS | :x: ${{ needs.build-ios.result }} |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| iOS | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts from the **Actions** tab → **Artifacts** section." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Retention**: 30 days" >> $GITHUB_STEP_SUMMARY

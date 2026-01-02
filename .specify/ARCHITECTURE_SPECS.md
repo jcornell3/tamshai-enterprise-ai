@@ -1,9 +1,9 @@
 # Tamshai Enterprise AI - Specification-Driven Development (SDD) Architecture
 
 **Lead Architect**: John Cornell
-**Architecture Version**: 1.4 (ADR-004 Platform Pivot)
+**Architecture Version**: 1.4 (ADR-006 Keycloak Unified)
 **SDD Framework**: GitHub Spec Kit
-**Last Updated**: December 26, 2025
+**Last Updated**: January 2, 2026
 
 ---
 
@@ -44,27 +44,51 @@ All specifications must comply with the **Tamshai Enterprise AI Constitution** (
 Establish robust, containerized environment with centralized identity management (Keycloak) for secure AI application deployment.
 
 **Key Components**:
-- Docker Compose with 13 services
-- Keycloak SSO (OIDC + TOTP MFA)
+- Docker Compose with 13+ services
+- Keycloak SSO (OIDC + TOTP MFA) via `--import-realm` (ADR-006)
 - PostgreSQL (HR, Finance data)
 - MongoDB (CRM data)
 - Elasticsearch (Support tickets)
 - Redis (Token revocation)
 - Kong API Gateway
+- Caddy Reverse Proxy (HTTPS for dev)
 - Network isolation (172.30.0.0/16)
+
+**Keycloak Configuration Method** (ADR-006):
+```yaml
+# All environments use Docker --import-realm
+keycloak:
+  command: start-dev --import-realm
+  volumes:
+    - realm-export-dev.json:/opt/keycloak/data/import/realm-export.json:ro
+```
+
+**Realm Files**:
+- `keycloak/realm-export-dev.json` - Dev/Stage (test users with TOTP)
+- `keycloak/realm-export.json` - Production (no pre-configured users)
+
+**Deployment Environments**:
+| Environment | Platform | Status |
+|-------------|----------|--------|
+| CI | GitHub Actions | ✅ Working |
+| Dev | Docker Desktop + Terraform | ✅ Working |
+| VPS/Stage | Hetzner Cloud + Terraform | ✅ Working |
+| GCP/Prod | Google Cloud + Terraform | Ready |
 
 **Success Criteria**:
 - ✅ All services start via `docker-compose up`
 - ✅ 8 test users with TOTP authentication
 - ✅ Health checks pass for all services
 - ✅ Sample data loaded across all databases
+- ✅ Keycloak realm imported via --import-realm across all environments (ADR-006)
+- ✅ VPS staging environment deployed and operational
 
 **Location**: `.specify/specs/001-foundation/`
 
 ---
 
 #### 002-security-layer: mTLS & Row Level Security
-**Status**: IN PROGRESS ⚡
+**Status**: MOSTLY COMPLETE ✅ (RLS done, mTLS deferred to production)
 **Feature Branch**: `002-security-layer`
 **Constitutional Compliance**: Articles I.1, I.2, I.3
 
@@ -72,11 +96,12 @@ Establish robust, containerized environment with centralized identity management
 Implement defense-in-depth security: mutual TLS for service-to-service communication and Row Level Security for data access control.
 
 **Key Components**:
-- Certificate Authority (CA) for development mTLS
-- Kong mTLS verification
-- PostgreSQL RLS policies on all tables
-- MongoDB role-based query filters
-- Session variable management (`app.current_user_id`, `app.current_user_roles`)
+- ✅ PostgreSQL RLS policies on HR tables (`sample-data/hr-data.sql:606-670`)
+- ✅ PostgreSQL RLS policies on Finance tables (`sample-data/finance-data.sql:266-427`)
+- ✅ Session variable management (`app.current_user_id`, `app.current_user_roles`)
+- ✅ MongoDB role-based query filters (application-level)
+- ⏳ mTLS for service-to-service (deferred to production)
+- ⏳ Kong mTLS verification (deferred to production)
 
 **RLS Policy Pattern** (PostgreSQL):
 ```sql
@@ -90,33 +115,43 @@ USING (
 );
 ```
 
-**Success Criteria**:
-- [ ] Kong rejects connections without valid certificates
-- [ ] Engineers see only own HR records
-- [ ] Managers see team records
-- [ ] HR roles see all employee data
-- [ ] RLS integration tests pass
+**Implemented RLS Policies**:
+- HR: `employee_self_access`, `employee_hr_access`, `employee_executive_access`, `employee_manager_access`
+- HR Reviews: `review_self_access`, `review_hr_access`, `review_manager_access`
+- Finance Budgets: `budget_finance_access`, `budget_executive_access`, `budget_department_access`
+- Finance Invoices: `invoice_finance_access`, `invoice_executive_access`, `invoice_department_access`
+- Finance Reports: `report_public_access`, `report_finance_access`, `report_executive_access`
 
-**Location**: `.specify/specs/002-security-layer/`
+**Success Criteria**:
+- [ ] Kong rejects connections without valid certificates (production only)
+- [x] Engineers see only own HR records (RLS enforced)
+- [x] Managers see team records (RLS enforced)
+- [x] HR roles see all employee data (RLS enforced)
+- [x] Finance roles see appropriate financial data (RLS enforced)
+- [ ] RLS integration tests pass (partial - unit tests exist)
+
+**Location**: `.specify/specs/002-security-layer/` (spec directory not created)
 
 ---
 
 #### 003-mcp-core: Gateway & Prompt Defense
-**Status**: CURRENT ⚡
+**Status**: COMPLETE ✅
 **Feature Branch**: `003-mcp-core`
 **Constitutional Compliance**: Articles I.2, II (all), III.1
 
 **Business Intent**:
 Central AI orchestration gateway with security enforcement (prompt injection defense, JWT validation, role-based routing).
 
-**Key Components**:
-- Node.js/TypeScript Gateway (473 lines implemented)
-- JWT validation with Keycloak JWKS
-- Token revocation (Redis)
-- 5-Layer Prompt Injection Defense
-- Role-to-MCP routing
-- Claude API integration (Anthropic SDK)
-- Audit logging (Winston)
+**Key Components** (All Implemented):
+- ✅ Node.js/TypeScript Gateway (`services/mcp-gateway/src/index.ts`)
+- ✅ JWT validation with Keycloak JWKS (`src/auth/jwt-validator.ts`)
+- ✅ Token revocation via Redis (`src/security/token-revocation.ts`)
+- ✅ 5-Layer Prompt Injection Defense (`src/security/prompt-defense.ts`)
+- ✅ Role-to-MCP routing (`src/mcp/role-mapper.ts`)
+- ✅ Claude API integration with SSE streaming (`src/ai/claude-client.ts`)
+- ✅ Audit logging (Winston)
+- ✅ Human-in-the-loop confirmations (`src/routes/confirmation.routes.ts`)
+- ✅ Truncation warning injection
 
 **Routing Logic**:
 ```typescript
@@ -131,31 +166,36 @@ const ROLE_TO_MCP: Record<string, string[]> = {
 
 **Success Criteria**:
 - [x] Gateway validates JWT tokens
-- [ ] Token revocation via Redis
-- [ ] Prompt injection patterns blocked
-- [ ] Streaming responses work
-- [ ] All queries logged with user context
+- [x] Token revocation via Redis
+- [x] Prompt injection patterns blocked
+- [x] SSE streaming responses work (v1.4)
+- [x] Truncation warnings injected (v1.4)
+- [x] Human-in-the-loop confirmations work (v1.4)
+- [x] All queries logged with user context
+- [ ] Performance SLA (<200ms routing) - not formally measured
 
 **Location**: `.specify/specs/003-mcp-core/`
 
 ---
 
 #### 004-mcp-suite: Domain MCP Servers
-**Status**: PLANNED 🔲
+**Status**: COMPLETE ✅
 **Feature Branch**: `004-mcp-suite`
 **Constitutional Compliance**: Articles I.1, I.3, II.1, II.2, II.3
 
 **Business Intent**:
 Expose enterprise data (HR, Finance, Sales, Support) to AI via Model Context Protocol tools with strict RBAC enforcement.
 
-**MCP Servers**:
+**MCP Servers** (All Implemented):
 
-| Server | Port | Tools | Data Source | Required Roles |
-|--------|------|-------|-------------|----------------|
-| **mcp-hr** | 3101 | `get_employee`, `list_employees`, `get_org_chart`, `get_performance_reviews` | PostgreSQL (tamshai_hr) | hr-read, hr-write, executive |
-| **mcp-finance** | 3102 | `get_budget`, `list_invoices`, `get_expense_report` | PostgreSQL (tamshai_finance) | finance-read, finance-write, executive |
-| **mcp-sales** | 3103 | `get_customer`, `list_opportunities`, `get_pipeline` | MongoDB (tamshai_sales) | sales-read, sales-write, executive |
-| **mcp-support** | 3104 | `search_tickets`, `get_knowledge_article` | Elasticsearch | support-read, support-write, executive |
+| Server | Port | Tools Implemented | Data Source | Required Roles |
+|--------|------|-------------------|-------------|----------------|
+| **mcp-hr** | 3101 | `get_employee`, `list_employees`, `delete_employee`, `update_salary` | PostgreSQL (tamshai_hr) | hr-read, hr-write, executive |
+| **mcp-finance** | 3102 | `get_budget`, `list_budgets`, `list_invoices`, `get_expense_report`, `delete_invoice`, `approve_budget` | PostgreSQL (tamshai_finance) | finance-read, finance-write, executive |
+| **mcp-sales** | 3103 | `list_opportunities`, `get_customer`, `delete_opportunity` | MongoDB (tamshai_sales) | sales-read, sales-write, executive |
+| **mcp-support** | 3104 | `search_tickets`, `search_knowledge_base`, `close_ticket` | Elasticsearch | support-read, support-write, executive |
+
+**Total: 15 tools implemented** (9 read, 6 write with confirmations)
 
 **PII Masking Pattern** (Article I.3):
 ```typescript
@@ -174,20 +214,28 @@ function maskSalary(employee: Employee, userRoles: string[]): Employee {
 ```
 
 **Success Criteria**:
-- [ ] All 4 MCP servers deployed
-- [ ] RLS session variables set before queries
-- [ ] PII masked for non-privileged users
-- [ ] Tools return structured JSON (no exceptions)
-- [ ] RBAC integration tests pass
+- [x] All 4 MCP servers deployed (ports 3101-3104)
+- [x] RLS session variables set before queries
+- [x] PII masking implemented (partial - salary, SSN)
+- [x] Tools return discriminated union JSON (success | error | pending_confirmation)
+- [x] LLM-friendly error schemas implemented
+- [x] Truncation metadata included in list operations
+- [x] Write tools return pending_confirmation for destructive actions
+- [x] RBAC integration tests pass
+- [ ] Performance SLA (<500ms simple queries) - not formally measured
+
+**Known Gaps** (per spec.md):
+- `get_org_chart`, `get_performance_reviews` not implemented
+- `get_pipeline`, `close_opportunity` not implemented
 
 **Location**: `.specify/specs/004-mcp-suite/`
 
 ---
 
-### Frontend (Planned 🔲)
+### Frontend (In Progress ⚡)
 
 #### 005-sample-apps: Web Portal & Dashboards
-**Status**: PLANNED 🔲
+**Status**: IN PROGRESS ⚡
 **Feature Branch**: `005-sample-apps`
 **Constitutional Compliance**: **Article V (ALL) - CRITICAL**
 
@@ -258,11 +306,23 @@ return <div>Salary: {employee.salary}</div>;
 - **Then**: Shows "Unauthorized" page (backend enforces, client displays)
 
 **Success Criteria**:
-- [ ] SSO works across all apps
-- [ ] Token stored in memory (not localStorage)
-- [ ] HR App shows/hides data based on backend response
-- [ ] Finance App blocks non-finance users
-- [ ] Silent refresh maintains authentication
+- [x] SSO works across all apps (Portal, HR complete)
+- [x] Token stored in memory (not localStorage)
+- [x] HR App shows/hides data based on backend response
+- [ ] Finance App blocks non-finance users (stub only)
+- [x] Silent refresh maintains authentication
+
+**Implementation Status**:
+
+| App | Port | Status | Notes |
+|-----|------|--------|-------|
+| **Portal** | 4000 | ✅ Complete | Role-based app navigation, user profile |
+| **HR** | 4001 | ✅ Complete | Employee directory (305 lines), AI query (217 lines) |
+| **Finance** | 4002 | ⚠️ Stub | Dashboard cards only (150 lines) |
+| **Sales** | 4003 | ⚠️ Stub | Opportunities skeleton (343 lines) |
+| **Support** | 4004 | ⚠️ Stub | Tickets/KB skeletons (379 lines) |
+
+**Shared Packages**: `@tamshai/auth`, `@tamshai/ui` (SSEQueryClient, ApprovalCard)
 
 **Location**: `.specify/specs/005-sample-apps/`
 
@@ -847,11 +907,11 @@ tamshai-enterprise-ai/
 │   │   │   ├── spec.md
 │   │   │   ├── plan.md
 │   │   │   └── tasks.md
-│   │   ├── 004-mcp-suite/        [🔲 PLANNED]
+│   │   ├── 004-mcp-suite/        [✓ COMPLETE]
 │   │   │   ├── spec.md
 │   │   │   ├── plan.md
 │   │   │   └── tasks.md
-│   │   ├── 005-sample-apps/      [🔲 PLANNED]
+│   │   ├── 005-sample-apps/      [⚡ IN PROGRESS]
 │   │   │   ├── spec.md
 │   │   │   ├── plan.md
 │   │   │   └── tasks.md
@@ -1009,6 +1069,77 @@ This approach avoids platform-specific protocol handler issues while maintaining
 
 ---
 
+### ADR-006: Keycloak Realm Unification via Docker --import-realm
+**Decision**: Unify Keycloak realm setup across all environments using Docker `--import-realm` flag.
+**Status**: APPROVED & IMPLEMENTED
+**Date**: 2026-01-02
+
+**Context**:
+During infrastructure alignment work, three different Keycloak configuration approaches were discovered across environments:
+
+| Environment | Previous Method | Issue |
+|-------------|-----------------|-------|
+| **Dev** | Terraform keycloak provider | Module has own provider.tf, incompatible with depends_on |
+| **VPS/Stage** | Docker --import-realm | Working correctly |
+| **GCP/Prod** | Nothing configured | Keycloak started with empty realm |
+
+The Terraform keycloak provider approach caused issues:
+- Module with own provider.tf is a "legacy module pattern"
+- Cannot use depends_on, count, or for_each with legacy modules
+- Timing issues between Keycloak startup and Terraform configuration
+- 60-90 second wait for Keycloak health check before Terraform could configure
+
+**Decision Rationale**:
+1. **Atomic Configuration**: `--import-realm` loads realm during Keycloak startup (no timing issues)
+2. **Speed**: ~30s startup vs ~90s+ with Terraform provider wait
+3. **Simplicity**: No additional Terraform provider to manage
+4. **Consistency**: Same mechanism works in Docker Compose (dev/CI) and Kubernetes (prod)
+5. **CI Compatibility**: Ephemeral CI environments don't benefit from Terraform state
+
+**Implementation**:
+
+**Docker Compose** (`docker-compose.yml`):
+```yaml
+keycloak:
+  command: start-dev --import-realm
+  volumes:
+    - ../keycloak/realm-export-dev.json:/opt/keycloak/data/import/realm-export.json:ro
+```
+
+**GCP Production** (`keycloak-startup.sh`):
+```bash
+# Environment-based realm file selection
+if [ "$ENVIRONMENT" = "production" ]; then
+  REALM_FILE="realm-export.json"
+else
+  REALM_FILE="realm-export-dev.json"
+fi
+docker run ... --import-realm ...
+```
+
+**Realm Files**:
+- `keycloak/realm-export-dev.json` - Dev/Stage (includes 8 test users with TOTP seeds)
+- `keycloak/realm-export.json` - Production (no pre-configured users)
+
+**Files Modified**:
+- `infrastructure/docker/docker-compose.yml` - Always use --import-realm
+- `infrastructure/terraform/dev/main.tf` - Removed keycloak module, added documentation
+- `infrastructure/terraform/dev/versions.tf` - Removed keycloak provider
+- `infrastructure/terraform/dev/outputs.tf` - Static realm info outputs
+- `infrastructure/terraform/modules/compute/scripts/keycloak-startup.sh` - Added --import-realm
+
+**Impact**:
+- ✅ All environments now use identical Keycloak configuration mechanism
+- ✅ Terraform dev environment simplified (no keycloak provider dependency)
+- ✅ GCP production Keycloak now properly configured
+- ✅ CI pipeline unchanged (already used --import-realm pattern)
+
+**Documentation**:
+- `.specify/V1.4_UPDATE_STATUS.md` - Infrastructure achievements section
+- `.specify/V1.4_IMPLEMENTATION_STATUS.md` - Deployment status section
+
+---
+
 ## Next Actions
 
 ### Completed
@@ -1023,18 +1154,22 @@ This approach avoids platform-specific protocol handler issues while maintaining
 9. ✅ Application-level rate limiting
 10. ✅ JWT audience validation
 11. ✅ Incident response runbook
+12. ✅ Keycloak realm unification via --import-realm (ADR-006)
+13. ✅ VPS staging environment deployed (Hetzner Cloud)
+14. ✅ Terraform dev environment with Caddy HTTPS
+15. ✅ CI/CD alignment verified across all environments
 
 ### Current Sprint
-12. ⚡ Complete MCP Gateway token revocation (003-mcp-core)
-13. ⚡ Implement remaining RLS policies (002-security-layer)
-14. ⚡ MCP Suite servers refinement (004-mcp-suite)
-15. ⚡ GDPR SAR implementation in HR App (005-sample-apps)
+16. ⚡ Complete MCP Gateway token revocation (003-mcp-core)
+17. ⚡ Implement remaining RLS policies (002-security-layer)
+18. ⚡ MCP Suite servers refinement (004-mcp-suite)
+19. ⚡ GDPR SAR implementation in HR App (005-sample-apps)
 
 ### Next Sprint
-16. 🔲 Flutter macOS build and test (009-flutter-unified)
-17. 🔲 Flutter iOS/Android builds (009-flutter-unified)
-18. 🔲 Complete Finance/Sales/Support apps (005-sample-apps)
-19. 🔲 Performance baseline establishment
+20. 🔲 Flutter macOS build and test (009-flutter-unified)
+21. 🔲 Flutter iOS/Android builds (009-flutter-unified)
+22. 🔲 Complete Finance/Sales/Support apps (005-sample-apps)
+23. 🔲 Performance baseline establishment
 
 ### Deprecated (Reference Only)
 - ~~006-ai-desktop (Electron)~~ - See ADR-004
@@ -1050,7 +1185,7 @@ This approach avoids platform-specific protocol handler issues while maintaining
 **Lead Architect**: John Cornell
 **Repository**: https://github.com/jcornell3/tamshai-enterprise-ai
 **Constitution Version**: 1.0.0
-**Last Spec Review**: December 26, 2025
+**Last Spec Review**: January 2, 2026
 
 ---
 
