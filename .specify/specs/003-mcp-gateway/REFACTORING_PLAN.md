@@ -4175,14 +4175,322 @@ describe('JWTValidator', () => {
 
 Before starting any refactoring work, verify:
 
-- [ ] Read this entire REFACTORING_PLAN.md (all **5** addendums)
+- [ ] Read this entire REFACTORING_PLAN.md (all **6** addendums)
 - [ ] Understand the client roles fix (Issue #1, **Addendum #5**)
 - [ ] Understand the JWKS client injection pattern (Issue #2, **Addendum #5**)
 - [ ] Add `safeParseInt` helper before using config values (Issue #3, **Addendum #5**)
+- [ ] Implement SSE heartbeat in Phase 3 (**Addendum #6** - Critical)
 - [ ] Run `npm test` locally - all tests pass
 - [ ] Run `npm run typecheck` - no errors
 - [ ] Run `npm run lint` - no errors
 
 ---
 
-**Last Updated**: 2026-01-01 (Architecture Review Corrections)
+## ADDENDUM #6: QA Review Findings (2026-01-02)
+
+**Source**: QA Lead Review (`REFACTORING_REVIEW.md`)
+**Status**: Approved with conditions
+
+### Overview
+
+QA review identified 1 critical gap, 3 high-priority gaps, 2 medium gaps, and 5 improvement opportunities. Two initially identified gaps (Redis failure, rate limiting) were found to already be addressed by existing architecture.
+
+| Category | Count | Action |
+|----------|-------|--------|
+| Critical | 1 | Must fix in Phase 3 |
+| High-Priority | 3 | Should fix during implementation |
+| Medium | 2 | Nice-to-have |
+| Improvements | 5 | Optimization opportunities |
+| Already Resolved | 2 | No action needed |
+
+---
+
+### Critical: SSE Heartbeat/Keep-Alive (Phase 3)
+
+**Problem**: Long-running Claude queries (30-60s) send no heartbeats. Proxies/load balancers may timeout.
+
+**Impact**:
+- Nginx default timeout: 60s → Connection dropped mid-query
+- Kong proxy timeout: 60s → 504 Gateway Timeout
+- Client cannot distinguish "thinking" from "dead connection"
+
+**Required Implementation** (add to `streaming.routes.ts`):
+
+```typescript
+router.post('/api/query', async (req: Request, res: Response) => {
+  // ... existing setup ...
+
+  // Add heartbeat every 15 seconds during stream
+  let heartbeatInterval: NodeJS.Timeout;
+
+  try {
+    heartbeatInterval = setInterval(() => {
+      if (!streamClosed) {
+        res.write(': heartbeat\n\n');  // SSE comment (client ignores)
+        if (res.flush) res.flush();
+      }
+    }, 15000);
+
+    for await (const event of generator) {
+      // ... existing streaming logic ...
+    }
+  } finally {
+    clearInterval(heartbeatInterval);
+  }
+});
+```
+
+**Test Required**:
+```typescript
+it('should send heartbeat every 15 seconds during long queries', async () => {
+  // Mock slow Claude response (20+ seconds)
+  // Verify heartbeat comments received
+  // Verify connection stays alive
+});
+```
+
+---
+
+### High-Priority: Graceful Shutdown (Phase 4)
+
+**Problem**: No connection draining during deploys. Active SSE streams may be dropped abruptly.
+
+**Required Implementation**:
+
+```typescript
+// Track active SSE connections
+const activeConnections = new Set<Response>();
+
+// In streaming route
+router.post('/api/query', (req, res) => {
+  activeConnections.add(res);
+  res.on('close', () => activeConnections.delete(res));
+  // ...
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('Shutting down, draining connections...');
+
+  // Stop accepting new connections
+  server.close();
+
+  // Send close to all SSE clients
+  for (const res of activeConnections) {
+    res.write('data: {"type":"shutdown"}\n\n');
+    res.end();
+  }
+
+  // Wait for active requests (max 30s)
+  await new Promise(r => setTimeout(r, 30000));
+  process.exit(0);
+});
+```
+
+---
+
+### High-Priority: MCP Retry Logic (Phase 2.2 or Post-Refactor)
+
+**Problem**: Single attempt to MCP servers. Network glitches cause immediate failure.
+
+**Recommendation**: Add exponential backoff for transient errors:
+
+```typescript
+async queryWithRetry(
+  server: MCPServerConfig,
+  query: string,
+  userContext: UserContext,
+  options: { maxRetries?: number } = {}
+): Promise<MCPQueryResult> {
+  const { maxRetries = 3 } = options;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await this.query(server, query, userContext, options);
+    } catch (error) {
+      if (!this.isRetryable(error) || attempt === maxRetries) throw error;
+      await this.delay(Math.pow(2, attempt) * 100); // 200ms, 400ms, 800ms
+    }
+  }
+}
+
+private isRetryable(error: Error): boolean {
+  const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'];
+  return retryableCodes.includes(error.code) ||
+         [502, 503, 504].includes(error.response?.status);
+}
+```
+
+---
+
+### High-Priority: Type Coverage CI Enforcement (Phase 4)
+
+**Problem**: 85% type coverage target has no CI enforcement.
+
+**Required**: Add to `.github/workflows/ci.yml`:
+
+```yaml
+- name: Check type coverage
+  run: |
+    cd services/mcp-gateway
+    npx type-coverage --at-least 85 --detail
+```
+
+---
+
+### Medium: Memory Leak Testing (Post-Refactor)
+
+**Problem**: AsyncGenerator + AbortController patterns can leak memory if not properly cleaned up.
+
+**Recommendation**: Add stress test:
+
+```typescript
+it('should not leak memory on 1000 aborted streams', async () => {
+  const initialMemory = process.memoryUsage().heapUsed;
+
+  for (let i = 0; i < 1000; i++) {
+    const controller = new AbortController();
+    const generator = streamingService.executeQuery('test', userContext, [], controller.signal);
+    await generator.next();
+    controller.abort();
+  }
+
+  global.gc(); // Requires --expose-gc flag
+  const finalMemory = process.memoryUsage().heapUsed;
+  expect(finalMemory - initialMemory).toBeLessThan(10 * 1024 * 1024); // <10MB growth
+});
+```
+
+---
+
+### Medium: Health Check Dependency Matrix (Post-Refactor)
+
+**Problem**: `/health` endpoint behavior unclear when dependencies are down.
+
+**Recommendation**: Define and test health check matrix:
+
+| Scenario | Expected Status |
+|----------|-----------------|
+| All healthy | `healthy` |
+| Redis down | `degraded` (fail-open) |
+| Keycloak JWKS down | `degraded` |
+| One MCP server down | `healthy` (non-critical) |
+| All down | `unhealthy` |
+
+---
+
+### Improvement: Mock Factory Structure (Phase 1)
+
+Create `tests/test-utils/` structure BEFORE writing tests:
+
+```
+tests/test-utils/
+├── mock-logger.ts       # Winston mock
+├── mock-user-context.ts # With TEST_USERS constant
+├── mock-jwt-validator.ts
+├── mock-mcp-client.ts
+├── mock-redis.ts
+└── index.ts             # Re-exports all
+```
+
+---
+
+### Improvement: Integration Test Matrix (Phase 4)
+
+Define explicit test scenarios:
+
+| Scenario | User | Query | Expected |
+|----------|------|-------|----------|
+| HR read success | alice.chen | "List employees" | 200 + data |
+| Cross-domain denied | alice.chen | "Show invoices" | 403 |
+| SSE stream complete | bob.martinez | "Analyze revenue" | SSE events |
+| SSE client disconnect | any | Long query | Clean abort |
+| Confirmation approve | alice.chen | "Delete employee X" | pending → success |
+| Confirmation reject | alice.chen | "Delete employee X" | pending → cancelled |
+| Token expired | expired_token | Any | 401 |
+| Token revoked | revoked_jti | Any | 401 |
+
+---
+
+### Improvement: Performance Baseline (Phase 4)
+
+Capture before/after metrics:
+
+| Metric | Before | After | Target |
+|--------|--------|-------|--------|
+| Cold start time | TBD | TBD | <2s |
+| Auth middleware latency | TBD | TBD | <10ms |
+| MCP query P50 | TBD | TBD | <500ms |
+| SSE first byte | TBD | TBD | <200ms |
+
+---
+
+### Improvement: Error Code Taxonomy
+
+Create centralized error codes:
+
+```typescript
+// src/errors/error-codes.ts
+export const ERROR_CODES = {
+  AUTH_MISSING_TOKEN: { code: 'AUTH_1001', http: 401 },
+  AUTH_INVALID_TOKEN: { code: 'AUTH_1002', http: 401 },
+  AUTH_TOKEN_REVOKED: { code: 'AUTH_1003', http: 401 },
+  AUTH_INSUFFICIENT_ROLES: { code: 'AUTH_1004', http: 403 },
+  MCP_SERVER_TIMEOUT: { code: 'MCP_2001', http: 504 },
+  MCP_SERVER_ERROR: { code: 'MCP_2002', http: 502 },
+  CLAUDE_API_ERROR: { code: 'CLAUDE_3001', http: 500 },
+} as const;
+```
+
+---
+
+### Improvement: Observability Hooks (Post-Refactor)
+
+Add OpenTelemetry-ready instrumentation points:
+
+```typescript
+const metrics = {
+  'gateway.requests.total': Counter,
+  'gateway.requests.duration_ms': Histogram,
+  'gateway.sse.connections.active': Gauge,
+  'gateway.sse.connections.aborted': Counter,
+  'gateway.mcp.queries.total': Counter,
+  'gateway.auth.revocations.total': Counter,
+};
+```
+
+---
+
+### Already Resolved (No Action Needed)
+
+1. **Redis Connection Failure**: Addressed by v1.5 `CachedTokenRevocation` with local cache and fail-open strategy (`src/utils/redis.ts:57-178`)
+
+2. **Rate Limiting**: Handled at Kong Gateway layer (`infrastructure/docker/kong/kong.yml:126-135`) - correct architectural placement
+
+---
+
+### Updated Phase Checklist
+
+**Phase 1** (add):
+- [ ] Create `tests/test-utils/` mock factory structure
+
+**Phase 3** (add):
+- [ ] Implement SSE heartbeat every 15 seconds (CRITICAL)
+- [ ] Add heartbeat test
+
+**Phase 4** (add):
+- [ ] Implement graceful shutdown with connection draining
+- [ ] Add type coverage check to CI (`npx type-coverage --at-least 85`)
+- [ ] Document integration test matrix
+- [ ] Capture performance baseline
+
+**Post-Refactor** (optional):
+- [ ] Add MCP retry logic with exponential backoff
+- [ ] Add memory leak stress tests
+- [ ] Implement health check dependency matrix
+- [ ] Add error code taxonomy
+- [ ] Add observability instrumentation
+
+---
+
+**Last Updated**: 2026-01-02 (QA Review Integration)
