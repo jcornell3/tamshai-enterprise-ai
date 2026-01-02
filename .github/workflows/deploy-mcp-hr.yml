@@ -80,7 +80,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh $VPS_USER@$VPS_HOST << 'DEPLOY_EOF'
           set -e  # Exit on error
 
           cd /opt/tamshai
@@ -132,7 +132,7 @@ jobs:
           fi
 
           exit 1
-          EOF
+          DEPLOY_EOF
 
       - name: Rollback MCP HR
         if: ${{ github.event.inputs.rollback == 'true' }}
@@ -140,7 +140,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh $VPS_USER@$VPS_HOST << 'ROLLBACK_EOF'
           set -e
 
           cd /opt/tamshai
@@ -165,7 +165,7 @@ jobs:
 
           echo "❌ Rollback health check failed"
           exit 1
-          EOF
+          ROLLBACK_EOF
 
       - name: Deployment summary
         if: success()
