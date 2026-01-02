@@ -9,9 +9,9 @@
 #   - Manual dispatch (with environment selection)
 #
 # Outputs (uploaded as artifacts):
-#   - Windows: tamshai-{env}-windows.zip (.exe + dependencies)
-#   - macOS: tamshai-{env}-macos.zip (.app bundle)
-#   - Android: tamshai-{env}.apk (debug), tamshai-{env}.aab (release)
+#   - Windows: tamshai-{env}-windows.msix (installer), tamshai-{env}-windows.zip (portable)
+#   - macOS: tamshai-{env}-macos.dmg (installer), tamshai-{env}-macos.zip (.app bundle)
+#   - Android: tamshai-{env}.apk (sideload), tamshai-{env}.aab (Play Store)
 #   - iOS: tamshai-{env}.ipa (requires Apple signing secrets)
 #
 # Environment Configuration:
@@ -202,25 +202,63 @@ jobs:
             --dart-define=ENV=${{ needs.setup.outputs.environment }} `
             --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
 
-      - name: Create Windows archive
+      - name: Create MSIX installer
+        working-directory: clients/unified_flutter
         shell: pwsh
         run: |
           $env = "${{ needs.setup.outputs.environment }}"
           $suffix = "${{ needs.setup.outputs.app_suffix }}"
-          $archiveName = "tamshai-$env-windows"
+          $appName = if ($suffix) { "Tamshai $suffix" } else { "Tamshai" }
+          $identityName = "com.tamshai.app.$env"
 
-          # Create archive of release folder
+          # Install msix package if not already in pubspec.yaml dev_dependencies
+          flutter pub add --dev msix
+
+          # Create MSIX with environment-specific identity
+          # This allows side-by-side installation of dev/stage/prod
+          flutter pub run msix:create `
+            --display-name "$appName" `
+            --publisher-display-name "Tamshai Corporation" `
+            --identity-name "$identityName" `
+            --version "1.0.0.0" `
+            --capabilities "internetClient"
+
+          # Rename MSIX to include environment
+          $msixPath = Get-ChildItem -Path "build/windows/x64/runner/Release/*.msix" | Select-Object -First 1
+          if ($msixPath) {
+            $newName = "tamshai-$env-windows.msix"
+            Move-Item -Path $msixPath.FullName -Destination "$env:GITHUB_WORKSPACE/$newName"
+            echo "Created $newName"
+          } else {
+            echo "::warning::MSIX file not found, skipping installer"
+          }
+
+      - name: Create Windows portable archive
+        shell: pwsh
+        run: |
+          $env = "${{ needs.setup.outputs.environment }}"
+          $archiveName = "tamshai-$env-windows-portable"
+
+          # Create archive of release folder (portable version)
           Compress-Archive `
             -Path "clients/unified_flutter/build/windows/x64/runner/Release/*" `
             -DestinationPath "$archiveName.zip"
 
           echo "Created $archiveName.zip"
 
-      - name: Upload Windows artifact
+      - name: Upload Windows MSIX installer
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
-          name: tamshai-${{ needs.setup.outputs.environment }}-windows
-          path: tamshai-${{ needs.setup.outputs.environment }}-windows.zip
+          name: tamshai-${{ needs.setup.outputs.environment }}-windows-msix
+          path: tamshai-${{ needs.setup.outputs.environment }}-windows.msix
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Windows portable
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-windows-portable
+          path: tamshai-${{ needs.setup.outputs.environment }}-windows-portable.zip
           retention-days: 30
 
       - name: Build summary
@@ -229,7 +267,8 @@ jobs:
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $env:GITHUB_STEP_SUMMARY
           echo "- **App Name**: Tamshai ${{ needs.setup.outputs.app_suffix }}" >> $env:GITHUB_STEP_SUMMARY
-          echo "- **Artifact**: tamshai-${{ needs.setup.outputs.environment }}-windows.zip" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **MSIX Installer**: tamshai-${{ needs.setup.outputs.environment }}-windows.msix" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Portable**: tamshai-${{ needs.setup.outputs.environment }}-windows-portable.zip" >> $env:GITHUB_STEP_SUMMARY
 
   # =============================================================================
   # MACOS BUILD
@@ -271,22 +310,76 @@ jobs:
             --dart-define=ENV=${{ needs.setup.outputs.environment }} \
             --dart-define=APP_SUFFIX=${{ needs.setup.outputs.app_suffix }}
 
-      - name: Create macOS archive
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG installer
         run: |
           ENV="${{ needs.setup.outputs.environment }}"
-          ARCHIVE_NAME="tamshai-$ENV-macos"
+          SUFFIX="${{ needs.setup.outputs.app_suffix }}"
+          APP_NAME="Tamshai${SUFFIX:+ $SUFFIX}"
+          DMG_NAME="tamshai-$ENV-macos.dmg"
+          APP_PATH="clients/unified_flutter/build/macos/Build/Products/Release"
 
-          # Create archive of .app bundle
+          # Find the .app bundle
+          APP_BUNDLE=$(find "$APP_PATH" -name "*.app" -maxdepth 1 | head -1)
+
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "::error::No .app bundle found in $APP_PATH"
+            exit 1
+          fi
+
+          echo "Creating DMG from: $APP_BUNDLE"
+
+          # Create DMG with Applications symlink for drag-and-drop install
+          create-dmg \
+            --volname "$APP_NAME" \
+            --volicon "$APP_BUNDLE/Contents/Resources/AppIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "$(basename "$APP_BUNDLE")" 150 190 \
+            --hide-extension "$(basename "$APP_BUNDLE")" \
+            --app-drop-link 450 185 \
+            --no-internet-enable \
+            "$GITHUB_WORKSPACE/$DMG_NAME" \
+            "$APP_BUNDLE" \
+            || {
+              # create-dmg returns non-zero even on success sometimes
+              # Check if DMG was created
+              if [ -f "$GITHUB_WORKSPACE/$DMG_NAME" ]; then
+                echo "DMG created successfully (ignoring create-dmg exit code)"
+              else
+                echo "::error::Failed to create DMG"
+                exit 1
+              fi
+            }
+
+          echo "Created $DMG_NAME"
+
+      - name: Create macOS portable archive
+        run: |
+          ENV="${{ needs.setup.outputs.environment }}"
+          ARCHIVE_NAME="tamshai-$ENV-macos-portable"
+
+          # Create archive of .app bundle (portable version)
           cd clients/unified_flutter/build/macos/Build/Products/Release
           zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME.zip" *.app
 
           echo "Created $ARCHIVE_NAME.zip"
 
-      - name: Upload macOS artifact
+      - name: Upload macOS DMG installer
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
         with:
-          name: tamshai-${{ needs.setup.outputs.environment }}-macos
-          path: tamshai-${{ needs.setup.outputs.environment }}-macos.zip
+          name: tamshai-${{ needs.setup.outputs.environment }}-macos-dmg
+          path: tamshai-${{ needs.setup.outputs.environment }}-macos.dmg
+          retention-days: 30
+
+      - name: Upload macOS portable
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: tamshai-${{ needs.setup.outputs.environment }}-macos-portable
+          path: tamshai-${{ needs.setup.outputs.environment }}-macos-portable.zip
           retention-days: 30
 
       - name: Build summary
@@ -295,7 +388,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment**: ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "- **App Name**: Tamshai ${{ needs.setup.outputs.app_suffix }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Artifact**: tamshai-${{ needs.setup.outputs.environment }}-macos.zip" >> $GITHUB_STEP_SUMMARY
+          echo "- **DMG Installer**: tamshai-${{ needs.setup.outputs.environment }}-macos.dmg" >> $GITHUB_STEP_SUMMARY
+          echo "- **Portable**: tamshai-${{ needs.setup.outputs.environment }}-macos-portable.zip" >> $GITHUB_STEP_SUMMARY
 
   # =============================================================================
   # ANDROID BUILD
@@ -530,6 +624,13 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download artifacts from the **Actions** tab → **Artifacts** section." >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Installer | Portable |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-----------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Windows | \`.msix\` (double-click to install) | \`.zip\` (extract and run) |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS | \`.dmg\` (drag to Applications) | \`.zip\` (extract .app) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android | \`.apk\` (sideload) | \`.aab\` (Play Store) |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS | \`.ipa\` (requires signing) | \`.zip\` (unsigned .app) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download from the **Actions** tab → **Artifacts** section." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Retention**: 30 days" >> $GITHUB_STEP_SUMMARY
