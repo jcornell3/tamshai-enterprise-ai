@@ -5,6 +5,20 @@
  * Pure function - no side effects, easy to test.
  */
 
+/**
+ * Safely parse integer from string with fallback to default.
+ * Returns defaultVal if parsing fails or results in NaN.
+ *
+ * @param val - String value to parse (may be undefined)
+ * @param defaultVal - Default value if parsing fails
+ * @returns Parsed integer or default value
+ */
+export function safeParseInt(val: string | undefined, defaultVal: number): number {
+  if (!val) return defaultVal;
+  const parsed = parseInt(val, 10);
+  return Number.isNaN(parsed) ? defaultVal : parsed;
+}
+
 export interface GatewayConfig {
   port: number;
   keycloak: {
@@ -40,7 +54,7 @@ export interface GatewayConfig {
  */
 export function loadConfig(): GatewayConfig {
   return {
-    port: parseInt(process.env.PORT || '3000'),
+    port: safeParseInt(process.env.PORT, 3000),
     keycloak: {
       url: process.env.KEYCLOAK_URL || 'http://localhost:8180',
       realm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
@@ -59,10 +73,10 @@ export function loadConfig(): GatewayConfig {
       support: process.env.MCP_SUPPORT_URL || 'http://localhost:3004',
     },
     timeouts: {
-      mcpRead: parseInt(process.env.MCP_READ_TIMEOUT_MS || '5000'),
-      mcpWrite: parseInt(process.env.MCP_WRITE_TIMEOUT_MS || '10000'),
-      claude: parseInt(process.env.CLAUDE_TIMEOUT_MS || '60000'),
-      total: parseInt(process.env.TOTAL_REQUEST_TIMEOUT_MS || '90000'),
+      mcpRead: safeParseInt(process.env.MCP_READ_TIMEOUT_MS, 5000),
+      mcpWrite: safeParseInt(process.env.MCP_WRITE_TIMEOUT_MS, 10000),
+      claude: safeParseInt(process.env.CLAUDE_TIMEOUT_MS, 60000),
+      total: safeParseInt(process.env.TOTAL_REQUEST_TIMEOUT_MS, 90000),
     },
     logLevel: process.env.LOG_LEVEL || 'info',
   };

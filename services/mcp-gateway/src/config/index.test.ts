@@ -4,7 +4,7 @@
  * Target: 95%+ coverage (pure function, easy to test)
  */
 
-import { loadConfig } from './index';
+import { loadConfig, safeParseInt } from './index';
 
 describe('Configuration Module', () => {
   // Store original env vars to restore after tests
@@ -140,15 +140,15 @@ describe('Configuration Module', () => {
       expect(config.claude.apiKey).toBe('sk-ant-api03-test-key');
     });
 
-    it('should handle invalid numeric values gracefully (NaN becomes 0)', () => {
+    it('should handle invalid numeric values gracefully (returns defaults)', () => {
       process.env.PORT = 'not-a-number';
       process.env.MCP_READ_TIMEOUT_MS = 'invalid';
 
       const config = loadConfig();
 
-      // parseInt('not-a-number') returns NaN, which is falsy
-      expect(isNaN(config.port)).toBe(true);
-      expect(isNaN(config.timeouts.mcpRead)).toBe(true);
+      // safeParseInt returns default value when parsing fails
+      expect(config.port).toBe(3000);
+      expect(config.timeouts.mcpRead).toBe(5000);
     });
 
     it('should return a complete GatewayConfig object', () => {
@@ -188,6 +188,44 @@ describe('Configuration Module', () => {
       const config2 = loadConfig();
 
       expect(config1).toEqual(config2);
+    });
+  });
+
+  describe('safeParseInt', () => {
+    it('should parse valid integer strings', () => {
+      expect(safeParseInt('42', 0)).toBe(42);
+      expect(safeParseInt('8080', 3000)).toBe(8080);
+      expect(safeParseInt('0', 100)).toBe(0);
+    });
+
+    it('should return default for undefined input', () => {
+      expect(safeParseInt(undefined, 3000)).toBe(3000);
+      expect(safeParseInt(undefined, 5000)).toBe(5000);
+    });
+
+    it('should return default for empty string', () => {
+      expect(safeParseInt('', 3000)).toBe(3000);
+    });
+
+    it('should return default for non-numeric strings', () => {
+      expect(safeParseInt('not-a-number', 3000)).toBe(3000);
+      expect(safeParseInt('abc', 5000)).toBe(5000);
+      expect(safeParseInt('five-seconds', 10000)).toBe(10000);
+    });
+
+    it('should return default for NaN-producing inputs', () => {
+      expect(safeParseInt('NaN', 3000)).toBe(3000);
+      expect(safeParseInt('undefined', 3000)).toBe(3000);
+    });
+
+    it('should handle negative numbers', () => {
+      expect(safeParseInt('-1', 0)).toBe(-1);
+      expect(safeParseInt('-100', 50)).toBe(-100);
+    });
+
+    it('should truncate floating point strings', () => {
+      expect(safeParseInt('3.14', 0)).toBe(3);
+      expect(safeParseInt('99.9', 0)).toBe(99);
     });
   });
 });
