@@ -13,50 +13,41 @@ The refactoring plan is **comprehensive and well-structured**, with critical iss
 
 | Category | Count | Severity |
 |----------|-------|----------|
-| Critical Gaps | 2 | Must fix before Phase 3 |
+| Critical Gaps | 1 | Must fix before Phase 3 |
 | High-Priority Gaps | 3 | Should fix during implementation |
 | Medium Gaps | 3 | Nice-to-have improvements |
 | Improvements | 5 | Optimization opportunities |
 
-**Overall Assessment**: ✅ **APPROVED with conditions** - Address critical gaps before Phase 3 deployment.
+**Overall Assessment**: ✅ **APPROVED with conditions** - Address critical gap (SSE heartbeat) before Phase 3 deployment.
 
 ---
 
 ## Critical Gaps (Must Fix)
 
-### GAP-001: Missing Redis Connection Failure Handling
+### ~~GAP-001: Missing Redis Connection Failure Handling~~ - RESOLVED
 
-**Location**: Phase 2.1 (JWTValidator), Phase 3 (Auth Middleware)
+**Status**: ✅ **Already addressed in v1.5 implementation**
 
-**Problem**: The auth middleware checks token revocation via Redis:
+**Location**: `src/utils/redis.ts` (lines 57-178)
+
+The codebase already implements a robust `CachedTokenRevocation` class with:
+- **Local in-memory cache** with O(1) lookups (no Redis call per request)
+- **Background sync every 2 seconds** (configurable via `TOKEN_REVOCATION_SYNC_MS`)
+- **Fail-open by default** (`TOKEN_REVOCATION_FAIL_OPEN !== 'false'`)
+- **Graceful degradation** - uses cached data when Redis sync fails
+- **Alerting** - logs error after 5 consecutive failures
+
 ```typescript
-if (payload?.jti && await isTokenRevoked(payload.jti)) {
-  res.status(401).json({ error: 'Token has been revoked' });
-}
+// Already implemented - src/utils/redis.ts:57-60
+const tokenRevocationConfig = {
+  syncIntervalMs: parseInt(process.env.TOKEN_REVOCATION_SYNC_MS || '2000'),
+  failOpen: process.env.TOKEN_REVOCATION_FAIL_OPEN !== 'false', // default: true
+};
 ```
 
-**Gap**: No handling for Redis connection failure. If Redis is down:
-- `isTokenRevoked()` throws → 500 error → All auth fails
-- Silent failure mode not defined
+**Trade-off**: Maximum 2-second window where revoked tokens may still be accepted (documented).
 
-**Impact**: Redis outage causes complete authentication failure (P0 incident).
-
-**Recommendation**:
-```typescript
-// Add fail-open or fail-closed strategy
-try {
-  if (payload?.jti && await isTokenRevoked(payload.jti)) {
-    res.status(401).json({ error: 'Token has been revoked' });
-    return;
-  }
-} catch (redisError) {
-  logger.error('Redis check failed, using fail-open strategy', { error: redisError });
-  // DECISION NEEDED: fail-open (allow) or fail-closed (deny)?
-  // Recommendation: fail-open with short TTL cache
-}
-```
-
-**Action Required**: Add test case and define failure strategy before Phase 3.
+**No action required.**
 
 ---
 
@@ -478,7 +469,7 @@ const metrics = {
 Based on this review, add to the existing checklist:
 
 ### Pre-Phase 3 (Critical)
-- [ ] **GAP-001**: Define Redis failure strategy (fail-open/fail-closed)
+- [x] ~~**GAP-001**: Define Redis failure strategy~~ - Already implemented (v1.5 CachedTokenRevocation)
 - [ ] **GAP-002**: Implement SSE heartbeat every 15 seconds
 
 ### Phase 3 Additions
@@ -501,11 +492,13 @@ Based on this review, add to the existing checklist:
 The refactoring plan is thorough and production-ready with the identified gaps addressed. The 3 prior review rounds and 5 addendums demonstrate excellent collaboration.
 
 **Priority Actions**:
-1. **Immediately**: Address GAP-001 (Redis failure) and GAP-002 (SSE heartbeat)
+1. **Immediately**: Address GAP-002 (SSE heartbeat) - only remaining critical gap
 2. **During Phase 3**: Implement graceful shutdown testing
 3. **Before production**: Validate type coverage enforcement in CI
 
-**Estimated Additional Effort**: 2-3 days for critical gaps, 1 week for all improvements.
+**Estimated Additional Effort**: 1 day for critical gap (SSE heartbeat), 1 week for all improvements.
+
+**Note**: GAP-001 (Redis failure) was already addressed in the v1.5 `CachedTokenRevocation` implementation with fail-open strategy.
 
 ---
 
