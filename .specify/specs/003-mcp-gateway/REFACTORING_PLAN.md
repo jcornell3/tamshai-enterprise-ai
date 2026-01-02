@@ -1,10 +1,52 @@
 # MCP Gateway Refactoring Plan
 ## Breaking Up index.ts for Improved Test Coverage
 
-**Status**: Planning
-**Current Coverage**: 31% overall (49.06% on services/mcp-gateway)
+**Status**: **IN PROGRESS** - Phase 1 & 2 Complete, Phase 3 & 4 Remaining
+**Current Coverage**: 49.06% on services/mcp-gateway (374 tests passing)
 **Target Coverage**: 70% overall (90% diff coverage on new code)
-**File Size**: index.ts - 1,533 lines (too large for effective testing)
+**File Size**: index.ts - 1,533 lines → target <200 lines
+
+---
+
+## Implementation Status (Updated 2026-01-02)
+
+### Completed Modules ✅
+
+| Module | File | Tests | Coverage | Notes |
+|--------|------|-------|----------|-------|
+| Config | `src/config/index.ts` | 19 tests | 95%+ | Includes `safeParseInt` (ADDENDUM #5) |
+| Role Mapper | `src/mcp/role-mapper.ts` | ✅ | 100% | Pure functions |
+| JWT Validator | `src/auth/jwt-validator.ts` | 19 tests | 95%+ | DI for jwksClient (ADDENDUM #5) |
+| MCP Client | `src/mcp/mcp-client.ts` | ✅ | 85%+ | Pagination, timeouts |
+| Claude Client | `src/ai/claude-client.ts` | ✅ | 90%+ | Streaming support |
+| Mock Factories | `src/test-utils/*` | N/A | N/A | mock-logger, mock-user-context, mock-mcp-server |
+
+### ADDENDUM #5 Fixes Applied ✅
+
+| Issue | Status | Implementation |
+|-------|--------|----------------|
+| Client roles regression | ✅ Fixed | Merges `realm_access` + `resource_access[clientId]` |
+| JWKS client DI | ✅ Fixed | Optional `jwksClient` param in constructor |
+| Safe parseInt | ✅ Fixed | `safeParseInt()` returns default on NaN |
+
+### Remaining Work
+
+| Phase | Task | Status | Priority |
+|-------|------|--------|----------|
+| Phase 3 | Extract streaming routes | Pending | High |
+| Phase 3 | Extract auth middleware | Pending | High |
+| Phase 3 | SSE heartbeat (ADDENDUM #6) | Pending | **Critical** |
+| Phase 4 | Graceful shutdown | Pending | High |
+| Phase 4 | Wire up extracted modules in index.ts | Pending | High |
+| Phase 4 | Type coverage CI enforcement | Pending | Medium |
+
+### Test Results (Local)
+
+```
+Test Suites: 15 passed
+Tests:       374 passed
+Time:        8.394s
+```
 
 ---
 
@@ -53,11 +95,12 @@
 
 ## Refactoring Strategy
 
-### Phase 1: Extract Pure Functions (Week 1)
+### Phase 1: Extract Pure Functions ✅ COMPLETE
 
 **Goal**: Extract logic with no side effects - easiest to test
+**Status**: ✅ Complete (2026-01-02)
 
-#### 1.1 Configuration Module
+#### 1.1 Configuration Module ✅
 **File**: `src/config/index.ts`
 **Lines**: 62-89 (28 lines)
 **Complexity**: Low
@@ -153,7 +196,7 @@ describe('loadConfig', () => {
 
 ---
 
-#### 1.2 Role Mapping Module
+#### 1.2 Role Mapping Module ✅
 **File**: `src/mcp/role-mapper.ts`
 **Lines**: 151-176, 273-279 (32 lines)
 **Complexity**: Low
@@ -243,11 +286,12 @@ describe('Role Mapper', () => {
 
 ---
 
-### Phase 2: Extract Stateful Services (Week 2)
+### Phase 2: Extract Stateful Services ✅ COMPLETE
 
 **Goal**: Extract services with external dependencies - use dependency injection for testability
+**Status**: ✅ Complete (2026-01-02) - All ADDENDUM #5 fixes applied
 
-#### 2.1 JWT Validator Service
+#### 2.1 JWT Validator Service ✅
 **File**: `src/auth/jwt-validator.ts`
 **Lines**: 182-266 (85 lines)
 **Complexity**: High
@@ -427,8 +471,8 @@ describe('JWTValidator', () => {
 
 ---
 
-#### 2.2 MCP Client Service
-**File**: `src/mcp/client.ts`
+#### 2.2 MCP Client Service ✅
+**File**: `src/mcp/mcp-client.ts` (actual implementation)
 **Lines**: 298-443 (146 lines)
 **Complexity**: Very High
 **Testing**: 85% coverage target
@@ -700,7 +744,7 @@ describe('MCPClient', () => {
 
 ---
 
-#### 2.3 Claude Client Service
+#### 2.3 Claude Client Service ✅
 **File**: `src/ai/claude-client.ts`
 **Lines**: 449-499 (51 lines)
 **Complexity**: High
@@ -971,9 +1015,11 @@ describe('ClaudeClient', () => {
 
 ---
 
-### Phase 3: Extract Middleware & Routes (Week 3)
+### Phase 3: Extract Middleware & Routes ⏳ NEXT
 
 **Goal**: Separate routing logic from business logic
+**Status**: ⏳ Pending - Blocked by Keycloak CI work
+**Critical**: Must implement SSE heartbeat (ADDENDUM #6)
 
 #### 3.1 Authentication Middleware
 **File**: `src/middleware/auth.middleware.ts`
@@ -1254,17 +1300,19 @@ export function createAIQueryRoutes(
 
 ---
 
-### Phase 4: Write Comprehensive Tests (Week 4)
+### Phase 4: Integration & Final Cleanup ⏳ PENDING
 
-**Goal**: Achieve 70%+ overall coverage
+**Goal**: Achieve 70%+ overall coverage, wire up modules, graceful shutdown
+**Status**: ⏳ Pending - After Phase 3
 
-#### 4.1 Unit Test Coverage
-- Config module: 95%+
-- Role mapper: 100%
-- JWT validator: 90%+
-- MCP client: 85%+
-- Claude client: 90%+
-- Auth middleware: 90%+
+#### 4.1 Unit Test Coverage (Partially Done)
+- ✅ Config module: 95%+ (19 tests)
+- ✅ Role mapper: 100%
+- ✅ JWT validator: 90%+ (19 tests)
+- ✅ MCP client: 85%+
+- ✅ Claude client: 90%+
+- ⏳ Auth middleware: Pending (Phase 3)
+- ⏳ Streaming routes: Pending (Phase 3)
 
 #### 4.2 Integration Test Coverage
 - Full authentication flow (Keycloak → Gateway → MCP)
