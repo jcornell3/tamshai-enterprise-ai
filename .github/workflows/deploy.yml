@@ -229,21 +229,17 @@ jobs:
         working-directory: ./services/mcp-gateway
         run: npm test -- --coverage --coverageReporters=cobertura
 
-      - name: Run integration tests
-        working-directory: ./infrastructure/docker
+      # NOTE: Integration tests are skipped in DevSecOps pipeline.
+      # They are comprehensively covered by the CI workflow (ci.yml) which has:
+      # - Proper GitHub Actions services with health checks
+      # - Keycloak setup via Terraform
+      # - MCP servers startup with proper environment
+      # This pipeline focuses on security scanning and deployment.
+      - name: Integration tests (skipped)
         run: |
-          # Configure kernel parameter for Elasticsearch
-          sudo sysctl -w vm.max_map_count=262144
-          echo "✅ Set vm.max_map_count=262144 (required for Elasticsearch)"
-
-          docker compose up -d
-          sleep 10  # Wait for services to be ready
-          docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE tamshai OWNER tamshai;" || true
-          cd ../../tests/integration
-          npm ci
-          npm test
-          cd ../../infrastructure/docker
-          docker compose down
+          echo "⏭️ Integration tests are handled by CI workflow (ci.yml)"
+          echo "   See: gateway-lint-test, integration-tests jobs"
+          echo "   This pipeline focuses on security scanning and deployment."
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

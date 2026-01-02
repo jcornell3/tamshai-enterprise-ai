@@ -65,11 +65,26 @@ runs:
       shell: bash
       run: |
         # Request OIDC token from GitHub
+        # The URL already contains query params, so we need to add audience properly
+        # Use --data-urlencode to safely add the audience parameter
+        AUDIENCE="https://github.com/jcornell3"
+
+        # Check if URL already has query parameters
+        if [[ "$ACTIONS_ID_TOKEN_REQUEST_URL" == *"?"* ]]; then
+          TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}"
+        else
+          TOKEN_URL="${ACTIONS_ID_TOKEN_REQUEST_URL}?audience=${AUDIENCE}"
+        fi
+
+        # Debug URL structure (hide sensitive parts)
+        echo "Token URL structure: ${TOKEN_URL%%\?*}?..."
+
         OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://github.com/jcornell3" | jq -r '.value')
+          "$TOKEN_URL" | jq -r '.value')
 
         if [ -z "$OIDC_TOKEN" ] || [ "$OIDC_TOKEN" = "null" ]; then
           echo "::error::Failed to get GitHub OIDC token"
+          echo "URL used (masked): ${TOKEN_URL%%\?*}?..."
           exit 1
         fi
 
