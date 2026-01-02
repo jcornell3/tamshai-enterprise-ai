@@ -128,20 +128,15 @@ write_files:
           reverse_proxy keycloak:8080
         }
 
-        # MCP Gateway API (/api/*)
+        # API Gateway (Kong handles rate limiting, CORS, security headers)
+        # Route /api/* through Kong instead of directly to MCP Gateway
         handle /api/* {
-          header {
-            Access-Control-Allow-Origin *
-            Access-Control-Allow-Methods "GET, POST, OPTIONS"
-            Access-Control-Allow-Headers "Authorization, Content-Type"
-          }
-
-          # SSE streaming support
+          # SSE streaming support - requires special proxy settings
           @sse {
             path /api/query*
             header Accept text/event-stream
           }
-          reverse_proxy @sse mcp-gateway:3100 {
+          reverse_proxy @sse kong:8000 {
             flush_interval -1
             transport http {
               read_timeout 120s
@@ -149,7 +144,8 @@ write_files:
             }
           }
 
-          reverse_proxy mcp-gateway:3100
+          # All other API requests go through Kong
+          reverse_proxy kong:8000
         }
 
         # HR App (/hr/*)

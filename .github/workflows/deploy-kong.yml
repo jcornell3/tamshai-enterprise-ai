@@ -38,7 +38,7 @@ concurrency:
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
   SERVICE_NAME: kong
-  HEALTH_CHECK_URL: http://localhost:8100/api/health
+  # Kong health check uses docker exec since ports are not exposed on VPS
   HEALTH_CHECK_TIMEOUT: 30
 
 permissions:
@@ -75,20 +75,29 @@ jobs:
           echo "📦 Deploying Kong Gateway..."
           echo "⚠️  WARNING: Kong downtime affects ALL API requests"
           git config --global --add safe.directory /opt/tamshai
-          docker tag kong:latest kong:rollback || true
+
+          # Tag current image for rollback
+          docker tag kong:3.4 kong:rollback 2>/dev/null || true
+
+          # Pull latest code
           git pull origin main
-          docker compose -f docker-compose.vps.yml build kong
+
+          # Restart Kong with updated config (no build needed - using official image)
           docker compose -f docker-compose.vps.yml up -d --no-deps kong
+
           echo "⏳ Waiting for health check..."
           for i in {1..30}; do
-            if curl -sf ${{ env.HEALTH_CHECK_URL }} > /dev/null 2>&1; then
+            if docker exec tamshai-kong kong health > /dev/null 2>&1; then
               echo "✅ Kong is healthy"
               exit 0
             fi
-            sleep 1
+            echo "Attempt $i - waiting..."
+            sleep 2
           done
+
           echo "❌ Health check failed - rolling back..."
-          docker tag kong:rollback kong:latest
+          docker compose -f docker-compose.vps.yml down kong
+          docker tag kong:rollback kong:3.4
           docker compose -f docker-compose.vps.yml up -d --no-deps kong
           exit 1
           EOF
@@ -102,14 +111,21 @@ jobs:
           ssh $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
-          docker tag kong:rollback kong:latest
+          echo "🔄 Rolling back Kong Gateway..."
+
+          # Restore previous image
+          docker tag kong:rollback kong:3.4
           docker compose -f docker-compose.vps.yml up -d --no-deps kong
+
+          echo "⏳ Verifying rollback..."
           for i in {1..30}; do
-            if curl -sf ${{ env.HEALTH_CHECK_URL }} > /dev/null 2>&1; then
+            if docker exec tamshai-kong kong health > /dev/null 2>&1; then
               echo "✅ Rollback successful"
               exit 0
             fi
-            sleep 1
+            echo "Attempt $i - waiting..."
+            sleep 2
           done
+          echo "❌ Rollback verification failed"
           exit 1
           EOF
