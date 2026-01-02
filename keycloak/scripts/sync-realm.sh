@@ -113,6 +113,33 @@ create_or_update_client() {
         echo "$client_json" | $KCADM create clients -r "$REALM" -f -
         log_info "Client '$client_id' created"
     fi
+
+    # Assign default client scopes (required for OIDC flows)
+    assign_client_scopes "$client_id"
+}
+
+get_scope_id() {
+    local scope_name="$1"
+    $KCADM get client-scopes -r "$REALM" -q "name=$scope_name" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1
+}
+
+assign_client_scopes() {
+    local client_id="$1"
+    local uuid=$(get_client_uuid "$client_id")
+
+    # Default scopes required for OIDC
+    local scopes=("openid" "profile" "email")
+
+    for scope in "${scopes[@]}"; do
+        local scope_id=$(get_scope_id "$scope")
+        if [ -n "$scope_id" ]; then
+            # Try to add the scope (ignore error if already assigned)
+            $KCADM update "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
+            log_info "  Assigned scope '$scope' to client '$client_id'"
+        else
+            log_warn "  Scope '$scope' not found in realm"
+        fi
+    done
 }
 
 # =============================================================================
