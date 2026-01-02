@@ -140,9 +140,10 @@ describe('IdentityService', () => {
         mockClient as unknown as import('pg').PoolClient
       );
 
+      // Production uses hr.access_audit_log with columns: user_email, action, resource, target_id, access_decision, access_justification
       expect(mockClient.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO hr.audit_access_logs'),
-        expect.arrayContaining(['emp-123', 'kc-user-123'])
+        expect.stringContaining('INSERT INTO hr.access_audit_log'),
+        expect.arrayContaining(['alice@tamshai.com', 'USER_CREATED', 'employee', 'emp-123'])
       );
     });
 
@@ -175,7 +176,7 @@ describe('IdentityService', () => {
 
       // Audit log should NOT be written on failure
       const auditLogCalls = mockClient.query.mock.calls.filter(
-        (call: [string, unknown[]?]) => call[0].includes('audit_access_logs')
+        (call: [string, unknown[]?]) => call[0].includes('access_audit_log')
       );
       expect(auditLogCalls).toHaveLength(0);
     });
@@ -204,7 +205,7 @@ describe('IdentityService', () => {
 
       // Audit log should NOT be written on failure
       const auditLogCalls = mockClient.query.mock.calls.filter(
-        (call: [string, unknown[]?]) => call[0].includes('audit_access_logs')
+        (call: [string, unknown[]?]) => call[0].includes('access_audit_log')
       );
       expect(auditLogCalls).toHaveLength(0);
     });
@@ -273,13 +274,14 @@ describe('IdentityService', () => {
     it('should write permissions snapshot to audit log', async () => {
       await identityService.terminateUser(employeeId);
 
+      // Production uses hr.access_audit_log with columns: user_email, action, resource, target_id, access_decision, access_justification
       expect(mockDb.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO hr.audit_access_logs'),
+        expect.stringContaining('INSERT INTO hr.access_audit_log'),
         expect.arrayContaining([
-          employeeId,
-          'USER_TERMINATED',
-          'kc-user-456',
-          expect.stringContaining('finance-read'),
+          'bob@tamshai.com',  // user_email
+          'USER_TERMINATED',  // action
+          'employee',         // resource
+          employeeId,         // target_id
         ])
       );
     });
@@ -364,6 +366,7 @@ describe('IdentityService', () => {
     it('should write USER_DELETED audit log', async () => {
       mockKcAdmin.users.findOne.mockResolvedValue({
         id: 'kc-user-789',
+        email: 'deleted@tamshai.com',
         enabled: false,
       });
       mockKcAdmin.users.del.mockResolvedValue(undefined);
@@ -371,10 +374,10 @@ describe('IdentityService', () => {
 
       await identityService.deleteUserPermanently('kc-user-789', 'emp-789');
 
-      // USER_DELETED is passed as a parameter ($3), so check args array
+      // Production uses hr.access_audit_log with columns: user_email, action, resource, target_id, access_decision
       expect(mockDb.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO hr.audit_access_logs'),
-        expect.arrayContaining(['emp-789', 'kc-user-789', 'USER_DELETED'])
+        expect.stringContaining('INSERT INTO hr.access_audit_log'),
+        expect.arrayContaining(['deleted@tamshai.com', 'USER_DELETED', 'employee', 'emp-789'])
       );
     });
 
@@ -416,10 +419,10 @@ describe('IdentityService', () => {
       expect(mockKcAdmin.users.del).not.toHaveBeenCalled();
 
       // Verify audit log records the blocked deletion attempt
-      // DELETION_BLOCKED is passed as a parameter ($3), so check args array
+      // Production uses hr.access_audit_log with columns: user_email, action, resource, target_id, access_decision, access_justification
       expect(mockDb.query).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO hr.audit_access_logs'),
-        expect.arrayContaining(['emp-reversed', 'kc-user-reversed', 'DELETION_BLOCKED'])
+        expect.stringContaining('INSERT INTO hr.access_audit_log'),
+        expect.arrayContaining(['reversed@tamshai.com', 'DELETION_BLOCKED', 'employee', 'emp-reversed'])
       );
     });
   });
