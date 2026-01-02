@@ -462,7 +462,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -487,7 +487,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -505,7 +505,7 @@
       "protocol": "openid-connect",
       "secret": "mcp-gateway-secret",
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -545,7 +545,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -572,7 +572,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -599,7 +599,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -626,7 +626,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -657,7 +657,7 @@
         "post.logout.redirect.uris": "http://localhost:*/logout##http://127.0.0.1:*/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -700,7 +700,7 @@
         "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://5.78.159.29/*##https://tamshai.com/*##https://www.tamshai.com/*"
       },
       "defaultClientScopes": [
-        "openid",
+        
         "profile",
         "email",
         "roles"
@@ -708,27 +708,6 @@
     }
   ],
   "clientScopes": [
-    {
-      "name": "openid",
-      "description": "OpenID Connect base scope",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      },
-      "protocolMappers": [
-        {
-          "name": "sub",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-sub-mapper",
-          "consentRequired": false,
-          "config": {
-            "access.token.claim": "true",
-            "id.token.claim": "true"
-          }
-        }
-      ]
-    },
     {
       "name": "profile",
       "description": "OpenID Connect built-in scope: profile",

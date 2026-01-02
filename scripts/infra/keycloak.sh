@@ -11,6 +11,7 @@
 #
 # Commands:
 #   sync       Sync clients and configuration
+#   reset      Reset Keycloak database (fresh realm import)
 #   status     Show Keycloak status and realm info
 #   clients    List all clients in realm
 #   users      List users (with optional role filter)
@@ -105,6 +106,85 @@ SYNC
     log_info "Sync complete"
 }
 
+cmd_reset() {
+    log_header "Resetting Keycloak Database"
+    log_warn "This will DELETE all Keycloak data and re-import the realm!"
+    log_warn "All users, sessions, and configuration will be lost."
+
+    read -p "Are you sure? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Cancelled"
+        return 0
+    fi
+
+    if [ "$ENV" = "dev" ]; then
+        local compose_dir="$PROJECT_ROOT/infrastructure/docker"
+        cd "$compose_dir"
+
+        log_info "Stopping Keycloak..."
+        docker compose stop keycloak
+
+        log_info "Removing Keycloak database tables..."
+        # Get database password from .env or use default
+        local db_pass="${POSTGRES_PASSWORD:-changeme}"
+        docker compose exec -T postgres psql -U tamshai -d keycloak -c "
+            DROP SCHEMA IF EXISTS public CASCADE;
+            CREATE SCHEMA public;
+            GRANT ALL ON SCHEMA public TO tamshai;
+        " || log_warn "Database reset may have partially failed"
+
+        log_info "Restarting Keycloak (will re-import realm)..."
+        docker compose up -d keycloak
+
+        log_info "Waiting for Keycloak to be ready..."
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -sf "http://localhost:8180/health/ready" >/dev/null 2>&1; then
+                log_info "Keycloak is ready"
+                break
+            fi
+            echo "  Waiting... attempt $i/10"
+            sleep 10
+        done
+
+    else
+        local vps_host="${VPS_HOST:-5.78.159.29}"
+        local vps_user="${VPS_SSH_USER:-root}"
+
+        ssh "$vps_user@$vps_host" << 'RESET'
+set -e
+cd /opt/tamshai
+export $(cat .env | grep -v '^#' | xargs)
+
+echo "[INFO] Stopping Keycloak..."
+docker compose -f docker-compose.vps.yml stop keycloak
+
+echo "[INFO] Removing Keycloak database tables..."
+docker compose -f docker-compose.vps.yml exec -T postgres psql -U tamshai -d keycloak -c "
+    DROP SCHEMA IF EXISTS public CASCADE;
+    CREATE SCHEMA public;
+    GRANT ALL ON SCHEMA public TO tamshai;
+" || echo "[WARN] Database reset may have partially failed"
+
+echo "[INFO] Restarting Keycloak (will re-import realm)..."
+docker compose -f docker-compose.vps.yml up -d keycloak
+
+echo "[INFO] Waiting for Keycloak to be ready..."
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -sf "http://localhost:8080/auth/health/ready" >/dev/null 2>&1; then
+        echo "[INFO] Keycloak is ready"
+        break
+    fi
+    echo "  Waiting... attempt $i/10"
+    sleep 10
+done
+RESET
+    fi
+
+    log_info "Reset complete. Running sync to ensure clients are configured..."
+    cmd_sync
+}
+
 cmd_status() {
     log_header "Keycloak Status"
 
@@ -195,6 +275,7 @@ show_help() {
     echo ""
     echo "Commands:"
     echo "  sync     Sync clients and configuration"
+    echo "  reset    Reset Keycloak database (fresh realm import)"
     echo "  status   Show Keycloak status"
     echo "  clients  List all clients"
     echo "  users    List all users"
@@ -207,6 +288,7 @@ show_help() {
 main() {
     case "$COMMAND" in
         sync)    cmd_sync ;;
+        reset)   cmd_reset ;;
         status)  cmd_status ;;
         clients) cmd_clients ;;
         users)   cmd_users ;;

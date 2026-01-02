@@ -177,19 +177,30 @@ assign_client_scopes() {
     local client_id="$1"
     local uuid=$(get_client_uuid "$client_id")
 
-    # Default scopes for OIDC clients
-    # Note: 'openid' is implicit in OIDC and not a separate client scope in Keycloak
-    local scopes=("profile" "email" "roles" "web-origins")
+    # Default scopes - always included in tokens
+    local default_scopes=("roles" "web-origins")
 
-    for scope in "${scopes[@]}"; do
+    # Optional scopes - can be requested via scope parameter
+    local optional_scopes=("profile" "email" "address" "phone" "offline_access")
+
+    for scope in "${default_scopes[@]}"; do
         local scope_id=$(get_scope_id "$scope")
         if [ -n "$scope_id" ]; then
-            # Add the scope to client's default scopes using PUT request
-            # The kcadm update requires -f for body, use create with -f /dev/null for PUT-like behavior
             $KCADM create "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
-            log_info "  Assigned scope '$scope' to client '$client_id'"
+            log_info "  Assigned default scope '$scope' to client '$client_id'"
         else
-            log_warn "  Scope '$scope' not found in realm"
+            log_warn "  Default scope '$scope' not found in realm"
+        fi
+    done
+
+    for scope in "${optional_scopes[@]}"; do
+        local scope_id=$(get_scope_id "$scope")
+        if [ -n "$scope_id" ]; then
+            # Add as optional scope so it can be requested in OAuth flows
+            $KCADM create "clients/$uuid/optional-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
+            log_info "  Assigned optional scope '$scope' to client '$client_id'"
+        else
+            log_warn "  Optional scope '$scope' not found in realm"
         fi
     done
 }
