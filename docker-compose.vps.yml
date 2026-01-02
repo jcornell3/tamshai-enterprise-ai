@@ -267,7 +267,7 @@ services:
   #     dockerfile: apps/portal/Dockerfile
   #     args:
   #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-web-portal}
   #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
   #   image: tamshai/web-portal:${IMAGE_TAG:-latest}
   #   container_name: tamshai-web-portal
@@ -286,7 +286,7 @@ services:
   #     dockerfile: apps/hr/Dockerfile
   #     args:
   #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-web-portal}
   #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
   #   image: tamshai/web-hr:${IMAGE_TAG:-latest}
   #   container_name: tamshai-web-hr
@@ -305,7 +305,7 @@ services:
   #     dockerfile: apps/finance/Dockerfile
   #     args:
   #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-web-portal}
   #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
   #   image: tamshai/web-finance:${IMAGE_TAG:-latest}
   #   container_name: tamshai-web-finance
@@ -324,7 +324,7 @@ services:
   #     dockerfile: apps/sales/Dockerfile
   #     args:
   #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-web-portal}
   #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
   #   image: tamshai/web-sales:${IMAGE_TAG:-latest}
   #   container_name: tamshai-web-sales
@@ -343,7 +343,7 @@ services:
   #     dockerfile: apps/support/Dockerfile
   #     args:
   #       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL}
-  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-mcp-gateway}
+  #       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-web-portal}
   #       VITE_MCP_GATEWAY_URL: ${VITE_MCP_GATEWAY_URL}
   #   image: tamshai/web-support:${IMAGE_TAG:-latest}
   #   container_name: tamshai-web-support

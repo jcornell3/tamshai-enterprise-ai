@@ -80,8 +80,9 @@ write_files:
       KEYCLOAK_REALM=tamshai-corp
 
       # Web Apps
-      VITE_KEYCLOAK_URL=https://${domain}/auth
-      VITE_KEYCLOAK_CLIENT_ID=mcp-gateway
+      # NOTE: Authority URL must include full realm path for OIDC discovery
+      VITE_KEYCLOAK_URL=https://${domain}/auth/realms/tamshai-corp
+      VITE_KEYCLOAK_CLIENT_ID=web-portal
       VITE_MCP_GATEWAY_URL=https://${domain}/api
 
       # Logging
