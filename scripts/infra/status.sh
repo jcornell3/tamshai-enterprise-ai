@@ -107,8 +107,8 @@ check_local_services() {
 
     # HTTP services
     check_http_health "MCP Gateway" "$base_url:3100/health" || ((failed++))
-    check_http_health "Keycloak" "$base_url:8180/health/ready" || ((failed++))
-    check_http_health "Kong Gateway" "$base_url:8100/status" || ((failed++))
+    check_http_health "Keycloak" "$base_url:8180/auth/health/ready" || ((failed++))
+    check_http_health "Kong Admin" "$base_url:8101/status" || ((failed++))
 
     log_header "Database Connections"
 
