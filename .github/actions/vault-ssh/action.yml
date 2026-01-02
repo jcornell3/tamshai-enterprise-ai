@@ -158,8 +158,18 @@ runs:
         VPS_HOST: ${{ inputs.vps-host }}
         SSH_USER: ${{ inputs.ssh-user }}
       run: |
-        # Test SSH connection with certificate
-        if ssh -o BatchMode=yes -o ConnectTimeout=10 $SSH_USER@$VPS_HOST "echo 'SSH certificate authentication successful'"; then
+        # Debug: Show certificate info
+        echo "=== SSH Key Files ==="
+        ls -la ~/.ssh/
+
+        echo ""
+        echo "=== Certificate Info ==="
+        ssh-keygen -L -f ~/.ssh/id_ed25519-cert.pub || echo "Failed to read certificate"
+
+        echo ""
+        echo "=== Testing SSH Connection (verbose) ==="
+        # Test SSH connection with certificate using verbose mode
+        if ssh -vvv -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 $SSH_USER@$VPS_HOST "echo 'SSH certificate authentication successful'" 2>&1; then
           echo "✅ Vault SSH authentication verified"
         else
           echo "::error::SSH connection test failed"
