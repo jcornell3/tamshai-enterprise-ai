@@ -122,8 +122,27 @@
     </footer>
 
     <script>
+        // PKCE Helper Functions
+        function generateCodeVerifier() {
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            return base64UrlEncode(array);
+        }
+
+        function base64UrlEncode(buffer) {
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        async function generateCodeChallenge(verifier) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(verifier);
+            const hash = await crypto.subtle.digest('SHA-256', data);
+            return base64UrlEncode(hash);
+        }
+
         // Determine the SSO URL based on current environment
-        (function() {
+        (async function() {
             const hostname = window.location.hostname;
             let keycloakUrl;
             let redirectUri;
@@ -148,6 +167,15 @@
                 redirectUri = window.location.origin + '/';
             }
 
+            // Generate PKCE parameters
+            const codeVerifier = generateCodeVerifier();
+            const codeChallenge = await generateCodeChallenge(codeVerifier);
+            const state = Math.random().toString(36).substring(7);
+
+            // Store code_verifier and state in sessionStorage for token exchange
+            sessionStorage.setItem('pkce_code_verifier', codeVerifier);
+            sessionStorage.setItem('oauth_state', state);
+
             // Build the Keycloak authorization URL
             const realm = 'tamshai-corp';
             const clientId = 'tamshai-website';
@@ -159,7 +187,9 @@
                 redirect_uri: redirectUri,
                 response_type: 'code',
                 scope: 'openid profile email',
-                state: Math.random().toString(36).substring(7)
+                state: state,
+                code_challenge: codeChallenge,
+                code_challenge_method: 'S256'
             });
 
             const ssoLoginUrl = `${authUrl}?${params.toString()}`;
