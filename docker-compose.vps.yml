@@ -30,9 +30,9 @@ services:
     networks:
       - tamshai-network
     depends_on:
-      keycloak:
+      kong:
         condition: service_healthy
-      mcp-gateway:
+      keycloak:
         condition: service_healthy
       tamshai-website:
         condition: service_healthy
@@ -41,6 +41,37 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # =============================================================================
+  # API GATEWAY (Kong - Rate Limiting, CORS, Security Headers)
+  # =============================================================================
+  kong:
+    image: kong:3.4
+    container_name: tamshai-kong
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+    volumes:
+      - ./infrastructure/kong/kong.vps.yml:/etc/kong/kong.yml:ro
+    depends_on:
+      mcp-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - tamshai-network
+    # NO ports exposed - accessed via Caddy
 
   # =============================================================================
   # TOKEN REVOCATION CACHE (Redis)
