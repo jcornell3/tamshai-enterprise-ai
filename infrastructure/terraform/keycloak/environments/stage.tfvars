@@ -22,7 +22,13 @@ environment = "stage"
 tls_insecure_skip_verify = false
 
 # Valid redirect URIs for staging
+# Must match Caddy routing paths in cloud-init.yaml
 valid_redirect_uris = [
-  "https://5.78.159.29/*",
-  "https://staging.tamshai.com/*", # If DNS is configured
+  "https://5.78.159.29/*",           # Catch-all for VPS IP
+  "https://5.78.159.29/app/*",       # Web Portal (/app/*)
+  "https://5.78.159.29/hr/*",        # Web HR (/hr/*)
+  "https://5.78.159.29/finance/*",   # Web Finance (/finance/*)
+  "https://5.78.159.29/sales/*",     # Web Sales (/sales/*)
+  "https://5.78.159.29/support/*",   # Web Support (/support/*)
+  "https://staging.tamshai.com/*",   # If DNS is configured
 ]
