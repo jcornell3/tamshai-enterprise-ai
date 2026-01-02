@@ -3,8 +3,23 @@
 **Issue**: #62
 **Author**: Claude-QA (claude-qa@tamshai.com)
 **Created**: 2026-01-01
+**Updated**: 2026-01-01 (QA Review Fixes)
 **Status**: Ready for Implementation
 **Related**: `Keycloak-Atomic-Dev.md`
+
+---
+
+## QA Review Notes (2026-01-01)
+
+This document has been updated based on QA review to address:
+
+1. **P1 - Typed Mocks**: Replaced `any` types with properly typed mock factories
+2. **P1 - Dependency Injection**: Tests now use constructor injection for KcAdminClient
+3. **P2 - Test Isolation**: Decoupling test uses isolated DB connection
+4. **P2 - Role Failure Test**: Added compensating transaction test
+5. **P3 - Re-enable Protection**: Added test for blocked deletion of re-enabled users
+6. **P3 - Worker Execution Test**: Added BullMQ worker test
+7. **P3 - Unique Emails**: All test emails now use UUIDs
 
 ---
 
@@ -34,13 +49,150 @@ services/mcp-hr/
 └── tests/
     ├── unit/
     │   └── identity.test.ts
-    └── integration/
-        └── identity-provisioning.test.ts
+    ├── integration/
+    │   └── identity-provisioning.test.ts
+    └── test-utils/
+        ├── index.ts
+        ├── mock-keycloak-admin.ts    # Typed KcAdminClient mock factory
+        ├── mock-db.ts                # Typed Pool/PoolClient mock factory
+        └── mock-queue.ts             # Typed BullMQ mock factory
 ```
 
 ---
 
 ## Phase 1: Unit Tests (Red Phase)
+
+### 1.1 Mock Factories (Required)
+
+**File**: `services/mcp-hr/tests/test-utils/mock-keycloak-admin.ts`
+
+Create typed mock factories to avoid `any` types and ensure type safety:
+
+```typescript
+import type KcAdminClient from '@keycloak/keycloak-admin-client';
+import type { UserRepresentation, RoleRepresentation, ClientRepresentation } from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
+
+/**
+ * Typed mock for KcAdminClient.users methods
+ */
+export interface MockKeycloakUsers {
+  create: jest.Mock<Promise<{ id: string }>, [Partial<UserRepresentation>]>;
+  update: jest.Mock<Promise<void>, [{ id: string }, Partial<UserRepresentation>]>;
+  del: jest.Mock<Promise<void>, [{ id: string }]>;
+  findOne: jest.Mock<Promise<UserRepresentation | null>, [{ id: string }]>;
+  find: jest.Mock<Promise<UserRepresentation[]>, [{ email?: string; search?: string }]>;
+  addClientRoleMappings: jest.Mock<Promise<void>, [{ id: string; clientUniqueId: string; roles: RoleRepresentation[] }]>;
+  listClientRoleMappings: jest.Mock<Promise<RoleRepresentation[]>, [{ id: string; clientUniqueId: string }]>;
+  listSessions: jest.Mock<Promise<{ id: string }[]>, [{ id: string }]>;
+  logout: jest.Mock<Promise<void>, [{ id: string }]>;
+}
+
+/**
+ * Typed mock for KcAdminClient.clients methods
+ */
+export interface MockKeycloakClients {
+  listRoles: jest.Mock<Promise<RoleRepresentation[]>, [{ id: string }]>;
+}
+
+/**
+ * Typed mock for KcAdminClient
+ */
+export interface MockKcAdminClient {
+  users: MockKeycloakUsers;
+  clients: MockKeycloakClients;
+  auth: jest.Mock<Promise<void>, [{ grantType: string; clientId: string; clientSecret: string }]>;
+  setConfig: jest.Mock<void, [{ realmName: string }]>;
+}
+
+/**
+ * Factory function to create a typed KcAdminClient mock
+ */
+export function createMockKcAdmin(): MockKcAdminClient {
+  return {
+    users: {
+      create: jest.fn().mockResolvedValue({ id: 'kc-user-default' }),
+      update: jest.fn().mockResolvedValue(undefined),
+      del: jest.fn().mockResolvedValue(undefined),
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
+      addClientRoleMappings: jest.fn().mockResolvedValue(undefined),
+      listClientRoleMappings: jest.fn().mockResolvedValue([]),
+      listSessions: jest.fn().mockResolvedValue([]),
+      logout: jest.fn().mockResolvedValue(undefined),
+    },
+    clients: {
+      listRoles: jest.fn().mockResolvedValue([]),
+    },
+    auth: jest.fn().mockResolvedValue(undefined),
+    setConfig: jest.fn(),
+  };
+}
+
+/**
+ * Reset all mocks in a MockKcAdminClient instance
+ */
+export function resetMockKcAdmin(mock: MockKcAdminClient): void {
+  Object.values(mock.users).forEach(fn => fn.mockReset());
+  Object.values(mock.clients).forEach(fn => fn.mockReset());
+  mock.auth.mockReset();
+  mock.setConfig.mockReset();
+}
+```
+
+**File**: `services/mcp-hr/tests/test-utils/mock-db.ts`
+
+```typescript
+import type { Pool, PoolClient, QueryResult } from 'pg';
+
+export interface MockPoolClient {
+  query: jest.Mock<Promise<QueryResult>, [string, unknown[]?]>;
+  release: jest.Mock<void, []>;
+}
+
+export interface MockPool {
+  query: jest.Mock<Promise<QueryResult>, [string, unknown[]?]>;
+  connect: jest.Mock<Promise<MockPoolClient>, []>;
+  end: jest.Mock<Promise<void>, []>;
+}
+
+export function createMockPoolClient(): MockPoolClient {
+  return {
+    query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+    release: jest.fn(),
+  };
+}
+
+export function createMockPool(mockClient?: MockPoolClient): MockPool {
+  const client = mockClient || createMockPoolClient();
+  return {
+    query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+    connect: jest.fn().mockResolvedValue(client),
+    end: jest.fn().mockResolvedValue(undefined),
+  };
+}
+```
+
+**File**: `services/mcp-hr/tests/test-utils/mock-queue.ts`
+
+```typescript
+import type { Queue, Job } from 'bullmq';
+
+export interface MockQueue {
+  add: jest.Mock<Promise<Job>, [string, unknown, { delay?: number }]>;
+  close: jest.Mock<Promise<void>, []>;
+}
+
+export function createMockQueue(): MockQueue {
+  return {
+    add: jest.fn().mockResolvedValue({ id: 'job-123' } as Job),
+    close: jest.fn().mockResolvedValue(undefined),
+  };
+}
+```
+
+---
+
+### 1.2 Unit Tests
 
 **File**: `services/mcp-hr/tests/unit/identity.test.ts`
 
@@ -48,7 +200,18 @@ Write these tests FIRST. They should all FAIL until implementation is complete.
 
 ```typescript
 import { IdentityService, EmployeeData } from '../../src/services/identity';
-import { Pool, PoolClient } from 'pg';
+import {
+  createMockKcAdmin,
+  resetMockKcAdmin,
+  MockKcAdminClient,
+} from '../test-utils/mock-keycloak-admin';
+import {
+  createMockPool,
+  createMockPoolClient,
+  MockPool,
+  MockPoolClient,
+} from '../test-utils/mock-db';
+import { createMockQueue, MockQueue } from '../test-utils/mock-queue';
 
 // Mock dependencies
 jest.mock('@keycloak/keycloak-admin-client');
@@ -56,27 +219,29 @@ jest.mock('bullmq');
 
 describe('IdentityService', () => {
   let identityService: IdentityService;
-  let mockDb: jest.Mocked<Pool>;
-  let mockClient: jest.Mocked<PoolClient>;
-  let mockKcAdmin: any;
+  let mockDb: MockPool;
+  let mockClient: MockPoolClient;
+  let mockKcAdmin: MockKcAdminClient;
+  let mockQueue: MockQueue;
 
   beforeEach(() => {
-    mockDb = {
-      query: jest.fn(),
-      connect: jest.fn(),
-    } as any;
+    // Create fresh mocks for each test (test isolation)
+    mockClient = createMockPoolClient();
+    mockDb = createMockPool(mockClient);
+    mockKcAdmin = createMockKcAdmin();
+    mockQueue = createMockQueue();
 
-    mockClient = {
-      query: jest.fn(),
-      release: jest.fn(),
-    } as any;
+    // Inject mocks via constructor (dependency injection pattern)
+    identityService = new IdentityService(
+      mockDb as unknown as import('pg').Pool,
+      mockKcAdmin as unknown as import('@keycloak/keycloak-admin-client').default,
+      mockQueue as unknown as import('bullmq').Queue
+    );
+  });
 
-    mockDb.connect.mockResolvedValue(mockClient);
-
-    identityService = new IdentityService(mockDb);
-
-    // Get mock instance of KcAdminClient
-    mockKcAdmin = (identityService as any).kcAdmin;
+  afterEach(() => {
+    resetMockKcAdmin(mockKcAdmin);
+    jest.clearAllMocks();
   });
 
   describe('createUserInKeycloak', () => {
@@ -177,9 +342,49 @@ describe('IdentityService', () => {
 
       // Audit log should NOT be written on failure
       const auditLogCalls = mockClient.query.mock.calls.filter(
-        call => call[0].includes('audit_access_logs')
+        (call: [string, unknown[]?]) => call[0].includes('audit_access_logs')
       );
       expect(auditLogCalls).toHaveLength(0);
+    });
+
+    it('should rollback Keycloak user if role assignment fails (compensating transaction)', async () => {
+      // User creation succeeds
+      mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      // Role lookup succeeds
+      mockKcAdmin.clients.listRoles.mockResolvedValue([
+        { id: 'role-hr-read', name: 'hr-read' },
+      ]);
+      // Role assignment fails
+      mockKcAdmin.users.addClientRoleMappings.mockRejectedValue(
+        new Error('Role assignment failed')
+      );
+
+      await expect(
+        identityService.createUserInKeycloak(employeeData, mockClient)
+      ).rejects.toThrow('Failed to provision Keycloak user');
+
+      // Critical: Keycloak user should be deleted as compensating transaction
+      expect(mockKcAdmin.users.del).toHaveBeenCalledWith({ id: 'kc-user-123' });
+
+      // Audit log should NOT be written on failure
+      const auditLogCalls = mockClient.query.mock.calls.filter(
+        (call: [string, unknown[]?]) => call[0].includes('audit_access_logs')
+      );
+      expect(auditLogCalls).toHaveLength(0);
+    });
+
+    it('should handle missing department role gracefully', async () => {
+      mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      // No roles found for department
+      mockKcAdmin.clients.listRoles.mockResolvedValue([]);
+      mockClient.query.mockResolvedValue({ rows: [], rowCount: 1 });
+
+      // Should succeed but without role assignment
+      const result = await identityService.createUserInKeycloak(employeeData, mockClient);
+
+      expect(result).toBe('kc-user-123');
+      // Role assignment should NOT be called
+      expect(mockKcAdmin.users.addClientRoleMappings).not.toHaveBeenCalled();
     });
   });
 
@@ -329,6 +534,104 @@ describe('IdentityService', () => {
 
       expect(mockKcAdmin.users.del).not.toHaveBeenCalled();
     });
+
+    it('should log blocked deletion when user was re-enabled (termination reversal)', async () => {
+      // User was re-enabled after termination (accidental termination reversal)
+      mockKcAdmin.users.findOne.mockResolvedValue({
+        id: 'kc-user-reversed',
+        enabled: true,
+        email: 'reversed@tamshai.com',
+      });
+
+      await expect(
+        identityService.deleteUserPermanently('kc-user-reversed', 'emp-reversed')
+      ).rejects.toThrow('Cannot delete enabled user');
+
+      // Verify deletion was NOT attempted
+      expect(mockKcAdmin.users.del).not.toHaveBeenCalled();
+
+      // Verify audit log records the blocked deletion attempt
+      expect(mockDb.query).toHaveBeenCalledWith(
+        expect.stringContaining('DELETION_BLOCKED'),
+        expect.arrayContaining(['emp-reversed', 'kc-user-reversed'])
+      );
+    });
+  });
+});
+```
+
+---
+
+### 1.3 Worker Unit Tests
+
+**File**: `services/mcp-hr/tests/unit/identity-cleanup-worker.test.ts`
+
+```typescript
+import { Worker, Job } from 'bullmq';
+import { IdentityService } from '../../src/services/identity';
+import { startIdentityCleanupWorker } from '../../src/workers/identity-cleanup';
+import { createMockPool, MockPool } from '../test-utils/mock-db';
+import { createMockKcAdmin, MockKcAdminClient } from '../test-utils/mock-keycloak-admin';
+
+jest.mock('bullmq');
+jest.mock('../../src/services/identity');
+
+describe('Identity Cleanup Worker', () => {
+  let mockDb: MockPool;
+  let mockIdentityService: jest.Mocked<IdentityService>;
+
+  beforeEach(() => {
+    mockDb = createMockPool();
+    mockIdentityService = {
+      deleteUserPermanently: jest.fn().mockResolvedValue(undefined),
+      authenticate: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<IdentityService>;
+
+    (IdentityService as jest.Mock).mockImplementation(() => mockIdentityService);
+  });
+
+  it('should process delete_user_final job after 72 hours', async () => {
+    const worker = startIdentityCleanupWorker(mockDb as unknown as import('pg').Pool);
+
+    // Simulate job execution
+    const mockJob: Partial<Job> = {
+      id: 'job-456',
+      data: {
+        keycloakUserId: 'kc-user-to-delete',
+        employeeId: 'emp-to-delete',
+      },
+      timestamp: Date.now() - 72 * 60 * 60 * 1000, // 72 hours ago
+    };
+
+    // Get the processor function and call it directly
+    const processor = (Worker as jest.Mock).mock.calls[0][1];
+    await processor(mockJob as Job);
+
+    expect(mockIdentityService.deleteUserPermanently).toHaveBeenCalledWith(
+      'kc-user-to-delete',
+      'emp-to-delete'
+    );
+  });
+
+  it('should handle deletion failure gracefully', async () => {
+    mockIdentityService.deleteUserPermanently.mockRejectedValue(
+      new Error('Keycloak unavailable')
+    );
+
+    const worker = startIdentityCleanupWorker(mockDb as unknown as import('pg').Pool);
+
+    const mockJob: Partial<Job> = {
+      id: 'job-fail',
+      data: {
+        keycloakUserId: 'kc-user-fail',
+        employeeId: 'emp-fail',
+      },
+    };
+
+    const processor = (Worker as jest.Mock).mock.calls[0][1];
+
+    // Should throw so BullMQ can retry
+    await expect(processor(mockJob as Job)).rejects.toThrow('Keycloak unavailable');
   });
 });
 ```
@@ -479,22 +782,49 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
   });
 
   describe('Decoupling Test', () => {
+    // Use isolated DB connection for this test to avoid polluting shared state
+    let isolatedDb: Pool;
+    let isolatedIdentityService: IdentityService;
+
+    beforeEach(async () => {
+      isolatedDb = new Pool({
+        host: postgresContainer.getHost(),
+        port: postgresContainer.getMappedPort(5432),
+        database: 'tamshai_hr',
+        user: 'tamshai',
+        password: 'testpass',
+      });
+      isolatedIdentityService = new IdentityService(isolatedDb);
+    });
+
+    afterEach(async () => {
+      // Clean up isolated connection (not shared db)
+      try {
+        await isolatedDb.end();
+      } catch (e) {
+        // Already closed in test
+      }
+    });
+
     it('should allow Keycloak login when HR DB is down', async () => {
+      // Use UUID for unique test email
+      const testEmail = `decoupling-${crypto.randomUUID()}@tamshai.com`;
+
       // 1. Create user while DB is up
-      const client = await db.connect();
+      const client = await isolatedDb.connect();
       await client.query('BEGIN');
 
       const result = await client.query(
         `INSERT INTO hr.employees (name, email, department) VALUES ($1, $2, $3) RETURNING *`,
-        ['Test User', 'test@tamshai.com', 'HR']
+        ['Decoupling Test User', testEmail, 'HR']
       );
 
-      await identityService.createUserInKeycloak(
+      await isolatedIdentityService.createUserInKeycloak(
         {
           id: result.rows[0].id,
-          email: 'test@tamshai.com',
-          firstName: 'Test',
-          lastName: 'User',
+          email: testEmail,
+          firstName: 'Decoupling',
+          lastName: 'Test User',
           department: 'HR',
         },
         client
@@ -503,35 +833,31 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
       await client.query('COMMIT');
       client.release();
 
-      // 2. Simulate HR DB outage by closing connection
-      await db.end();
+      // 2. Simulate HR DB outage by closing ISOLATED connection (not shared db)
+      await isolatedDb.end();
 
       // 3. Verify Keycloak user still exists and can be found
       kcAdmin.setConfig({ realmName: 'tamshai-corp' });
-      const users = await kcAdmin.users.find({ email: 'test@tamshai.com' });
+      const users = await kcAdmin.users.find({ email: testEmail });
 
       expect(users).toHaveLength(1);
       expect(users[0].enabled).toBe(true);
 
-      // 4. Restore DB connection for remaining tests
-      db = new Pool({
-        host: postgresContainer.getHost(),
-        port: postgresContainer.getMappedPort(5432),
-        database: 'tamshai_hr',
-        user: 'tamshai',
-        password: 'testpass',
-      });
+      // Note: Shared db connection remains intact for other tests
     });
   });
 
   describe('Onboarding Transaction', () => {
     it('should create Keycloak user when employee created', async () => {
+      // Use UUID for unique test email
+      const testEmail = `alice-${crypto.randomUUID()}@tamshai.com`;
+
       const client = await db.connect();
       await client.query('BEGIN');
 
       const result = await client.query(
         `INSERT INTO hr.employees (name, email, department, role) VALUES ($1, $2, $3, $4) RETURNING *`,
-        ['Alice Chen', 'alice@tamshai.com', 'HR', 'Manager']
+        ['Alice Chen', testEmail, 'HR', 'Manager']
       );
 
       const employee = result.rows[0];
@@ -539,7 +865,7 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
       await identityService.createUserInKeycloak(
         {
           id: employee.id,
-          email: 'alice@tamshai.com',
+          email: testEmail,
           firstName: 'Alice',
           lastName: 'Chen',
           department: 'HR',
@@ -552,7 +878,7 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
       // Verify Keycloak user exists
       kcAdmin.setConfig({ realmName: 'tamshai-corp' });
-      const users = await kcAdmin.users.find({ email: 'alice@tamshai.com' });
+      const users = await kcAdmin.users.find({ email: testEmail });
 
       expect(users).toHaveLength(1);
       expect(users[0].enabled).toBe(true);
@@ -561,6 +887,9 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
     });
 
     it('should rollback HR record if Keycloak creation fails', async () => {
+      // Use UUID for unique test email
+      const duplicateEmail = `duplicate-${crypto.randomUUID()}@tamshai.com`;
+
       const client = await db.connect();
 
       try {
@@ -568,14 +897,14 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
         const result = await client.query(
           `INSERT INTO hr.employees (name, email, department) VALUES ($1, $2, $3) RETURNING *`,
-          ['Will Fail', 'duplicate@tamshai.com', 'HR']
+          ['Will Fail', duplicateEmail, 'HR']
         );
 
         // Create user first time (will succeed)
         await identityService.createUserInKeycloak(
           {
             id: result.rows[0].id,
-            email: 'duplicate@tamshai.com',
+            email: duplicateEmail,
             firstName: 'Will',
             lastName: 'Fail',
             department: 'HR',
@@ -597,14 +926,14 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
         const result2 = await client2.query(
           `INSERT INTO hr.employees (name, email, department) VALUES ($1, $2, $3) RETURNING *`,
-          ['Duplicate User', 'duplicate@tamshai.com', 'HR']
+          ['Duplicate User', duplicateEmail, 'HR']
         );
 
         // This should fail because email already exists in Keycloak
         await identityService.createUserInKeycloak(
           {
             id: result2.rows[0].id,
-            email: 'duplicate@tamshai.com',
+            email: duplicateEmail,
             firstName: 'Duplicate',
             lastName: 'User',
             department: 'HR',
@@ -617,9 +946,10 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
       } catch (e) {
         await client2.query('ROLLBACK');
 
-        // Verify HR record was NOT created
+        // Verify HR record was NOT created (check by unique email, not name)
         const employees = await db.query(
-          `SELECT * FROM hr.employees WHERE name = 'Duplicate User'`
+          `SELECT * FROM hr.employees WHERE email = $1 AND name = 'Duplicate User'`,
+          [duplicateEmail]
         );
         expect(employees.rows).toHaveLength(0);
       } finally {
@@ -827,18 +1157,46 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
 ## Phase 3: API E2E Tests
 
+> **⚠️ TODO: Complete E2E Setup**
+>
+> E2E tests require a running mcp-hr service with real Keycloak integration.
+> Consider deferring E2E tests to Phase 2 after unit and integration tests pass.
+>
+> Prerequisites:
+> - Running mcp-hr service (via `docker compose up mcp-hr`)
+> - Admin token from Keycloak
+> - Test employee fixtures
+> - Unique email generation for parallel test execution
+
 **File**: `services/mcp-hr/tests/e2e/employees-api.test.ts`
 
 ```typescript
+import request from 'supertest';
+import { getAdminToken } from '../test-utils/keycloak-auth';
+
 describe('Employees API - Identity Provisioning', () => {
+  let adminToken: string;
+  let app: Express.Application;
+  let employeeId: string;
+
+  beforeAll(async () => {
+    // TODO: Initialize app and get admin token
+    // This requires running Keycloak and mcp-hr services
+    adminToken = await getAdminToken();
+    app = (await import('../../src/app')).default;
+  });
+
   describe('POST /api/hr/employees', () => {
     it('should create employee and provision Keycloak user atomically', async () => {
+      // Use UUID for unique test email
+      const testEmail = `e2e-new-${crypto.randomUUID()}@tamshai.com`;
+
       const response = await request(app)
         .post('/api/hr/employees')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          name: 'New Employee',
-          email: 'new@tamshai.com',
+          name: 'E2E New Employee',
+          email: testEmail,
           department: 'Sales',
           role: 'Associate',
         });
@@ -846,16 +1204,23 @@ describe('Employees API - Identity Provisioning', () => {
       expect(response.status).toBe(201);
       expect(response.body.status).toBe('success');
       expect(response.body.metadata.keycloakProvisioned).toBe(true);
+
+      // Store for terminate test
+      employeeId = response.body.data.id;
     });
 
     it('should return error and not create employee if Keycloak fails', async () => {
-      // Assuming Keycloak is down or returns error
+      // This test requires mocking Keycloak unavailability
+      // Consider using a feature flag or dedicated test endpoint
+      const testEmail = `e2e-fail-${crypto.randomUUID()}@tamshai.com`;
+
       const response = await request(app)
         .post('/api/hr/employees')
         .set('Authorization', `Bearer ${adminToken}`)
+        .set('X-Test-Keycloak-Fail', 'true') // Test header to simulate failure
         .send({
           name: 'Should Fail',
-          email: 'fail@tamshai.com',
+          email: testEmail,
           department: 'HR',
         });
 
@@ -867,6 +1232,9 @@ describe('Employees API - Identity Provisioning', () => {
 
   describe('POST /api/hr/employees/:id/terminate', () => {
     it('should terminate employee and return session revocation count', async () => {
+      // Requires employeeId from previous test
+      expect(employeeId).toBeDefined();
+
       const response = await request(app)
         .post(`/api/hr/employees/${employeeId}/terminate`)
         .set('Authorization', `Bearer ${adminToken}`);
@@ -875,6 +1243,13 @@ describe('Employees API - Identity Provisioning', () => {
       expect(response.body.status).toBe('success');
       expect(response.body.data.sessionsRevoked).toBeGreaterThanOrEqual(0);
       expect(response.body.data.scheduledDeletionAt).toBeDefined();
+
+      // Verify scheduled deletion is ~72 hours in future
+      const scheduledTime = new Date(response.body.data.scheduledDeletionAt).getTime();
+      const now = Date.now();
+      const delayMs = scheduledTime - now;
+      expect(delayMs).toBeGreaterThan(71 * 60 * 60 * 1000); // > 71 hours
+      expect(delayMs).toBeLessThan(73 * 60 * 60 * 1000); // < 73 hours
     });
   });
 });
@@ -914,29 +1289,48 @@ npm test -- --watch tests/unit/identity.test.ts
 
 ## Test Data Management
 
+### Test Email Generation
+
+All test emails MUST use UUIDs to prevent conflicts during parallel test execution:
+
+```typescript
+// ✅ CORRECT: Unique email per test run
+const testEmail = `alice-${crypto.randomUUID()}@tamshai.com`;
+
+// ❌ WRONG: Static email causes conflicts
+const testEmail = 'alice@tamshai.com';
+```
+
 ### Test Users for Integration Tests
 
-| Name | Email | Department | Purpose |
-|------|-------|------------|---------|
-| Test User | test@tamshai.com | HR | Decoupling test |
-| Alice Chen | alice@tamshai.com | HR | Onboarding test |
-| Dan Williams | dan-*@tamshai.com | Finance | Kill switch test |
-| Eve Thompson | eve-*@tamshai.com | HR | Retention test |
-| Frank Davis | frank-*@tamshai.com | Support | Deletion test |
+| Name Pattern | Email Pattern | Department | Purpose |
+|--------------|---------------|------------|---------|
+| Decoupling Test User | `decoupling-{uuid}@tamshai.com` | HR | Decoupling test |
+| Alice Chen | `alice-{uuid}@tamshai.com` | HR | Onboarding test |
+| Dan Williams | `dan-{uuid}@tamshai.com` | Finance | Kill switch test |
+| Eve Thompson | `eve-{uuid}@tamshai.com` | HR | Retention test |
+| Frank Davis | `frank-{uuid}@tamshai.com` | Support | Deletion test |
 
 ### Cleanup
 
-Integration tests should clean up after themselves:
+Integration tests should clean up after themselves using pattern matching:
 
 ```typescript
 afterEach(async () => {
-  // Clean up test users from Keycloak
-  await kcAdmin.users.find({ search: '@tamshai.com' }).then(users =>
-    Promise.all(users.map(u => kcAdmin.users.del({ id: u.id! })))
+  // Clean up test users from Keycloak (match UUID pattern)
+  kcAdmin.setConfig({ realmName: 'tamshai-corp' });
+  const users = await kcAdmin.users.find({ search: '@tamshai.com' });
+  await Promise.all(
+    users
+      .filter(u => u.email?.includes('-') && u.email?.endsWith('@tamshai.com'))
+      .map(u => kcAdmin.users.del({ id: u.id! }))
   );
 
-  // Clean up test employees from DB
-  await db.query(`DELETE FROM hr.employees WHERE email LIKE '%@tamshai.com'`);
+  // Clean up test employees from DB (match UUID pattern)
+  await db.query(`
+    DELETE FROM hr.employees
+    WHERE email ~ '^[a-z]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@tamshai.com$'
+  `);
   await db.query(`DELETE FROM hr.audit_access_logs`);
 });
 ```

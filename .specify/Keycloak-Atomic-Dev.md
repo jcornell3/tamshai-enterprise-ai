@@ -3,8 +3,19 @@
 **Issue**: #62
 **Author**: Claude-Dev (claude-dev@tamshai.com)
 **Created**: 2026-01-01
+**Updated**: 2026-01-01 (QA Review Fixes)
 **Status**: Ready for Implementation
 **Prerequisite**: Issue #61 (Incremental Deployment Workflows) - CLOSED
+
+---
+
+## QA Review Notes (2026-01-01)
+
+This document has been updated based on QA review to address:
+
+1. **P1 - Dependency Injection**: IdentityService now accepts KcAdminClient and Queue via constructor
+2. **P2 - Compensating Transactions**: Added rollback of Keycloak user if role assignment fails
+3. **P3 - Blocked Deletion Audit**: Added audit log for blocked deletion attempts
 
 ---
 
@@ -129,10 +140,17 @@ terraform plan -var-file=environments/dev.tfvars
 
 ```sql
 -- Audit table for identity provisioning events (S-OX compliance)
+-- Updated 2026-01-01: Added DELETION_BLOCKED action for re-enabled user protection
 CREATE TABLE IF NOT EXISTS hr.audit_access_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id UUID NOT NULL REFERENCES hr.employees(id),
-  action VARCHAR(50) NOT NULL CHECK (action IN ('USER_CREATED', 'USER_TERMINATED', 'USER_DELETED', 'ROLE_CHANGED')),
+  action VARCHAR(50) NOT NULL CHECK (action IN (
+    'USER_CREATED',      -- User provisioned in Keycloak
+    'USER_TERMINATED',   -- User disabled + sessions revoked
+    'USER_DELETED',      -- User permanently deleted after 72 hours
+    'DELETION_BLOCKED',  -- Deletion blocked (user was re-enabled)
+    'ROLE_CHANGED'       -- Role assignment changed
+  )),
   keycloak_user_id VARCHAR(255),
   permissions_snapshot JSONB,
   details JSONB,
@@ -153,6 +171,7 @@ ADD COLUMN IF NOT EXISTS keycloak_user_id VARCHAR(255);
 
 -- Comment for compliance documentation
 COMMENT ON TABLE hr.audit_access_logs IS 'S-OX compliant audit trail for identity provisioning. Retain 7 years.';
+COMMENT ON COLUMN hr.audit_access_logs.action IS 'Action type: USER_CREATED, USER_TERMINATED, USER_DELETED, DELETION_BLOCKED, ROLE_CHANGED';
 ```
 
 ---
@@ -193,21 +212,37 @@ export interface TerminationResult {
   scheduledDeletionAt: Date;
 }
 
+/**
+ * IdentityService manages Keycloak user provisioning and de-provisioning.
+ *
+ * Uses dependency injection for KcAdminClient and Queue to enable unit testing
+ * with mocks. When not provided, creates default instances from config.
+ */
 export class IdentityService {
   private kcAdmin: KcAdminClient;
   private db: Pool;
   private cleanupQueue: Queue;
   private isAuthenticated = false;
 
-  constructor(db: Pool) {
+  /**
+   * @param db - PostgreSQL connection pool
+   * @param kcAdmin - Optional KcAdminClient instance (for testing)
+   * @param cleanupQueue - Optional BullMQ queue (for testing)
+   */
+  constructor(
+    db: Pool,
+    kcAdmin?: KcAdminClient,
+    cleanupQueue?: Queue
+  ) {
     this.db = db;
 
-    this.kcAdmin = new KcAdminClient({
+    // Dependency injection: use provided instances or create defaults
+    this.kcAdmin = kcAdmin || new KcAdminClient({
       baseUrl: config.keycloak.url,
       realmName: config.keycloak.realm,
     });
 
-    this.cleanupQueue = new Queue('identity-cleanup', {
+    this.cleanupQueue = cleanupQueue || new Queue('identity-cleanup', {
       connection: {
         host: config.redis.host,
         port: config.redis.port,
@@ -236,6 +271,9 @@ export class IdentityService {
    * Create user in Keycloak during employee onboarding.
    * MUST be called within a database transaction for atomicity.
    *
+   * Implements compensating transaction: if role assignment fails after user
+   * creation, the Keycloak user is deleted to maintain consistency.
+   *
    * @throws Error if Keycloak creation fails (caller should rollback transaction)
    */
   async createUserInKeycloak(
@@ -244,9 +282,11 @@ export class IdentityService {
   ): Promise<string> {
     await this.authenticate();
 
+    let keycloakUserId: string | null = null;
+
     try {
       // 1. Create Keycloak user
-      const { id: keycloakUserId } = await this.kcAdmin.users.create({
+      const result = await this.kcAdmin.users.create({
         realm: config.keycloak.realm,
         username: employeeData.email,
         email: employeeData.email,
@@ -261,14 +301,27 @@ export class IdentityService {
         },
       });
 
-      // 2. Assign department role
+      keycloakUserId = result.id;
+
+      // 2. Assign department role (may fail - need compensating transaction)
       const departmentRole = await this.getDepartmentRole(employeeData.department);
       if (departmentRole) {
-        await this.kcAdmin.users.addClientRoleMappings({
-          id: keycloakUserId,
-          clientUniqueId: config.keycloak.mcpGatewayClientId,
-          roles: [{ id: departmentRole.id!, name: departmentRole.name! }],
-        });
+        try {
+          await this.kcAdmin.users.addClientRoleMappings({
+            id: keycloakUserId,
+            clientUniqueId: config.keycloak.mcpGatewayClientId,
+            roles: [{ id: departmentRole.id!, name: departmentRole.name! }],
+          });
+        } catch (roleError) {
+          // COMPENSATING TRANSACTION: Delete Keycloak user if role assignment fails
+          logger.error('Role assignment failed, rolling back Keycloak user', {
+            keycloakUserId,
+            roleError: roleError instanceof Error ? roleError.message : 'Unknown error',
+          });
+
+          await this.kcAdmin.users.del({ id: keycloakUserId });
+          throw roleError; // Re-throw to trigger outer catch
+        }
       }
 
       // 3. Update employee record with Keycloak user ID
@@ -301,6 +354,7 @@ export class IdentityService {
     } catch (error) {
       logger.error('Failed to create user in Keycloak', {
         employeeId: employeeData.id,
+        keycloakUserId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(`Failed to provision Keycloak user: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -392,11 +446,15 @@ export class IdentityService {
 
   /**
    * Permanently delete user from Keycloak (called by cleanup worker after 72 hours).
+   *
+   * Safety checks:
+   * - User must be disabled (prevents accidental deletion of active users)
+   * - If user was re-enabled (termination reversal), deletion is blocked and logged
    */
   async deleteUserPermanently(keycloakUserId: string, employeeId: string): Promise<void> {
     await this.authenticate();
 
-    // Safety check: verify user is disabled
+    // Safety check: verify user exists and is disabled
     const kcUser = await this.kcAdmin.users.findOne({ id: keycloakUserId });
 
     if (!kcUser) {
@@ -405,6 +463,24 @@ export class IdentityService {
     }
 
     if (kcUser.enabled) {
+      // User was re-enabled after termination (accidental termination reversal)
+      // Log blocked deletion for audit trail
+      await this.db.query(
+        `INSERT INTO hr.audit_access_logs
+         (employee_id, action, keycloak_user_id, details, created_by)
+         VALUES ($1, 'DELETION_BLOCKED', $2, $3, $4)`,
+        [
+          employeeId,
+          keycloakUserId,
+          JSON.stringify({
+            reason: 'User was re-enabled after termination',
+            blockedAt: new Date().toISOString(),
+          }),
+          'system',
+        ]
+      );
+
+      logger.warn('Deletion blocked: user was re-enabled', { keycloakUserId, employeeId });
       throw new Error(`Cannot delete enabled user ${keycloakUserId}. Safety check failed.`);
     }
 
@@ -642,6 +718,12 @@ mcp-hr:
 
 ## Implementation Checklist
 
+### Phase 0: Test Infrastructure (NEW - from QA Review)
+- [ ] Create `tests/test-utils/mock-keycloak-admin.ts` (typed mock factory)
+- [ ] Create `tests/test-utils/mock-db.ts` (typed Pool/PoolClient mock)
+- [ ] Create `tests/test-utils/mock-queue.ts` (typed BullMQ mock)
+- [ ] Create `tests/test-utils/index.ts` (re-exports)
+
 ### Phase 1: Infrastructure (2 hours)
 - [ ] Add service account client to `main.tf`
 - [ ] Add `atomic_mode` variable
@@ -651,14 +733,17 @@ mcp-hr:
 
 ### Phase 2: Database (1 hour)
 - [ ] Create migration file `003_audit_access_logs.sql`
+- [ ] Include DELETION_BLOCKED action in CHECK constraint
 - [ ] Run migration in dev environment
 - [ ] Verify table and columns created
 
 ### Phase 3: IdentityService (8 hours)
 - [ ] Install dependencies (`@keycloak/keycloak-admin-client`, `bullmq`)
-- [ ] Create `src/services/identity.ts`
+- [ ] Create `src/services/identity.ts` with dependency injection
+- [ ] Implement compensating transaction in `createUserInKeycloak`
+- [ ] Implement blocked deletion audit in `deleteUserPermanently`
 - [ ] Create `src/workers/identity-cleanup.ts`
-- [ ] Write unit tests (see Keycloak-Atomic-QA.md)
+- [ ] Write unit tests using typed mock factories (see Keycloak-Atomic-QA.md)
 - [ ] Verify tests FAIL (red phase)
 
 ### Phase 4: Route Integration (2 hours)
@@ -672,7 +757,9 @@ mcp-hr:
 - [ ] Update GitHub Secrets for staging/production
 
 ### Phase 6: Testing & Deployment (2 hours)
-- [ ] Run integration tests (see Keycloak-Atomic-QA.md)
+- [ ] Run unit tests (all must pass)
+- [ ] Run integration tests with Testcontainers (see Keycloak-Atomic-QA.md)
+- [ ] Verify test isolation (no static emails, all use UUIDs)
 - [ ] Deploy to staging via incremental workflow
 - [ ] Monitor for 24 hours
 - [ ] Deploy to production
