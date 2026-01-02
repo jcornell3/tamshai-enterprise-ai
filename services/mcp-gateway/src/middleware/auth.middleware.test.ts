@@ -15,7 +15,7 @@ import {
 } from './auth.middleware';
 import { JWTValidator } from '../auth/jwt-validator';
 import { createMockLogger } from '../test-utils/mock-logger';
-import { createMockUserContext, TEST_USERS } from '../test-utils/mock-user-context';
+import { TEST_USERS } from '../test-utils/mock-user-context';
 
 // Mock jsonwebtoken
 jest.mock('jsonwebtoken', () => ({

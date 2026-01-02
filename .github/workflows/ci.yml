@@ -94,7 +94,7 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat type-coverage.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-        continue-on-error: true
+        # Phase 4: Enforce 85% type coverage (was continue-on-error: true)
 
       - name: Upload type coverage report
         if: matrix.node-version == '20'

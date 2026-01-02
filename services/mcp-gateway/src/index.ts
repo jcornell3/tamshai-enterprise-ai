@@ -52,8 +52,8 @@ import gdprRoutes from './routes/gdpr';
 import healthRoutes from './routes/health.routes';
 import userRoutes from './routes/user.routes';
 import { JWTValidator } from './auth/jwt-validator';
-import { createAuthMiddleware, AuthenticatedRequest as AuthReq } from './middleware/auth.middleware';
-import { createStreamingRoutes } from './routes/streaming.routes';
+import { createAuthMiddleware } from './middleware/auth.middleware';
+import { createStreamingRoutes, drainConnections, getActiveConnectionCount } from './routes/streaming.routes';
 
 dotenv.config();
 
@@ -1266,24 +1266,39 @@ async function startServer(): Promise<void> {
     logger.info(`Configured MCP servers: ${Object.keys(config.mcpServers).join(', ')}`);
   });
 
-  // Graceful shutdown handling
-  const shutdown = (signal: string) => {
+  // Graceful shutdown handling (Phase 4 - Connection Draining)
+  const shutdown = async (signal: string) => {
     logger.info(`${signal} received, shutting down gracefully...`);
+
+    // Set up force exit timeout (30 seconds for graceful drain)
+    const forceExitTimeout = setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 30000);
+
+    // Stop accepting new connections
+    server.close(() => {
+      logger.info('HTTP server stopped accepting new connections');
+    });
 
     // Stop token revocation background sync
     stopTokenRevocationSync();
     logger.info('Token revocation sync stopped');
 
-    server.close(() => {
-      logger.info('HTTP server closed');
-      process.exit(0);
-    });
+    // Drain active SSE connections
+    const activeCount = getActiveConnectionCount();
+    if (activeCount > 0) {
+      logger.info(`Draining ${activeCount} active SSE connections...`);
+      const drained = drainConnections();
+      logger.info(`Drained ${drained} SSE connections`);
+    }
 
-    // Force exit if graceful shutdown takes too long
-    setTimeout(() => {
-      logger.error('Forced shutdown after timeout');
-      process.exit(1);
-    }, 10000);
+    // Wait briefly for connections to close cleanly
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    clearTimeout(forceExitTimeout);
+    logger.info('Graceful shutdown complete');
+    process.exit(0);
   };
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
