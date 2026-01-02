@@ -9,11 +9,11 @@ Full-stack Terraform configuration for local Docker Compose development. Mimics 
 **Architecture**: Hybrid approach combining:
 - Docker Compose for container orchestration (via `local-exec`)
 - Terraform for environment configuration and secrets management
-- Keycloak module for realm management (separate from docker-compose)
+- Keycloak realm via Docker `--import-realm` (consistent across all environments)
 
 **Services Managed** (19 total):
 - **Infrastructure** (5): PostgreSQL, MongoDB, Redis, Elasticsearch, MinIO
-- **Identity** (1): Keycloak (via Terraform module)
+- **Identity** (1): Keycloak (via Docker --import-realm)
 - **API Gateway** (1): Kong
 - **MCP Servers** (5): Gateway, HR, Finance, Sales, Support
 - **Web Apps** (6): Portal, HR, Finance, Sales, Support, Website
@@ -163,13 +163,26 @@ docker compose down
 
 ### 3. Keycloak Realm Management
 
-Terraform module creates:
-- 1 realm: `tamshai-corp`
+Keycloak realm is loaded via Docker's `--import-realm` flag from:
+- **Dev/Stage**: `keycloak/realm-export-dev.json` (includes test users)
+- **Production**: `keycloak/realm-export.json` (no test users)
+
+**Realm Contents**:
+- 1 realm: `tamshai`
 - 9 roles: `executive`, `hr-read`, `hr-write`, `finance-read`, etc.
 - 8 test users: `alice.chen`, `bob.martinez`, `carol.johnson`, etc.
 - 1 OAuth client: `mcp-gateway`
 
-**Module Source**: `../keycloak` (reuses existing Keycloak Terraform)
+**Why Docker Import (not Terraform provider)**:
+- Consistent across all environments (dev/stage/prod)
+- Faster startup (no API calls required)
+- Works offline (realm embedded in codebase)
+- Simpler deployment (no provider dependency)
+
+**To modify the realm**:
+1. Make changes in Keycloak admin UI (http://localhost:8180)
+2. Export realm: Realm Settings > Action > Partial Export
+3. Update `keycloak/realm-export-dev.json` or `realm-export.json`
 
 ### 4. Service Health Checks
 
@@ -390,9 +403,11 @@ terraform apply -var-file=dev.tfvars
 | **Secrets** | TF_VAR_* env vars | random_password resources |
 | **Networking** | Docker network | Firewall rules |
 | **State** | Local file | Local file (.gitignore'd) |
-| **Keycloak** | Terraform module | Realm import via docker |
+| **Keycloak** | Docker --import-realm | Docker --import-realm |
 
 **Philosophy**: Dev mimics stage/prod structure but targets local infrastructure.
+
+**Unified Keycloak Strategy**: All environments (dev/stage/prod) use Docker's `--import-realm` for consistent realm setup.
 
 ## Next Steps
 

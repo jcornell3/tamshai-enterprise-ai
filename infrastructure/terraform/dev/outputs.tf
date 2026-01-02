@@ -42,29 +42,41 @@ output "tamshai_local_url" {
 }
 
 # =============================================================================
-# KEYCLOAK REALM OUTPUTS (from module)
+# KEYCLOAK REALM INFO
 # =============================================================================
+#
+# Realm is loaded from keycloak/realm-export-dev.json via Docker --import-realm
+# These values are static references to what's defined in the realm export file.
+#
 
 output "realm_name" {
-  description = "Keycloak realm name"
-  value       = module.keycloak.realm_name
+  description = "Keycloak realm name (from realm-export-dev.json)"
+  value       = "tamshai"
 }
 
 output "mcp_gateway_client_id" {
-  description = "MCP Gateway OAuth client ID"
-  value       = module.keycloak.mcp_gateway_client_id
+  description = "MCP Gateway OAuth client ID (from realm-export-dev.json)"
+  value       = "mcp-gateway"
 }
 
-output "mcp_gateway_client_secret" {
-  description = "MCP Gateway OAuth client secret"
-  value       = module.keycloak.mcp_gateway_client_secret
-  sensitive   = true
-}
+output "keycloak_realm_info" {
+  description = "Keycloak realm configuration info"
+  value       = <<-EOT
+    Realm: tamshai
+    Client ID: mcp-gateway
 
-output "test_users" {
-  description = "Test user credentials"
-  value       = module.keycloak.test_users
-  sensitive   = true
+    Test Users (password: password123):
+      - alice.chen (HR)
+      - bob.martinez (Finance)
+      - carol.johnson (Sales)
+      - dan.williams (Support)
+      - eve.thompson (Executive/CEO)
+      - frank.davis (Intern)
+      - nina.patel (Engineering Manager)
+      - marcus.johnson (Engineer)
+
+    Realm source: keycloak/realm-export-dev.json
+  EOT
 }
 
 # =============================================================================
@@ -140,7 +152,7 @@ output "next_steps" {
 
     📚 Documentation:
     - Terraform Guide: infrastructure/terraform/dev/README.md
-    - Test Users: terraform output test_users
+    - Realm Info: terraform output keycloak_realm_info
     - All Commands: terraform output quick_commands
 
   EOT

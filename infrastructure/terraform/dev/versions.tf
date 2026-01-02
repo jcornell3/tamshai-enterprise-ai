@@ -24,10 +24,7 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.0"
     }
-    keycloak = {
-      source  = "mrparkers/keycloak"
-      version = "~> 4.4.0"
-    }
+    # Keycloak provider removed - realm managed via Docker --import-realm
   }
 
   # Local state for dev (no remote backend needed)

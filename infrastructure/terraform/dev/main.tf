@@ -274,60 +274,28 @@ resource "null_resource" "wait_for_services" {
 }
 
 # =============================================================================
-# KEYCLOAK PROVIDER CONFIGURATION
-# =============================================================================
-
-# Provider configured after wait_for_services completes
-provider "keycloak" {
-  client_id     = "admin-cli"
-  username      = "admin"
-  password      = var.keycloak_admin_password
-  url           = "http://localhost:8180/auth"
-  initial_login = false
-
-  # For local dev with self-signed certs
-  tls_insecure_skip_verify = true
-
-  # Implicit dependency: this provider won't be used until after wait_for_services
-  # because the provider block is parsed after null_resource.wait_for_services
-}
-
-# =============================================================================
 # KEYCLOAK REALM MANAGEMENT
 # =============================================================================
-
-module "keycloak" {
-  source = "../keycloak"
-
-  depends_on = [null_resource.wait_for_services]
-
-  # Keycloak connection
-  keycloak_url            = "http://localhost:8180/auth"
-  keycloak_admin_user     = "admin"
-  keycloak_admin_password = var.keycloak_admin_password
-
-  # Realm configuration
-  realm_name         = "tamshai-corp"
-  realm_display_name = "Tamshai Corporation - Development"
-  environment        = var.environment
-
-  # Credentials
-  test_user_password        = var.test_user_password
-  mcp_gateway_client_secret = var.mcp_gateway_client_secret
-
-  # Security settings (relaxed for dev)
-  tls_insecure_skip_verify = true
-
-  # Redirect URIs
-  valid_redirect_uris = [
-    "http://localhost:3100/*",
-    "http://localhost:4000/*",
-    "http://localhost:4001/*",
-    "http://localhost:4002/*",
-    "http://localhost:4003/*",
-    "http://localhost:4004/*",
-  ]
-}
+#
+# REMOVED: Terraform keycloak provider and module
+#
+# Keycloak realm is now managed via Docker's --import-realm flag for consistency
+# across all environments (dev, stage, prod). The realm is loaded from:
+#   - Dev/Stage: keycloak/realm-export-dev.json (includes test users)
+#   - Production: keycloak/realm-export.json (no test users)
+#
+# This approach:
+#   1. Ensures identical realm setup across all environments
+#   2. Removes dependency on Terraform keycloak provider
+#   3. Eliminates timing issues with provider initialization
+#   4. Aligns with VPS deployment pattern
+#
+# To modify the realm:
+#   1. Make changes in Keycloak admin UI
+#   2. Export realm: Realm Settings > Action > Partial Export
+#   3. Update keycloak/realm-export-dev.json or realm-export.json
+#
+# =============================================================================
 
 # =============================================================================
 # CLEANUP ON DESTROY

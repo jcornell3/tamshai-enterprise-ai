@@ -83,9 +83,9 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     container_name: tamshai-keycloak
     restart: unless-stopped
-    # Use --import-realm only when NOT using Terraform to manage realm
-    # Set KEYCLOAK_IMPORT_REALM=false when using Terraform
-    command: start-dev ${KEYCLOAK_IMPORT_REALM:+--import-realm}
+    # Always use --import-realm for realm setup consistency across all environments
+    # Realm is loaded from realm-export-dev.json (dev/stage) or realm-export.json (prod)
+    command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
