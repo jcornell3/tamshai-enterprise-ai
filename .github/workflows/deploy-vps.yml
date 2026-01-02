@@ -211,11 +211,9 @@ jobs:
           echo "=== Loading environment ==="
           export $(cat .env | grep -v '^#' | xargs)
 
-          echo "=== Pulling Docker images ==="
-          docker compose -f docker-compose.vps.yml pull
-
-          echo "=== Deploying services ==="
-          docker compose -f docker-compose.vps.yml up -d ${{ env.BUILD_FLAG }}
+          echo "=== Building and deploying services ==="
+          # Always build images on VPS (no container registry configured yet)
+          docker compose -f docker-compose.vps.yml up -d --build
 
           echo "=== Cleaning up ==="
           docker image prune -f
