@@ -74,6 +74,34 @@ services:
     # NO ports exposed - accessed via Caddy
 
   # =============================================================================
+  # SECRETS MANAGEMENT (HashiCorp Vault) - Optional
+  # =============================================================================
+  # Vault is used for secrets management in production.
+  # For SSH certificate auth (planned), see docs/vault/SSH_CERTIFICATES.md
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: tamshai-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_SKIP_VERIFY: "true"
+    volumes:
+      - vault_data:/vault/data
+      - ./infrastructure/vault/config.hcl:/vault/config/config.hcl:ro
+    command: server -config=/vault/config/config.hcl
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - tamshai-network
+    # NO ports exposed - internal only (access via ssh tunnel for admin)
+
+  # =============================================================================
   # TOKEN REVOCATION CACHE (Redis)
   # =============================================================================
   redis:
@@ -563,5 +591,6 @@ volumes:
   elasticsearch_data:
   minio_data:
   redis_data:
+  vault_data:
   caddy_data:
   caddy_config:
