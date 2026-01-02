@@ -127,13 +127,14 @@ assign_client_scopes() {
     local client_id="$1"
     local uuid=$(get_client_uuid "$client_id")
 
-    # Default scopes required for OIDC
-    local scopes=("openid" "profile" "email")
+    # Default scopes for OIDC clients
+    # Note: 'openid' is implicit in OIDC and not a separate client scope in Keycloak
+    local scopes=("profile" "email" "roles" "web-origins")
 
     for scope in "${scopes[@]}"; do
         local scope_id=$(get_scope_id "$scope")
         if [ -n "$scope_id" ]; then
-            # Try to add the scope (ignore error if already assigned)
+            # Add the scope to client's default scopes
             $KCADM update "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
             log_info "  Assigned scope '$scope' to client '$client_id'"
         else
