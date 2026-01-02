@@ -117,7 +117,7 @@ jobs:
           echo "Starting bootstrap with PULL_LATEST=$PULL_LATEST, REBUILD=$REBUILD, FRESH_START=$FRESH_START"
           ssh $VPS_USER@$VPS_HOST "cd /opt/tamshai && \
             git config --global --add safe.directory /opt/tamshai && \
-            if [ '$PULL_LATEST' = 'true' ]; then git pull origin main; fi && \
+            if [ '$PULL_LATEST' = 'true' ]; then git fetch origin && git reset --hard origin/main; fi && \
             docker compose -f docker-compose.vps.yml down --remove-orphans || true && \
             if [ '$FRESH_START' = 'true' ]; then docker compose -f docker-compose.vps.yml down -v || true; fi && \
             docker compose -f docker-compose.vps.yml up -d \$([ '$REBUILD' = 'true' ] && echo '--build' || echo '')"

@@ -204,9 +204,10 @@ jobs:
           cd /opt/tamshai
 
           echo "=== Pulling latest code ==="
+          git config --global --add safe.directory /opt/tamshai
           git fetch origin
           git checkout ${{ env.DEPLOY_BRANCH }}
-          git pull origin ${{ env.DEPLOY_BRANCH }}
+          git reset --hard origin/${{ env.DEPLOY_BRANCH }}
 
           echo "=== Loading environment ==="
           export $(cat .env | grep -v '^#' | xargs)
