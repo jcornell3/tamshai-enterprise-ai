@@ -25,9 +25,11 @@ import {
 } from '../../src/services/identity';
 
 // Test configuration from environment
+// Note: Local Docker uses KC_HTTP_RELATIVE_PATH=/auth, CI does not
 const config = {
   keycloak: {
     baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
+    pathPrefix: process.env.KEYCLOAK_PATH_PREFIX ?? '/auth', // '/auth' for local, '' for CI
     realm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
     adminUsername: process.env.KEYCLOAK_ADMIN || 'admin',
     adminPassword: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
@@ -50,10 +52,12 @@ const config = {
 class TestKcAdminClient implements KcAdminClient {
   private accessToken: string | null = null;
   private readonly baseUrl: string;
+  private readonly pathPrefix: string;
   private readonly realm: string;
 
-  constructor(baseUrl: string, realm: string) {
+  constructor(baseUrl: string, realm: string, pathPrefix: string = '') {
     this.baseUrl = baseUrl;
+    this.pathPrefix = pathPrefix;
     this.realm = realm;
   }
 
@@ -63,7 +67,7 @@ class TestKcAdminClient implements KcAdminClient {
     clientSecret: string;
   }): Promise<void> {
     const response = await fetch(
-      `${this.baseUrl}/auth/realms/master/protocol/openid-connect/token`,
+      `${this.baseUrl}${this.pathPrefix}/realms/master/protocol/openid-connect/token`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -94,7 +98,7 @@ class TestKcAdminClient implements KcAdminClient {
     }
 
     const response = await fetch(
-      `${this.baseUrl}/auth/admin/realms/${this.realm}${path}`,
+      `${this.baseUrl}${this.pathPrefix}/admin/realms/${this.realm}${path}`,
       {
         method,
         headers: {
@@ -120,7 +124,7 @@ class TestKcAdminClient implements KcAdminClient {
   users = {
     create: async (user: Record<string, unknown>): Promise<{ id: string }> => {
       const response = await fetch(
-        `${this.baseUrl}/auth/admin/realms/${this.realm}/users`,
+        `${this.baseUrl}${this.pathPrefix}/admin/realms/${this.realm}/users`,
         {
           method: 'POST',
           headers: {
@@ -268,7 +272,7 @@ describe('IdentityService Integration Tests', () => {
     }
 
     // Initialize Keycloak admin client
-    kcAdmin = new TestKcAdminClient(config.keycloak.baseUrl, config.keycloak.realm);
+    kcAdmin = new TestKcAdminClient(config.keycloak.baseUrl, config.keycloak.realm, config.keycloak.pathPrefix);
 
     try {
       await kcAdmin.auth({

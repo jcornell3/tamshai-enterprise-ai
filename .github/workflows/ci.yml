@@ -775,6 +775,7 @@ jobs:
         env:
           CI: true
           KEYCLOAK_URL: http://127.0.0.1:8180
+          KEYCLOAK_PATH_PREFIX: ''  # CI Keycloak has no path prefix (local uses /auth)
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
