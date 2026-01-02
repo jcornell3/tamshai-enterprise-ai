@@ -30,19 +30,10 @@ import YAML from 'yaml';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  MCPToolResponse,
-  isSuccessResponse,
-  isPendingConfirmationResponse,
-} from './types/mcp-response';
-import {
-  getPendingConfirmation,
   isTokenRevoked,
   stopTokenRevocationSync,
 } from './utils/redis';
-import { scrubPII } from './utils/pii-scrubber';
 import {
-  sanitizeForLog,
-  isValidToolName,
   getAccessibleMCPServers,
   getDeniedMCPServers,
   MCPServerConfig,
@@ -54,6 +45,9 @@ import { JWTValidator } from './auth/jwt-validator';
 import { createAuthMiddleware } from './middleware/auth.middleware';
 import { createStreamingRoutes, drainConnections, getActiveConnectionCount } from './routes/streaming.routes';
 import { MCPClient, MCPQueryResult } from './mcp/mcp-client';
+import { createAIQueryRoutes } from './routes/ai-query.routes';
+import { createConfirmationRoutes } from './routes/confirmation.routes';
+import { createMCPProxyRoutes } from './routes/mcp-proxy.routes';
 
 dotenv.config();
 
@@ -148,25 +142,6 @@ interface UserContext {
 // Extended Request type with userContext property
 interface AuthenticatedRequest extends Request {
   userContext?: UserContext;
-}
-
-interface AIQueryRequest {
-  query: string;
-  conversationId?: string;
-  context?: Record<string, unknown>;
-}
-
-interface AuditLog {
-  timestamp: string;
-  requestId: string;
-  userId: string;
-  username: string;
-  roles: string[];
-  query: string;
-  mcpServersAccessed: string[];
-  mcpServersDenied: string[];
-  responseSuccess: boolean;
-  durationMs: number;
 }
 
 // =============================================================================
@@ -467,96 +442,20 @@ app.use('/api/admin/gdpr', authMiddleware, gdprRoutes);
 // User info and MCP tools routes - extracted to routes/user.routes.ts
 app.use(authMiddleware, userRoutes);
 
-// Main AI query endpoint
-app.post('/api/ai/query', authMiddleware, aiQueryLimiter, async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  const { query, conversationId }: AIQueryRequest = req.body;
+// =============================================================================
+// AI QUERY ROUTES (Extracted for testability - Phase 7 Refactoring)
+// =============================================================================
 
-  if (!query || typeof query !== 'string') {
-    res.status(400).json({ error: 'Query is required' });
-    return;
-  }
-
-  logger.info('AI Query received', {
-    requestId,
-    username: sanitizeForLog(userContext.username),
-    query: scrubPII(query.substring(0, 100)),
-    roles: userContext.roles,
-  });
-
-  try {
-    // Determine accessible MCP servers
-    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
-    const deniedServers = getDeniedMCPServersForUser(userContext.roles);
-
-    // Query all accessible MCP servers in parallel
-    const mcpPromises = accessibleServers.map((server) =>
-      queryMCPServer(server, query, userContext)
-    );
-    const mcpResults = await Promise.all(mcpPromises);
-
-    // v1.5: Separate successful from failed results
-    const successfulResults = mcpResults.filter((r) => r.status === 'success');
-    const failedResults = mcpResults.filter((r) => r.status !== 'success');
-
-    // Log any partial response issues
-    if (failedResults.length > 0) {
-      logger.warn('Partial response in non-streaming query', {
-        requestId,
-        failed: failedResults.map((r) => ({ server: r.server, status: r.status, error: r.error })),
-        successful: successfulResults.map((r) => r.server),
-      });
-    }
-
-    // Send to Claude with context (only successful results)
-    const aiResponse = await sendToClaudeWithContext(query, successfulResults, userContext);
-
-    const durationMs = Date.now() - startTime;
-
-    // Audit log - scrub PII before logging (security fix)
-    const auditLog: AuditLog = {
-      timestamp: new Date().toISOString(),
-      requestId,
-      userId: userContext.userId,
-      username: userContext.username,
-      roles: userContext.roles,
-      query: scrubPII(query),  // Scrub PII from query before logging
-      mcpServersAccessed: successfulResults.map((r) => r.server),
-      mcpServersDenied: deniedServers.map((s) => s.name),
-      responseSuccess: true,
-      durationMs,
-    };
-    logger.info('Audit log:', auditLog);
-
-    // v1.5: Include partial response warnings in metadata
-    const responseWarnings = failedResults.map((r) => ({
-      server: r.server,
-      status: r.status,
-      message: r.error,
-    }));
-
-    res.json({
-      requestId,
-      conversationId: conversationId || uuidv4(),
-      response: aiResponse,
-      status: failedResults.length > 0 ? 'partial' : 'success',
-      metadata: {
-        dataSourcesQueried: successfulResults.map((r) => r.server),
-        dataSourcesFailed: failedResults.map((r) => r.server),
-        processingTimeMs: durationMs,
-      },
-      ...(responseWarnings.length > 0 && { warnings: responseWarnings }),
-    });
-  } catch (error) {
-    logger.error('AI query error:', error);
-    res.status(500).json({
-      error: 'Failed to process AI query',
-      requestId,
-    });
-  }
+const aiQueryRouter = createAIQueryRoutes({
+  logger,
+  getAccessibleServers: getAccessibleMCPServersForUser,
+  getDeniedServers: getDeniedMCPServersForUser,
+  queryMCPServer,
+  sendToClaudeWithContext,
 });
+
+// Mount AI query routes at /api with auth and rate limiting
+app.use('/api', authMiddleware, aiQueryLimiter, aiQueryRouter);
 
 // Internal audit endpoint (for Kong HTTP log plugin)
 app.post('/internal/audit', express.json(), (req: Request, res: Response) => {
@@ -594,384 +493,30 @@ const streamingRouter = createStreamingRoutes({
 // Mount streaming routes at /api with auth and rate limiting
 app.use('/api', authMiddleware, aiQueryLimiter, streamingRouter);
 
-/**
- * v1.4 Confirmation Endpoint (Section 5.6)
- *
- * Handles human-in-the-loop confirmations for write operations.
- * Retrieves pending action from Redis and executes or cancels it.
- */
-app.post('/api/confirm/:confirmationId', authMiddleware, async (req: Request, res: Response) => {
-  const { confirmationId } = req.params;
-  const { approved } = req.body;
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  const requestId = req.headers['x-request-id'] as string;
-
-  logger.info('Confirmation request', {
-    requestId,
-    confirmationId,
-    approved,
-    userId: userContext.userId,
-  });
-
-  if (typeof approved !== 'boolean') {
-    res.status(400).json({ error: 'Field "approved" must be a boolean' });
-    return;
-  }
-
-  try {
-    // Retrieve pending confirmation from Redis
-    const pendingAction = await getPendingConfirmation(confirmationId);
-
-    if (!pendingAction) {
-      res.status(404).json({
-        error: 'Confirmation not found or expired',
-        message: '⏱️ Confirmation expired. Please retry the operation.',
-      });
-      return;
-    }
-
-    // Verify user is the same one who initiated the request
-    if (pendingAction.userId !== userContext.userId) {
-      logger.warn('Confirmation user mismatch', {
-        requestId,
-        confirmationId,
-        initiatingUser: pendingAction.userId,
-        confirmingUser: userContext.userId,
-      });
-      res.status(403).json({ error: 'Confirmation can only be completed by the initiating user' });
-      return;
-    }
-
-    if (!approved) {
-      // User rejected the action
-      logger.info('Action rejected by user', { requestId, confirmationId });
-      res.json({
-        status: 'cancelled',
-        message: '❌ Action cancelled',
-      });
-      return;
-    }
-
-    // Execute the confirmed action by calling the MCP server
-    // SECURITY: Validate mcpServer is a known server name to prevent property injection
-    const validServerNames = Object.keys(config.mcpServers);
-    const mcpServerName = typeof pendingAction.mcpServer === 'string' ? pendingAction.mcpServer : '';
-    if (!mcpServerName || !validServerNames.includes(mcpServerName)) {
-      logger.warn('Invalid MCP server in pending action', {
-        requestId,
-        confirmationId,
-        attemptedServer: String(pendingAction.mcpServer).substring(0, 50),
-        validServers: validServerNames,
-      });
-      res.status(500).json({ error: 'Invalid MCP server in pending action' });
-      return;
-    }
-    const mcpServerUrl = config.mcpServers[mcpServerName as keyof typeof config.mcpServers];
-
-    const executeResponse = await axios.post(
-      `${mcpServerUrl}/execute`,
-      {
-        action: pendingAction.action,
-        data: pendingAction,
-        userContext: {
-          userId: userContext.userId,
-          username: userContext.username,
-          roles: userContext.roles,
-        },
-      },
-      {
-        timeout: 30000,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': userContext.userId,
-          'X-User-Roles': userContext.roles.join(','),
-          'X-Request-ID': requestId,
-        },
-      }
-    );
-
-    logger.info('Action executed successfully', {
-      requestId,
-      confirmationId,
-      action: pendingAction.action,
-    });
-
-    res.json({
-      status: 'success',
-      message: '✅ Action completed successfully',
-      result: executeResponse.data,
-    });
-  } catch (error) {
-    logger.error('Confirmation execution error:', error);
-    res.status(500).json({
-      error: 'Failed to execute confirmed action',
-      requestId,
-    });
-  }
-});
-
 // =============================================================================
-// MCP TOOL PROXY ENDPOINTS
+// CONFIRMATION ROUTES (Extracted for testability - Phase 7 Refactoring)
 // =============================================================================
 
-/**
- * Generic MCP tool proxy endpoint
- * Routes: /api/mcp/:serverName/:toolName
- *
- * Allows web applications to directly call MCP tools with proper authorization.
- * The gateway validates the user's access to the MCP server and forwards the request.
- */
-app.get('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, res: Response) => {
-  const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  const { serverName, toolName } = req.params;
-
-  // SECURITY: Validate toolName to prevent SSRF/path traversal
-  if (!isValidToolName(toolName)) {
-    logger.warn('Invalid tool name rejected', {
-      requestId,
-      userId: userContext.userId,
-      toolName,
-    });
-    res.status(400).json({
-      status: 'error',
-      code: 'INVALID_TOOL_NAME',
-      message: 'Tool name contains invalid characters',
-      suggestedAction: 'Tool names must start with a letter and contain only alphanumeric characters, underscores, or hyphens',
-    });
-    return;
-  }
-
-  // Convert query params to proper types (Express parses everything as strings)
-  const queryParams: Record<string, string | number | string[]> = {};
-  for (const [key, value] of Object.entries(req.query)) {
-    if (value === undefined) continue;
-    // Try to parse as number if it looks numeric
-    if (typeof value === 'string' && /^\d+$/.test(value)) {
-      queryParams[key] = parseInt(value, 10);
-    } else if (typeof value === 'string') {
-      queryParams[key] = value;
-    } else if (Array.isArray(value)) {
-      queryParams[key] = value.filter((v): v is string => typeof v === 'string');
-    }
-    // Skip ParsedQs objects (nested query params)
-  }
-
-  logger.info(`MCP tool call: ${serverName}/${toolName}`, {
-    requestId,
-    userId: userContext.userId,
-    queryParams,
-  });
-
-  try {
-    // Find the MCP server configuration
-    const server = mcpServerConfigs.find((s) => s.name === serverName);
-    if (!server) {
-      res.status(404).json({
-        status: 'error',
-        code: 'SERVER_NOT_FOUND',
-        message: `MCP server '${serverName}' not found`,
-        suggestedAction: `Available servers: ${mcpServerConfigs.map((s) => s.name).join(', ')}`,
-      });
-      return;
-    }
-
-    // Check if user has access to this server
-    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
-    const hasAccess = accessibleServers.some((s) => s.name === serverName);
-
-    if (!hasAccess) {
-      logger.warn('Unauthorized MCP server access attempt', {
-        requestId,
-        userId: userContext.userId,
-        serverName,
-        userRoles: userContext.roles,
-      });
-
-      res.status(403).json({
-        status: 'error',
-        code: 'ACCESS_DENIED',
-        message: `You do not have access to the '${serverName}' data source`,
-        suggestedAction: `Required roles: ${server.requiredRoles.join(' or ')}. Your roles: ${userContext.roles.join(', ')}`,
-      });
-      return;
-    }
-
-    // Forward request to MCP server (MCP servers expect POST with {input, userContext})
-    // SECURITY: toolName is validated above, server.url comes from trusted config
-    const mcpResponse = await axios.post(
-      `${server.url}/tools/${encodeURIComponent(toolName)}`,
-      {
-        input: queryParams, // Query params become input
-        userContext: {
-          userId: userContext.userId,
-          username: userContext.username,
-          email: userContext.email,
-          roles: userContext.roles,
-        },
-      },
-      {
-        timeout: 30000,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': requestId,
-        },
-      }
-    );
-
-    // v1.4: Check for truncation warnings and inject into response
-    const toolResponse = mcpResponse.data as MCPToolResponse;
-    if (isSuccessResponse(toolResponse) && toolResponse.metadata?.truncated) {
-      logger.info('Truncation detected in MCP response', {
-        requestId,
-        serverName,
-        toolName,
-        returnedCount: toolResponse.metadata.returnedCount,
-      });
-    }
-
-    res.json(toolResponse);
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response) {
-        // MCP server returned an error
-        res.status(error.response.status).json(error.response.data);
-      } else if (error.code === 'ECONNREFUSED') {
-        res.status(503).json({
-          status: 'error',
-          code: 'SERVICE_UNAVAILABLE',
-          message: `MCP server '${serverName}' is not available`,
-          suggestedAction: 'Please try again later or contact support',
-        });
-      } else {
-        throw error;
-      }
-    } else {
-      logger.error('MCP tool proxy error:', error);
-      res.status(500).json({
-        status: 'error',
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to communicate with MCP server',
-        suggestedAction: 'Please try again or contact support',
-      });
-    }
-  }
+const confirmationRouter = createConfirmationRoutes({
+  logger,
+  mcpServerUrls: config.mcpServers,
 });
 
-/**
- * MCP POST endpoint for write operations (confirmations, etc.)
- */
-app.post('/api/mcp/:serverName/:toolName', authMiddleware, async (req: Request, res: Response) => {
-  const requestId = req.headers['x-request-id'] as string;
-  const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-  const { serverName, toolName } = req.params;
-  const body = req.body;
+// Mount confirmation routes at /api with auth
+app.use('/api', authMiddleware, confirmationRouter);
 
-  // SECURITY: Validate toolName to prevent SSRF/path traversal
-  if (!isValidToolName(toolName)) {
-    logger.warn('Invalid tool name rejected', {
-      requestId,
-      userId: userContext.userId,
-      toolName,
-    });
-    res.status(400).json({
-      status: 'error',
-      code: 'INVALID_TOOL_NAME',
-      message: 'Tool name contains invalid characters',
-      suggestedAction: 'Tool names must start with a letter and contain only alphanumeric characters, underscores, or hyphens',
-    });
-    return;
-  }
+// =============================================================================
+// MCP PROXY ROUTES (Extracted for testability - Phase 7 Refactoring)
+// =============================================================================
 
-  logger.info(`MCP tool call (POST): ${serverName}/${toolName}`, {
-    requestId,
-    userId: userContext.userId,
-    body,
-  });
-
-  try {
-    // Find the MCP server configuration
-    const server = mcpServerConfigs.find((s) => s.name === serverName);
-    if (!server) {
-      res.status(404).json({
-        status: 'error',
-        code: 'SERVER_NOT_FOUND',
-        message: `MCP server '${serverName}' not found`,
-      });
-      return;
-    }
-
-    // Check if user has access to this server
-    const accessibleServers = getAccessibleMCPServersForUser(userContext.roles);
-    const hasAccess = accessibleServers.some((s) => s.name === serverName);
-
-    if (!hasAccess) {
-      logger.warn('Unauthorized MCP server access attempt', {
-        requestId,
-        userId: userContext.userId,
-        serverName,
-        userRoles: userContext.roles,
-      });
-
-      res.status(403).json({
-        status: 'error',
-        code: 'ACCESS_DENIED',
-        message: `You do not have access to the '${serverName}' data source`,
-      });
-      return;
-    }
-
-    // Forward request to MCP server
-    // SECURITY: toolName is validated above, server.url comes from trusted config
-    const mcpResponse = await axios.post(
-      `${server.url}/tools/${encodeURIComponent(toolName)}`,
-      body,
-      {
-        timeout: 30000,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': userContext.userId,
-          'X-User-Roles': userContext.roles.join(','),
-          'X-Request-ID': requestId,
-        },
-      }
-    );
-
-    const toolResponse = mcpResponse.data as MCPToolResponse;
-
-    // v1.4: Handle pending confirmations
-    if (isPendingConfirmationResponse(toolResponse)) {
-      logger.info('Pending confirmation created', {
-        requestId,
-        confirmationId: toolResponse.confirmationId,
-        action: toolName,
-      });
-    }
-
-    res.json(toolResponse);
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response) {
-        res.status(error.response.status).json(error.response.data);
-      } else if (error.code === 'ECONNREFUSED') {
-        res.status(503).json({
-          status: 'error',
-          code: 'SERVICE_UNAVAILABLE',
-          message: `MCP server '${serverName}' is not available`,
-        });
-      } else {
-        throw error;
-      }
-    } else {
-      logger.error('MCP tool proxy error:', error);
-      res.status(500).json({
-        status: 'error',
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to communicate with MCP server',
-      });
-    }
-  }
+const mcpProxyRouter = createMCPProxyRoutes({
+  logger,
+  mcpServers: mcpServerConfigs,
+  getAccessibleServers: getAccessibleMCPServersForUser,
 });
+
+// Mount MCP proxy routes at /api with auth
+app.use('/api', authMiddleware, mcpProxyRouter);
 
 // =============================================================================
 // SERVER STARTUP
