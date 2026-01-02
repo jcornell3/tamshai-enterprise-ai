@@ -45,10 +45,16 @@ export const JobName = {
 } as const;
 
 /**
- * Department to Keycloak role mapping
+ * Department code to Keycloak role mapping
+ * Maps department codes (from hr.departments.code) to Keycloak client roles
  */
 export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
   HR: 'hr-read',
+  FIN: 'finance-read',
+  SALES: 'sales-read',
+  SUPPORT: 'support-read',
+  ENG: 'engineering-read',
+  // Legacy mappings for backwards compatibility with tests
   Finance: 'finance-read',
   Sales: 'sales-read',
   Support: 'support-read',
@@ -211,10 +217,12 @@ const SQL = {
     'SELECT id, email, keycloak_user_id FROM hr.employees WHERE id = $1',
 
   SELECT_ALL_ACTIVE_EMPLOYEES:
-    `SELECT id, email, first_name AS "firstName", last_name AS "lastName", department
-     FROM hr.employees
-     WHERE status = 'active' AND keycloak_user_id IS NULL
-     ORDER BY id`,
+    `SELECT e.id, e.email, e.first_name AS "firstName", e.last_name AS "lastName",
+            COALESCE(d.code, 'Unknown') AS department
+     FROM hr.employees e
+     LEFT JOIN hr.departments d ON e.department_id = d.id
+     WHERE e.status = 'active' AND e.keycloak_user_id IS NULL
+     ORDER BY e.id`,
 
   UPDATE_EMPLOYEE_TERMINATED:
     "UPDATE hr.employees SET status = 'terminated', terminated_at = NOW() WHERE id = $1",
