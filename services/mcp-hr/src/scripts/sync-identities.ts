@@ -36,7 +36,81 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { Queue } from 'bullmq';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { IdentityService, BulkSyncResult, CleanupQueue } from '../services/identity';
+import { IdentityService, BulkSyncResult, CleanupQueue, KcAdminClient, KcUserRepresentation, KcRoleRepresentation } from '../services/identity';
+
+/**
+ * Wraps the KeycloakAdminClient to match the KcAdminClient interface.
+ * This adapter handles type differences (e.g., undefined vs null).
+ */
+function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient {
+  return {
+    users: {
+      create: async (user: Partial<KcUserRepresentation>): Promise<{ id: string }> => {
+        return kcAdmin.users.create(user);
+      },
+      update: async (query: { id: string }, user: Partial<KcUserRepresentation>): Promise<void> => {
+        await kcAdmin.users.update(query, user);
+      },
+      del: async (query: { id: string }): Promise<void> => {
+        await kcAdmin.users.del(query);
+      },
+      find: async (query: { email?: string; username?: string }): Promise<KcUserRepresentation[]> => {
+        const users = await kcAdmin.users.find(query);
+        return users as KcUserRepresentation[];
+      },
+      findOne: async (query: { id: string }): Promise<KcUserRepresentation | null> => {
+        const user = await kcAdmin.users.findOne(query);
+        return user ?? null; // Convert undefined to null
+      },
+      addClientRoleMappings: async (params: {
+        id: string;
+        clientUniqueId: string;
+        roles: KcRoleRepresentation[];
+      }): Promise<void> => {
+        // Cast roles to satisfy Keycloak's RoleMappingPayload type (requires id and name to be strings)
+        const rolesWithIds = params.roles.filter(
+          (r): r is KcRoleRepresentation & { id: string; name: string } => !!r.id && !!r.name
+        );
+        await kcAdmin.users.addClientRoleMappings({
+          id: params.id,
+          clientUniqueId: params.clientUniqueId,
+          roles: rolesWithIds.map((r) => ({ id: r.id, name: r.name })),
+        });
+      },
+      listClientRoleMappings: async (params: {
+        id: string;
+        clientUniqueId: string;
+      }): Promise<KcRoleRepresentation[]> => {
+        const roles = await kcAdmin.users.listClientRoleMappings(params);
+        return roles as KcRoleRepresentation[];
+      },
+      listSessions: async (query: { id: string }): Promise<{ id: string }[]> => {
+        const sessions = await kcAdmin.users.listSessions(query);
+        return sessions.map((s: { id?: string }) => ({ id: s.id || '' }));
+      },
+      logout: async (query: { id: string }): Promise<void> => {
+        await kcAdmin.users.logout(query);
+      },
+    },
+    clients: {
+      listRoles: async (query: { id: string }): Promise<KcRoleRepresentation[]> => {
+        const roles = await kcAdmin.clients.listRoles(query);
+        return roles as KcRoleRepresentation[];
+      },
+    },
+    auth: async (credentials: {
+      grantType: string;
+      clientId: string;
+      clientSecret: string;
+    }): Promise<void> => {
+      await kcAdmin.auth({
+        grantType: credentials.grantType as 'client_credentials',
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+      });
+    },
+  };
+}
 
 // ============================================================================
 // Configuration
@@ -123,8 +197,9 @@ async function main(): Promise<void> {
     });
     log('info', 'Keycloak authentication successful');
 
-    // Create IdentityService
-    const identityService = new IdentityService(pool, kcAdmin, cleanupQueue);
+    // Create IdentityService with adapted Keycloak client
+    const kcAdminAdapter = createKcAdminClientAdapter(kcAdmin);
+    const identityService = new IdentityService(pool, kcAdminAdapter, cleanupQueue);
 
     // Get pending sync count
     const pendingCount = await identityService.getPendingSyncCount();
