@@ -1,9 +1,13 @@
 # ============================================================
 # Staging Environment Configuration (Hetzner VPS)
 # ============================================================
+#
+# IMPORTANT: Use staging.tamshai.com domain instead of IP address
+# to avoid reconfiguration if VPS IP changes. Set up DNS A record:
+#   staging.tamshai.com -> 5.78.159.29 (or current VPS IP)
 
-# Keycloak connection settings (VPS at 5.78.159.29)
-keycloak_url        = "https://5.78.159.29/auth"
+# Keycloak connection settings
+keycloak_url        = "https://staging.tamshai.com/auth"
 keycloak_admin_user = "admin"
 # keycloak_admin_password = "PROVIDE_VIA_ENV_VAR"  # Set via TF_VAR_keycloak_admin_password
 
@@ -22,13 +26,12 @@ environment = "stage"
 tls_insecure_skip_verify = false
 
 # Valid redirect URIs for staging
-# Must match Caddy routing paths in cloud-init.yaml
+# Use domain-based URIs to avoid IP dependency
 valid_redirect_uris = [
-  "https://5.78.159.29/*",           # Catch-all for VPS IP
-  "https://5.78.159.29/app/*",       # Web Portal (/app/*)
-  "https://5.78.159.29/hr/*",        # Web HR (/hr/*)
-  "https://5.78.159.29/finance/*",   # Web Finance (/finance/*)
-  "https://5.78.159.29/sales/*",     # Web Sales (/sales/*)
-  "https://5.78.159.29/support/*",   # Web Support (/support/*)
-  "https://staging.tamshai.com/*",   # If DNS is configured
+  "https://staging.tamshai.com/*",           # Catch-all for domain
+  "https://staging.tamshai.com/app/*",       # Web Portal (/app/*)
+  "https://staging.tamshai.com/hr/*",        # Web HR (/hr/*)
+  "https://staging.tamshai.com/finance/*",   # Web Finance (/finance/*)
+  "https://staging.tamshai.com/sales/*",     # Web Sales (/sales/*)
+  "https://staging.tamshai.com/support/*",   # Web Support (/support/*)
 ]

@@ -1,57 +1,66 @@
-# Tamshai Enterprise AI - Terraform Variables
-# Copy this file to terraform.tfvars and fill in your values
+# Tamshai Enterprise AI - Terraform Variables (Example)
 #
-# NEVER commit terraform.tfvars to git - it contains secrets!
+# NON-SECRET values only! All secrets must be provided via:
+# - GitHub Actions secrets (for CI/CD)
+# - Environment variables (TF_VAR_*)
+# - HashiCorp Vault (for production)
+#
+# Copy this file to terraform.tfvars for local development.
 
 # =============================================================================
 # CLOUD PROVIDER CONFIGURATION
 # =============================================================================
 
 # Choose your cloud provider: "digitalocean" or "hetzner"
-cloud_provider = "digitalocean"
+cloud_provider = "hetzner"
 
-# DigitalOcean API token (get from https://cloud.digitalocean.com/account/api/tokens)
-# Required if cloud_provider = "digitalocean"
-do_token = "dop_v1_your_token_here"
-
-# Hetzner Cloud API token (get from https://console.hetzner.cloud/)
-# Required if cloud_provider = "hetzner"
-hcloud_token = ""
+# API tokens - NEVER store here! Use environment variables:
+#   export TF_VAR_hcloud_token="your-token"
+#   export TF_VAR_do_token="your-token"
 
 # =============================================================================
 # VPS CONFIGURATION
 # =============================================================================
 
 # Region
-# DigitalOcean: nyc1, nyc3, sfo3, ams3, sgp1, lon1, fra1, tor1, blr1
-# Hetzner: nbg1, fsn1, hel1, ash
-region = "nyc1"
+# Hetzner: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki),
+#          hil (Hillsboro OR), ash (Ashburn VA)
+# DigitalOcean: nyc1, nyc3, sfo3, ams3, sgp1, lon1, fra1
+region = "hil"
 
 # VPS Size (8GB RAM recommended for all services)
-# DigitalOcean: s-2vcpu-4gb (~$24/mo), s-4vcpu-8gb (~$48/mo)
-# Hetzner: cx21 (~$5/mo), cx31 (~$10/mo), cx41 (~$18/mo)
-vps_size = "s-4vcpu-8gb"
+# Hetzner: cpx11 (2GB), cpx21 (4GB), cpx31 (8GB), cpx41 (16GB)
+# DigitalOcean: s-2vcpu-4gb, s-4vcpu-8gb
+vps_size = "cpx31"
 
 # Environment name (affects resource naming)
 environment = "staging"
 
 # =============================================================================
-# DOMAIN CONFIGURATION
+# DOMAIN CONFIGURATION (Cloudflare)
 # =============================================================================
 
 # Your domain name (required)
-# DNS must be configured to point to VPS IP after deployment
-domain = "tamshai.example.com"
+# Configure Cloudflare DNS A record to point to VPS IP after deployment
+# Cloudflare SSL/TLS mode: Flexible or Full
+domain = "staging.tamshai.com"
 
-# Email for Let's Encrypt certificates (required)
-email = "admin@example.com"
+# Email for notifications
+email = "admin@tamshai.com"
 
 # =============================================================================
-# APPLICATION SECRETS
+# APPLICATION SECRETS - ALL VIA ENVIRONMENT VARIABLES
 # =============================================================================
-
-# Claude API key (get from https://console.anthropic.com/settings/keys)
-claude_api_key = "sk-ant-api03-your-key-here"
+#
+# Required secrets (set via TF_VAR_* or GitHub Actions):
+#   TF_VAR_claude_api_key      - Anthropic Claude API key
+#   TF_VAR_hcloud_token        - Hetzner Cloud API token
+#   TF_VAR_keycloak_admin_pass - Keycloak admin password
+#   TF_VAR_postgres_password   - PostgreSQL root password
+#   TF_VAR_mongodb_password    - MongoDB root password
+#   TF_VAR_minio_password      - MinIO root password
+#
+# NEVER put actual secrets in this file!
 
 # =============================================================================
 # DEPLOYMENT CONFIGURATION
@@ -68,8 +77,8 @@ github_branch = "main"
 # =============================================================================
 
 # IP addresses allowed for SSH access (empty = SSH disabled)
-# Recommended: Keep empty for fully automated deployment
-# Example: ["1.2.3.4/32", "5.6.7.8/32"]
+# For staging: Allow all (protected by fail2ban + SSH key auth)
+# For production: Restrict to specific IPs
 allowed_ssh_ips = []
 
 # Path to SSH public key (only used if allowed_ssh_ips is not empty)
