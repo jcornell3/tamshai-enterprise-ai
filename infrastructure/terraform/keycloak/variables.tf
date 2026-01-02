@@ -42,6 +42,13 @@ variable "mcp_gateway_client_secret" {
   default     = "test-client-secret"
 }
 
+variable "mcp_hr_service_client_secret" {
+  description = "Client secret for MCP HR Service (identity sync)"
+  type        = string
+  sensitive   = true
+  default     = "hr-service-secret"
+}
+
 variable "tls_insecure_skip_verify" {
   description = "Skip TLS verification (for local dev with self-signed certs)"
   type        = bool

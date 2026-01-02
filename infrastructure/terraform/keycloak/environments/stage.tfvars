@@ -15,9 +15,10 @@ keycloak_admin_user = "admin"
 realm_name         = "tamshai-corp"
 realm_display_name = "Tamshai Corporation - Staging"
 
-# Test credentials (staging - should be different from dev)
-# test_user_password         = "PROVIDE_VIA_ENV_VAR"  # Set via TF_VAR_test_user_password
-# mcp_gateway_client_secret  = "PROVIDE_VIA_ENV_VAR"  # Set via TF_VAR_mcp_gateway_client_secret
+# Secrets (staging - provided via TF_VAR_* environment variables or GitHub Secrets)
+# test_user_password              = "PROVIDE_VIA_ENV_VAR"  # Set via TF_VAR_test_user_password
+# mcp_gateway_client_secret       = "PROVIDE_VIA_ENV_VAR"  # Set via TF_VAR_mcp_gateway_client_secret
+# mcp_hr_service_client_secret    = "PROVIDE_VIA_ENV_VAR"  # Set via TF_VAR_mcp_hr_service_client_secret
 
 # Environment
 environment = "stage"

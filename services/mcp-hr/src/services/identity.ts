@@ -31,6 +31,8 @@ export const AuditAction = {
   USER_TERMINATED: 'USER_TERMINATED',
   USER_DELETED: 'USER_DELETED',
   DELETION_BLOCKED: 'DELETION_BLOCKED',
+  BULK_SYNC_STARTED: 'BULK_SYNC_STARTED',
+  BULK_SYNC_COMPLETED: 'BULK_SYNC_COMPLETED',
 } as const;
 
 export type AuditActionType = (typeof AuditAction)[keyof typeof AuditAction];
@@ -87,6 +89,27 @@ export interface TerminationResult {
 }
 
 /**
+ * Result of bulk sync operation
+ */
+export interface BulkSyncResult {
+  success: boolean;
+  totalEmployees: number;
+  created: number;
+  skipped: number;
+  errors: SyncError[];
+  duration: number;
+}
+
+/**
+ * Individual sync error
+ */
+export interface SyncError {
+  employeeId: string;
+  email: string;
+  error: string;
+}
+
+/**
  * Keycloak user representation (subset used by IdentityService)
  */
 export interface KcUserRepresentation {
@@ -124,6 +147,7 @@ export interface KcAdminClient {
     create(user: Partial<KcUserRepresentation>): Promise<{ id: string }>;
     update(query: { id: string }, user: Partial<KcUserRepresentation>): Promise<void>;
     del(query: { id: string }): Promise<void>;
+    find(query: { email?: string; username?: string }): Promise<KcUserRepresentation[]>;
     findOne(query: { id: string }): Promise<KcUserRepresentation | null>;
     addClientRoleMappings(params: {
       id: string;
@@ -185,6 +209,12 @@ const SQL = {
 
   SELECT_EMPLOYEE_BY_ID:
     'SELECT id, email, keycloak_user_id FROM hr.employees WHERE id = $1',
+
+  SELECT_ALL_ACTIVE_EMPLOYEES:
+    `SELECT id, email, first_name AS "firstName", last_name AS "lastName", department
+     FROM hr.employees
+     WHERE status = 'active' AND keycloak_user_id IS NULL
+     ORDER BY id`,
 
   UPDATE_EMPLOYEE_TERMINATED:
     "UPDATE hr.employees SET status = 'terminated', terminated_at = NOW() WHERE id = $1",
@@ -462,5 +492,134 @@ export class IdentityService {
         email,
       }),
     ]);
+  }
+
+  // ============================================================================
+  // Bulk Sync Operations
+  // ============================================================================
+
+  /**
+   * Synchronize all active HR employees to Keycloak.
+   *
+   * This method provisions users who:
+   * - Have status = 'active' in HR database
+   * - Do NOT have a keycloak_user_id set (not yet provisioned)
+   *
+   * For each employee, it:
+   * 1. Checks if user already exists in Keycloak by email
+   * 2. Creates new Keycloak user if not found
+   * 3. Assigns department role
+   * 4. Updates employee record with keycloak_user_id
+   *
+   * This is idempotent - safe to run multiple times.
+   *
+   * @returns BulkSyncResult with counts of created, skipped, and errors
+   */
+  async syncAllEmployees(): Promise<BulkSyncResult> {
+    const startTime = Date.now();
+    const errors: SyncError[] = [];
+    let created = 0;
+    let skipped = 0;
+
+    // Log sync start
+    await this.db.query(SQL.INSERT_AUDIT_LOG, [
+      null,
+      null,
+      AuditAction.BULK_SYNC_STARTED,
+      JSON.stringify({ timestamp: new Date().toISOString() }),
+    ]);
+
+    // Fetch all active employees without Keycloak ID
+    const result = await this.db.query(SQL.SELECT_ALL_ACTIVE_EMPLOYEES);
+    const employees: EmployeeData[] = result.rows;
+
+    // Process each employee
+    for (const employee of employees) {
+      try {
+        const wasCreated = await this.syncEmployee(employee);
+        if (wasCreated) {
+          created++;
+        } else {
+          skipped++;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        errors.push({
+          employeeId: employee.id,
+          email: employee.email,
+          error: message,
+        });
+      }
+    }
+
+    const duration = Date.now() - startTime;
+
+    // Log sync completion
+    await this.db.query(SQL.INSERT_AUDIT_LOG, [
+      null,
+      null,
+      AuditAction.BULK_SYNC_COMPLETED,
+      JSON.stringify({
+        totalEmployees: employees.length,
+        created,
+        skipped,
+        errorCount: errors.length,
+        duration,
+      }),
+    ]);
+
+    return {
+      success: errors.length === 0,
+      totalEmployees: employees.length,
+      created,
+      skipped,
+      errors,
+      duration,
+    };
+  }
+
+  /**
+   * Sync a single employee to Keycloak.
+   *
+   * @param employee - Employee data to sync
+   * @returns true if user was created, false if skipped (already exists)
+   */
+  private async syncEmployee(employee: EmployeeData): Promise<boolean> {
+    // Check if user already exists in Keycloak by email
+    const existingUsers = await this.kcAdmin.users.find({ email: employee.email });
+
+    if (existingUsers.length > 0) {
+      // User exists in Keycloak - update employee record with keycloak_user_id
+      const keycloakUserId = existingUsers[0].id!;
+      await this.db.query(SQL.UPDATE_EMPLOYEE_KEYCLOAK_ID, [
+        keycloakUserId,
+        employee.id,
+      ]);
+      return false; // Skipped, already exists
+    }
+
+    // User doesn't exist - create in transaction
+    const client = await this.db.connect();
+    try {
+      await client.query('BEGIN');
+      await this.createUserInKeycloak(employee, client);
+      await client.query('COMMIT');
+      return true; // Created
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Get count of employees pending sync (active without keycloak_user_id)
+   */
+  async getPendingSyncCount(): Promise<number> {
+    const result = await this.db.query(
+      `SELECT COUNT(*) FROM hr.employees WHERE status = 'active' AND keycloak_user_id IS NULL`
+    );
+    return parseInt(result.rows[0].count, 10);
   }
 }

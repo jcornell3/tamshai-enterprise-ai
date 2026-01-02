@@ -130,6 +130,13 @@ variable "allowed_ssh_ips" {
   default     = [] # No SSH by default - fully automated
 }
 
+variable "mcp_hr_service_client_secret" {
+  description = "Client secret for MCP HR Service (identity sync)"
+  type        = string
+  sensitive   = true
+  default     = "" # If empty, a random secret will be generated
+}
+
 # =============================================================================
 # PROVIDERS
 # =============================================================================
@@ -173,6 +180,11 @@ resource "random_password" "minio_password" {
 
 resource "random_password" "jwt_secret" {
   length  = 64
+  special = false
+}
+
+resource "random_password" "mcp_hr_service_secret" {
+  length  = 32
   special = false
 }
 
@@ -375,20 +387,24 @@ locals {
     length(hcloud_server.tamshai) > 0 ? hcloud_server.tamshai[0].ipv4_address : ""
   )
 
+  # Use provided secret or generate one
+  mcp_hr_service_secret = var.mcp_hr_service_client_secret != "" ? var.mcp_hr_service_client_secret : random_password.mcp_hr_service_secret.result
+
   cloud_init_config = templatefile("${path.module}/cloud-init.yaml", {
-    domain               = var.domain
-    email                = var.email
-    environment          = var.environment
-    github_repo          = var.github_repo
-    github_branch        = var.github_branch
-    claude_api_key       = var.claude_api_key
-    postgres_password    = random_password.postgres_password.result
-    keycloak_admin_pass  = random_password.keycloak_admin_password.result
-    keycloak_db_password = random_password.keycloak_db_password.result
-    mongodb_password     = random_password.mongodb_password.result
-    minio_password       = random_password.minio_password.result
-    jwt_secret           = random_password.jwt_secret.result
-    root_password        = random_password.root_password.result
+    domain                        = var.domain
+    email                         = var.email
+    environment                   = var.environment
+    github_repo                   = var.github_repo
+    github_branch                 = var.github_branch
+    claude_api_key                = var.claude_api_key
+    postgres_password             = random_password.postgres_password.result
+    keycloak_admin_pass           = random_password.keycloak_admin_password.result
+    keycloak_db_password          = random_password.keycloak_db_password.result
+    mongodb_password              = random_password.mongodb_password.result
+    minio_password                = random_password.minio_password.result
+    jwt_secret                    = random_password.jwt_secret.result
+    root_password                 = random_password.root_password.result
+    mcp_hr_service_client_secret  = local.mcp_hr_service_secret
   })
 }
 

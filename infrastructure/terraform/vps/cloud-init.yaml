@@ -79,6 +79,9 @@ write_files:
       JWKS_URI=http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM=tamshai-corp
 
+      # Identity Sync (HR -> Keycloak provisioning)
+      MCP_HR_SERVICE_CLIENT_SECRET=${mcp_hr_service_client_secret}
+
       # Web Apps
       # NOTE: Authority URL must include full realm path for OIDC discovery
       VITE_KEYCLOAK_URL=https://${domain}/auth/realms/tamshai-corp

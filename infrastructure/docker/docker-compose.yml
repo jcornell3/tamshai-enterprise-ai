@@ -513,6 +513,44 @@ services:
     networks:
       - tamshai-network
 
+  # =============================================================================
+  # IDENTITY SYNC (One-shot: Syncs HR employees to Keycloak)
+  # =============================================================================
+  # This service runs once after deployment to sync all HR database employees
+  # to Keycloak. It's a one-shot container that exits after completion.
+  # NOTE: Requires Keycloak Terraform to be applied first (creates mcp-hr-service client)
+  identity-sync:
+    build:
+      context: ../../services/mcp-hr
+      dockerfile: Dockerfile.sync
+    container_name: tamshai-identity-sync
+    environment:
+      # PostgreSQL connection (uses internal Docker network)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: tamshai_hr
+      POSTGRES_USER: tamshai
+      POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:-tamshai_password}
+      # Keycloak connection (uses internal Docker network)
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: tamshai-corp
+      KEYCLOAK_CLIENT_ID: mcp-hr-service
+      KEYCLOAK_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-dev-secret}
+      # Redis for BullMQ cleanup queue
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # One-shot container - runs sync and exits
+    restart: "no"
+    networks:
+      - tamshai-network
+
 # =============================================================================
 # NETWORKS & VOLUMES
 # =============================================================================

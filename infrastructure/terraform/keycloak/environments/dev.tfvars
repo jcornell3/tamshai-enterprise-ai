@@ -12,8 +12,9 @@ realm_name         = "tamshai-corp"
 realm_display_name = "Tamshai Corporation - Development"
 
 # Test credentials (dev only - NOT for production)
-test_user_password        = "password123"
-mcp_gateway_client_secret = "test-client-secret"
+test_user_password           = "password123"
+mcp_gateway_client_secret    = "test-client-secret"
+mcp_hr_service_client_secret = "hr-service-dev-secret"
 
 # Environment
 environment = "dev"

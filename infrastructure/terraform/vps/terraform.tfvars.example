@@ -53,12 +53,16 @@ email = "admin@tamshai.com"
 # =============================================================================
 #
 # Required secrets (set via TF_VAR_* or GitHub Actions):
-#   TF_VAR_claude_api_key      - Anthropic Claude API key
-#   TF_VAR_hcloud_token        - Hetzner Cloud API token
-#   TF_VAR_keycloak_admin_pass - Keycloak admin password
-#   TF_VAR_postgres_password   - PostgreSQL root password
-#   TF_VAR_mongodb_password    - MongoDB root password
-#   TF_VAR_minio_password      - MinIO root password
+#   TF_VAR_claude_api_key                - Anthropic Claude API key
+#   TF_VAR_hcloud_token                  - Hetzner Cloud API token
+#   TF_VAR_mcp_hr_service_client_secret  - Identity sync service account secret
+#
+# Auto-generated secrets (Terraform generates if not provided):
+#   - keycloak_admin_pass  - Keycloak admin password
+#   - postgres_password    - PostgreSQL root password
+#   - mongodb_password     - MongoDB root password
+#   - minio_password       - MinIO root password
+#   - jwt_secret           - JWT signing secret
 #
 # NEVER put actual secrets in this file!
 

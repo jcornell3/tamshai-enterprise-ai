@@ -284,6 +284,48 @@ resource "keycloak_openid_client_default_scopes" "mcp_gateway_default_scopes" {
 }
 
 # ============================================================
+# MCP HR Service Client (Service Account for Identity Sync)
+# ============================================================
+# This client is used by the mcp-hr service to provision users
+# in Keycloak via the Admin API. It authenticates using
+# client_credentials grant (no user interaction).
+
+resource "keycloak_openid_client" "mcp_hr_service" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = "mcp-hr-service"
+  name      = "MCP HR Service"
+  enabled   = true
+
+  access_type                  = "CONFIDENTIAL"
+  client_secret                = var.mcp_hr_service_client_secret
+  service_accounts_enabled     = true
+  standard_flow_enabled        = false  # No browser auth
+  direct_access_grants_enabled = false  # No password grant
+
+  valid_redirect_uris = []  # Not used for service accounts
+}
+
+# Service Account User - automatically created when service_accounts_enabled = true
+# We need to assign realm-admin role for Keycloak Admin API access
+data "keycloak_openid_client" "realm_management" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = "realm-management"
+}
+
+data "keycloak_role" "manage_users" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = data.keycloak_openid_client.realm_management.id
+  name      = "manage-users"
+}
+
+resource "keycloak_openid_client_service_account_role" "mcp_hr_service_manage_users" {
+  realm_id                = keycloak_realm.tamshai_corp.id
+  service_account_user_id = keycloak_openid_client.mcp_hr_service.service_account_user_id
+  client_id               = data.keycloak_openid_client.realm_management.id
+  role                    = data.keycloak_role.manage_users.name
+}
+
+# ============================================================
 # Test Users
 # ============================================================
 

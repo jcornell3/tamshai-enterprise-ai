@@ -1,0 +1,52 @@
+# Tamshai Corp Identity Sync
+# Runs the identity sync script to provision HR employees in Keycloak
+#
+# This is a one-shot container that:
+# 1. Waits for PostgreSQL and Keycloak to be healthy
+# 2. Syncs all active HR employees to Keycloak
+# 3. Exits with appropriate exit code
+#
+# Exit codes:
+#   0 - Success
+#   1 - Partial failure (some errors)
+#   2 - Connection failure
+#   3 - Authentication failure
+
+# =============================================================================
+# BUILD STAGE
+# =============================================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies for tsx)
+RUN npm ci
+
+# Copy source code
+COPY tsconfig.json ./
+COPY src ./src
+
+# =============================================================================
+# RUNTIME STAGE
+# =============================================================================
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+
+# Install wait-for-it script dependencies
+RUN apk add --no-cache bash curl
+
+# Copy everything from builder (we need tsx for runtime)
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./
+
+# Set environment
+ENV NODE_ENV=production
+
+# Default command runs the sync script
+CMD ["npx", "tsx", "src/scripts/sync-identities.ts"]
