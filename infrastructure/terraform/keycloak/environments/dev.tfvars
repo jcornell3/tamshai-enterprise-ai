@@ -24,11 +24,11 @@ tls_insecure_skip_verify = true
 
 # Valid redirect URIs for local development
 valid_redirect_uris = [
-  "http://localhost:3100/*",   # MCP Gateway
-  "http://localhost:3000/*",   # Web UI dev server
-  "http://localhost:4000/*",   # Web Portal
-  "http://localhost:4001/*",   # Web HR
-  "http://localhost:4002/*",   # Web Finance
-  "http://localhost:4003/*",   # Web Sales
-  "http://localhost:4004/*",   # Web Support
+  "http://localhost:3100/*", # MCP Gateway
+  "http://localhost:3000/*", # Web UI dev server
+  "http://localhost:4000/*", # Web Portal
+  "http://localhost:4001/*", # Web HR
+  "http://localhost:4002/*", # Web Finance
+  "http://localhost:4003/*", # Web Sales
+  "http://localhost:4004/*", # Web Support
 ]

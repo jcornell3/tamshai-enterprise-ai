@@ -391,20 +391,20 @@ locals {
   mcp_hr_service_secret = var.mcp_hr_service_client_secret != "" ? var.mcp_hr_service_client_secret : random_password.mcp_hr_service_secret.result
 
   cloud_init_config = templatefile("${path.module}/cloud-init.yaml", {
-    domain                        = var.domain
-    email                         = var.email
-    environment                   = var.environment
-    github_repo                   = var.github_repo
-    github_branch                 = var.github_branch
-    claude_api_key                = var.claude_api_key
-    postgres_password             = random_password.postgres_password.result
-    keycloak_admin_pass           = random_password.keycloak_admin_password.result
-    keycloak_db_password          = random_password.keycloak_db_password.result
-    mongodb_password              = random_password.mongodb_password.result
-    minio_password                = random_password.minio_password.result
-    jwt_secret                    = random_password.jwt_secret.result
-    root_password                 = random_password.root_password.result
-    mcp_hr_service_client_secret  = local.mcp_hr_service_secret
+    domain                       = var.domain
+    email                        = var.email
+    environment                  = var.environment
+    github_repo                  = var.github_repo
+    github_branch                = var.github_branch
+    claude_api_key               = var.claude_api_key
+    postgres_password            = random_password.postgres_password.result
+    keycloak_admin_pass          = random_password.keycloak_admin_password.result
+    keycloak_db_password         = random_password.keycloak_db_password.result
+    mongodb_password             = random_password.mongodb_password.result
+    minio_password               = random_password.minio_password.result
+    jwt_secret                   = random_password.jwt_secret.result
+    root_password                = random_password.root_password.result
+    mcp_hr_service_client_secret = local.mcp_hr_service_secret
   })
 }
 
