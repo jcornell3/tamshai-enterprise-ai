@@ -968,7 +968,7 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
       const result = await client.query(
         `INSERT INTO hr.employees (name, email, department) VALUES ($1, $2, $3) RETURNING *`,
-        ['Dan Williams', `dan-${Date.now()}@tamshai.com`, 'Finance']
+        ['Dan Williams', `dan-${crypto.randomUUID()}@tamshai.com`, 'Finance']
       );
 
       employeeId = result.rows[0].id;
@@ -1041,7 +1041,7 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
       const result = await client.query(
         `INSERT INTO hr.employees (name, email, department) VALUES ($1, $2, $3) RETURNING *`,
-        ['Eve Thompson', `eve-${Date.now()}@tamshai.com`, 'HR']
+        ['Eve Thompson', `eve-${crypto.randomUUID()}@tamshai.com`, 'HR']
       );
 
       const employeeId = result.rows[0].id;
@@ -1094,7 +1094,7 @@ describe('Identity Provisioning (Atomic Architecture)', () => {
 
       const result = await client.query(
         `INSERT INTO hr.employees (name, email, department) VALUES ($1, $2, $3) RETURNING *`,
-        ['Frank Davis', `frank-${Date.now()}@tamshai.com`, 'Support']
+        ['Frank Davis', `frank-${crypto.randomUUID()}@tamshai.com`, 'Support']
       );
 
       const employeeId = result.rows[0].id;
