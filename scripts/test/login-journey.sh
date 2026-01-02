@@ -45,15 +45,25 @@ if [ "$ENV" = "dev" ]; then
     BASE_URL="https://www.tamshai.local"
     KEYCLOAK_URL="https://www.tamshai.local/auth"
     # Skip SSL verification for local self-signed certs
-    CURL_OPTS="-k -sf"
-else
+    INSECURE="-k"
+elif [ "$ENV" = "prod" ]; then
     BASE_URL="https://www.tamshai.com"
     KEYCLOAK_URL="https://www.tamshai.com/auth"
-    CURL_OPTS="-sf"
+    INSECURE=""
+else
+    # stage
+    BASE_URL="https://www.tamshai.com"
+    KEYCLOAK_URL="https://www.tamshai.com/auth"
+    INSECURE=""
 fi
 
 FAILED=0
 PASSED=0
+
+# Wrapper for curl with common options
+do_curl() {
+    curl $INSECURE -sf --max-time 10 "$@" 2>/dev/null
+}
 
 test_step() {
     local name="$1"
@@ -76,7 +86,7 @@ test_home_page() {
     log_step "Testing home page..."
 
     local response
-    response=$(curl $CURL_OPTS -o /dev/null -w "%{http_code}" "$BASE_URL/" 2>/dev/null) || response="000"
+    response=$(do_curl -o /dev/null -w "%{http_code}" "$BASE_URL/") || response="000"
 
     if [ "$response" = "200" ]; then
         test_step "Home page returns 200" 0
@@ -89,7 +99,7 @@ test_employee_login_page() {
     log_step "Testing employee login page..."
 
     local response
-    response=$(curl $CURL_OPTS -o /dev/null -w "%{http_code}" "$BASE_URL/employee-login.html" 2>/dev/null) || response="000"
+    response=$(do_curl -o /dev/null -w "%{http_code}" "$BASE_URL/employee-login.html") || response="000"
 
     if [ "$response" = "200" ]; then
         test_step "Employee login page returns 200" 0
@@ -99,16 +109,16 @@ test_employee_login_page() {
 
     # Check for SSO button
     local content
-    content=$(curl $CURL_OPTS "$BASE_URL/employee-login.html" 2>/dev/null) || content=""
+    content=$(do_curl "$BASE_URL/employee-login.html") || content=""
 
-    if echo "$content" | grep -q "sso-login-btn"; then
+    if [ -n "$content" ] && echo "$content" | grep -q "sso-login-btn"; then
         test_step "SSO login button exists" 0
     else
         test_step "SSO login button exists" 1
     fi
 
     # Check for PKCE code_challenge in JavaScript
-    if echo "$content" | grep -q "code_challenge"; then
+    if [ -n "$content" ] && echo "$content" | grep -q "code_challenge"; then
         test_step "PKCE support implemented" 0
     else
         test_step "PKCE support implemented" 1
@@ -119,7 +129,7 @@ test_keycloak_availability() {
     log_step "Testing Keycloak availability..."
 
     local response
-    response=$(curl $CURL_OPTS -o /dev/null -w "%{http_code}" "$KEYCLOAK_URL/realms/tamshai-corp/.well-known/openid-configuration" 2>/dev/null) || response="000"
+    response=$(do_curl -o /dev/null -w "%{http_code}" "$KEYCLOAK_URL/realms/tamshai-corp/.well-known/openid-configuration") || response="000"
 
     if [ "$response" = "200" ]; then
         test_step "Keycloak OIDC discovery endpoint" 0
@@ -128,7 +138,7 @@ test_keycloak_availability() {
     fi
 
     # Check health endpoint
-    response=$(curl $CURL_OPTS -o /dev/null -w "%{http_code}" "$KEYCLOAK_URL/health/ready" 2>/dev/null) || response="000"
+    response=$(do_curl -o /dev/null -w "%{http_code}" "$KEYCLOAK_URL/health/ready") || response="000"
 
     if [ "$response" = "200" ]; then
         test_step "Keycloak health endpoint" 0
@@ -161,7 +171,7 @@ test_sso_redirect() {
 
     # Follow redirect to Keycloak login page
     local response
-    response=$(curl $CURL_OPTS -o /dev/null -w "%{http_code}" -L "$oauth_url" 2>/dev/null) || response="000"
+    response=$(curl $INSECURE -sf --max-time 15 -o /dev/null -w "%{http_code}" -L "$oauth_url" 2>/dev/null) || response="000"
 
     if [ "$response" = "200" ]; then
         test_step "OAuth redirect to Keycloak login page" 0
@@ -171,7 +181,7 @@ test_sso_redirect() {
 
     # Check that the login form is present
     local content
-    content=$(curl $CURL_OPTS -L "$oauth_url" 2>/dev/null) || content=""
+    content=$(curl $INSECURE -sf --max-time 15 -L "$oauth_url" 2>/dev/null) || content=""
 
     if echo "$content" | grep -q "kc-form-login\|kc-login\|username"; then
         test_step "Keycloak login form present" 0
@@ -195,7 +205,7 @@ test_login_with_credentials() {
     local login_url="$KEYCLOAK_URL/realms/tamshai-corp/protocol/openid-connect/token"
 
     local response
-    response=$(curl $CURL_OPTS -X POST -o /dev/null -w "%{http_code}" \
+    response=$(curl $INSECURE -sf --max-time 10 -X POST -o /dev/null -w "%{http_code}" \
         -d "client_id=tamshai-website" \
         -d "grant_type=password" \
         -d "username=test" \
