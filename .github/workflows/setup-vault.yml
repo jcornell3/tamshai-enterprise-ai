@@ -304,15 +304,23 @@ jobs:
           # Generate CA for signing
           vault write ssh-client-signer/config/ca generate_signing_key=true || echo "CA may already exist"
 
-          # Create role for GitHub deployments
-          vault write ssh-client-signer/roles/github-deploy \
-            key_type=ca \
-            allow_user_certificates=true \
-            default_user=root \
-            allowed_users="root,tamshai" \
-            default_extensions="permit-pty,permit-port-forwarding" \
-            ttl=10m \
-            max_ttl=30m
+          # Create role for GitHub deployments using JSON file
+          cat > /tmp/ssh-role.json << 'JSONEOF'
+          {
+            "key_type": "ca",
+            "allow_user_certificates": true,
+            "default_user": "root",
+            "allowed_users": "root,tamshai",
+            "default_extensions": {
+              "permit-pty": "",
+              "permit-port-forwarding": ""
+            },
+            "ttl": "10m",
+            "max_ttl": "30m"
+          }
+          JSONEOF
+          vault write ssh-client-signer/roles/github-deploy @/tmp/ssh-role.json
+          rm /tmp/ssh-role.json
 
           # Enable JWT auth for GitHub OIDC
           vault auth enable jwt || echo "JWT auth may already be enabled"
