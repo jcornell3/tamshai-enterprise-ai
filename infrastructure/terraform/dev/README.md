@@ -25,6 +25,29 @@ Full-stack Terraform configuration for local Docker Compose development. Mimics 
 2. **Terraform 1.5+** installed
 3. **Windows PowerShell** (for environment setup script)
 4. **Claude API Key** from https://console.anthropic.com/settings/keys
+5. **Hosts file entry** for HTTPS access (see below)
+
+### Hosts File Setup (Required for HTTPS)
+
+Add the following entry to your hosts file to enable `https://www.tamshai.local`:
+
+**Windows (Admin PowerShell):**
+```powershell
+Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1  tamshai.local www.tamshai.local"
+```
+
+**Linux/macOS:**
+```bash
+echo "127.0.0.1  tamshai.local www.tamshai.local" | sudo tee -a /etc/hosts
+```
+
+**Verify:**
+```bash
+ping tamshai.local
+# Should resolve to 127.0.0.1
+```
+
+**Note:** Terraform will fail with a clear error message if the hosts file entry is missing.
 
 ## Quick Start
 
@@ -84,6 +107,11 @@ terraform apply -var-file=dev.tfvars
 ### 6. Verify Deployment
 
 ```bash
+# Primary access URL (HTTPS)
+terraform output tamshai_local_url
+# Open in browser: https://www.tamshai.local
+# Accept the self-signed certificate warning
+
 # Check all service URLs
 terraform output services
 

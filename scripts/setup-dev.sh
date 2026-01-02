@@ -1,4 +1,19 @@
 #!/bin/bash
+# =============================================================================
+# ⚠️  DEPRECATED - Use Terraform workflow instead
+# =============================================================================
+#
+# This script is deprecated. Please use the Terraform-based setup:
+#
+#   cd infrastructure/terraform/dev
+#   terraform init
+#   terraform apply -var-file=dev.tfvars
+#
+# See infrastructure/terraform/dev/README.md for full instructions.
+# This script remains for legacy compatibility only.
+#
+# =============================================================================
+
 # Tamshai Corp Enterprise AI - Development Setup Script
 # This script sets up the local development environment
 

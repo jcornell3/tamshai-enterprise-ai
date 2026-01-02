@@ -107,6 +107,41 @@ locals {
       url  = "http://localhost:9100"
       port = 9100
     }
+    caddy = {
+      url  = "https://www.tamshai.local"
+      port = 443
+    }
+  }
+}
+
+# =============================================================================
+# PRE-FLIGHT CHECKS
+# =============================================================================
+
+# Verify hosts file contains tamshai.local entry
+resource "null_resource" "hosts_file_check" {
+  provisioner "local-exec" {
+    interpreter = ["powershell", "-Command"]
+    command     = <<-EOT
+      $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
+      if (Test-Path $hostsPath) {
+        $hosts = Get-Content $hostsPath -Raw
+        if ($hosts -match "tamshai\.local") {
+          Write-Host "✓ tamshai.local found in hosts file" -ForegroundColor Green
+        } else {
+          Write-Host "ERROR: tamshai.local not found in hosts file" -ForegroundColor Red
+          Write-Host ""
+          Write-Host "Please add the following entry to your hosts file:" -ForegroundColor Yellow
+          Write-Host "  127.0.0.1  tamshai.local www.tamshai.local" -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "Run this command as Administrator:" -ForegroundColor Yellow
+          Write-Host "  Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value '127.0.0.1  tamshai.local www.tamshai.local'" -ForegroundColor Cyan
+          exit 1
+        }
+      } else {
+        Write-Host "WARNING: Could not find hosts file at $hostsPath" -ForegroundColor Yellow
+      }
+    EOT
   }
 }
 
@@ -152,7 +187,7 @@ resource "local_file" "docker_env" {
 resource "null_resource" "docker_compose_up" {
   count = var.auto_start_services ? 1 : 0
 
-  depends_on = [local_file.docker_env]
+  depends_on = [local_file.docker_env, null_resource.hosts_file_check]
 
   triggers = {
     env_file_hash = local_file.docker_env.content
@@ -220,7 +255,20 @@ resource "null_resource" "wait_for_services" {
         sleep 2
       done
 
+      # Wait for Caddy (HTTPS proxy)
+      for i in {1..30}; do
+        if curl -sf -k https://localhost > /dev/null 2>&1; then
+          echo "Caddy HTTPS ready!"
+          break
+        fi
+        echo "Waiting for Caddy... ($i/30)"
+        sleep 2
+      done
+
       echo "All critical services are healthy!"
+      echo ""
+      echo "Access your dev environment at: https://www.tamshai.local"
+      echo "(Accept the self-signed certificate warning in your browser)"
     EOT
   }
 }

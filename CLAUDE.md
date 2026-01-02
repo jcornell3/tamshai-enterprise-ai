@@ -57,15 +57,24 @@ This ensures the user can immediately pull and test the changes on their local m
 ### Essential Commands
 
 ```bash
-# Full environment setup
+# Full environment setup (Terraform - recommended)
+# Prerequisites: Add hosts file entry first (see README)
+cd infrastructure/terraform/dev
+terraform init                           # First time only
+terraform apply -var-file=dev.tfvars     # Deploy environment
+# Access at: https://www.tamshai.local
+
+# Teardown and redeploy
+terraform destroy -var-file=dev.tfvars   # Stop services
+terraform apply -var-file=dev.tfvars     # Fresh deploy
+
+# Legacy setup script (deprecated)
 ./scripts/setup-dev.sh
 
-# Start all services
+# Manual docker-compose commands
 cd infrastructure/docker
-docker compose up -d
-
-# Stop all services
-docker compose down
+docker compose up -d                      # Start all services
+docker compose down                       # Stop all services
 
 # View service logs
 docker compose logs -f mcp-gateway
