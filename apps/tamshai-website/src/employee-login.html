@@ -134,18 +134,18 @@
                 keycloakUrl = 'http://localhost:8180';
                 redirectUri = window.location.origin + '/app/';
             } else if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local') {
-                // Dev environment with Caddy
+                // Dev environment with Caddy - portal is deployed
                 keycloakUrl = window.location.origin + '/auth';
                 redirectUri = window.location.origin + '/app/';
             } else if (hostname.includes('5.78.159.29') || hostname.includes('tamshai.com')) {
                 // Stage/Production environment (VPS)
-                // Use same-origin /auth path (via Caddy reverse proxy)
+                // Portal not yet deployed on stage - redirect to homepage for now
                 keycloakUrl = window.location.origin + '/auth';
-                redirectUri = window.location.origin + '/app/';
+                redirectUri = window.location.origin + '/';
             } else {
                 // Unknown environment - try same-origin
                 keycloakUrl = window.location.origin + '/auth';
-                redirectUri = window.location.origin + '/app/';
+                redirectUri = window.location.origin + '/';
             }
 
             // Build the Keycloak authorization URL
