@@ -30,6 +30,27 @@ resource "keycloak_realm" "tamshai_corp" {
 
   # Password policy (stronger for production)
   password_policy = var.environment == "prod" ? "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1)" : "length(8)"
+
+  # OTP Policy - enable TOTP for MFA
+  otp_policy {
+    type            = "totp"
+    algorithm       = "HmacSHA1"
+    digits          = 6
+    initial_counter = 0
+    look_ahead_window = 1
+    period          = 30
+  }
+}
+
+# ============================================================
+# Required Action: Configure TOTP
+# ============================================================
+resource "keycloak_required_action" "configure_totp" {
+  realm_id       = keycloak_realm.tamshai_corp.id
+  alias          = "CONFIGURE_TOTP"
+  enabled        = true
+  default_action = true  # New users will be prompted to configure TOTP
+  name           = "Configure OTP"
 }
 
 # ============================================================
@@ -281,6 +302,8 @@ resource "keycloak_user" "alice_chen" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "alice_chen_roles" {
@@ -308,6 +331,8 @@ resource "keycloak_user" "bob_martinez" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "bob_martinez_roles" {
@@ -335,6 +360,8 @@ resource "keycloak_user" "carol_johnson" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "carol_johnson_roles" {
@@ -362,6 +389,8 @@ resource "keycloak_user" "dan_williams" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "dan_williams_roles" {
@@ -389,6 +418,8 @@ resource "keycloak_user" "eve_thompson" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 resource "keycloak_user_roles" "eve_thompson_roles" {
@@ -415,6 +446,8 @@ resource "keycloak_user" "frank_davis" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 # Nina Patel - Engineering Manager (no roles yet)
@@ -432,6 +465,8 @@ resource "keycloak_user" "nina_patel" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
 
 # Marcus Johnson - Software Engineer (no roles yet)
@@ -449,4 +484,6 @@ resource "keycloak_user" "marcus_johnson" {
     value     = var.test_user_password
     temporary = false
   }
+
+  required_actions = ["CONFIGURE_TOTP"]
 }
