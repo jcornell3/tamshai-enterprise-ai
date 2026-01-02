@@ -148,8 +148,9 @@
             }
 
             // Build the Keycloak authorization URL
-            const realm = 'tamshai';
+            const realm = 'tamshai-corp';
             const clientId = 'tamshai-website';
+            // Note: Keycloak is behind /auth path via Caddy reverse proxy
             const authUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth`;
 
             const params = new URLSearchParams({

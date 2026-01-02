@@ -662,6 +662,49 @@
         "email",
         "roles"
       ]
+    },
+    {
+      "clientId": "tamshai-website",
+      "name": "Tamshai Corporate Website",
+      "description": "Corporate website SSO login for employee services",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:8080/employee-services.html",
+        "http://localhost:8080/*",
+        "https://tamshai.local/employee-services.html",
+        "https://tamshai.local/*",
+        "https://www.tamshai.local/employee-services.html",
+        "https://www.tamshai.local/*",
+        "https://5.78.159.29/employee-services.html",
+        "https://5.78.159.29/*",
+        "https://tamshai.com/employee-services.html",
+        "https://tamshai.com/*",
+        "https://www.tamshai.com/employee-services.html",
+        "https://www.tamshai.com/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "https://tamshai.local",
+        "https://www.tamshai.local",
+        "https://5.78.159.29",
+        "https://tamshai.com",
+        "https://www.tamshai.com"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://5.78.159.29/*##https://tamshai.com/*##https://www.tamshai.com/*"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
     }
   ],
   "clientScopes": [
