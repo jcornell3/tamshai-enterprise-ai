@@ -145,18 +145,38 @@ jobs:
           echo "Updating Vault CA public key..."
           vault read -field=public_key ssh-client-signer/config/ca > /etc/ssh/vault-ca.pub
           chmod 644 /etc/ssh/vault-ca.pub
-          echo "CA public key:"
-          cat /etc/ssh/vault-ca.pub
+          echo "CA public key fingerprint:"
+          ssh-keygen -lf /etc/ssh/vault-ca.pub
 
-          # Add TrustedUserCAKeys to sshd config if not already there
-          if ! grep -q "TrustedUserCAKeys" /etc/ssh/sshd_config; then
+          # Check if TrustedUserCAKeys is already in sshd_config
+          if grep -q "^TrustedUserCAKeys" /etc/ssh/sshd_config; then
+            echo "TrustedUserCAKeys already configured"
+          else
+            # Add TrustedUserCAKeys to sshd config
+            echo "" >> /etc/ssh/sshd_config
+            echo "# Vault SSH Certificate Authentication" >> /etc/ssh/sshd_config
             echo "TrustedUserCAKeys /etc/ssh/vault-ca.pub" >> /etc/ssh/sshd_config
             echo "Added TrustedUserCAKeys to sshd_config"
           fi
 
-          # Always reload sshd to pick up new CA key
-          systemctl reload sshd
-          echo "sshd reloaded with updated CA"
+          # Show the relevant sshd config lines
+          echo ""
+          echo "sshd_config TrustedUserCAKeys setting:"
+          grep -n "TrustedUserCAKeys" /etc/ssh/sshd_config
+
+          # Test sshd config syntax
+          echo ""
+          echo "Testing sshd config..."
+          sshd -t && echo "sshd config syntax OK"
+
+          # IMPORTANT: Full restart (not reload) is required for TrustedUserCAKeys changes
+          echo ""
+          echo "Restarting sshd service..."
+          systemctl restart sshd
+          echo "sshd restarted successfully"
+
+          # Verify sshd is running
+          systemctl is-active sshd
           EOF
 
       - name: Test Vault configuration
@@ -189,6 +209,48 @@ jobs:
           echo "=== Configuration Complete ==="
           EOF
 
+      - name: Test Local Certificate Auth
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VAULT_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          echo "=== Testing Certificate Auth Locally on VPS ==="
+          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          export VAULT_ADDR='https://127.0.0.1:8200'
+          export VAULT_SKIP_VERIFY=1
+          TOKEN=$(grep 'Initial Root Token' /root/vault-init.txt | awk '{print $NF}')
+          export VAULT_TOKEN="$TOKEN"
+
+          # Generate test key
+          ssh-keygen -t ed25519 -f /tmp/test_cert_key -N "" -C "test-cert" -q
+
+          # Get signed certificate
+          vault write -field=signed_key ssh-client-signer/sign/github-deploy \
+            public_key=@/tmp/test_cert_key.pub \
+            valid_principals="root" > /tmp/test_cert_key-cert.pub
+
+          echo "Certificate info:"
+          ssh-keygen -L -f /tmp/test_cert_key-cert.pub
+
+          chmod 600 /tmp/test_cert_key
+          chmod 600 /tmp/test_cert_key-cert.pub
+
+          echo ""
+          echo "Testing SSH connection with certificate to localhost..."
+          if ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+            -i /tmp/test_cert_key root@127.0.0.1 "echo '✅ Certificate auth WORKS!'"; then
+            echo "Certificate authentication is working correctly!"
+            RESULT=0
+          else
+            echo "❌ Certificate auth FAILED"
+            RESULT=1
+          fi
+
+          rm -f /tmp/test_cert_key /tmp/test_cert_key.pub /tmp/test_cert_key-cert.pub
+          exit $RESULT
+          EOF
+
       - name: Summary
         run: |
           echo "## Vault Roles Fixed" >> $GITHUB_STEP_SUMMARY
@@ -196,7 +258,8 @@ jobs:
           echo "- SSH signing role created" >> $GITHUB_STEP_SUMMARY
           echo "- JWT role for GitHub Actions created" >> $GITHUB_STEP_SUMMARY
           echo "- VPS configured to trust Vault CA" >> $GITHUB_STEP_SUMMARY
+          echo "- Certificate auth tested successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
-          echo "1. Add Vault credentials to GitHub Secrets" >> $GITHUB_STEP_SUMMARY
-          echo "2. Update deployment workflows to use Vault SSH" >> $GITHUB_STEP_SUMMARY
+          echo "1. Run deploy-mcp-gateway.yml to verify Vault SSH works end-to-end" >> $GITHUB_STEP_SUMMARY
+          echo "2. Remove static VPS_SSH_KEY from GitHub Secrets" >> $GITHUB_STEP_SUMMARY
