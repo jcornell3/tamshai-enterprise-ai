@@ -331,13 +331,15 @@ describe('IdentityService Integration Tests', () => {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
 
-      CREATE TABLE IF NOT EXISTS hr.audit_access_logs (
+      -- Production audit log schema (matches hr-data.sql)
+      CREATE TABLE IF NOT EXISTS hr.access_audit_log (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        employee_id UUID,
+        user_email VARCHAR(255) NOT NULL,
         action VARCHAR(50) NOT NULL,
-        keycloak_user_id VARCHAR(255),
-        permissions_snapshot JSONB,
-        details JSONB,
+        resource VARCHAR(100),
+        target_id UUID,
+        access_decision VARCHAR(20),
+        access_justification TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
@@ -355,7 +357,7 @@ describe('IdentityService Integration Tests', () => {
 
     // Cleanup test data from database
     await db.query(`
-      DELETE FROM hr.audit_access_logs WHERE employee_id IN (
+      DELETE FROM hr.access_audit_log WHERE target_id IN (
         SELECT id FROM hr.employees WHERE email LIKE '%@integration-test.tamshai.com'
       );
       DELETE FROM hr.employees WHERE email LIKE '%@integration-test.tamshai.com';
@@ -434,8 +436,8 @@ describe('IdentityService Integration Tests', () => {
 
         // Verify audit log
         const auditLog = await db.query(
-          `SELECT * FROM hr.audit_access_logs
-           WHERE employee_id = $1 AND action = $2`,
+          `SELECT * FROM hr.access_audit_log
+           WHERE target_id = $1 AND action = $2`,
           [employee.id, AuditAction.USER_CREATED]
         );
         expect(auditLog.rows).toHaveLength(1);
@@ -552,15 +554,16 @@ describe('IdentityService Integration Tests', () => {
       await identityService.terminateUser(employeeId);
 
       const auditLog = await db.query(
-        `SELECT * FROM hr.audit_access_logs
-         WHERE employee_id = $1 AND action = $2`,
+        `SELECT * FROM hr.access_audit_log
+         WHERE target_id = $1 AND action = $2`,
         [employeeId, AuditAction.USER_TERMINATED]
       );
 
       expect(auditLog.rows).toHaveLength(1);
-      expect(auditLog.rows[0].permissions_snapshot).toBeDefined();
+      expect(auditLog.rows[0].access_justification).toBeDefined();
 
-      const snapshot = auditLog.rows[0].permissions_snapshot;
+      // access_justification contains the JSON snapshot
+      const snapshot = JSON.parse(auditLog.rows[0].access_justification);
       expect(snapshot.timestamp).toBeDefined();
       expect(snapshot.sessionsRevoked).toBeDefined();
     });
@@ -654,8 +657,8 @@ describe('IdentityService Integration Tests', () => {
 
       // Verify deletion logged
       const auditLog = await db.query(
-        `SELECT * FROM hr.audit_access_logs
-         WHERE employee_id = $1 AND action = $2`,
+        `SELECT * FROM hr.access_audit_log
+         WHERE target_id = $1 AND action = $2`,
         [employeeId, AuditAction.USER_DELETED]
       );
       expect(auditLog.rows).toHaveLength(1);
@@ -715,8 +718,8 @@ describe('IdentityService Integration Tests', () => {
 
       // Verify DELETION_BLOCKED audit log
       const auditLog = await db.query(
-        `SELECT * FROM hr.audit_access_logs
-         WHERE employee_id = $1 AND action = $2`,
+        `SELECT * FROM hr.access_audit_log
+         WHERE target_id = $1 AND action = $2`,
         [employeeId, AuditAction.DELETION_BLOCKED]
       );
       expect(auditLog.rows).toHaveLength(1);
