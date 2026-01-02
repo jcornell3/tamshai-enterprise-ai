@@ -50,6 +50,29 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 - **Multi-Platform**: Flutter clients for Windows, macOS, Linux, iOS, Android
 - **Enterprise Ready**: Audit logging, token revocation, rate limiting
 
+## Infrastructure Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Containers** | Docker Compose | Local dev & CI orchestration |
+| **Infrastructure as Code** | Terraform | Dev, VPS, and GCP deployment |
+| **Reverse Proxy** | Caddy | HTTPS termination, path-based routing |
+| **Identity** | Keycloak | SSO, OIDC, TOTP MFA |
+| **API Gateway** | Kong | Rate limiting, JWT validation |
+| **AI Orchestration** | MCP Gateway (Node.js) | Claude API integration, prompt defense |
+| **Databases** | PostgreSQL, MongoDB, Elasticsearch, Redis | Domain data, search, caching |
+| **CI/CD** | GitHub Actions | Automated testing, VPS deployment |
+| **Secrets** | HashiCorp Vault | SSH certificates for VPS access |
+
+### Multi-Environment Deployment
+
+| Environment | Platform | Method | Status |
+|-------------|----------|--------|--------|
+| **CI** | GitHub Actions | Docker Compose | ✅ Automated |
+| **Dev** | Docker Desktop | Terraform + Docker Compose | ✅ Local |
+| **Stage** | Hetzner Cloud | Terraform + GitHub Actions (Vault SSH) | ✅ Deployed |
+| **Prod** | Google Cloud | Terraform + GKE | Planned |
+
 ## Quick Start
 
 ### Prerequisites
@@ -199,19 +222,59 @@ flutter doctor             # Should show all green checkmarks
 
 ### Development Setup
 
+#### 1. Add Hosts File Entry (One-Time)
+
+The dev environment uses HTTPS at `https://www.tamshai.local`. Add this entry to your hosts file:
+
+**Windows** (run PowerShell as Administrator):
+```powershell
+Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1 tamshai.local www.tamshai.local"
+```
+
+**macOS/Linux**:
+```bash
+echo "127.0.0.1 tamshai.local www.tamshai.local" | sudo tee -a /etc/hosts
+```
+
+#### 2. Clone and Configure
+
 ```bash
 # Clone repository
 git clone https://github.com/jcornell3/tamshai-enterprise-ai.git
 cd tamshai-enterprise-ai
 
-# Run setup script (recommended)
-./scripts/setup-dev.sh
+# Set environment variables (one-time)
+# Windows PowerShell:
+.\scripts\setup-terraform-dev-env.ps1
 
-# Or manual setup:
+# Or manually set TF_VAR_claude_api_key environment variable
+# Get your API key from https://console.anthropic.com
+```
+
+#### 3. Deploy with Terraform (Recommended)
+
+```bash
+cd infrastructure/terraform/dev
+terraform init                          # First time only
+terraform apply -var-file=dev.tfvars    # Deploy all services
+
+# Access the application
+# https://www.tamshai.local (accept self-signed certificate warning)
+```
+
+#### Alternative: Docker Compose Only
+
+```bash
 cd infrastructure/docker
 cp .env.example .env
-# Edit .env with your CLAUDE_API_KEY from console.anthropic.com
+# Edit .env with your CLAUDE_API_KEY
 docker compose up -d
+```
+
+#### Legacy Setup Script (Deprecated)
+
+```bash
+./scripts/setup-dev.sh  # Still works but Terraform is preferred
 ```
 
 ### Flutter Client Setup
@@ -246,11 +309,20 @@ flutter build appbundle --release
 
 ### Access Services
 
+**Primary Access** (via Caddy HTTPS proxy):
+| Service | URL | Notes |
+|---------|-----|-------|
+| Main Application | https://www.tamshai.local | Accept self-signed cert |
+| Keycloak Auth | https://www.tamshai.local/auth | SSO login |
+| API Gateway | https://www.tamshai.local/api | Kong-proxied APIs |
+
+**Direct Service Access** (for debugging):
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | Keycloak Admin | http://localhost:8180 | admin / admin |
 | MCP Gateway | http://localhost:3100 | JWT required |
 | Kong Gateway | http://localhost:8100 | - |
+| MinIO Console | http://localhost:9102 | minioadmin / minioadmin |
 
 ### Test Users
 
@@ -319,17 +391,44 @@ npm test  # Requires running Docker services
 
 ## Deployment
 
-### VPS Deployment (Hetzner/DigitalOcean)
+### CI/CD Pipeline
+
+The project uses GitHub Actions for automated testing and deployment:
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | Push/PR | Lint, type check, unit tests, integration tests |
+| `codeql.yml` | Push/PR/Weekly | Security scanning (SAST) |
+| `security.yml` | Push/PR | Dependency audit, secret detection |
+| `deploy-vps.yml` | Push to main | Automated VPS deployment via Vault SSH |
+
+### VPS Staging (Current)
+
+The staging environment runs on Hetzner Cloud with automated deployments:
 
 ```bash
+# Manual deployment (if needed)
 cd infrastructure/terraform/vps
-cp terraform.tfvars.example terraform.tfvars
-# Edit with your values
+terraform init
+terraform apply
+
+# Or trigger via GitHub Actions
+gh workflow run deploy-vps.yml --ref main
+```
+
+**Access**: Configured via Cloudflare (see deployment secrets)
+
+See [VPS Deployment Guide](infrastructure/terraform/vps/README.md) for details.
+
+### GCP Production (Planned)
+
+```bash
+cd infrastructure/terraform
 terraform init
 terraform apply
 ```
 
-See [VPS Deployment Guide](infrastructure/terraform/vps/README.md) for details.
+See [infrastructure/terraform/README.md](infrastructure/terraform/README.md) for GCP configuration.
 
 ## Security
 
@@ -344,10 +443,22 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## Documentation
 
+### Getting Started
 - [CLAUDE.md](CLAUDE.md) - Comprehensive development guide
+- [Terraform Dev Setup](infrastructure/terraform/dev/README.md) - Local development with Terraform
+
+### Architecture
 - [Architecture Overview](docs/architecture/overview.md)
 - [Security Model](docs/architecture/security-model.md)
-- [Contributing](CONTRIBUTING.md)
+- [Architecture Specs](.specify/ARCHITECTURE_SPECS.md) - All specifications and ADRs
+
+### Infrastructure
+- [Port Allocation](docs/development/PORT_ALLOCATION.md) - Service port assignments
+- [VPS Deployment](infrastructure/terraform/vps/README.md) - Hetzner Cloud setup
+- [Terraform State Security](docs/security/TERRAFORM_STATE_SECURITY.md)
+
+### Contributing
+- [Contributing Guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
