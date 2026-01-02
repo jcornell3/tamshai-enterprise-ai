@@ -11,7 +11,7 @@ import { WebStorageStateStore } from 'oidc-client-ts';
 export const oidcConfig = {
   // Keycloak endpoints
   authority: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8180/auth/realms/tamshai-corp',
-  client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'mcp-gateway',
+  client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'web-portal',
   redirect_uri: `${window.location.origin}/callback`,
   post_logout_redirect_uri: window.location.origin,
 

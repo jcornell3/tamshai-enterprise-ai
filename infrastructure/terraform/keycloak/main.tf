@@ -134,6 +134,77 @@ resource "keycloak_openid_client" "mcp_gateway" {
   full_scope_allowed = true # Include all assigned client roles in tokens
 }
 
+# ============================================================
+# Web Portal Client (PUBLIC - for browser SPAs)
+# ============================================================
+# Browser SPAs cannot securely store client secrets, so they need
+# a PUBLIC client with PKCE for authorization code flow.
+
+resource "keycloak_openid_client" "web_portal" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = "web-portal"
+  name      = "Web Portal (SPA)"
+  enabled   = true
+
+  access_type                  = "PUBLIC"
+  standard_flow_enabled        = true
+  direct_access_grants_enabled = false # Not needed for browser apps
+  implicit_flow_enabled        = false # Use auth code + PKCE instead
+
+  valid_redirect_uris = var.valid_redirect_uris
+  web_origins         = ["+"] # Allow all valid redirect URIs
+
+  # PKCE is enforced by default for PUBLIC clients in Keycloak 17+
+  # OAuth/OIDC settings
+  full_scope_allowed = true # Include all assigned client roles in tokens
+}
+
+# Protocol Mapper: Client Roles in Access Token (Web Portal)
+resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_roles" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.web_portal.id
+  name      = "client-roles-mapper"
+
+  claim_name       = "resource_access.web-portal.roles"
+  claim_value_type = "String"
+
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+
+  multivalued = true
+}
+
+# Protocol Mapper: Include MCP Gateway roles in Web Portal tokens
+# This allows web portal users to access MCP Gateway resources
+resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_mcp_roles" {
+  realm_id   = keycloak_realm.tamshai_corp.id
+  client_id  = keycloak_openid_client.web_portal.id
+  name       = "mcp-gateway-roles-mapper"
+
+  # Include mcp-gateway roles in web-portal tokens
+  claim_name       = "resource_access.mcp-gateway.roles"
+  claim_value_type = "String"
+
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+
+  multivalued = true
+}
+
+# Audience Mapper: Include mcp-gateway as audience
+# Required for the MCP Gateway to accept tokens from web-portal client
+resource "keycloak_openid_audience_protocol_mapper" "web_portal_mcp_audience" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.web_portal.id
+  name      = "mcp-gateway-audience"
+
+  included_client_audience = keycloak_openid_client.mcp_gateway.client_id
+  add_to_id_token          = false
+  add_to_access_token      = true
+}
+
 # Protocol Mapper: Client Roles in Access Token
 # ============================================================
 # CRITICAL: Without this mapper, Keycloak does NOT include client roles in the
