@@ -15,8 +15,9 @@ The refactoring plan is **comprehensive and well-structured**, with critical iss
 |----------|-------|----------|
 | Critical Gaps | 1 | Must fix before Phase 3 |
 | High-Priority Gaps | 3 | Should fix during implementation |
-| Medium Gaps | 3 | Nice-to-have improvements |
+| Medium Gaps | 2 | Nice-to-have improvements |
 | Improvements | 5 | Optimization opportunities |
+| Already Resolved | 2 | GAP-001 (Redis), GAP-007 (Rate limiting) |
 
 **Overall Assessment**: ✅ **APPROVED with conditions** - Address critical gap (SSE heartbeat) before Phase 3 deployment.
 
@@ -254,26 +255,27 @@ it('should not leak memory on 1000 aborted streams', async () => {
 
 ---
 
-### GAP-007: Missing Rate Limit Integration with Roles
+### ~~GAP-007: Missing Rate Limit Integration with Roles~~ - NOT APPLICABLE
 
-**Location**: Phase 1/Phase 3
+**Status**: ✅ **Handled at correct architectural layer (Kong Gateway)**
 
-**Problem**: Rate limiting (lines 554-581) is mentioned but not extracted or tested.
-
-**Gap**:
-- No role-based rate limits (executive vs user)
-- No per-user tracking (only IP-based implied)
-- No integration with extracted modules
-
-**Recommendation**: Consider extracting to `src/middleware/rate-limit.middleware.ts` with role-aware limits:
-```typescript
-const rateLimits: Record<string, number> = {
-  'executive': 1000,  // requests/hour
-  'hr-write': 500,
-  'hr-read': 200,
-  'default': 100,
-};
+Rate limiting is already implemented in Kong API Gateway (`infrastructure/docker/kong/kong.yml:126-135`):
+```yaml
+- name: rate-limiting
+  route: ai-query-route
+  config:
+    minute: 60
+    hour: 500
+    policy: local
+    fault_tolerant: true
 ```
+
+This is the **correct approach** - rate limiting belongs at the API gateway (edge layer), not the application layer. Adding duplicate rate limiting in MCP Gateway would be:
+- Redundant
+- Inconsistent with defense-in-depth architecture
+- Harder to manage centrally
+
+**No action required.**
 
 ---
 
