@@ -769,6 +769,24 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
+      - name: Run MCP HR integration tests
+        working-directory: services/mcp-hr
+        run: npm run test:integration
+        env:
+          CI: true
+          KEYCLOAK_URL: http://127.0.0.1:8180
+          KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: admin
+          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5433
+          POSTGRES_DB: tamshai_hr
+          POSTGRES_USER: tamshai
+          POSTGRES_PASSWORD: changeme
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
       - name: Stop MCP Gateway
         if: always()
         run: |
