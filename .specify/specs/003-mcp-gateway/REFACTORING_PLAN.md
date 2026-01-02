@@ -3469,9 +3469,364 @@ describe('Integration: Happy Path (with HTTP mocks)', () => {
 
 ---
 
-**Last Updated**: 2025-12-30 (Final Execution Recommendations)
+**Last Updated**: 2026-01-01 (Status Update + Lessons Learned)
 **Author**: Claude (Anthropic)
 **Reviewers**:
 - Technical Lead (Review #1 - Critical fixes applied)
 - Principal SDET/QA Lead (Review #2 - Testing enhancements applied)
 - Final Technical Review (ADDENDUM #3 - Production-critical safeguards)
+- QA Lead (ADDENDUM #4 - Lessons Learned from CI Remediation)
+
+---
+
+## ADDENDUM #4: Status Update & Lessons Learned (January 2026)
+
+**Author**: Claude-QA (claude-qa@tamshai.com)
+**Date**: 2026-01-01
+**Context**: Following 2-day CI remediation effort that uncovered critical testing patterns
+
+---
+
+### Current Implementation Status
+
+#### Modules Already Extracted ✅
+
+| Module | File | Lines | Coverage | Notes |
+|--------|------|-------|----------|-------|
+| Configuration | `src/config/index.ts` | 69 | ~95% | ✅ Complete with tests |
+| JWT Validator | `src/auth/jwt-validator.ts` | 153 | ~85% | ✅ Complete with tests |
+| MCP Client | `src/mcp/mcp-client.ts` | 220 | ~80% | ✅ Complete with tests |
+| Role Mapper | `src/mcp/role-mapper.ts` | 88 | ~100% | ✅ Complete with tests |
+| Claude Client | `src/ai/claude-client.ts` | 164 | ~90% | ✅ Complete with tests |
+| Prompt Defense | `src/security/prompt-defense.ts` | 603 | ~85% | ✅ Complete with tests |
+| Token Revocation | `src/security/token-revocation.ts` | 249 | ~80% | ✅ Complete with tests |
+| PII Scrubber | `src/utils/pii-scrubber.ts` | 182 | ~90% | ✅ Complete with tests |
+| Redis Utils | `src/utils/redis.ts` | 321 | ~75% | ✅ Complete with tests |
+| Gateway Utils | `src/utils/gateway-utils.ts` | 61 | ~90% | ✅ Complete with tests |
+| MCP Response Types | `src/types/mcp-response.ts` | 159 | ~95% | ✅ Complete with tests |
+| Health Routes | `src/routes/health.routes.ts` | 67 | ~90% | ✅ Complete with tests |
+| User Routes | `src/routes/user.routes.ts` | 103 | ~85% | ✅ Complete with tests |
+| GDPR Routes | `src/routes/gdpr.ts` | 587 | ~70% | ✅ Complete with tests |
+| Test Utilities | `src/test-utils/*` | ~200 | N/A | ✅ Mock factories created |
+
+**Total Extracted**: ~3,226 lines across 15 modules
+
+#### Remaining in index.ts ⚠️
+
+| Section | Lines | Complexity | Priority |
+|---------|-------|------------|----------|
+| Logger Setup | 94-108 | Low | Low |
+| Type Definitions | 114-145 | Low | Medium |
+| MCP Server Configs | 150-175 | Low | High |
+| validateToken function | 198-279 | High | **CRITICAL** |
+| authMiddleware | 653-697 | High | **CRITICAL** |
+| AI Query Handler | 708-797 | Very High | **CRITICAL** |
+| SSE Streaming Logic | 800-1011 | **Very High** | **CRITICAL** |
+| Confirmation Handler | 1079-1187 | High | High |
+| MCP Tool Proxy | 1200-1459 | Very High | High |
+| Server Startup | 1500-1564 | Medium | Low |
+
+**Remaining**: ~1,564 lines with **0% coverage**
+
+#### Current Coverage Metrics (2026-01-01)
+
+```
+=============================== Coverage summary ===============================
+Statements   : 53.38% ( 583/1092 )
+Branches     : 52.85% ( 315/596 )
+Functions    : 53.80% ( 106/197 )
+Lines        : 54.30% ( 574/1057 )
+================================================================================
+
+File-specific (from coverage report):
+- index.ts: 0% coverage (lines 18-1564)
+- All extracted modules: 75-100% coverage
+```
+
+---
+
+### Lessons Learned from CI Remediation (December 31 - January 1)
+
+During 2 days of intensive CI debugging, we identified critical patterns that MUST be followed in the remaining refactoring work.
+
+#### Issue #1: 🔴 Mock Data Structure Mismatches (CRITICAL)
+
+**What Happened**: Integration tests failed with cryptic errors because mock data didn't match actual MCP response schemas.
+
+**Root Cause**: Tests used simplified mock objects that were missing required fields or had wrong types.
+
+**Example of the Problem**:
+```typescript
+// ❌ BAD: Missing required fields, causes downstream failures
+const mockEmployee = {
+  name: 'Alice',
+  role: 'hr'
+};
+
+// ✅ GOOD: Complete schema matching actual MCP response
+const mockEmployee = {
+  employee_id: '550e8400-e29b-41d4-a716-446655440001',  // UUID format
+  first_name: 'Alice',
+  last_name: 'Chen',
+  email: 'alice.chen@tamshai.local',
+  department: 'Human Resources',
+  job_title: 'VP of Human Resources',
+  hire_date: '2020-01-15',
+  manager_id: null,
+  status: 'active'
+};
+```
+
+**REQUIRED PATTERN**: Always use complete mock objects matching production schemas.
+
+**Implementation**:
+```typescript
+// src/test-utils/mock-data.ts
+export const MOCK_EMPLOYEES = {
+  aliceChen: {
+    employee_id: '550e8400-e29b-41d4-a716-446655440001',
+    first_name: 'Alice',
+    last_name: 'Chen',
+    email: 'alice.chen@tamshai.local',
+    department: 'Human Resources',
+    job_title: 'VP of Human Resources',
+    hire_date: '2020-01-15',
+    manager_id: null,
+    status: 'active',
+  } as const,
+  // ... other employees
+};
+
+// Type-safe mock factory
+export function createMockEmployee(
+  overrides: Partial<typeof MOCK_EMPLOYEES.aliceChen> = {}
+): typeof MOCK_EMPLOYEES.aliceChen {
+  return { ...MOCK_EMPLOYEES.aliceChen, ...overrides };
+}
+```
+
+---
+
+#### Issue #2: 🔴 Typing Mismatches in Test Assertions
+
+**What Happened**: Tests passed locally but failed in CI due to type coercion differences.
+
+**Root Cause**: Using `any` types in tests masked type mismatches that surfaced at runtime.
+
+**Example of the Problem**:
+```typescript
+// ❌ BAD: any type hides mismatches
+const result = await someFunction() as any;
+expect(result.data).toBeDefined();  // Passes even if structure is wrong
+
+// ✅ GOOD: Strict typing catches issues at compile time
+interface ExpectedResult {
+  status: 'success' | 'error';
+  data: Employee[];
+  metadata: { count: number };
+}
+const result: ExpectedResult = await someFunction();
+expect(result.data).toHaveLength(2);
+```
+
+**REQUIRED PATTERN**:
+1. Define explicit interfaces for all test inputs/outputs
+2. Never use `as any` in tests
+3. Use `satisfies` operator for type checking without casting
+
+---
+
+#### Issue #3: 🟡 Inconsistent Naming Conventions
+
+**What Happened**: Confusion between similar function names caused wrong functions to be called.
+
+**Examples of Confusion**:
+- `getAccessibleMCPServers` vs `getAccessibleMCPServersForUser`
+- `validateToken` (in index.ts) vs `JWTValidator.validate` (in jwt-validator.ts)
+- `queryMCPServer` vs `MCPClient.query`
+
+**REQUIRED NAMING CONVENTIONS**:
+
+| Pattern | Convention | Example |
+|---------|------------|---------|
+| Classes | PascalCase + descriptive | `JWTValidator`, `MCPClient`, `StreamingService` |
+| Factory functions | `create` + noun | `createAuthMiddleware`, `createMockEmployee` |
+| Getter functions | `get` + noun | `getAccessibleServers`, `getSigningKey` |
+| Boolean getters | `is/has/can` + adjective | `isTokenRevoked`, `hasAccess`, `canExecute` |
+| Async functions | Verb + noun (no `async` suffix) | `validateToken`, `queryServer` |
+| Test files | Same name + `.test.ts` | `jwt-validator.test.ts` |
+| Mock files | `mock-` prefix | `mock-logger.ts`, `mock-mcp-server.ts` |
+
+**When Renaming During Refactor**:
+1. Add deprecation comment to old function
+2. Export both old and new names
+3. Update all callers in same PR
+4. Remove old name in subsequent PR
+
+---
+
+#### Issue #4: 🟡 Test Isolation Failures
+
+**What Happened**: Tests passed individually but failed when run together due to shared state.
+
+**Root Cause**: Jest's test isolation doesn't clear module-level singletons between tests.
+
+**Example of the Problem**:
+```typescript
+// ❌ BAD: Module-level state persists across tests
+let cache: Map<string, any> = new Map();
+
+// ✅ GOOD: Inject dependencies, reset in beforeEach
+class TokenCache {
+  private cache = new Map<string, any>();
+
+  reset(): void {
+    this.cache.clear();
+  }
+}
+
+// In tests:
+beforeEach(() => {
+  tokenCache.reset();
+});
+```
+
+**REQUIRED PATTERN**:
+1. All stateful modules must have a `reset()` method for testing
+2. Use `beforeEach(() => jest.resetModules())` when testing singletons
+3. Never rely on test execution order
+
+---
+
+#### Issue #5: 🟡 Redis Mock Timing Issues
+
+**What Happened**: Token revocation tests were flaky due to async Redis operations.
+
+**Root Cause**: `ioredis-mock` doesn't perfectly replicate Redis async behavior.
+
+**REQUIRED PATTERN**: Use explicit waits and verification:
+```typescript
+// ❌ BAD: Race condition possible
+await redis.set('key', 'value');
+const result = await redis.get('key');
+
+// ✅ GOOD: Explicit verification
+await redis.set('key', 'value');
+await new Promise(resolve => setImmediate(resolve)); // Allow event loop tick
+const result = await redis.get('key');
+expect(result).toBe('value');
+```
+
+---
+
+### Revised Testing Strategy
+
+Based on the lessons learned, here is the revised testing approach for remaining refactoring:
+
+#### Test File Structure
+
+```
+src/
+├── module-name/
+│   ├── module-name.ts           # Implementation
+│   ├── module-name.test.ts      # Unit tests (mocked dependencies)
+│   ├── module-name.types.ts     # TypeScript interfaces (if complex)
+│   └── index.ts                 # Re-exports
+└── test-utils/
+    ├── index.ts                 # Central export
+    ├── mock-data.ts             # Strongly-typed mock objects
+    ├── mock-logger.ts           # Winston logger mock
+    ├── mock-user-context.ts     # UserContext factory
+    ├── mock-mcp-server.ts       # MCP response factories
+    └── nock-helpers.ts          # HTTP interception (for integration)
+```
+
+#### Test Quality Checklist (Per Module)
+
+Before marking any module as "refactor complete", verify:
+
+- [ ] **Types**: All test inputs/outputs have explicit TypeScript types (no `any`)
+- [ ] **Mock Data**: Uses factories from `test-utils/mock-data.ts`
+- [ ] **Isolation**: Each test can run independently (`--runInBand` passes)
+- [ ] **Coverage**: >85% line coverage on the module
+- [ ] **Edge Cases**: Tests for null, undefined, empty arrays, error paths
+- [ ] **Naming**: Follows naming conventions in table above
+- [ ] **Documentation**: JSDoc on public functions with usage examples
+
+#### Integration Test Requirements
+
+For each route module extracted, create integration test covering:
+
+1. **Happy Path**: Valid token, valid request, expected response
+2. **Auth Failure**: Missing token, invalid token, expired token, revoked token
+3. **Validation Failure**: Missing required fields, wrong types, invalid values
+4. **RBAC**: User without role gets 403, user with role gets 200
+5. **Error Handling**: MCP server timeout, MCP server error, Claude API error
+6. **SSE Streaming** (if applicable): Event format, completion signal, client disconnect
+
+---
+
+### Updated Priority Order
+
+Based on coverage impact and risk, here is the revised extraction order:
+
+| Priority | Module | From index.ts Lines | Impact | Risk |
+|----------|--------|---------------------|--------|------|
+| **P1** | Auth Middleware | 653-697 | High | Medium |
+| **P2** | SSE Streaming Service | 800-1011 | **Very High** | High |
+| **P3** | AI Query Handler | 708-797 | High | Medium |
+| **P4** | MCP Tool Proxy | 1200-1459 | High | Medium |
+| **P5** | Confirmation Handler | 1079-1187 | Medium | Low |
+| **P6** | Logger Factory | 94-108 | Low | Low |
+| **P7** | Server Bootstrap | 1500-1564 | Low | Low |
+
+**Rationale**:
+- P1 (Auth Middleware): Already has a template in jwt-validator, low risk
+- P2 (SSE Streaming): Highest complexity, most coverage gain, but requires careful abort handling
+- P3-P5: Straightforward route extractions
+- P6-P7: Low impact, can be done last
+
+---
+
+### Success Metrics (Updated)
+
+| Metric | Current (Jan 2026) | Target | Verification |
+|--------|-------------------|--------|--------------|
+| index.ts LOC | 1,564 | <300 | `wc -l src/index.ts` |
+| index.ts Coverage | 0% | 80%+ | Jest coverage report |
+| Overall Coverage | 54.30% | 70%+ | Jest coverage report |
+| Diff Coverage | N/A | 90%+ | Codecov PR checks |
+| Test Flakiness | ~5% | 0% | 10 consecutive CI runs pass |
+| Test Duration | ~14s | <10s | Jest execution time |
+
+---
+
+### Pre-Implementation Checklist
+
+Before starting any refactoring work, verify:
+
+- [ ] Read this entire REFACTORING_PLAN.md (all 4 addendums)
+- [ ] Run `npm test` locally - all 366 tests pass
+- [ ] Run `npm run typecheck` - no errors
+- [ ] Run `npm run lint` - no errors
+- [ ] Understand the singleton pattern for JWTValidator (Issue #1, Addendum #1)
+- [ ] Understand the AsyncGenerator pattern for streaming (Issue #2, Addendum #1)
+- [ ] Understand nock HTTP mocking (Addendum #3)
+- [ ] Have access to CI logs to verify changes don't break pipeline
+
+---
+
+### Open Questions for Review
+
+1. **Streaming Abort Signal**: Should we add OpenTelemetry tracing to measure aborted stream frequency?
+2. **Nock vs MSW**: Should we migrate to Mock Service Worker for more realistic HTTP mocking?
+3. **Type Coverage**: Should we add `typescript-coverage-report` to CI to enforce 85%+ type coverage?
+4. **E2E Tests**: Should Phase 5 include Playwright tests against a staging environment?
+
+---
+
+**Next Steps**:
+1. Project Sponsor reviews this updated plan
+2. Dev team confirms understanding of all 4 addendums
+3. Start with P1 (Auth Middleware extraction) as proof-of-concept
+4. Iterate based on learnings from P1
