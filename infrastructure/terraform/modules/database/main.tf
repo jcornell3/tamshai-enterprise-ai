@@ -34,7 +34,7 @@ resource "google_sql_database_instance" "postgres" {
     ip_configuration {
       ipv4_enabled    = false # Use private IP only
       private_network = var.network_id
-      require_ssl     = true # Security: Enforce SSL for all connections (CKV_GCP_6)
+      ssl_mode        = "ENCRYPTED_ONLY" # Security: Enforce SSL (replaces deprecated require_ssl)
     }
 
     backup_configuration {
