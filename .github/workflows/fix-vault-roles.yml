@@ -171,12 +171,13 @@ jobs:
 
           # IMPORTANT: Full restart (not reload) is required for TrustedUserCAKeys changes
           echo ""
-          echo "Restarting sshd service..."
-          systemctl restart sshd
-          echo "sshd restarted successfully"
+          echo "Restarting SSH service..."
+          # Ubuntu uses 'ssh' service name, not 'sshd'
+          systemctl restart ssh
+          echo "SSH service restarted successfully"
 
-          # Verify sshd is running
-          systemctl is-active sshd
+          # Verify SSH is running
+          systemctl is-active ssh
           EOF
 
       - name: Test Vault configuration
