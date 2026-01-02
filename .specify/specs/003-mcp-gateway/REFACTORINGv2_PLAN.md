@@ -675,9 +675,9 @@ async function sendToClaudeWithContext(...): Promise<string> {
 | Criteria | Target | Actual | Status |
 |----------|--------|--------|--------|
 | index.ts lines | ~430 | ~525 | ⚠️ Slightly higher (kept some wrappers for API stability) |
-| Overall coverage | 78%+ | 80.66% | ✅ Exceeded |
+| Overall coverage | 78%+ | **80.8%** | ✅ Exceeded |
 | Extracted modules coverage | 90%+ | 97-100% | ✅ Exceeded |
-| Tests | 500+ | 492 | ✅ Close to target |
+| Tests | 500+ | **497** | ✅ Close to target |
 | All CI checks pass | Yes | Yes | ✅ |
 
 ### Recommendations for Future Work
@@ -687,7 +687,15 @@ async function sendToClaudeWithContext(...): Promise<string> {
 3. **token-revocation.ts**: Could improve from 82% to 90%+ with Redis failure scenario tests
 4. **Integration test expansion**: Add more E2E scenarios for critical paths
 
+### Additional Coverage Improvements (Post-Phase 8)
+
+**Commit `d8fd100`** - Coverage polish:
+- Added 5 Redis error handling tests (sync failures, error events)
+- Removed 15 lines of dead code in mcp-client.ts (unreachable pagination fallback)
+- redis.ts functions: 70% → 75%
+- mcp-client.ts lines: 97% → 100%
+
 ---
 
 *Last Updated: 2026-01-02*
-*Document Version: 2.1 (Added Implementation Results)*
+*Document Version: 2.2 (Updated coverage numbers after polish)*
