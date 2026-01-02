@@ -77,12 +77,13 @@ jobs:
           export VAULT_SKIP_VERIFY=1
           export VAULT_TOKEN="$VAULT_TOKEN"
 
-          # Create SSH role with proper JSON escaping
+          # Create SSH role with proper configuration
           vault write ssh-client-signer/roles/github-deploy \
             key_type=ca \
+            allow_user_certificates=true \
             default_user=root \
             allowed_users="root,tamshai" \
-            allowed_extensions="permit-pty,permit-port-forwarding" \
+            default_extensions="permit-pty,permit-port-forwarding" \
             ttl=10m \
             max_ttl=30m
 
