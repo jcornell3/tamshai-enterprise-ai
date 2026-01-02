@@ -33,12 +33,12 @@ resource "keycloak_realm" "tamshai_corp" {
 
   # OTP Policy - enable TOTP for MFA
   otp_policy {
-    type            = "totp"
-    algorithm       = "HmacSHA1"
-    digits          = 6
-    initial_counter = 0
+    type              = "totp"
+    algorithm         = "HmacSHA1"
+    digits            = 6
+    initial_counter   = 0
     look_ahead_window = 1
-    period          = 30
+    period            = 30
   }
 }
 
@@ -49,7 +49,7 @@ resource "keycloak_required_action" "configure_totp" {
   realm_id       = keycloak_realm.tamshai_corp.id
   alias          = "CONFIGURE_TOTP"
   enabled        = true
-  default_action = true  # New users will be prompted to configure TOTP
+  default_action = true # New users will be prompted to configure TOTP
   name           = "Configure OTP"
 }
 
@@ -199,9 +199,9 @@ resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_roles" {
 # Protocol Mapper: Include MCP Gateway roles in Web Portal tokens
 # This allows web portal users to access MCP Gateway resources
 resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_mcp_roles" {
-  realm_id   = keycloak_realm.tamshai_corp.id
-  client_id  = keycloak_openid_client.web_portal.id
-  name       = "mcp-gateway-roles-mapper"
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.web_portal.id
+  name      = "mcp-gateway-roles-mapper"
 
   # Include mcp-gateway roles in web-portal tokens
   claim_name       = "resource_access.mcp-gateway.roles"
@@ -299,10 +299,10 @@ resource "keycloak_openid_client" "mcp_hr_service" {
   access_type                  = "CONFIDENTIAL"
   client_secret                = var.mcp_hr_service_client_secret
   service_accounts_enabled     = true
-  standard_flow_enabled        = false  # No browser auth
-  direct_access_grants_enabled = false  # No password grant
+  standard_flow_enabled        = false # No browser auth
+  direct_access_grants_enabled = false # No password grant
 
-  valid_redirect_uris = []  # Not used for service accounts
+  valid_redirect_uris = [] # Not used for service accounts
 }
 
 # Service Account User - automatically created when service_accounts_enabled = true

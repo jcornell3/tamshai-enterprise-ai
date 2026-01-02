@@ -29,10 +29,10 @@ tls_insecure_skip_verify = false
 # Valid redirect URIs for staging
 # Use domain-based URIs to avoid IP dependency
 valid_redirect_uris = [
-  "https://staging.tamshai.com/*",           # Catch-all for domain
-  "https://staging.tamshai.com/app/*",       # Web Portal (/app/*)
-  "https://staging.tamshai.com/hr/*",        # Web HR (/hr/*)
-  "https://staging.tamshai.com/finance/*",   # Web Finance (/finance/*)
-  "https://staging.tamshai.com/sales/*",     # Web Sales (/sales/*)
-  "https://staging.tamshai.com/support/*",   # Web Support (/support/*)
+  "https://staging.tamshai.com/*",         # Catch-all for domain
+  "https://staging.tamshai.com/app/*",     # Web Portal (/app/*)
+  "https://staging.tamshai.com/hr/*",      # Web HR (/hr/*)
+  "https://staging.tamshai.com/finance/*", # Web Finance (/finance/*)
+  "https://staging.tamshai.com/sales/*",   # Web Sales (/sales/*)
+  "https://staging.tamshai.com/support/*", # Web Support (/support/*)
 ]
