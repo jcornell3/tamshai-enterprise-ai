@@ -586,31 +586,31 @@ src/
 | Phase 8 | ✅ Complete | `e9c7fdf` | Extracted ClaudeClient with mock mode |
 | Phase 9 | ⏸️ Deferred | - | App factory extraction (diminishing returns) |
 
-### Final Coverage Numbers
+### Final Coverage Numbers (Updated 2026-01-02)
 
-**Overall**: 80.66% lines (target was 78%+) ✅
+**Overall**: 80.8% statements, 81.28% lines (target was 78%+) ✅
 
-| Module | Lines | Branches | Functions | Notes |
-|--------|-------|----------|-----------|-------|
-| src/ai/claude-client.ts | **100%** | 94% | 100% | +mock mode support |
-| src/auth/jwt-validator.ts | 94% | 87% | 90% | |
-| src/config/index.ts | 100% | 100% | 100% | |
-| src/mcp/mcp-client.ts | 95% | 94% | 67% | |
-| src/mcp/role-mapper.ts | 100% | 100% | 100% | |
-| src/middleware/auth.middleware.ts | 100% | 100% | 100% | |
-| src/routes/ai-query.routes.ts | **100%** | 100% | 100% | NEW |
-| src/routes/confirmation.routes.ts | **100%** | 100% | 100% | NEW |
-| src/routes/gdpr.ts | 90% | 76% | 93% | |
-| src/routes/health.routes.ts | 100% | 93% | 100% | |
-| src/routes/mcp-proxy.routes.ts | **97%** | 89% | 100% | NEW |
-| src/routes/streaming.routes.ts | 87% | 75% | 90% | |
-| src/routes/user.routes.ts | 100% | 100% | 100% | |
-| src/security/prompt-defense.ts | 92% | 86% | 94% | |
-| src/security/token-revocation.ts | 82% | 94% | 85% | |
-| src/utils/gateway-utils.ts | 100% | 100% | 100% | |
-| src/utils/pii-scrubber.ts | 100% | 97% | 100% | |
-| src/utils/redis.ts | 84% | 74% | 70% | |
-| **src/index.ts** | **0%** | 0% | 0% | Intentional - see below |
+| Module | Stmts | Branch | Funcs | Lines | Notes |
+|--------|-------|--------|-------|-------|-------|
+| src/ai/claude-client.ts | 100% | 94% | 100% | 100% | +mock mode support |
+| src/auth/jwt-validator.ts | 94% | 87% | 90% | 94% | |
+| src/config/index.ts | 100% | 100% | 100% | 100% | |
+| src/mcp/mcp-client.ts | 97% | 97% | 67% | **100%** | Dead code removed |
+| src/mcp/role-mapper.ts | 100% | 100% | 100% | 100% | |
+| src/middleware/auth.middleware.ts | 100% | 100% | 100% | 100% | |
+| src/routes/ai-query.routes.ts | 100% | 100% | 100% | 100% | Phase 7 |
+| src/routes/confirmation.routes.ts | 100% | 100% | 100% | 100% | Phase 7 |
+| src/routes/gdpr.ts | 90% | 76% | 93% | 90% | |
+| src/routes/health.routes.ts | 100% | 93% | 100% | 100% | |
+| src/routes/mcp-proxy.routes.ts | 97% | 89% | 100% | 98% | Phase 7 |
+| src/routes/streaming.routes.ts | 87% | 75% | 90% | 87% | |
+| src/routes/user.routes.ts | 100% | 100% | 100% | 100% | |
+| src/security/prompt-defense.ts | 92% | 86% | 94% | 93% | |
+| src/security/token-revocation.ts | 82% | 94% | 85% | 82% | |
+| src/utils/gateway-utils.ts | 100% | 100% | 100% | 100% | |
+| src/utils/pii-scrubber.ts | 100% | 97% | 100% | 100% | |
+| src/utils/redis.ts | 85% | 74% | **75%** | 85% | +error handling tests |
+| **src/index.ts** | 0% | 0% | 0% | 0% | Intentional - see below |
 
 ### Test Count Progression
 
@@ -619,6 +619,7 @@ src/
 | Pre-refactoring (Phase 1-4) | 415 | - |
 | Post-Phase 7 (route extraction) | 484 | +69 |
 | Post-Phase 8 (Claude extraction) | 492 | +8 |
+| Post-coverage improvements | **497** | +5 |
 
 ### index.ts Coverage Decision
 
