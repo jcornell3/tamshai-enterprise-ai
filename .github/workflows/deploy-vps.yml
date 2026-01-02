@@ -226,6 +226,15 @@ jobs:
           curl -sf http://localhost:3100/health && echo "[OK] MCP Gateway: healthy" || echo "[FAIL] MCP Gateway: unhealthy"
           curl -sf http://localhost:8080/auth/health/ready && echo "[OK] Keycloak: healthy" || echo "[FAIL] Keycloak: unhealthy"
 
+          echo "=== Syncing Keycloak configuration ==="
+          # Copy sync script to Keycloak container
+          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh keycloak:/tmp/sync-realm.sh
+          # Fix line endings and execute
+          docker exec keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh 2>/dev/null || true'
+          docker exec keycloak chmod +x /tmp/sync-realm.sh
+          docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
+            keycloak /tmp/sync-realm.sh stage
+
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
 
