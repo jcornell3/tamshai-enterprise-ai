@@ -51,7 +51,8 @@ const createMockCleanupQueue = () => ({
   close: jest.fn(),
 }) as unknown as CleanupQueue;
 
-const createQueryResult = <T>(rows: T[]): QueryResult<T> => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const createQueryResult = <T = any>(rows: T[]): QueryResult<T> => ({
   rows,
   rowCount: rows.length,
   command: '',
@@ -420,8 +421,7 @@ describe('IdentityService', () => {
 
       expect(count).toBe(5);
       expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining("status = 'active'"),
-        undefined
+        expect.stringContaining("status = 'active'")
       );
     });
   });
