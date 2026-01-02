@@ -318,10 +318,12 @@ describe('IdentityService Integration Tests', () => {
       -- Employees table with department_id FK (matches production schema)
       CREATE TABLE IF NOT EXISTS hr.employees (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        first_name VARCHAR(255),
-        last_name VARCHAR(255),
+        employee_number VARCHAR(20) UNIQUE NOT NULL,
+        first_name VARCHAR(255) NOT NULL,
+        last_name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         department_id UUID REFERENCES hr.departments(id),
+        hire_date DATE NOT NULL DEFAULT CURRENT_DATE,
         status VARCHAR(20) DEFAULT 'active',
         terminated_at TIMESTAMP WITH TIME ZONE,
         deleted_at TIMESTAMP WITH TIME ZONE,
@@ -373,6 +375,13 @@ describe('IdentityService Integration Tests', () => {
     return `${prefix}-${randomUUID()}@integration-test.tamshai.com`;
   }
 
+  /**
+   * Helper to generate unique employee number for tests
+   */
+  function testEmployeeNumber(): string {
+    return `TEST-${randomUUID().substring(0, 8).toUpperCase()}`;
+  }
+
   describe('Onboarding Transaction (createUserInKeycloak)', () => {
     it('should create Keycloak user when employee is created', async () => {
       const email = testEmail('alice');
@@ -383,9 +392,9 @@ describe('IdentityService Integration Tests', () => {
 
         // Create employee record
         const result = await client.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['Alice', 'Chen', email, 'Human Resources']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'Alice', 'Chen', email, 'Human Resources']
         );
         const employee = result.rows[0];
 
@@ -444,9 +453,9 @@ describe('IdentityService Integration Tests', () => {
         // First user - should succeed
         await client1.query('BEGIN');
         const result1 = await client1.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['First', 'User', email, 'Human Resources']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'First', 'User', email, 'Human Resources']
         );
 
         const keycloakUserId = await identityService.createUserInKeycloak(
@@ -465,9 +474,9 @@ describe('IdentityService Integration Tests', () => {
         // Second user with same email - should fail
         await client2.query('BEGIN');
         const result2 = await client2.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['Second', 'User', `duplicate-${randomUUID()}@integration-test.tamshai.com`, 'Human Resources']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'Second', 'User', `duplicate-${randomUUID()}@integration-test.tamshai.com`, 'Human Resources']
         );
 
         // Try to create with duplicate email in Keycloak
@@ -504,9 +513,9 @@ describe('IdentityService Integration Tests', () => {
         await client.query('BEGIN');
 
         const result = await client.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['Dan', 'Williams', email, 'Finance']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'Dan', 'Williams', email, 'Finance']
         );
         employeeId = result.rows[0].id;
 
@@ -602,9 +611,9 @@ describe('IdentityService Integration Tests', () => {
         await client.query('BEGIN');
 
         const result = await client.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['Eve', 'Thompson', email, 'Human Resources']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'Eve', 'Thompson', email, 'Human Resources']
         );
         employeeId = result.rows[0].id;
 
@@ -665,9 +674,9 @@ describe('IdentityService Integration Tests', () => {
         await client.query('BEGIN');
 
         const result = await client.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['Frank', 'Davis', email, 'Support']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'Frank', 'Davis', email, 'Support']
         );
         employeeId = result.rows[0].id;
 
@@ -729,9 +738,9 @@ describe('IdentityService Integration Tests', () => {
         await client.query('BEGIN');
 
         const result = await client.query(
-          `INSERT INTO hr.employees (first_name, last_name, email, department_id)
-           VALUES ($1, $2, $3, (SELECT id FROM hr.departments WHERE name = $4)) RETURNING *`,
-          ['Grace', 'Hopper', email, 'Engineering']
+          `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
+           VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
+          [testEmployeeNumber(), 'Grace', 'Hopper', email, 'Engineering']
         );
 
         keycloakUserId = await isolatedService.createUserInKeycloak(
