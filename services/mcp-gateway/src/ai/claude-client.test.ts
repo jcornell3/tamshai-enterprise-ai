@@ -23,6 +23,7 @@ describe('ClaudeClient', () => {
     config = {
       model: 'claude-sonnet-4-20250514',
       maxTokens: 4096,
+      apiKey: 'sk-ant-api03-real-key', // Real key format (not test key)
     };
 
     // Mock Anthropic instance
@@ -44,13 +45,46 @@ describe('ClaudeClient', () => {
     it('should initialize with default maxTokens if not provided', () => {
       const configWithoutMaxTokens = {
         model: 'claude-sonnet-4-20250514',
+        apiKey: 'sk-ant-api03-real-key',
       };
       const clientWithDefaults = new ClaudeClient(mockAnthropic, configWithoutMaxTokens, mockLogger);
       expect(clientWithDefaults).toBeDefined();
     });
   });
 
-  describe('query', () => {
+  describe('isMockMode', () => {
+    it('should return true when NODE_ENV is test', () => {
+      // NODE_ENV is 'test' during Jest execution
+      expect(client.isMockMode()).toBe(true);
+    });
+
+    it('should return true when apiKey starts with sk-ant-test-', () => {
+      const testConfig = {
+        model: 'claude-sonnet-4-20250514',
+        apiKey: 'sk-ant-test-mock-key',
+      };
+      const testClient = new ClaudeClient(mockAnthropic, testConfig, mockLogger);
+      expect(testClient.isMockMode()).toBe(true);
+    });
+
+    it('should return false for real API key in production', () => {
+      // Save and modify NODE_ENV
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+
+      const prodConfig = {
+        model: 'claude-sonnet-4-20250514',
+        apiKey: 'sk-ant-api03-real-production-key',
+      };
+      const prodClient = new ClaudeClient(mockAnthropic, prodConfig, mockLogger);
+      expect(prodClient.isMockMode()).toBe(false);
+
+      // Restore NODE_ENV
+      process.env.NODE_ENV = originalNodeEnv;
+    });
+  });
+
+  describe('query - mock mode', () => {
     const userContext = createMockUserContext({
       userId: 'user-123',
       username: 'alice.chen',
@@ -69,6 +103,79 @@ describe('ClaudeClient', () => {
         },
       },
     ];
+
+    it('should return mock response in test mode', async () => {
+      const result = await client.query(query, mcpData, userContext);
+
+      expect(result).toContain('[Mock Response]');
+      expect(result).toContain('alice.chen');
+      expect(result).toContain('hr-read, hr-write');
+      expect(result).toContain('hr');
+      expect(mockLogger.info).toHaveBeenCalledWith('Mock mode: Returning simulated Claude response', {
+        username: 'alice.chen',
+        roles: ['hr-read', 'hr-write'],
+        dataSourceCount: 1,
+      });
+    });
+
+    it('should include all data sources in mock response', async () => {
+      const multiSourceData: MCPDataContext[] = [
+        { server: 'hr', data: { employees: [] } },
+        { server: 'finance', data: { budgets: [] } },
+        { server: 'sales', data: { deals: [] } },
+      ];
+
+      const result = await client.query(query, multiSourceData, userContext);
+
+      expect(result).toContain('hr, finance, sales');
+    });
+
+    it('should show "none" when no data sources', async () => {
+      const result = await client.query(query, [], userContext);
+
+      expect(result).toContain('Data sources consulted: none');
+    });
+
+    it('should truncate long queries in mock response', async () => {
+      const longQuery = 'A'.repeat(100);
+      const result = await client.query(longQuery, mcpData, userContext);
+
+      expect(result).toContain('A'.repeat(50));
+      expect(result).toContain('...');
+      expect(result).not.toContain('A'.repeat(51));
+    });
+
+    it('should not call Anthropic API in mock mode', async () => {
+      await client.query(query, mcpData, userContext);
+
+      expect(mockAnthropic.messages.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('query - real mode', () => {
+    const userContext = createMockUserContext({
+      userId: 'user-123',
+      username: 'alice.chen',
+      email: 'alice@tamshai.com',
+      roles: ['hr-read', 'hr-write'],
+    });
+    const query = 'Who are the employees in the Engineering department?';
+    const mcpData: MCPDataContext[] = [
+      {
+        server: 'hr',
+        data: {
+          employees: [
+            { id: 1, name: 'Alice', department: 'Engineering' },
+            { id: 2, name: 'Bob', department: 'Engineering' },
+          ],
+        },
+      },
+    ];
+
+    beforeEach(() => {
+      // Spy on isMockMode to force real mode for these tests
+      jest.spyOn(client, 'isMockMode').mockReturnValue(false);
+    });
 
     it('should successfully query Claude with MCP data context', async () => {
       const mockResponse = {
@@ -246,8 +353,10 @@ describe('ClaudeClient', () => {
       const customConfig = {
         model: 'claude-opus-4',
         maxTokens: 8192,
+        apiKey: 'sk-ant-api03-real-key',
       };
       const customClient = new ClaudeClient(mockAnthropic, customConfig, mockLogger);
+      jest.spyOn(customClient, 'isMockMode').mockReturnValue(false);
 
       const mockResponse = {
         content: [{ type: 'text', text: 'Test response' }],

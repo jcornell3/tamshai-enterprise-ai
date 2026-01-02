@@ -48,6 +48,7 @@ import { MCPClient, MCPQueryResult } from './mcp/mcp-client';
 import { createAIQueryRoutes } from './routes/ai-query.routes';
 import { createConfirmationRoutes } from './routes/confirmation.routes';
 import { createMCPProxyRoutes } from './routes/mcp-proxy.routes';
+import { ClaudeClient } from './ai/claude-client';
 
 dotenv.config();
 
@@ -235,80 +236,30 @@ async function queryMCPServer(
 }
 
 // =============================================================================
-// CLAUDE API INTEGRATION
+// CLAUDE API INTEGRATION (Phase 8 Refactoring - Extracted to ClaudeClient)
 // =============================================================================
 
 const anthropic = new Anthropic({
   apiKey: config.claude.apiKey,
 });
 
+// Create ClaudeClient instance with configuration
+const claudeClient = new ClaudeClient(anthropic, {
+  model: config.claude.model,
+  maxTokens: 4096,
+  apiKey: config.claude.apiKey,
+}, logger);
+
+/**
+ * Send query to Claude with MCP data context
+ * Delegates to ClaudeClient.query() for testability and separation of concerns
+ */
 async function sendToClaudeWithContext(
   query: string,
   mcpData: Array<{ server: string; data: unknown }>,
   userContext: UserContext
 ): Promise<string> {
-  // TEST/CI MODE: Return mock responses to avoid Claude API calls with invalid key
-  // This allows integration tests to verify Gateway routing and auth without requiring real API key
-  const isMockMode =
-    process.env.NODE_ENV === 'test' ||
-    config.claude.apiKey.startsWith('sk-ant-test-');
-
-  if (isMockMode) {
-    logger.info('Mock mode: Returning simulated Claude response', {
-      username: userContext.username,
-      roles: userContext.roles,
-      dataSourceCount: mcpData.length,
-    });
-
-    // Return a realistic mock response that tests can verify
-    const dataSources = mcpData.map((d) => d.server).join(', ') || 'none';
-    return `[Mock Response] Query processed successfully for user ${userContext.username} ` +
-           `with roles: ${userContext.roles.join(', ')}. ` +
-           `Data sources consulted: ${dataSources}. ` +
-           `Query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`;
-  }
-
-  // Build context from MCP data
-  const dataContext = mcpData
-    .filter((d) => d.data !== null)
-    .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
-    .join('\n\n');
-
-  const systemPrompt = `You are an AI assistant for Tamshai Corp, a family investment management organization.
-You have access to enterprise data based on the user's role permissions.
-The current user is "${userContext.username}" (email: ${userContext.email || 'unknown'}) with system roles: ${userContext.roles.join(', ')}.
-
-IMPORTANT - User Identity Context:
-- First, look for this user in the employee data to understand their position and department
-- Use their employee record to determine who their team members or direct reports are
-- If the user asks about "my team" or "my employees", find the user in the data first, then find employees who report to them or are in their department
-
-When answering questions:
-1. Only use the data provided in the context below
-2. If the data doesn't contain information to answer the question, say so
-3. Never make up or infer sensitive information not in the data
-4. Be concise and professional
-5. If asked about data you don't have access to, explain that the user's role doesn't have permission
-6. When asked about "my team", first identify the user in the employee data, then find their direct reports
-
-Available data context:
-${dataContext || 'No relevant data available for this query.'}`;
-
-  const message = await anthropic.messages.create({
-    model: config.claude.model,
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: query,
-      },
-    ],
-  });
-
-  // Extract text from response
-  const textContent = message.content.find((c) => c.type === 'text');
-  return textContent?.text || 'No response generated.';
+  return claudeClient.query(query, mcpData, userContext);
 }
 
 // =============================================================================

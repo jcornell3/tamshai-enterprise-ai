@@ -12,6 +12,7 @@ import { UserContext } from '../test-utils/mock-user-context';
 export interface ClaudeClientConfig {
   model: string;
   maxTokens?: number;
+  apiKey: string; // Used to detect mock mode (sk-ant-test-*)
 }
 
 export interface MCPDataContext {
@@ -40,6 +41,36 @@ export class ClaudeClient {
       maxTokens: config.maxTokens ?? 4096,
     };
     this.logger = logger;
+  }
+
+  /**
+   * Check if client is in mock mode (for testing/CI)
+   * Mock mode is enabled when:
+   * - NODE_ENV is 'test'
+   * - API key starts with 'sk-ant-test-'
+   */
+  isMockMode(): boolean {
+    return (
+      process.env.NODE_ENV === 'test' ||
+      this.config.apiKey.startsWith('sk-ant-test-')
+    );
+  }
+
+  /**
+   * Generate mock response for testing
+   */
+  private generateMockResponse(
+    query: string,
+    mcpData: MCPDataContext[],
+    userContext: UserContext
+  ): string {
+    const dataSources = mcpData.map((d) => d.server).join(', ') || 'none';
+    return (
+      `[Mock Response] Query processed successfully for user ${userContext.username} ` +
+      `with roles: ${userContext.roles.join(', ')}. ` +
+      `Data sources consulted: ${dataSources}. ` +
+      `Query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`
+    );
   }
 
   /**
@@ -90,6 +121,16 @@ ${dataContext || 'No relevant data available for this query.'}`;
     mcpData: MCPDataContext[],
     userContext: UserContext
   ): Promise<string> {
+    // TEST/CI MODE: Return mock responses to avoid Claude API calls with invalid key
+    if (this.isMockMode()) {
+      this.logger.info('Mock mode: Returning simulated Claude response', {
+        username: userContext.username,
+        roles: userContext.roles,
+        dataSourceCount: mcpData.length,
+      });
+      return this.generateMockResponse(query, mcpData, userContext);
+    }
+
     const dataContext = this.formatMCPDataContext(mcpData);
     const systemPrompt = this.buildSystemPrompt(userContext, dataContext);
 

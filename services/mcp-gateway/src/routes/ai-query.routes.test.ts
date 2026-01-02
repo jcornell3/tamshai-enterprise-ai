@@ -18,7 +18,6 @@ import { createAIQueryRoutes, AIQueryRoutesDependencies } from './ai-query.route
 import { createMockLogger } from '../test-utils/mock-logger';
 import { TEST_USERS, UserContext } from '../test-utils/mock-user-context';
 import { MCPServerConfig } from '../utils/gateway-utils';
-import { MCPQueryResult } from '../mcp/mcp-client';
 
 describe('AI Query Routes', () => {
   let mockLogger: ReturnType<typeof createMockLogger>;
