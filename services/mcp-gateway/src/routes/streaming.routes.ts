@@ -11,6 +11,7 @@
  * - Truncation warning injection (Section 5.3)
  * - Pagination metadata (Section 5.2)
  * - Human-in-the-loop confirmations (Section 5.6)
+ * - Graceful shutdown with connection draining (Phase 4)
  */
 
 import { Router, Request, Response } from 'express';
@@ -25,6 +26,44 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { UserContext } from '../test-utils/mock-user-context';
 import { scrubPII } from '../utils/pii-scrubber';
 import { sanitizeForLog, MCPServerConfig } from '../utils/gateway-utils';
+
+// =============================================================================
+// CONNECTION TRACKING (Phase 4 - Graceful Shutdown)
+// =============================================================================
+
+/**
+ * Track active SSE connections for graceful shutdown
+ * Connections are added when streaming starts and removed on close/error
+ */
+const activeConnections = new Set<Response>();
+
+/**
+ * Get count of active SSE connections
+ * Used for monitoring and graceful shutdown decisions
+ */
+export function getActiveConnectionCount(): number {
+  return activeConnections.size;
+}
+
+/**
+ * Drain all active SSE connections during shutdown
+ * Sends shutdown event to all clients and closes connections
+ *
+ * @returns Number of connections drained
+ */
+export function drainConnections(): number {
+  const count = activeConnections.size;
+  for (const res of activeConnections) {
+    try {
+      res.write(`data: ${JSON.stringify({ type: 'shutdown', message: 'Server is shutting down' })}\n\n`);
+      res.end();
+    } catch {
+      // Connection may already be closed, ignore errors
+    }
+  }
+  activeConnections.clear();
+  return count;
+}
 
 /**
  * MCP Query result with timeout status for partial response handling
@@ -116,6 +155,9 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
     res.flushHeaders();
 
+    // Track connection for graceful shutdown (Phase 4)
+    activeConnections.add(res);
+
     // Track stream state for cleanup
     let streamClosed = false;
     let heartbeatInterval: NodeJS.Timeout | null = null;
@@ -139,6 +181,8 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
       }
+      // Remove from active connections (Phase 4 graceful shutdown)
+      activeConnections.delete(res);
     };
 
     req.on('close', () => {
