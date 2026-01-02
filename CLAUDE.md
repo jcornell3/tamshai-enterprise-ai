@@ -136,6 +136,27 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 # Login journey testing
 ./scripts/test/login-journey.sh dev      # Test SSO login flow on dev
 ./scripts/test/login-journey.sh stage    # Test SSO login flow on stage
+
+# Service logs viewer
+./scripts/infra/logs.sh gateway          # View MCP Gateway logs
+./scripts/infra/logs.sh keycloak -f      # Follow Keycloak logs
+./scripts/infra/logs.sh all --since 30m  # All logs from last 30 minutes
+
+# Container shell access
+./scripts/infra/shell.sh gateway         # Shell into MCP Gateway
+./scripts/infra/shell.sh postgres        # PostgreSQL client (psql)
+./scripts/infra/shell.sh mongodb         # MongoDB shell (mongosh)
+./scripts/infra/shell.sh redis           # Redis CLI
+
+# Environment teardown
+./scripts/infra/teardown.sh dev          # Stop dev containers
+./scripts/infra/teardown.sh dev --volumes # Remove data volumes (DESTRUCTIVE)
+./scripts/infra/teardown.sh stage        # Stop stage containers
+
+# Database backup (alternative location)
+./scripts/infra/backup.sh                # Backup all databases
+./scripts/infra/backup.sh postgres       # Backup PostgreSQL only
+./scripts/infra/backup.sh mongodb        # Backup MongoDB
 ```
 
 **Environment Variables for Stage Scripts:**
