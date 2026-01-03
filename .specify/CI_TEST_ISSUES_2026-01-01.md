@@ -334,7 +334,7 @@ const DATABASE_NAME = process.env.MONGODB_DB || extractDatabaseFromUrl(MONGODB_U
 
 **Issue**: The fallback default is `tamshai_crm` but all actual configurations use `tamshai_sales`:
 - `infrastructure/docker/docker-compose.yml:226` → `MONGODB_DB: tamshai_sales`
-- `docker-compose.vps.yml:216` → `MONGODB_DB: tamshai_sales`
+- `docker-compose.yml` → `MONGODB_DB: tamshai_sales`
 - `sample-data/sales-data.js:5` → `db.getSiblingDB('tamshai_sales')`
 - `.github/workflows/ci.yml:429` → loads into `tamshai_sales`
 - `.github/workflows/ci.yml:650` → passes `tamshai_sales` in URL

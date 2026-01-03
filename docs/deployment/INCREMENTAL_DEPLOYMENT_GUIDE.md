@@ -376,7 +376,7 @@ gh secret set VPS_SSH_KEY < ~/.ssh/id_rsa
 ssh tamshai@5.78.159.29
 cd /opt/tamshai
 docker tag mcp-hr:rollback mcp-hr:latest
-docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
+docker compose -f docker-compose.yml up -d --no-deps mcp-hr
 ```
 
 ### Database Rollback (5-10 minutes)
@@ -445,13 +445,13 @@ gh run download 12345678
 ssh tamshai@5.78.159.29
 
 # View all services
-docker compose -f /opt/tamshai/docker-compose.vps.yml logs -f
+docker compose -f /opt/tamshai/docker-compose.yml logs -f
 
 # View specific service
-docker compose -f /opt/tamshai/docker-compose.vps.yml logs -f mcp-hr
+docker compose -f /opt/tamshai/docker-compose.yml logs -f mcp-hr
 
 # View last 100 lines
-docker compose -f /opt/tamshai/docker-compose.vps.yml logs --tail=100 mcp-hr
+docker compose -f /opt/tamshai/docker-compose.yml logs --tail=100 mcp-hr
 ```
 
 ### Health Check Status
@@ -524,11 +524,11 @@ curl http://5.78.159.29:8100/api/health
 **Resolution**:
 1. Check service logs:
    ```bash
-   docker compose -f docker-compose.vps.yml logs mcp-hr
+   docker compose -f docker-compose.yml logs mcp-hr
    ```
 2. Verify dependencies running:
    ```bash
-   docker compose -f docker-compose.vps.yml ps
+   docker compose -f docker-compose.yml ps
    ```
 3. Check health endpoint manually:
    ```bash

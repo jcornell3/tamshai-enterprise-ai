@@ -101,15 +101,15 @@ jobs:
 
           if [ "$SERVICES" == "all" ]; then
             echo "📦 Deploying all services..."
-            docker compose -f docker-compose.vps.yml build
-            docker compose -f docker-compose.vps.yml up -d
+            docker compose build
+            docker compose up -d
           else
             echo "📦 Deploying selected services: $SERVICES"
             IFS=',' read -ra SVC_ARRAY <<< "$SERVICES"
             for svc in "\${SVC_ARRAY[@]}"; do
               echo "  - Deploying \$svc..."
-              docker compose -f docker-compose.vps.yml build \$svc
-              docker compose -f docker-compose.vps.yml up -d --no-deps \$svc
+              docker compose build \$svc
+              docker compose up -d --no-deps \$svc
             done
           fi
 

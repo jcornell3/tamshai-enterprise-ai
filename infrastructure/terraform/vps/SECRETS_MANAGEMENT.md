@@ -398,7 +398,7 @@ terraform apply
 # 4. Restart MCP Gateway to pick up new key
 ssh -i .keys/deploy_key root@$(terraform output -raw vps_ip)
 cd /opt/tamshai
-docker compose -f docker-compose.vps.yml restart mcp-gateway
+docker compose restart mcp-gateway
 ```
 
 ### Hetzner API Token

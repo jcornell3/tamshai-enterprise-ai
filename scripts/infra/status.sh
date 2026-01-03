@@ -86,7 +86,7 @@ check_docker_containers() {
 
     local compose_file="$PROJECT_ROOT/infrastructure/docker/docker-compose.yml"
     if [ "$ENV" = "stage" ]; then
-        compose_file="$PROJECT_ROOT/docker-compose.vps.yml"
+        compose_file="$PROJECT_ROOT/docker-compose.yml"
     fi
 
     if [ ! -f "$compose_file" ]; then

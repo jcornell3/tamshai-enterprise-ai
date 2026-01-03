@@ -227,7 +227,7 @@ docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
     --user "${KEYCLOAK_ADMIN:-admin}" --password "$KEYCLOAK_ADMIN_PASSWORD"
 
 echo "[INFO] Fetching employees from HR database..."
-employees=$(docker compose -f docker-compose.vps.yml exec -T postgres psql -U tamshai -d tamshai_hr -t -A -F '|' -c "
+employees=$(docker compose exec -T tamshai-postgres psql -U tamshai -d tamshai_hr -t -A -F '|' -c "
     SELECT
         e.email,
         LOWER(SPLIT_PART(e.email, '@', 1)) as username,
@@ -489,17 +489,17 @@ cd /opt/tamshai
 export $(cat .env | grep -v '^#' | xargs)
 
 echo "[INFO] Stopping Keycloak..."
-docker compose -f docker-compose.vps.yml stop keycloak
+docker compose stop keycloak
 
 echo "[INFO] Removing Keycloak database tables..."
-docker compose -f docker-compose.vps.yml exec -T postgres psql -U postgres -d keycloak -c "
+docker compose exec -T tamshai-postgres psql -U postgres -d keycloak -c "
     DROP SCHEMA IF EXISTS public CASCADE;
     CREATE SCHEMA public AUTHORIZATION keycloak;
     GRANT ALL ON SCHEMA public TO keycloak;
 " || echo "[WARN] Database reset may have partially failed"
 
 echo "[INFO] Restarting Keycloak (will re-import realm)..."
-docker compose -f docker-compose.vps.yml up -d keycloak
+docker compose up -d keycloak
 
 echo "[INFO] Waiting for Keycloak to be ready..."
 for i in 1 2 3 4 5 6 7 8 9 10; do

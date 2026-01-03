@@ -109,7 +109,7 @@ curl -X POST http://localhost:8180/admin/realms/tamshai-corp/users/$USER_ID/role
 Use `start` mode (not `start-dev`):
 
 ```yaml
-# docker-compose.vps.yml
+# docker-compose.yml (VPS uses root compose file)
 keycloak:
   command: start --hostname-strict=false
   environment:
