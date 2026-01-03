@@ -188,7 +188,14 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          # Validate key format
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null 2>&1 || {
+            echo "::error::SSH key format is invalid"
+            exit 1
+          }
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || {
+            echo "::warning::Could not scan host keys, continuing anyway"
+          }
           echo "SSH key configured"
 
       - name: Deploy to VPS
@@ -201,7 +208,7 @@ jobs:
           echo "   Branch: $DEPLOY_BRANCH"
           echo "   Build: $BUILD_FLAG"
 
-          ssh -o ConnectTimeout=30 $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
           set -e
 
           cd /opt/tamshai
