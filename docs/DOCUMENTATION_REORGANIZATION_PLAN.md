@@ -1,0 +1,339 @@
+# Documentation Reorganization Plan
+
+**Created**: January 3, 2026
+**Status**: Proposed
+**Author**: Tamshai-Dev
+
+---
+
+## Executive Summary
+
+Analysis of the repository's 145+ markdown files revealed significant organizational issues affecting maintainability and discoverability. This plan proposes moving 40+ files to proper locations based on repository best practices.
+
+**Key Issues Identified:**
+- 4 files at root that belong in `docs/`
+- 11 non-spec files incorrectly placed in `.specify/`
+- 18 dated investigation files cluttering `docs/keycloak-findings/`
+- Duplicate documentation (KEYCLOAK_SETUP.md in 2+ locations)
+- Legacy scaffold directory with redundant docs
+
+---
+
+## Phase 1: Root Directory Cleanup
+
+**Goal**: Keep only essential community files at root level.
+
+### Files to Move
+
+| File | Current Location | New Location | Reason |
+|------|------------------|--------------|--------|
+| `KEYCLOAK_SETUP.md` | Root | `docs/deployment/KEYCLOAK_SETUP.md` | Procedural docs belong in docs/ |
+| `QUICKSTART.md` | Root | DELETE (duplicate) | Duplicate of `docs/deployment/QUICK_START.md` |
+| `PERMISSIONS_AUDIT.md` | Root | `docs/security/audits/2025-12-29-permissions-audit.md` | Security audit belongs in docs/security/ |
+| `GEMINI.md` | Root | DELETE (consolidate) | Redundant copy of CLAUDE.md content |
+
+### Files to Keep at Root
+
+| File | Reason |
+|------|--------|
+| `README.md` | Standard project entry point |
+| `CHANGELOG.md` | Standard versioning practice |
+| `CONTRIBUTING.md` | Community standard |
+| `CODE_OF_CONDUCT.md` | Community standard |
+| `SECURITY.md` | GitHub security policy standard location |
+| `CLAUDE.md` | Primary AI assistant guide (project-specific convention) |
+| `DOCUMENTATION_INDEX.md` | Project documentation index |
+
+---
+
+## Phase 2: .specify/ Directory Cleanup
+
+**Goal**: `.specify/` should contain ONLY specifications, templates, and memory files.
+
+### Files to Move Out of .specify/
+
+| File | Current Location | New Location | Reason |
+|------|------------------|--------------|--------|
+| `CI_TEST_ISSUES_2026-01-01.md` | `.specify/` | `docs/troubleshooting/2026-01-01-ci-test-issues.md` | Investigation notes |
+| `V1.4_UPDATE_STATUS.md` | `.specify/` | `docs/status/V1.4_UPDATE_STATUS.md` | Status report |
+| `V1.4_IMPLEMENTATION_STATUS.md` | `.specify/` | `docs/status/V1.4_IMPLEMENTATION_STATUS.md` | Status report |
+| `V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md` | `.specify/` | `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md` | Test results |
+| `TEST_FIX_PLAN.md` | `.specify/` | `docs/tasks/TEST_FIX_PLAN.md` | Execution plan |
+| `SPEC_ALIGNMENT_PLAN.md` | `.specify/` | `docs/tasks/SPEC_ALIGNMENT_PLAN.md` | Analysis/planning |
+| `Keycloak-Atomic-Dev.md` | `.specify/` | `docs/tasks/keycloak-atomic-dev.md` | Task planning |
+| `Keycloak-Atomic-QA.md` | `.specify/` | `docs/tasks/keycloak-atomic-qa.md` | Task planning |
+| `ARCHITECTURE_V1.4_CHANGES.md` | `.specify/` | `docs/architecture/V1.4_CHANGES.md` | Architecture docs |
+
+### Files to Keep in .specify/
+
+| File/Directory | Reason |
+|----------------|--------|
+| `README.md` | Spec Kit overview |
+| `INTEGRATION.md` | Spec Kit integration docs |
+| `ARCHITECTURE_SPECS.md` | Master spec document |
+| `memory/constitution.md` | Project constitution |
+| `templates/*` | Specification templates |
+| `specs/001-011/*` | All numbered specifications |
+
+---
+
+## Phase 3: Archive Investigation Files
+
+**Goal**: Move dated debugging/investigation files to archive to declutter active docs.
+
+### Create Archive Structure
+
+```
+docs/archived/
+├── keycloak-debugging-2025-12/
+│   └── [18 investigation files]
+└── README.md (explains archive purpose)
+```
+
+### Files to Archive
+
+Move all 18 files from `docs/keycloak-findings/` to `docs/archived/keycloak-debugging-2025-12/`:
+
+| File | Size | Date |
+|------|------|------|
+| `2025-12-30-terraform-deployment-success.md` | 12K | Dec 30 |
+| `2025-12-31-401-error-root-cause-analysis.md` | 12K | Dec 31 |
+| `2025-12-31-ci-health-check-resolution.md` | 11K | Dec 31 |
+| `2025-12-31-ci-improvements-code-review.md` | 17K | Dec 31 |
+| `2025-12-31-ci-integration-test-fixes.md` | 16K | Dec 31 |
+| `2025-12-31-client-roles-issue.md` | 8.8K | Dec 31 |
+| `2025-12-31-client-roles-response.md` | 3.6K | Dec 31 |
+| `2025-12-31-final-status.md` | 11K | Dec 31 |
+| `2025-12-31-github-security-scanning-discrepancy.md` | 11K | Dec 31 |
+| `2025-12-31-integration-test-401-token-acquisition.md` | 9.6K | Dec 31 |
+| `2025-12-31-mcp-integration-test-remediation-plan.md` | 29K | Dec 31 |
+| `2025-12-31-phase5-remaining-issues.md` | 12K | Dec 31 |
+| `2025-12-31-security-remediation-plan.md` | 23K | Dec 31 |
+| `2025-12-31-status-update.md` | 6.0K | Dec 31 |
+| `2025-12-31-terraform-success-but-401-test-failures.md` | 14K | Dec 31 |
+| `ci-401-debug-strategy.md` | 11K | - |
+
+### Files to Keep in docs/keycloak-findings/
+
+| File | Reason |
+|------|--------|
+| `KEYCLOAK_MANAGEMENT.md` | Current operational guide |
+| `KEYCLOAK_USER_TESTING_METHODOLOGIES.md` | Current testing reference |
+
+---
+
+## Phase 4: Consolidate Duplicate Documentation
+
+**Goal**: Single source of truth for each topic.
+
+### KEYCLOAK_SETUP.md Consolidation
+
+| Location | Action |
+|----------|--------|
+| Root `KEYCLOAK_SETUP.md` | Move to `docs/deployment/KEYCLOAK_SETUP.md` |
+| `tamshai_auth_scaffold/KEYCLOAK_SETUP.md` | DELETE (duplicate) |
+
+### QUICKSTART.md Consolidation
+
+| Location | Action |
+|----------|--------|
+| Root `QUICKSTART.md` | DELETE |
+| `docs/deployment/QUICK_START.md` | Keep as canonical |
+| `tamshai_auth_scaffold/QUICKSTART.md` | DELETE (duplicate) |
+
+---
+
+## Phase 5: Consolidate Task/Action-Item Directories
+
+**Goal**: Single location for all task and action-item documents.
+
+### Merge Action Items
+
+| Current Location | Files | Action |
+|------------------|-------|--------|
+| `docs/action-items/` | 2 files | Move to `docs/tasks/` |
+| `docs/tasks/` | 3 files | Keep |
+
+### Files to Move
+
+| File | From | To |
+|------|------|-----|
+| `terraform-ci-implementation-for-qa.md` | `docs/action-items/` | `docs/tasks/` |
+| `terraform-dev-full-stack.md` | `docs/action-items/` | `docs/tasks/` |
+
+### Delete Empty Directory
+
+After moving files, delete `docs/action-items/`.
+
+---
+
+## Phase 6: Handle Legacy Scaffold
+
+**Goal**: Archive or remove deprecated scaffold code documentation.
+
+### Assessment Required
+
+The `tamshai_auth_scaffold/` directory contains:
+- `README.md`
+- `KEYCLOAK_SETUP.md` (duplicate)
+- `QUICKSTART.md` (duplicate)
+
+### Recommended Action
+
+If scaffold is deprecated:
+1. Move `tamshai_auth_scaffold/README.md` to `docs/archived/legacy-scaffold/README.md`
+2. Delete duplicate docs (KEYCLOAK_SETUP.md, QUICKSTART.md)
+3. Add note to archived README explaining deprecation
+
+If scaffold is still in use:
+1. Keep README.md in place
+2. Update to reference canonical docs in `docs/deployment/`
+3. Delete duplicates
+
+---
+
+## Phase 7: Create New Directory Structure
+
+### New Directories to Create
+
+```bash
+mkdir -p docs/archived/keycloak-debugging-2025-12
+mkdir -p docs/status
+mkdir -p docs/testing
+mkdir -p docs/troubleshooting
+mkdir -p docs/security/audits
+```
+
+### Directory Purposes
+
+| Directory | Purpose |
+|-----------|---------|
+| `docs/archived/` | Historical investigation files, deprecated docs |
+| `docs/status/` | Project status reports (V1.4 updates, etc.) |
+| `docs/testing/` | Test results, test plans |
+| `docs/troubleshooting/` | Debugging guides, issue investigations |
+| `docs/security/audits/` | Security audit reports |
+
+---
+
+## Implementation Commands
+
+### Phase 1: Root Cleanup
+
+```bash
+# Move KEYCLOAK_SETUP.md to docs/deployment/
+git mv KEYCLOAK_SETUP.md docs/deployment/KEYCLOAK_SETUP.md
+
+# Delete duplicate QUICKSTART.md
+git rm QUICKSTART.md
+
+# Move PERMISSIONS_AUDIT.md to docs/security/audits/
+mkdir -p docs/security/audits
+git mv PERMISSIONS_AUDIT.md docs/security/audits/2025-12-29-permissions-audit.md
+
+# Delete redundant GEMINI.md
+git rm GEMINI.md
+```
+
+### Phase 2: .specify/ Cleanup
+
+```bash
+# Create new directories
+mkdir -p docs/status docs/testing docs/troubleshooting docs/tasks
+
+# Move status reports
+git mv .specify/V1.4_UPDATE_STATUS.md docs/status/
+git mv .specify/V1.4_IMPLEMENTATION_STATUS.md docs/status/
+
+# Move test results
+git mv .specify/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md docs/testing/
+
+# Move task/planning docs
+git mv .specify/TEST_FIX_PLAN.md docs/tasks/
+git mv .specify/SPEC_ALIGNMENT_PLAN.md docs/tasks/
+git mv .specify/Keycloak-Atomic-Dev.md docs/tasks/keycloak-atomic-dev.md
+git mv .specify/Keycloak-Atomic-QA.md docs/tasks/keycloak-atomic-qa.md
+
+# Move architecture docs
+git mv .specify/ARCHITECTURE_V1.4_CHANGES.md docs/architecture/V1.4_CHANGES.md
+
+# Move troubleshooting
+git mv .specify/CI_TEST_ISSUES_2026-01-01.md docs/troubleshooting/2026-01-01-ci-test-issues.md
+```
+
+### Phase 3: Archive Investigation Files
+
+```bash
+# Create archive directory
+mkdir -p docs/archived/keycloak-debugging-2025-12
+
+# Move all dated investigation files
+git mv docs/keycloak-findings/2025-12-30-*.md docs/archived/keycloak-debugging-2025-12/
+git mv docs/keycloak-findings/2025-12-31-*.md docs/archived/keycloak-debugging-2025-12/
+git mv docs/keycloak-findings/ci-401-debug-strategy.md docs/archived/keycloak-debugging-2025-12/
+```
+
+### Phase 4: Consolidate Duplicates
+
+```bash
+# Remove duplicate in scaffold
+git rm tamshai_auth_scaffold/KEYCLOAK_SETUP.md
+git rm tamshai_auth_scaffold/QUICKSTART.md
+```
+
+### Phase 5: Merge Action Items
+
+```bash
+# Move action items to tasks
+git mv docs/action-items/terraform-ci-implementation-for-qa.md docs/tasks/
+git mv docs/action-items/terraform-dev-full-stack.md docs/tasks/
+
+# Remove empty directory
+rmdir docs/action-items
+```
+
+---
+
+## Post-Reorganization Tasks
+
+1. **Update DOCUMENTATION_INDEX.md** - Regenerate with new file locations
+2. **Update CLAUDE.md** - Fix any broken documentation references
+3. **Update README.md** - Verify documentation links still work
+4. **Search for broken links** - `grep -r "docs/" --include="*.md" | grep -v node_modules`
+5. **Create docs/archived/README.md** - Explain archive purpose and contents
+
+---
+
+## Summary of Changes
+
+| Action | Count | Size Impact |
+|--------|-------|-------------|
+| Files moved | 32 | No change |
+| Files deleted (duplicates) | 5 | -30K |
+| Files archived | 16 | No change |
+| New directories created | 5 | - |
+| Directories removed | 2 | - |
+
+---
+
+## Risk Mitigation
+
+1. **Broken links**: Run link checker before and after
+2. **CI/CD references**: Check workflows for hardcoded paths
+3. **External documentation**: Check if any external docs reference moved files
+4. **Git history**: Use `git mv` to preserve file history
+
+---
+
+## Approval
+
+- [ ] Review proposed changes
+- [ ] Verify scaffold deprecation status
+- [ ] Approve reorganization plan
+- [ ] Execute implementation phases
+- [ ] Update DOCUMENTATION_INDEX.md
+- [ ] Verify no broken links
+
+---
+
+*This plan follows repository best practices from GitHub documentation guidelines and the Node.js, React, and Kubernetes project documentation structures.*
