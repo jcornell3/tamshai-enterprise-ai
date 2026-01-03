@@ -56,7 +56,7 @@ services:
       - ${VAULT_CONFIG:-./infrastructure/docker/vault/config}:/vault/config:ro
     command: ${VAULT_MODE:-server -dev}
     ports:
-      - "${VAULT_PORT:-8200}:8200"
+      - "${VAULT_PORT:-8201}:8200"
     healthcheck:
       test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
       interval: 30s
