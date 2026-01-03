@@ -561,6 +561,41 @@ npm run lint:fix                  # Auto-fix linting issues
 
 See `.specify/specs/011-qa-testing/TESTING_CI_CD_CONFIG.md` for complete CI/CD docs.
 
+### Performance Testing (k6)
+
+Performance and load testing uses [k6](https://k6.io/) with TDD-style threshold definitions.
+
+**Test Scenarios**:
+| Scenario | Duration | Users | Thresholds |
+|----------|----------|-------|------------|
+| Smoke | 30s | 1 | P95 < 200ms, Error < 1% |
+| Load | 10min | 50 | P95 < 500ms, P99 < 1000ms |
+| Stress | 15min | 200 | P95 < 2000ms, Error < 5% |
+| Soak | 4hr | 25 | P95 < 500ms, Error < 0.1% |
+
+**Commands**:
+```bash
+cd tests/performance
+
+# Quick smoke test (30 seconds)
+npm run test:smoke
+
+# Full load test (10 minutes)
+npm run test:load
+
+# Stress test (find breaking point)
+npm run test:stress
+
+# CI mode (quick validation)
+npm run test:ci
+```
+
+**CI Integration**: Performance smoke tests run automatically on push to main via `.github/workflows/ci.yml`.
+
+**Results**: Each test generates a JSON results file (`*-results.json`) with threshold pass/fail status.
+
+See `tests/performance/README.md` for complete documentation.
+
 ---
 
 ## Development Environment
