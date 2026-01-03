@@ -11,11 +11,11 @@
 Analysis of the repository's 145+ markdown files revealed significant organizational issues affecting maintainability and discoverability. This plan proposes moving 40+ files to proper locations based on repository best practices.
 
 **Key Issues Identified:**
-- 4 files at root that belong in `docs/`
+- 3 files at root that belong in `docs/` (KEYCLOAK_SETUP.md, QUICKSTART.md, PERMISSIONS_AUDIT.md)
 - 11 non-spec files incorrectly placed in `.specify/`
-- 18 dated investigation files cluttering `docs/keycloak-findings/`
+- 16 dated investigation files cluttering `docs/keycloak-findings/`
 - Duplicate documentation (KEYCLOAK_SETUP.md in 2+ locations)
-- Legacy scaffold directory with redundant docs
+- Legacy scaffold directory with redundant docs (confirmed deprecated)
 
 ---
 
@@ -30,7 +30,6 @@ Analysis of the repository's 145+ markdown files revealed significant organizati
 | `KEYCLOAK_SETUP.md` | Root | `docs/deployment/KEYCLOAK_SETUP.md` | Procedural docs belong in docs/ |
 | `QUICKSTART.md` | Root | DELETE (duplicate) | Duplicate of `docs/deployment/QUICK_START.md` |
 | `PERMISSIONS_AUDIT.md` | Root | `docs/security/audits/2025-12-29-permissions-audit.md` | Security audit belongs in docs/security/ |
-| `GEMINI.md` | Root | DELETE (consolidate) | Redundant copy of CLAUDE.md content |
 
 ### Files to Keep at Root
 
@@ -41,7 +40,8 @@ Analysis of the repository's 145+ markdown files revealed significant organizati
 | `CONTRIBUTING.md` | Community standard |
 | `CODE_OF_CONDUCT.md` | Community standard |
 | `SECURITY.md` | GitHub security policy standard location |
-| `CLAUDE.md` | Primary AI assistant guide (project-specific convention) |
+| `CLAUDE.md` | AI assistant guide for Claude Code |
+| `GEMINI.md` | AI assistant guide for Google Gemini (parallel to CLAUDE.md) |
 | `DOCUMENTATION_INDEX.md` | Project documentation index |
 
 ---
@@ -169,26 +169,22 @@ After moving files, delete `docs/action-items/`.
 
 ## Phase 6: Handle Legacy Scaffold
 
-**Goal**: Archive or remove deprecated scaffold code documentation.
+**Goal**: Archive deprecated scaffold code documentation.
 
-### Assessment Required
+**Status**: CONFIRMED DEPRECATED by project owner.
 
 The `tamshai_auth_scaffold/` directory contains:
-- `README.md`
-- `KEYCLOAK_SETUP.md` (duplicate)
-- `QUICKSTART.md` (duplicate)
+- `README.md` - Archive to `docs/archived/legacy-scaffold/`
+- `KEYCLOAK_SETUP.md` - DELETE (duplicate)
+- `QUICKSTART.md` - DELETE (duplicate)
 
-### Recommended Action
+### Actions
 
-If scaffold is deprecated:
-1. Move `tamshai_auth_scaffold/README.md` to `docs/archived/legacy-scaffold/README.md`
-2. Delete duplicate docs (KEYCLOAK_SETUP.md, QUICKSTART.md)
-3. Add note to archived README explaining deprecation
-
-If scaffold is still in use:
-1. Keep README.md in place
-2. Update to reference canonical docs in `docs/deployment/`
-3. Delete duplicates
+| File | Action |
+|------|--------|
+| `tamshai_auth_scaffold/README.md` | Move to `docs/archived/legacy-scaffold/README.md` |
+| `tamshai_auth_scaffold/KEYCLOAK_SETUP.md` | DELETE |
+| `tamshai_auth_scaffold/QUICKSTART.md` | DELETE |
 
 ---
 
@@ -231,8 +227,7 @@ git rm QUICKSTART.md
 mkdir -p docs/security/audits
 git mv PERMISSIONS_AUDIT.md docs/security/audits/2025-12-29-permissions-audit.md
 
-# Delete redundant GEMINI.md
-git rm GEMINI.md
+# NOTE: Keep GEMINI.md at root (required for Gemini AI assistant)
 ```
 
 ### Phase 2: .specify/ Cleanup
@@ -309,10 +304,18 @@ rmdir docs/action-items
 | Action | Count | Size Impact |
 |--------|-------|-------------|
 | Files moved | 32 | No change |
-| Files deleted (duplicates) | 5 | -30K |
+| Files deleted (duplicates) | 3 | -20K |
 | Files archived | 16 | No change |
-| New directories created | 5 | - |
+| New directories created | 6 | - |
 | Directories removed | 2 | - |
+
+**Files to Delete:**
+1. `QUICKSTART.md` (root) - duplicate
+2. `tamshai_auth_scaffold/KEYCLOAK_SETUP.md` - duplicate
+3. `tamshai_auth_scaffold/QUICKSTART.md` - duplicate
+
+**Files to Keep (clarified):**
+- `GEMINI.md` - Required for Gemini AI assistant
 
 ---
 
@@ -327,8 +330,8 @@ rmdir docs/action-items
 
 ## Approval
 
-- [ ] Review proposed changes
-- [ ] Verify scaffold deprecation status
+- [x] Review proposed changes
+- [x] Verify scaffold deprecation status (CONFIRMED DEPRECATED)
 - [ ] Approve reorganization plan
 - [ ] Execute implementation phases
 - [ ] Update DOCUMENTATION_INDEX.md
