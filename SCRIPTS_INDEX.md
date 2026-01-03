@@ -17,9 +17,10 @@
 | Test | 2 | `scripts/test/` |
 | Keycloak | 3 | `keycloak/scripts/` |
 | Desktop Client (Windows) | 8 | `clients/desktop/` |
-| Spec Kit (.specify) | 10 | `.specify/scripts/` |
+| Spec Kit (.specify) | 6 | `.specify/scripts/` |
+| Secrets | 1 | `scripts/secrets/` |
 | Terraform/Cloud | 3 | `infrastructure/terraform/` |
-| Root Scripts | 8 | `scripts/` |
+| Root Scripts | 7 | `scripts/` |
 | CI/CD Workflows | 26 | `.github/workflows/` |
 | Sample Data | 4 | `sample-data/` |
 
@@ -79,7 +80,6 @@
 
 | Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
 |--------|---------|-------------|---------|------------|--------------|
-| `setup-dev.sh` | **DEPRECATED** - Legacy dev environment setup | dev | Manual | Yes | Docker, npm |
 | `deploy-vps.sh` | Deploy to VPS via SSH or cloud API | stage | Manual | Yes | Terraform, SSH |
 | `discover-mobile-host.sh` | Find mobile device host for testing | dev | Manual | Yes | ip, ifconfig |
 | `generate-mtls-certs.sh` | Generate mTLS certificates | prod | Manual | No | openssl |
@@ -120,33 +120,29 @@
 | `setup-mobile-firewall.ps1` | Configure firewall for mobile testing | dev | Manual | Yes | netsh |
 | `cleanup-mobile-firewall.ps1` | Remove mobile testing firewall rules | dev | Manual | Yes | netsh |
 
-#### Deprecated Client (`clients/unified/scripts/`)
-
-| Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
-|--------|---------|-------------|---------|------------|--------------|
-| `register-protocol-handler.ps1` | **DEPRECATED** - Old protocol handler | dev | Manual | Yes | npm |
-
 ### Spec Kit Scripts (`.specify/scripts/`)
 
 #### Root Level
 
 | Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
 |--------|---------|-------------|---------|------------|--------------|
-| `check-prerequisites.sh` | Check GitHub Spec Kit prerequisites | any | Manual | Yes | - |
-| `common.sh` | Shared utility functions | any | Sourced | N/A | - |
-| `create-new-feature.sh` | Create new feature specification | any | Manual | Yes | - |
-| `setup-plan.sh` | Initialize implementation plan | any | Manual | Yes | - |
 | `update-claude-md.sh` | Update CLAUDE.md documentation | any | Manual | Yes | - |
 
 #### Bash Subdirectory (`.specify/scripts/bash/`)
 
 | Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
 |--------|---------|-------------|---------|------------|--------------|
-| `check-prerequisites.sh` | **DUPLICATE** - Enhanced version with JSON output | any | Manual | Yes | - |
-| `common.sh` | **DUPLICATE** - Shared utility functions | any | Sourced | N/A | - |
-| `create-new-feature.sh` | **DUPLICATE** - Create new feature spec | any | Manual | Yes | - |
-| `setup-plan.sh` | **DUPLICATE** - Initialize plan | any | Manual | Yes | - |
+| `check-prerequisites.sh` | Check Spec Kit prerequisites (JSON output supported) | any | Manual | Yes | - |
+| `common.sh` | Shared utility functions | any | Sourced | N/A | - |
+| `create-new-feature.sh` | Create new feature specification | any | Manual | Yes | - |
+| `setup-plan.sh` | Initialize implementation plan | any | Manual | Yes | - |
 | `update-agent-context.sh` | Update AI agent context | any | Manual | Yes | - |
+
+### Secrets Scripts (`scripts/secrets/`)
+
+| Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
+|--------|---------|-------------|---------|------------|--------------|
+| `update-github-secrets.sh` | Update GitHub secrets from Terraform output | stage | Manual | Yes | gh CLI, terraform |
 
 ### Terraform/Infrastructure Scripts
 

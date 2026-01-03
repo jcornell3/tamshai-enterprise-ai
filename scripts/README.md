@@ -2,6 +2,36 @@
 
 Utility scripts for Tamshai Enterprise AI development and deployment.
 
+## Full Scripts Catalog
+
+For the complete inventory of all 58+ scripts with metadata (purpose, environment, dependencies, idempotency), see **[SCRIPTS_INDEX.md](../SCRIPTS_INDEX.md)**.
+
+## Directory Structure
+
+```
+scripts/
+├── db/              # Database backup and restore
+├── infra/           # Infrastructure management (deploy, status, teardown)
+├── mcp/             # MCP server health and restart
+├── secrets/         # Secret management (GitHub, Vault)
+├── test/            # Integration and login testing
+├── vault/           # HashiCorp Vault operations
+├── windows/         # Windows-specific firewall scripts
+└── *.sh / *.ps1     # Root-level utility scripts
+```
+
+## Quick Reference
+
+| Task | Command |
+|------|---------|
+| Check service status | `./scripts/infra/status.sh dev` |
+| Deploy services | `./scripts/infra/deploy.sh dev` |
+| Backup databases | `./scripts/db/backup.sh dev` |
+| Check MCP health | `./scripts/mcp/health-check.sh dev` |
+| Update GitHub secrets | `./scripts/secrets/update-github-secrets.sh stage` |
+
+---
+
 ## Terraform Environment Setup
 
 ### setup-terraform-dev-env.ps1
