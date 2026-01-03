@@ -272,9 +272,8 @@ jobs:
         run: |
           terraform -chdir=./infrastructure/terraform/keycloak init -input=false -backend=false
           terraform -chdir=./infrastructure/terraform/keycloak validate
-          terraform -chdir=./infrastructure/terraform/keycloak plan -input=false -no-color -out=keycloak.tfplan
+          terraform -chdir=./infrastructure/terraform/keycloak plan -input=false -no-color -var-file=environments/ci.tfvars -out=keycloak.tfplan
           terraform -chdir=./infrastructure/terraform/keycloak show -no-color keycloak.tfplan > keycloak-plan.txt
-        continue-on-error: true
 
       - name: Upload plan
         uses: actions/upload-artifact@v4
@@ -317,7 +316,7 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [terraform-plan]
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' && needs.terraform-plan.outputs.plan_status == 'success'
     environment:
       name: staging
       url: https://staging.tamshai.com
@@ -386,7 +385,7 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [terraform-plan]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.plan_status == 'success'
     environment:
       name: production
       url: https://tamshai.com
@@ -491,13 +490,14 @@ jobs:
       - name: Notify deployment
         uses: 8398a7/action-slack@v3
         if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
           status: ${{ job.status }}
           text: |
             Production deployment ${{ job.status }}
             Commit: ${{ github.sha }}
             Author: ${{ github.actor }}
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
   # =============================================================================
   # STAGE 7: POST-DEPLOYMENT VERIFICATION
