@@ -726,7 +726,10 @@ terraform init
 terraform plan
 terraform apply
 
-# Or via GitHub Actions (auto-deploy on push to main)
+# IMPORTANT: After terraform apply (especially destroy+apply), update SSH secret:
+gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
+
+# Then deploy via GitHub Actions
 gh workflow run deploy-vps.yml --ref main
 ```
 

@@ -68,6 +68,20 @@ docker compose ps
 
 **DO NOT use SSH directly** - Use GitHub Actions workflows to avoid Git for Windows pop-ups and ensure consistent deployment.
 
+### ⚠️ Critical: SSH Key Update After Terraform Rebuild
+
+**When you run `terraform destroy` followed by `terraform apply`**, a NEW SSH key is generated. The GitHub Actions `VPS_SSH_KEY` secret must be updated or deployments will fail with "Permission denied (publickey)".
+
+```bash
+# After terraform apply, update the secret with the new key:
+gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
+
+# Then trigger a deployment:
+gh workflow run deploy-vps.yml --ref main
+```
+
+For full SSH key documentation, see [STAGE_VPS_DEPLOYMENT_STATUS.md](../deployment/STAGE_VPS_DEPLOYMENT_STATUS.md#step-2-update-github-ssh-secret).
+
 ### Full Tear-Down and Redeploy
 
 ```bash
