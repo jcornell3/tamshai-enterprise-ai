@@ -788,7 +788,11 @@ gh workflow run deploy-vps.yml --ref main
 **Phase 2**: ✅ JWT validation, token revocation, prompt injection defense
 **Phase 3**: ✅ MCP Gateway implementation, Claude API integration, role-based routing
 **Phase 4**: ⚠️ MCP Suite servers (planned for implementation)
-**Phase 5**: ⚠️ Sample web apps (planned)
+**Phase 5**: ✅ Sample web apps (GREEN phase complete)
+  - Finance App: InvoicesPage, ExpenseReportsPage, BudgetsPage, DashboardPage, AIQueryPage
+  - Sales App: CustomerDetail, CloseOpportunityModal, PipelineDashboard, OpportunitiesList
+  - Support App: CloseTicketModal (500+ lines), TicketDetail, ArticleDetailPage, DashboardPage
+  - RLS Policies: `tamshai_app` user (no BYPASSRLS), public read policies for reference tables
 **Phase 6**: ✅ Flutter unified desktop client (Windows complete)
 **Phase 7**: ⚠️ Monitoring & alerting (planned)
 **Phase 8**: ✅ VPS staging deployment (Hetzner Cloud)
@@ -1062,6 +1066,6 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 
 ---
 
-*Last Updated: December 31, 2025*
-*Architecture Version: 1.4 (Flutter Desktop Complete, VPS Staging Deployed, Security Hardened)*
-*Document Version: 2.1 (Security Remediation Complete)*
+*Last Updated: January 3, 2026*
+*Architecture Version: 1.4 (Flutter Desktop Complete, VPS Staging Deployed, Sample Apps GREEN Phase)*
+*Document Version: 2.2 (Sample Apps & RLS Implementation)*
