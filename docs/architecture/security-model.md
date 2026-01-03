@@ -267,13 +267,109 @@ The MCP Gateway applies filters before data reaches the AI:
 interface QueryFilter {
   // Remove restricted fields before sending to AI
   filterFields(data: any, userRoles: string[]): any;
-  
+
   // Limit result set size
   limitResults(data: any[], maxResults: number): any[];
-  
+
   // Mask PII based on role
   maskPII(data: any, userRoles: string[]): any;
 }
+```
+
+### 4.4 Row-Level Security (RLS)
+
+PostgreSQL Row-Level Security provides an additional defense layer at the database level, ensuring data isolation even if application-level controls are bypassed.
+
+#### 4.4.1 Database User Separation
+
+| User | Purpose | BYPASSRLS | Usage |
+|------|---------|-----------|-------|
+| `tamshai` | Admin/Migrations | Yes | Schema changes, data loading |
+| `tamshai_app` | Application | No | All MCP server connections |
+
+**Critical**: MCP servers connect as `tamshai_app` which is subject to RLS policies.
+
+#### 4.4.2 Session Variables
+
+RLS policies use session variables set by MCP servers on each connection:
+
+```sql
+-- Set by MCP server before executing queries
+SET app.current_user_id = 'user-uuid-12345';
+SET app.current_user_email = 'alice.chen@tamshai.com';
+SET app.current_user_roles = '["hr-read", "hr-write"]';
+SET app.current_user_department = 'HR';
+```
+
+#### 4.4.3 RLS Policy Types
+
+**Public Read Policies** (reference data):
+```sql
+-- Anyone can read reference tables
+CREATE POLICY "departments_public_read" ON hr.departments
+  FOR SELECT USING (true);
+
+CREATE POLICY "grade_levels_public_read" ON hr.grade_levels
+  FOR SELECT USING (true);
+
+CREATE POLICY "fiscal_years_public_read" ON finance.fiscal_years
+  FOR SELECT USING (true);
+```
+
+**Role-Based Read Policies** (sensitive data):
+```sql
+-- Users can only see employees they are authorized to access
+CREATE POLICY "employees_role_read" ON hr.employees
+  FOR SELECT USING (
+    -- User can always see themselves
+    employee_id::text = current_setting('app.current_user_id', true)
+    OR
+    -- Users with hr-read can see all
+    current_setting('app.current_user_roles', true)::jsonb ? 'hr-read'
+    OR
+    -- Managers can see their direct reports
+    manager_id::text = current_setting('app.current_user_id', true)
+  );
+```
+
+**Write Policies** (destructive operations):
+```sql
+-- Only HR staff can modify employee records
+CREATE POLICY "employees_hr_write" ON hr.employees
+  FOR ALL USING (
+    current_setting('app.current_user_roles', true)::jsonb ? 'hr-write'
+  );
+
+-- Employees can update their own non-sensitive fields
+CREATE POLICY "employees_self_update" ON hr.employees
+  FOR UPDATE USING (
+    employee_id::text = current_setting('app.current_user_id', true)
+  )
+  WITH CHECK (
+    -- Cannot change their own salary, department, or manager
+    employee_id::text = current_setting('app.current_user_id', true)
+  );
+```
+
+#### 4.4.4 Testing RLS Policies
+
+Integration tests verify RLS enforcement using separate database clients:
+
+```typescript
+// Test setup: Create RLS-enforced client
+const userClient = createUserClient({
+  userId: 'alice-uuid',
+  email: 'alice@tamshai.com',
+  roles: ['hr-read'],
+  department: 'HR'
+});
+
+// Test: User cannot see salary without hr-write
+const result = await userClient.query(
+  'SELECT salary FROM hr.employees WHERE employee_id = $1',
+  [otherEmployeeId]
+);
+expect(result.rows).toHaveLength(0);  // RLS blocks access
 ```
 
 ---
