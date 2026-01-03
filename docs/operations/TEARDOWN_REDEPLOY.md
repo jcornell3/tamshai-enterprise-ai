@@ -74,7 +74,10 @@ docker compose ps
 
 ```bash
 # After terraform apply, update the secret with the new key:
-gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
+./scripts/secrets/update-github-secrets.sh stage --ssh-key
+
+# Or manually:
+# gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
 
 # Then trigger a deployment:
 gh workflow run deploy-vps.yml --ref main

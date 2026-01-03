@@ -133,6 +133,11 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 ./scripts/vault/vault.sh secrets dev     # List secrets
 ./scripts/vault/vault.sh ui dev          # Open Vault UI
 
+# GitHub secrets management (after Terraform changes)
+./scripts/secrets/update-github-secrets.sh stage --ssh-key   # Update SSH key only
+./scripts/secrets/update-github-secrets.sh stage --all       # Update all secrets
+./scripts/secrets/update-github-secrets.sh stage --dry-run   # Preview changes
+
 # Login journey testing
 ./scripts/test/login-journey.sh dev      # Test SSO login flow on dev
 ./scripts/test/login-journey.sh stage    # Test SSO login flow on stage

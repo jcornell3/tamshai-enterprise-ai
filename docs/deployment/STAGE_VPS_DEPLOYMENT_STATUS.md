@@ -65,7 +65,20 @@ SSH keys may be stored in different locations:
 | `~/.ssh/tamshai_staging` | Legacy/alternative key | May exist from earlier setup |
 | `.keys/deploy_key` | Terraform-generated | Created during `terraform apply` |
 
-#### Updating the Secret via GitHub CLI (Recommended)
+#### Updating the Secret via Script (Recommended)
+
+```bash
+# Automated script that finds the correct key from Terraform state/files
+./scripts/secrets/update-github-secrets.sh stage --ssh-key
+
+# Preview what would be updated (dry run)
+./scripts/secrets/update-github-secrets.sh stage --dry-run
+
+# Update all secrets (SSH key + VPS_HOST)
+./scripts/secrets/update-github-secrets.sh stage --all
+```
+
+#### Updating the Secret via GitHub CLI (Manual)
 
 ```bash
 # Option 1: Use your local SSH key (if it works for VPS access)
@@ -105,8 +118,11 @@ If deploy-vps.yml fails with `Permission denied (publickey,password)`:
 
 **Quick fix**:
 ```bash
-# Update secret with your working local key
-gh secret set VPS_SSH_KEY < ~/.ssh/tamshai_vps
+# Use the automated script (recommended)
+./scripts/secrets/update-github-secrets.sh stage --ssh-key
+
+# Or manually update with Terraform-generated key
+gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
 
 # Trigger a new deployment
 gh workflow run deploy-vps.yml --ref main
