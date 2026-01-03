@@ -4,6 +4,8 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Base path for when deployed at /support/
+  base: '/support/',
   server: {
     port: 4004,
     host: true,

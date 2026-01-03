@@ -4,6 +4,8 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // Base path for when deployed at /finance/
+  base: '/finance/',
   server: {
     port: 4002,
     host: true,
