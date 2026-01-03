@@ -795,10 +795,10 @@ jobs:
           docker tag mcp-hr:latest mcp-hr:rollback
 
           # Build new version
-          docker compose -f docker-compose.vps.yml build mcp-hr
+          docker compose -f docker-compose.yml build mcp-hr
 
           # Deploy (--no-deps = don't recreate dependencies)
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
+          docker compose -f docker-compose.yml up -d --no-deps mcp-hr
 
           # Health check (30-second timeout)
           echo "⏳ Waiting for health check..."
@@ -813,7 +813,7 @@ jobs:
           # Rollback on health check failure
           echo "❌ Health check failed. Rolling back..."
           docker tag mcp-hr:rollback mcp-hr:latest
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
+          docker compose -f docker-compose.yml up -d --no-deps mcp-hr
           exit 1
           EOF
 ```

@@ -50,7 +50,7 @@ Implement granular, service-specific deployment workflows to enable incremental 
   - Not suitable for incremental updates
 
 **3. Docker Compose Files**:
-- `docker-compose.vps.yml` - Production VPS stack
+- `docker-compose.yml` - Production VPS stack
 - `infrastructure/docker/docker-compose.yml` - Local dev stack
 - No per-service compose files
 
@@ -77,10 +77,10 @@ Implement granular, service-specific deployment workflows to enable incremental 
 **Current Limitation**:
 ```bash
 # This updates ALL services (monolithic)
-docker compose -f docker-compose.vps.yml up -d
+docker compose -f docker-compose.yml up -d
 
 # This doesn't exist (service-specific)
-docker compose -f docker-compose.vps.yml up -d mcp-gateway  # ← Works, but not automated
+docker compose -f docker-compose.yml up -d mcp-gateway  # ← Works, but not automated
 ```
 
 **Impact**: Manual intervention required for selective updates
@@ -170,10 +170,10 @@ docker compose -f docker-compose.vps.yml up -d mcp-gateway  # ← Works, but not
 **Method**: Docker Compose selective update
 ```bash
 # Update only MCP Gateway
-docker compose -f docker-compose.vps.yml up -d --no-deps --build mcp-gateway
+docker compose -f docker-compose.yml up -d --no-deps --build mcp-gateway
 
 # Update all MCP servers
-docker compose -f docker-compose.vps.yml up -d --no-deps --build \
+docker compose -f docker-compose.yml up -d --no-deps --build \
   mcp-hr mcp-finance mcp-sales mcp-support
 ```
 
@@ -454,8 +454,8 @@ jobs:
           docker tag mcp-gateway:latest mcp-gateway:rollback || true
 
           # Update only MCP Gateway (no-deps = don't restart dependencies)
-          docker compose -f docker-compose.vps.yml build mcp-gateway
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway
+          docker compose -f docker-compose.yml build mcp-gateway
+          docker compose -f docker-compose.yml up -d --no-deps mcp-gateway
 
           # Wait for health check
           echo "Waiting for MCP Gateway to be healthy..."
@@ -471,7 +471,7 @@ jobs:
           # Rollback if health check fails
           echo "❌ Health check failed, rolling back..."
           docker tag mcp-gateway:rollback mcp-gateway:latest
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway
+          docker compose -f docker-compose.yml up -d --no-deps mcp-gateway
           exit 1
           EOF
 
@@ -704,7 +704,7 @@ docker-compose.production.yml       # Production environment (future GCP)
 ## References
 
 - Current VPS deployment: `.github/workflows/deploy-vps.yml`
-- Docker Compose: `docker-compose.vps.yml`
+- Docker Compose: `docker-compose.yml`
 - Deployment scripts: `scripts/deploy-vps.sh`
 - Cloudflare Pages Docs: https://developers.cloudflare.com/pages/
 - Docker Compose selective update: https://docs.docker.com/compose/production/

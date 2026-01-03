@@ -705,7 +705,7 @@ export const config = {
 
 ### 5.2 Update Docker Compose
 
-**File**: `docker-compose.vps.yml` (add to mcp-hr service):
+**File**: `docker-compose.yml` (add to mcp-hr service):
 
 ```yaml
 mcp-hr:

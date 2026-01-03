@@ -100,11 +100,11 @@ jobs:
 
           # Build new version
           echo "🔨 Building MCP HR..."
-          docker compose -f docker-compose.vps.yml build mcp-hr
+          docker compose build mcp-hr
 
           # Deploy (--no-deps = don't restart dependencies)
           echo "🚀 Deploying MCP HR (no dependency restart)..."
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
+          docker compose up -d --no-deps mcp-hr
 
           # Health check with timeout (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for health check..."
@@ -121,7 +121,7 @@ jobs:
           echo "❌ Health check failed after 30 seconds"
           echo "🔄 Rolling back to previous version..."
           docker tag tamshai/mcp-hr:rollback tamshai/mcp-hr:latest
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
+          docker compose up -d --no-deps mcp-hr
 
           # Verify rollback succeeded
           sleep 5
@@ -151,7 +151,7 @@ jobs:
           docker tag tamshai/mcp-hr:rollback tamshai/mcp-hr:latest
 
           # Redeploy with rollback version
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-hr
+          docker compose up -d --no-deps mcp-hr
 
           # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Verifying rollback..."

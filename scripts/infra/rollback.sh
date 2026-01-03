@@ -223,7 +223,7 @@ echo "=== Loading environment ==="
 export \$(cat .env | grep -v '^#' | xargs)
 
 echo "=== Rebuilding services ==="
-docker compose -f docker-compose.vps.yml up -d --build
+docker compose up -d --build
 
 echo "=== Waiting for services ==="
 sleep 30

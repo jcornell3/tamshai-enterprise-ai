@@ -332,7 +332,7 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 tamshai@$VPS_HOST << 'EOF'
           cd /opt/tamshai
           git pull origin main
-          docker compose -f docker-compose.vps.yml up -d --build mcp-gateway
+          docker compose up -d --build mcp-gateway
           EOF
 ```
 

@@ -136,7 +136,7 @@ echo "=== Loading environment ==="
 export \$(cat .env | grep -v '^#' | xargs)
 
 echo "=== Deploying services ==="
-docker compose -f docker-compose.vps.yml up -d ${BUILD_FLAG:---build}
+docker compose up -d ${BUILD_FLAG:---build}
 
 echo "=== Waiting for services ==="
 sleep 30

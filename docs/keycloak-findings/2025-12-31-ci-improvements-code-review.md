@@ -199,7 +199,7 @@ quay.io/keycloak/keycloak:24.0 start-dev
 - Ensures test environment matches production behavior
 
 **User Action Required**:
-- Verify VPS also uses Keycloak 24.0 in `docker-compose.vps.yml`
+- Verify VPS also uses Keycloak 24.0 in `docker-compose.yml`
 - If VPS uses different version, document reason or update VPS to 24.0
 
 **Impact**:
@@ -236,7 +236,7 @@ postgres:16-alpine
 
 **User Action Required**:
 - Test SQL compatibility: Verify `sample-data/*.sql` loads without errors
-- Check VPS PostgreSQL version in `docker-compose.vps.yml`
+- Check VPS PostgreSQL version in `docker-compose.yml`
 - Update local dev to PostgreSQL 16-alpine for full consistency
 
 **Impact**:

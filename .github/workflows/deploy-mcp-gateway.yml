@@ -100,11 +100,11 @@ jobs:
 
           # Build new version
           echo "🔨 Building MCP Gateway..."
-          docker compose -f docker-compose.vps.yml build mcp-gateway
+          docker compose build mcp-gateway
 
           # Deploy (--no-deps = don't restart dependencies)
           echo "🚀 Deploying MCP Gateway (no dependency restart)..."
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway
+          docker compose up -d --no-deps mcp-gateway
 
           # Health check with timeout (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for health check..."
@@ -121,7 +121,7 @@ jobs:
           echo "❌ Health check failed after ${{ env.HEALTH_CHECK_TIMEOUT }} seconds"
           echo "🔄 Rolling back to previous version..."
           docker tag tamshai/mcp-gateway:rollback tamshai/mcp-gateway:latest
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway
+          docker compose up -d --no-deps mcp-gateway
 
           # Verify rollback succeeded
           sleep 5
@@ -151,7 +151,7 @@ jobs:
           docker tag tamshai/mcp-gateway:rollback tamshai/mcp-gateway:latest
 
           # Redeploy with rollback version
-          docker compose -f docker-compose.vps.yml up -d --no-deps mcp-gateway
+          docker compose up -d --no-deps mcp-gateway
 
           # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Verifying rollback..."
