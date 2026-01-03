@@ -30,6 +30,36 @@ export interface KBArticle {
   author?: string;
   created_at: string;
   updated_at: string;
+  views?: number;
+}
+
+/**
+ * Support Metrics for Dashboard
+ */
+export interface SupportMetrics {
+  openTickets: number;
+  criticalTickets: number;
+  avgResolutionTime: string;
+  slaComplianceRate: number;
+  ticketsByStatus: Record<string, number>;
+  ticketsByPriority: Record<string, number>;
+}
+
+/**
+ * Resolution Template for closing tickets
+ */
+export interface ResolutionTemplate {
+  id: string;
+  text: string;
+}
+
+/**
+ * KB Article Summary (for suggestions)
+ */
+export interface KBArticleSummary {
+  id: string;
+  title: string;
+  category: string;
 }
 
 /**

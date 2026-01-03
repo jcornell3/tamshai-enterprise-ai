@@ -19,7 +19,7 @@
  */
 
 import { Client } from 'pg';
-import { createUserClient, getAdminPool, TEST_USERS } from './setup';
+import { createUserClient, createFinanceUserClient, getAdminPool, getAdminPoolFinance, TEST_USERS } from './setup';
 
 describe('RLS Policies - Integration Tests', () => {
   let adminPool: ReturnType<typeof getAdminPool>;
@@ -34,11 +34,18 @@ describe('RLS Policies - Integration Tests', () => {
   // ============================================================
 
   describe('Reference Tables (Public Read)', () => {
-    let internClient: Client;
+    let internClientHR: Client;
+    let internClientFinance: Client;
 
     beforeAll(async () => {
       // Use intern (lowest privilege) to verify public read access
-      internClient = await createUserClient(
+      // Separate clients for HR and Finance databases
+      internClientHR = await createUserClient(
+        TEST_USERS.intern.userId,
+        TEST_USERS.intern.roles,
+        TEST_USERS.intern.department
+      );
+      internClientFinance = await createFinanceUserClient(
         TEST_USERS.intern.userId,
         TEST_USERS.intern.roles,
         TEST_USERS.intern.department
@@ -46,54 +53,55 @@ describe('RLS Policies - Integration Tests', () => {
     });
 
     afterAll(async () => {
-      await internClient.end();
+      await internClientHR.end();
+      await internClientFinance.end();
     });
 
     test('any authenticated user can SELECT from hr.departments', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Intern can read all departments (reference data)
 
-      const result = await internClient.query('SELECT * FROM hr.departments');
+      const result = await internClientHR.query('SELECT * FROM hr.departments');
 
       // Should return departments without RLS blocking
       expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('department_id');
-      expect(result.rows[0]).toHaveProperty('department_name');
+      expect(result.rows[0]).toHaveProperty('id');
+      expect(result.rows[0]).toHaveProperty('name');
     });
 
     test('any authenticated user can SELECT from hr.grade_levels', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Intern can read all grade levels (reference data)
 
-      const result = await internClient.query('SELECT * FROM hr.grade_levels');
+      const result = await internClientHR.query('SELECT * FROM hr.grade_levels');
 
       // Should return grade levels without RLS blocking
       expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('grade_id');
-      expect(result.rows[0]).toHaveProperty('grade_name');
+      expect(result.rows[0]).toHaveProperty('id');
+      expect(result.rows[0]).toHaveProperty('grade');
     });
 
     test('any authenticated user can SELECT from finance.fiscal_years', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Intern can read fiscal years (reference data)
 
-      const result = await internClient.query('SELECT * FROM finance.fiscal_years');
+      const result = await internClientFinance.query('SELECT * FROM finance.fiscal_years');
 
       // Should return fiscal years without RLS blocking
       expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('fiscal_year_id');
+      expect(result.rows[0]).toHaveProperty('id');
     });
 
     test('any authenticated user can SELECT from finance.budget_categories', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Intern can read budget categories (reference data)
 
-      const result = await internClient.query('SELECT * FROM finance.budget_categories');
+      const result = await internClientFinance.query('SELECT * FROM finance.budget_categories');
 
       // Should return categories without RLS blocking
       expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('category_id');
-      expect(result.rows[0]).toHaveProperty('category_name');
+      expect(result.rows[0]).toHaveProperty('id');
+      expect(result.rows[0]).toHaveProperty('name');
     });
   });
 
@@ -119,7 +127,7 @@ describe('RLS Policies - Integration Tests', () => {
 
         // Intern should only see themselves
         expect(result.rows.length).toBe(1);
-        expect(result.rows[0].employee_id).toBe(TEST_USERS.intern.employeeId);
+        expect(result.rows[0].id).toBe(TEST_USERS.intern.employeeId);
       } finally {
         await client.end();
       }
@@ -141,7 +149,7 @@ describe('RLS Policies - Integration Tests', () => {
 
         // Employee should only see themselves
         expect(result.rows.length).toBe(1);
-        expect(result.rows[0].employee_id).toBe(TEST_USERS.employee.employeeId);
+        expect(result.rows[0].id).toBe(TEST_USERS.employee.employeeId);
       } finally {
         await client.end();
       }
@@ -166,7 +174,7 @@ describe('RLS Policies - Integration Tests', () => {
 
         // Verify manager's own record is included
         const managerRow = result.rows.find(
-          (r) => r.employee_id === TEST_USERS.manager.employeeId
+          (r) => r.id === TEST_USERS.manager.employeeId
         );
         expect(managerRow).toBeDefined();
       } finally {
@@ -276,7 +284,7 @@ describe('RLS Policies - Integration Tests', () => {
 
         // Finance role should only see their own record
         expect(result.rows.length).toBe(1);
-        expect(result.rows[0].employee_id).toBe(TEST_USERS.financeRead.employeeId);
+        expect(result.rows[0].id).toBe(TEST_USERS.financeRead.employeeId);
       } finally {
         await client.end();
       }

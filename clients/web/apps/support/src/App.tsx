@@ -4,6 +4,8 @@ import TicketsPage from './pages/TicketsPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import AIQueryPage from './pages/AIQueryPage';
 import CallbackPage from './pages/CallbackPage';
+import DashboardPage from './pages/DashboardPage';
+import ArticleDetailPage from './pages/ArticleDetailPage';
 import Layout from './components/Layout';
 
 function App() {
@@ -18,7 +20,9 @@ function App() {
         }
       >
         <Route index element={<TicketsPage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="knowledge-base/:articleId" element={<ArticleDetailPage />} />
         <Route path="ai-query" element={<AIQueryPage />} />
       </Route>
       <Route path="/callback" element={<CallbackPage />} />
