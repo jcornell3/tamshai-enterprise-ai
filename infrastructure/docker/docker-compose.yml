@@ -1,5 +1,9 @@
-# Tamshai Corp Enterprise AI - Local Development Environment
-# Docker Compose configuration for WSL2 + Docker Desktop
+# Tamshai Corp Enterprise AI - Unified Docker Compose
+# Single source for dev and stage environments
+#
+# Usage:
+#   Dev:   docker compose up -d (uses defaults)
+#   Stage: CADDYFILE=./Caddyfile.stage docker compose up -d
 #
 # PORT ALLOCATION (avoiding conflicts with existing MCP dev environment on 8443):
 #   - Keycloak:      8180 (moved from 8080 to avoid common conflicts)
@@ -103,13 +107,15 @@ services:
       - "443:443"
       - "80:80"
     volumes:
-      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - ${CADDYFILE:-./Caddyfile.dev}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       kong:
         condition: service_healthy
       tamshai-website:
+        condition: service_healthy
+      web-portal:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]

@@ -121,20 +121,6 @@
         </div>
     </footer>
 
-    <!-- SSO authentication is handled by the Employee Portal app -->
-    <script>
-        // For stage/prod environments where portal is not yet deployed,
-        // redirect to a helpful message
-        (function() {
-            const hostname = window.location.hostname;
-            if (hostname.includes('5.78.159.29') || hostname.includes('tamshai.com')) {
-                // Stage/Prod - portal not yet deployed
-                document.getElementById('sso-login-btn').addEventListener('click', function(e) {
-                    e.preventDefault();
-                    alert('Employee Portal coming soon! Contact IT for access.');
-                });
-            }
-        })();
-    </script>
+    <!-- SSO authentication is handled by the Employee Portal app at /app/ -->
 </body>
 </html>
