@@ -20,11 +20,10 @@ RUN npm install
 WORKDIR /app/apps/sales
 RUN npm run build
 
-# Stage 2: Production with Nginx (unprivileged)
-FROM nginxinc/nginx-unprivileged:alpine
+# Stage 2: Production with Nginx
+FROM nginx:alpine
 
-# Install wget for healthcheck (as root before switching)
-USER root
+# Install wget for healthcheck
 RUN apk add --no-cache wget
 
 # Copy built assets
@@ -33,18 +32,11 @@ COPY --from=builder /app/apps/sales/dist /usr/share/nginx/html
 # Copy Nginx configuration
 COPY apps/sales/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Fix permissions for nginx user
-RUN chown -R nginx:nginx /usr/share/nginx/html
-
-# Switch to non-root nginx user
-USER nginx
-
-# Expose port 8080 (unprivileged nginx uses 8080 by default)
-EXPOSE 8080
+EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
