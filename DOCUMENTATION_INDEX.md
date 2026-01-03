@@ -131,13 +131,13 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 ### docs/deployment/
 - `docs/deployment/ANDROID_PUBLISHING_GUIDE.md`
 - `docs/deployment/COMPLETE_SETUP_GUIDE.md`
-- `docs/deployment/DEV_INFRASTRUCTURE_TESTS.md`
 - `docs/deployment/FLUTTER_MULTI_ENVIRONMENT_BUILDS.md`
 - `docs/deployment/GITHUB_ACTIONS_GUIDE.md`
 - `docs/deployment/INCREMENTAL_DEPLOYMENT_GUIDE.md`
 - `docs/deployment/KEYCLOAK_SETUP.md`
 - `docs/deployment/QUICK_START.md`
 - `docs/deployment/STAGE_VPS_DEPLOYMENT_STATUS.md`
+- `docs/deployment/TEARDOWN_REDEPLOY.md`
 - `docs/deployment/TERRAFORM_CLOUD_SETUP.md`
 - `docs/deployment/VAULT_SETUP.md`
 - `docs/deployment/VPS_SETUP_GUIDE.md`
@@ -151,12 +151,8 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/development/REACT_NATIVE_TO_FLUTTER_MIGRATION.md`
 - `docs/development/V1.4_CODE_EXAMPLES.md`
 
-### docs/keycloak-findings/
-- `docs/keycloak-findings/KEYCLOAK_USER_TESTING_METHODOLOGIES.md`
-
 ### docs/operations/
 - `docs/operations/KEYCLOAK_MANAGEMENT.md`
-- `docs/operations/TEARDOWN_REDEPLOY.md`
 
 ### docs/security/
 - `docs/security/audits/2025-12-29-permissions-audit.md`
@@ -182,16 +178,18 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/tasks/TEST_FIX_PLAN.md`
 
 ### docs/testing/
+- `docs/testing/DEV_INFRASTRUCTURE_TESTS.md`
+- `docs/testing/USER_MANAGEMENT.md`
 - `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md`
 
 ### docs/troubleshooting/
 - `docs/troubleshooting/2026-01-01-ci-test-issues.md`
+- `docs/troubleshooting/CI_FIXES_2025-12-30.md`
+- `docs/troubleshooting/KEYCLOAK_23_DEEP_DIVE.md`
+- `docs/troubleshooting/KEYCLOAK_USER_TESTING_METHODOLOGIES.md`
 
 ### docs/ (Root)
-- `docs/CI_FIXES_2025-12-30.md`
 - `docs/DOCUMENTATION_REORGANIZATION_PLAN.md`
-- `docs/KEYCLOAK_23_DEEP_DIVE.md`
-- `docs/USER_MANAGEMENT.md`
 
 ### infrastructure/terraform/
 - `infrastructure/terraform/dev/README.md`
@@ -342,6 +340,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 |------|-------------|
 | `docs/deployment/KEYCLOAK_SETUP.md` | Complete guide for configuring Keycloak for Flutter desktop/mobile applications. |
 | `docs/deployment/QUICK_START.md` | Quick start deployment guide with prerequisites and basic setup steps. |
+| `docs/deployment/TEARDOWN_REDEPLOY.md` | Procedures for tearing down and redeploying environments. |
 | `docs/deployment/VPS_SETUP_GUIDE.md` | Step-by-step guide for setting up Hetzner VPS staging environment. |
 | `docs/deployment/VAULT_SETUP.md` | Guide for setting up HashiCorp Vault for secrets management. |
 | `docs/deployment/*.md` | Various deployment guides for Android, Flutter, GitHub Actions, and Terraform. |
@@ -359,7 +358,6 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | File | Description |
 |------|-------------|
 | `docs/operations/KEYCLOAK_MANAGEMENT.md` | Guide for managing Keycloak realms, clients, and users. |
-| `docs/operations/TEARDOWN_REDEPLOY.md` | Procedures for tearing down and redeploying environments. |
 
 ### docs/security/
 
@@ -390,6 +388,8 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 | File | Description |
 |------|-------------|
+| `docs/testing/DEV_INFRASTRUCTURE_TESTS.md` | Infrastructure tests for development environment validation. |
+| `docs/testing/USER_MANAGEMENT.md` | Guide for managing users including test user credentials and login process. |
 | `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md` | Test results for human-in-the-loop confirmation flow implementation. |
 
 ### docs/troubleshooting/
@@ -397,15 +397,15 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | File | Description |
 |------|-------------|
 | `docs/troubleshooting/2026-01-01-ci-test-issues.md` | Investigation and resolution of CI test failures from January 2026. |
+| `docs/troubleshooting/CI_FIXES_2025-12-30.md` | CI pipeline fixes applied on December 30, 2025. |
+| `docs/troubleshooting/KEYCLOAK_23_DEEP_DIVE.md` | Deep dive technical analysis of Keycloak 23 features and configuration. |
+| `docs/troubleshooting/KEYCLOAK_USER_TESTING_METHODOLOGIES.md` | Testing methodologies for Keycloak user configuration. |
 
 ### docs/ (Root)
 
 | File | Description |
 |------|-------------|
-| `docs/CI_FIXES_2025-12-30.md` | CI pipeline fixes applied on December 30, 2025. |
 | `docs/DOCUMENTATION_REORGANIZATION_PLAN.md` | Plan for reorganizing documentation files (executed 2026-01-03). |
-| `docs/KEYCLOAK_23_DEEP_DIVE.md` | Deep dive technical analysis of Keycloak 23 features and configuration. |
-| `docs/USER_MANAGEMENT.md` | Guide for managing users including test user credentials and login process. |
 
 ### infrastructure/terraform/
 
@@ -442,7 +442,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 ## Recent Changes (2026-01-03 Reorganization)
 
-### Files Moved
+### Files Moved (Phase 1 - Early January 2026)
 - `KEYCLOAK_SETUP.md` → `docs/deployment/KEYCLOAK_SETUP.md`
 - `PERMISSIONS_AUDIT.md` → `docs/security/audits/2025-12-29-permissions-audit.md`
 - `.specify/V1.4_*.md` → `docs/status/`
@@ -450,18 +450,31 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/keycloak-findings/KEYCLOAK_MANAGEMENT.md` → `docs/operations/`
 - 16 investigation files → `docs/archived/keycloak-debugging-2025-12/`
 
+### Files Moved (Phase 2 - January 3, 2026)
+- `docs/CI_FIXES_2025-12-30.md` → `docs/troubleshooting/`
+- `docs/KEYCLOAK_23_DEEP_DIVE.md` → `docs/troubleshooting/`
+- `docs/USER_MANAGEMENT.md` → `docs/testing/`
+- `docs/keycloak-findings/KEYCLOAK_USER_TESTING_METHODOLOGIES.md` → `docs/troubleshooting/`
+- `docs/deployment/DEV_INFRASTRUCTURE_TESTS.md` → `docs/testing/`
+- `docs/operations/TEARDOWN_REDEPLOY.md` → `docs/deployment/`
+
+### Directories Removed
+- `docs/keycloak-findings/` (consolidated into troubleshooting)
+
 ### Files Deleted
 - `QUICKSTART.md` (duplicate of `docs/deployment/QUICK_START.md`)
 - `tamshai_auth_scaffold/KEYCLOAK_SETUP.md` (duplicate)
 - `tamshai_auth_scaffold/QUICKSTART.md` (duplicate)
 
-### New Directories
+### Current Directory Structure
 - `docs/archived/` - Historical documentation
 - `docs/status/` - Project status reports
 - `docs/tasks/` - Consolidated task documents
-- `docs/testing/` - Test results
-- `docs/troubleshooting/` - Debugging guides
+- `docs/testing/` - Test documentation and user management
+- `docs/troubleshooting/` - Debugging guides and CI fixes
+- `docs/deployment/` - Setup guides including teardown/redeploy
+- `docs/operations/` - Keycloak management
 
 ---
 
-*This index was regenerated after the documentation reorganization on 2026-01-03.*
+*This index was last updated 2026-01-03 (Phase 2 documentation reorganization).*
