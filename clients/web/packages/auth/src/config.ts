@@ -1,18 +1,36 @@
 import { WebStorageStateStore } from 'oidc-client-ts';
 
 /**
+ * Detect the current app's base path from the URL
+ * Returns: /app, /hr, /finance, /sales, /support, or empty string
+ */
+function getAppBasePath(): string {
+  const pathname = window.location.pathname;
+  const appPaths = ['/app', '/hr', '/finance', '/sales', '/support'];
+
+  for (const appPath of appPaths) {
+    if (pathname.startsWith(appPath)) {
+      return appPath;
+    }
+  }
+
+  return '';
+}
+
+/**
  * Determine environment-specific Keycloak configuration
  */
 function getKeycloakConfig() {
   const hostname = window.location.hostname;
   const origin = window.location.origin;
+  const basePath = getAppBasePath();
 
   // Dev environment with Caddy (tamshai.local)
   if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local') {
     return {
       authority: `${origin}/auth/realms/tamshai-corp`,
       client_id: 'tamshai-website',
-      redirect_uri: `${origin}/app/callback`,
+      redirect_uri: `${origin}${basePath}/callback`,
       post_logout_redirect_uri: origin,
     };
   }
@@ -22,7 +40,7 @@ function getKeycloakConfig() {
     return {
       authority: `${origin}/auth/realms/tamshai-corp`,
       client_id: 'tamshai-website',
-      redirect_uri: `${origin}/app/callback`,
+      redirect_uri: `${origin}${basePath}/callback`,
       post_logout_redirect_uri: origin,
     };
   }
