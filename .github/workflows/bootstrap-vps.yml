@@ -132,6 +132,9 @@ jobs:
           ssh $VPS_USER@$VPS_HOST "cd /opt/tamshai && \
             git config --global --add safe.directory /opt/tamshai && \
             if [ '$PULL_LATEST' = 'true' ]; then git fetch origin && git reset --hard origin/main; fi && \
+            echo 'Stopping all tamshai containers...' && \
+            docker ps -aq --filter 'name=tamshai' | xargs -r docker stop || true && \
+            docker ps -aq --filter 'name=tamshai' | xargs -r docker rm -f || true && \
             docker compose down --remove-orphans || true && \
             if [ '$FRESH_START' = 'true' ]; then docker compose down -v || true; fi && \
             if [ '$REBUILD' = 'true' ]; then docker image prune -f && docker compose build --no-cache; fi && \
