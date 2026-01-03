@@ -117,28 +117,6 @@ jobs:
           LOG_LEVEL=info
           IMAGE_TAG=latest
           IMAGE_PREFIX=tamshai/
-          # Disable exposed ports for VPS (accessed via Caddy)
-          REDIS_PORT=
-          VAULT_PORT=
-          KEYCLOAK_PORT=
-          KONG_PROXY_PORT=
-          KONG_ADMIN_PORT=
-          MCP_GATEWAY_PORT=
-          MCP_HR_PORT=
-          MCP_FINANCE_PORT=
-          MCP_SALES_PORT=
-          MCP_SUPPORT_PORT=
-          WEB_PORTAL_PORT=
-          WEB_HR_PORT=
-          WEB_FINANCE_PORT=
-          WEB_SALES_PORT=
-          WEB_SUPPORT_PORT=
-          WEBSITE_PORT=
-          POSTGRES_PORT=
-          MONGODB_PORT=
-          ELASTICSEARCH_PORT=
-          MINIO_API_PORT=
-          MINIO_CONSOLE_PORT=
           ENVEOF"
           echo "Created .env file"
 
