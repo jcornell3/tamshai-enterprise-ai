@@ -92,10 +92,10 @@ jobs:
           KEYCLOAK_MODE=start
           KEYCLOAK_ADMIN=admin
           KEYCLOAK_ADMIN_PASSWORD=$KEYCLOAK_ADMIN_PASSWORD
-          KC_HOSTNAME=$VPS_HOST
+          KC_HOSTNAME=www.tamshai.com
           KC_HTTP_RELATIVE_PATH=/auth
-          KEYCLOAK_URL=https://$VPS_HOST/auth
-          KEYCLOAK_ISSUER=https://$VPS_HOST/auth/realms/tamshai-corp
+          KEYCLOAK_URL=https://www.tamshai.com/auth
+          KEYCLOAK_ISSUER=https://www.tamshai.com/auth/realms/tamshai-corp
           KEYCLOAK_INTERNAL_URL=http://keycloak:8080/auth
           # Caddyfile location (uses root Caddyfile for VPS)
           CADDYFILE=./Caddyfile
