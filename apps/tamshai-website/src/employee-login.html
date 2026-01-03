@@ -98,7 +98,7 @@
                 <h2>Employee Portal</h2>
                 <p>Access internal services, AI tools, and company resources using your Tamshai credentials.</p>
 
-                <a href="#" id="sso-login-btn" class="sso-btn">
+                <a href="/app/" id="sso-login-btn" class="sso-btn">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                     </svg>
@@ -121,81 +121,19 @@
         </div>
     </footer>
 
+    <!-- SSO authentication is handled by the Employee Portal app -->
     <script>
-        // PKCE Helper Functions
-        function generateCodeVerifier() {
-            const array = new Uint8Array(32);
-            crypto.getRandomValues(array);
-            return base64UrlEncode(array);
-        }
-
-        function base64UrlEncode(buffer) {
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        }
-
-        async function generateCodeChallenge(verifier) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(verifier);
-            const hash = await crypto.subtle.digest('SHA-256', data);
-            return base64UrlEncode(hash);
-        }
-
-        // Determine the SSO URL based on current environment
-        (async function() {
+        // For stage/prod environments where portal is not yet deployed,
+        // redirect to a helpful message
+        (function() {
             const hostname = window.location.hostname;
-            let keycloakUrl;
-            let redirectUri;
-
-            // Detect environment and set appropriate Keycloak URL
-            if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                // Local development
-                keycloakUrl = 'http://localhost:8180';
-                redirectUri = window.location.origin + '/app/';
-            } else if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local') {
-                // Dev environment with Caddy - portal is deployed
-                keycloakUrl = window.location.origin + '/auth';
-                redirectUri = window.location.origin + '/app/callback';
-            } else if (hostname.includes('5.78.159.29') || hostname.includes('tamshai.com')) {
-                // Stage/Production environment (VPS)
-                // Portal not yet deployed on stage - redirect to homepage for now
-                keycloakUrl = window.location.origin + '/auth';
-                redirectUri = window.location.origin + '/';
-            } else {
-                // Unknown environment - try same-origin
-                keycloakUrl = window.location.origin + '/auth';
-                redirectUri = window.location.origin + '/';
+            if (hostname.includes('5.78.159.29') || hostname.includes('tamshai.com')) {
+                // Stage/Prod - portal not yet deployed
+                document.getElementById('sso-login-btn').addEventListener('click', function(e) {
+                    e.preventDefault();
+                    alert('Employee Portal coming soon! Contact IT for access.');
+                });
             }
-
-            // Generate PKCE parameters
-            const codeVerifier = generateCodeVerifier();
-            const codeChallenge = await generateCodeChallenge(codeVerifier);
-            const state = Math.random().toString(36).substring(7);
-
-            // Store code_verifier and state in sessionStorage for token exchange
-            sessionStorage.setItem('pkce_code_verifier', codeVerifier);
-            sessionStorage.setItem('oauth_state', state);
-
-            // Build the Keycloak authorization URL
-            const realm = 'tamshai-corp';
-            const clientId = 'tamshai-website';
-            // Note: Keycloak is behind /auth path via Caddy reverse proxy
-            const authUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth`;
-
-            const params = new URLSearchParams({
-                client_id: clientId,
-                redirect_uri: redirectUri,
-                response_type: 'code',
-                scope: 'openid profile email',
-                state: state,
-                code_challenge: codeChallenge,
-                code_challenge_method: 'S256'
-            });
-
-            const ssoLoginUrl = `${authUrl}?${params.toString()}`;
-
-            // Set the SSO button href
-            document.getElementById('sso-login-btn').href = ssoLoginUrl;
         })();
     </script>
 </body>
