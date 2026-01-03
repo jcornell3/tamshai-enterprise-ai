@@ -45,13 +45,71 @@ terraform apply -auto-approve
 
 ### Step 2: Update GitHub SSH Secret
 
-The new VPS has a new SSH key. Update the `VPS_SSH_KEY` secret in GitHub:
+The deploy-vps.yml workflow uses SSH to connect to the VPS and run deployment commands. If the VPS is rebuilt or SSH keys change, you must update the `VPS_SSH_KEY` secret in GitHub.
+
+#### How SSH Authentication Works in CI/CD
+
+1. **GitHub Actions** reads the `VPS_SSH_KEY` secret (private key content)
+2. **deploy-vps.yml** writes it to `~/.ssh/id_ed25519` on the runner
+3. **ssh-keygen** validates the key format before attempting connection
+4. **SSH** connects using `-i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes`
+5. **VPS** accepts the connection if the public key is in `/root/.ssh/authorized_keys`
+
+#### SSH Keys Location
+
+SSH keys may be stored in different locations:
+
+| Location | When Used | Notes |
+|----------|-----------|-------|
+| `~/.ssh/tamshai_vps` | Local SSH access | User's personal SSH key |
+| `~/.ssh/tamshai_staging` | Legacy/alternative key | May exist from earlier setup |
+| `.keys/deploy_key` | Terraform-generated | Created during `terraform apply` |
+
+#### Updating the Secret via GitHub CLI (Recommended)
 
 ```bash
-# Get the new private key
-cat infrastructure/terraform/vps/.keys/deploy_key
+# Option 1: Use your local SSH key (if it works for VPS access)
+gh secret set VPS_SSH_KEY < ~/.ssh/tamshai_vps
 
-# Update in GitHub: Settings → Secrets → VPS_SSH_KEY
+# Option 2: Use Terraform-generated key (after terraform apply)
+gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
+```
+
+#### Updating via GitHub Web UI
+
+1. Go to: https://github.com/jcornell3/tamshai-enterprise-ai/settings/secrets/actions
+2. Click on `VPS_SSH_KEY` → Update
+3. Paste the **entire private key** including:
+   - `-----BEGIN OPENSSH PRIVATE KEY-----`
+   - Key content (base64 encoded)
+   - `-----END OPENSSH PRIVATE KEY-----`
+4. Click "Update secret"
+
+#### Verifying SSH Key Matches
+
+```bash
+# Get fingerprint of your local key
+ssh-keygen -lf ~/.ssh/tamshai_vps.pub
+
+# Compare with VPS authorized_keys (requires console access or working SSH)
+ssh root@5.78.159.29 "ssh-keygen -lf ~/.ssh/authorized_keys"
+```
+
+#### Troubleshooting SSH Failures
+
+If deploy-vps.yml fails with `Permission denied (publickey,password)`:
+
+1. **Key format issue**: The "Setup SSH key" step validates format - check if it passed
+2. **Wrong key**: The secret doesn't match VPS authorized_keys
+3. **Key rotation**: VPS was rebuilt but secret wasn't updated
+
+**Quick fix**:
+```bash
+# Update secret with your working local key
+gh secret set VPS_SSH_KEY < ~/.ssh/tamshai_vps
+
+# Trigger a new deployment
+gh workflow run deploy-vps.yml --ref main
 ```
 
 ### Step 3: Install Docker and Clone Repo
