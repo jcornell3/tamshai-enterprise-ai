@@ -822,7 +822,7 @@ gh workflow run deploy-vps.yml --ref main
 **Phase 1**: ✅ Docker Compose infrastructure, Keycloak SSO, sample data
 **Phase 2**: ✅ JWT validation, token revocation, prompt injection defense
 **Phase 3**: ✅ MCP Gateway implementation, Claude API integration, role-based routing
-**Phase 4**: ⚠️ MCP Suite servers (planned for implementation)
+**Phase 4**: ✅ MCP Suite servers (complete - 4 servers, 15 tools)
 **Phase 5**: ✅ Sample web apps (GREEN phase complete)
   - Finance App: InvoicesPage, ExpenseReportsPage, BudgetsPage, DashboardPage, AIQueryPage
   - Sales App: CustomerDetail, CloseOpportunityModal, PipelineDashboard, OpportunitiesList
@@ -1062,8 +1062,8 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 ### Security
 - [Terraform State Security](docs/security/TERRAFORM_STATE_SECURITY.md)
 - [VPS Firewall Justification](docs/security/VPS_FIREWALL_JUSTIFICATION.md)
-- [Security Remediation Plan](docs/keycloak-findings/2025-12-31-security-remediation-plan.md)
-- [Phase 5 Security Analysis](docs/keycloak-findings/2025-12-31-phase5-remaining-issues.md)
+- [Security Remediation Plan](docs/archived/keycloak-debugging-2025-12/2025-12-31-security-remediation-plan.md)
+- [Phase 5 Security Analysis](docs/archived/keycloak-debugging-2025-12/2025-12-31-phase5-remaining-issues.md)
 
 ### Development
 - [Port Allocation](docs/development/PORT_ALLOCATION.md)
