@@ -1,13 +1,18 @@
 {
   "name": "@tamshai/performance-tests",
-  "version": "1.4.0",
-  "description": "Performance tests for Tamshai Enterprise AI using k6",
+  "version": "1.5.0",
+  "description": "Performance tests for Tamshai Enterprise AI using k6 (TDD approach)",
   "private": true,
   "scripts": {
-    "test": "k6 run scenarios/gateway-load.js",
-    "test:smoke": "k6 run --vus 1 --duration 10s scenarios/gateway-load.js",
-    "test:stress": "k6 run --vus 50 --duration 60s scenarios/gateway-load.js",
-    "test:report": "k6 run --out json=results.json scenarios/gateway-load.js"
+    "test": "k6 run scenarios/load.js",
+    "test:smoke": "k6 run scenarios/smoke.js",
+    "test:load": "k6 run scenarios/load.js",
+    "test:stress": "k6 run scenarios/stress.js",
+    "test:soak": "k6 run scenarios/soak.js",
+    "test:soak:short": "SOAK_DURATION=30m k6 run scenarios/soak.js",
+    "test:legacy": "k6 run scenarios/gateway-load.js",
+    "test:all": "npm run test:smoke && npm run test:load",
+    "test:ci": "k6 run --vus 3 --duration 15s scenarios/smoke.js"
   },
   "keywords": [
     "tamshai",
