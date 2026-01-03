@@ -11,6 +11,7 @@
 #
 # Commands:
 #   sync       Sync clients and configuration
+#   sync-users Sync users from HR database to Keycloak
 #   reset      Reset Keycloak database (fresh realm import)
 #   status     Show Keycloak status and realm info
 #   clients    List all clients in realm
@@ -106,6 +107,199 @@ SYNC
     log_info "Sync complete"
 }
 
+cmd_sync_users() {
+    log_header "Syncing Users from HR Database"
+
+    local compose_dir="$PROJECT_ROOT/infrastructure/docker"
+
+    if [ "$ENV" = "dev" ]; then
+        cd "$compose_dir"
+        local default_password="${SYNC_USER_PASSWORD:-TamshaiDev2025!}"
+
+        # Authenticate kcadm
+        log_info "Authenticating to Keycloak..."
+        MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://localhost:8080/auth --realm master \
+            --user "${KEYCLOAK_ADMIN:-admin}" --password "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+
+        # Fetch employees from HR database
+        log_info "Fetching employees from HR database..."
+        local employees=$(docker compose exec -T postgres psql -U tamshai -d tamshai_hr -t -A -F '|' -c "
+            SELECT
+                e.email,
+                LOWER(SPLIT_PART(e.email, '@', 1)) as username,
+                e.first_name,
+                e.last_name,
+                COALESCE(d.code, 'OTHER') as dept_code,
+                e.is_manager,
+                e.id::text as employee_id
+            FROM hr.employees e
+            LEFT JOIN hr.departments d ON e.department_id = d.id
+            WHERE e.status = 'ACTIVE'
+            AND e.deleted_at IS NULL
+            ORDER BY e.last_name, e.first_name;
+        ")
+
+        local synced=0
+        local failed=0
+
+        echo "$employees" | while IFS='|' read -r email username first_name last_name dept_code is_manager employee_id; do
+            if [ -z "$email" ]; then continue; fi
+
+            log_info "Processing: $username ($first_name $last_name)"
+
+            # Check if user exists
+            local user_id=$(MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+            if [ -n "$user_id" ]; then
+                echo "  Updating existing user..."
+                MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh update "users/$user_id" -r "$REALM" \
+                    -s "email=$email" \
+                    -s "firstName=$first_name" \
+                    -s "lastName=$last_name" \
+                    -s "enabled=true" \
+                    -s "emailVerified=true" 2>/dev/null || echo "  [WARN] Update failed"
+            else
+                echo "  Creating new user..."
+                MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh create users -r "$REALM" \
+                    -s "username=$username" \
+                    -s "email=$email" \
+                    -s "firstName=$first_name" \
+                    -s "lastName=$last_name" \
+                    -s "enabled=true" \
+                    -s "emailVerified=true" 2>/dev/null || { echo "  [WARN] Create failed"; continue; }
+
+                user_id=$(MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+                # Set password for new user
+                if [ -n "$user_id" ]; then
+                    MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh set-password -r "$REALM" \
+                        --username "$username" --new-password "$default_password" --temporary=false 2>/dev/null || \
+                        echo "  [WARN] Password set failed"
+                fi
+            fi
+
+            # Assign roles based on department
+            if [ -n "$user_id" ]; then
+                local roles=""
+                case "$dept_code" in
+                    EXEC)    roles="executive" ;;
+                    HR)      roles="hr-read hr-write" ;;
+                    FIN)     roles="finance-read finance-write" ;;
+                    SALES)   roles="sales-read sales-write" ;;
+                    SUPPORT) roles="support-read support-write" ;;
+                esac
+
+                if [ "$is_manager" = "t" ]; then
+                    roles="$roles manager"
+                fi
+
+                for role in $roles; do
+                    MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh add-roles -r "$REALM" \
+                        --uusername "$username" --rolename "$role" 2>/dev/null || true
+                done
+
+                if [ -n "$roles" ]; then
+                    echo "  Assigned roles: $roles"
+                fi
+            fi
+        done
+
+    else
+        local vps_host="${VPS_HOST:-5.78.159.29}"
+        local vps_user="${VPS_SSH_USER:-root}"
+
+        log_info "Running user sync on VPS..."
+        ssh "$vps_user@$vps_host" << 'SYNC_VPS'
+set -e
+cd /opt/tamshai
+export $(cat .env | grep -v '^#' | xargs)
+
+REALM="tamshai-corp"
+CONTAINER="tamshai-keycloak"
+DEFAULT_PASSWORD="${SYNC_USER_PASSWORD:-TamshaiProd2025!}"
+
+echo "[INFO] Authenticating to Keycloak..."
+docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
+    --server http://localhost:8080/auth --realm master \
+    --user "${KEYCLOAK_ADMIN:-admin}" --password "$KEYCLOAK_ADMIN_PASSWORD"
+
+echo "[INFO] Fetching employees from HR database..."
+employees=$(docker compose -f docker-compose.vps.yml exec -T postgres psql -U tamshai -d tamshai_hr -t -A -F '|' -c "
+    SELECT
+        e.email,
+        LOWER(SPLIT_PART(e.email, '@', 1)) as username,
+        e.first_name,
+        e.last_name,
+        COALESCE(d.code, 'OTHER') as dept_code,
+        e.is_manager,
+        e.id::text as employee_id
+    FROM hr.employees e
+    LEFT JOIN hr.departments d ON e.department_id = d.id
+    WHERE e.status = 'ACTIVE'
+    AND e.deleted_at IS NULL
+    ORDER BY e.last_name, e.first_name;
+")
+
+echo "$employees" | while IFS='|' read -r email username first_name last_name dept_code is_manager employee_id; do
+    if [ -z "$email" ]; then continue; fi
+
+    echo "[INFO] Processing: $username ($first_name $last_name)"
+
+    user_id=$(docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+    if [ -n "$user_id" ]; then
+        echo "  Updating existing user..."
+        docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh update "users/$user_id" -r "$REALM" \
+            -s "email=$email" -s "firstName=$first_name" -s "lastName=$last_name" \
+            -s "enabled=true" -s "emailVerified=true" 2>/dev/null || echo "  [WARN] Update failed"
+    else
+        echo "  Creating new user..."
+        docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh create users -r "$REALM" \
+            -s "username=$username" -s "email=$email" -s "firstName=$first_name" \
+            -s "lastName=$last_name" -s "enabled=true" -s "emailVerified=true" 2>/dev/null || { echo "  [WARN] Create failed"; continue; }
+
+        user_id=$(docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+        if [ -n "$user_id" ]; then
+            docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh set-password -r "$REALM" \
+                --username "$username" --new-password "$DEFAULT_PASSWORD" --temporary=false 2>/dev/null || \
+                echo "  [WARN] Password set failed"
+        fi
+    fi
+
+    if [ -n "$user_id" ]; then
+        roles=""
+        case "$dept_code" in
+            EXEC)    roles="executive" ;;
+            HR)      roles="hr-read hr-write" ;;
+            FIN)     roles="finance-read finance-write" ;;
+            SALES)   roles="sales-read sales-write" ;;
+            SUPPORT) roles="support-read support-write" ;;
+        esac
+
+        if [ "$is_manager" = "t" ]; then
+            roles="$roles manager"
+        fi
+
+        for role in $roles; do
+            docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh add-roles -r "$REALM" \
+                --uusername "$username" --rolename "$role" 2>/dev/null || true
+        done
+
+        if [ -n "$roles" ]; then
+            echo "  Assigned roles: $roles"
+        fi
+    fi
+done
+
+echo "[INFO] User sync complete"
+SYNC_VPS
+    fi
+
+    log_info "User sync complete"
+}
+
 cmd_reset() {
     log_header "Resetting Keycloak Database"
     log_warn "This will DELETE all Keycloak data and re-import the realm!"
@@ -126,12 +320,11 @@ cmd_reset() {
         docker compose stop keycloak
 
         log_info "Removing Keycloak database tables..."
-        # Get database password from .env or use default
-        local db_pass="${POSTGRES_PASSWORD:-changeme}"
-        docker compose exec -T postgres psql -U tamshai -d keycloak -c "
+        # Run as postgres superuser and grant to keycloak user (KC_DB_USERNAME in docker-compose)
+        docker compose exec -T postgres psql -U postgres -d keycloak -c "
             DROP SCHEMA IF EXISTS public CASCADE;
-            CREATE SCHEMA public;
-            GRANT ALL ON SCHEMA public TO tamshai;
+            CREATE SCHEMA public AUTHORIZATION keycloak;
+            GRANT ALL ON SCHEMA public TO keycloak;
         " || log_warn "Database reset may have partially failed"
 
         log_info "Restarting Keycloak (will re-import realm)..."
@@ -160,10 +353,10 @@ echo "[INFO] Stopping Keycloak..."
 docker compose -f docker-compose.vps.yml stop keycloak
 
 echo "[INFO] Removing Keycloak database tables..."
-docker compose -f docker-compose.vps.yml exec -T postgres psql -U tamshai -d keycloak -c "
+docker compose -f docker-compose.vps.yml exec -T postgres psql -U postgres -d keycloak -c "
     DROP SCHEMA IF EXISTS public CASCADE;
-    CREATE SCHEMA public;
-    GRANT ALL ON SCHEMA public TO tamshai;
+    CREATE SCHEMA public AUTHORIZATION keycloak;
+    GRANT ALL ON SCHEMA public TO keycloak;
 " || echo "[WARN] Database reset may have partially failed"
 
 echo "[INFO] Restarting Keycloak (will re-import realm)..."
@@ -274,26 +467,28 @@ show_help() {
     echo "Usage: $0 [command] [environment]"
     echo ""
     echo "Commands:"
-    echo "  sync     Sync clients and configuration"
-    echo "  reset    Reset Keycloak database (fresh realm import)"
-    echo "  status   Show Keycloak status"
-    echo "  clients  List all clients"
-    echo "  users    List all users"
-    echo "  scopes   List client scopes"
-    echo "  logs     Show container logs"
+    echo "  sync       Sync clients and configuration"
+    echo "  sync-users Sync users from HR database to Keycloak"
+    echo "  reset      Reset Keycloak database (fresh realm import)"
+    echo "  status     Show Keycloak status"
+    echo "  clients    List all clients"
+    echo "  users      List all users"
+    echo "  scopes     List client scopes"
+    echo "  logs       Show container logs"
     echo ""
     echo "Environments: dev (default), stage"
 }
 
 main() {
     case "$COMMAND" in
-        sync)    cmd_sync ;;
-        reset)   cmd_reset ;;
-        status)  cmd_status ;;
-        clients) cmd_clients ;;
-        users)   cmd_users ;;
-        scopes)  cmd_scopes ;;
-        logs)    cmd_logs ;;
+        sync)       cmd_sync ;;
+        sync-users) cmd_sync_users ;;
+        reset)      cmd_reset ;;
+        status)     cmd_status ;;
+        clients)    cmd_clients ;;
+        users)      cmd_users ;;
+        scopes)     cmd_scopes ;;
+        logs)       cmd_logs ;;
         help|--help|-h) show_help ;;
         *)
             log_error "Unknown command: $COMMAND"
