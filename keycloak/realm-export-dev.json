@@ -970,7 +970,7 @@
       "name": "Configure OTP",
       "providerId": "CONFIGURE_TOTP",
       "enabled": true,
-      "defaultAction": true,
+      "defaultAction": false,
       "priority": 10
     },
     {
@@ -978,7 +978,7 @@
       "name": "Recovery Authentication Codes",
       "providerId": "CONFIGURE_RECOVERY_AUTHN_CODES",
       "enabled": true,
-      "defaultAction": true,
+      "defaultAction": false,
       "priority": 20
     }
   ],
