@@ -117,11 +117,11 @@ test_employee_login_page() {
         test_step "SSO login button exists" 1
     fi
 
-    # Check for PKCE code_challenge in JavaScript
-    if [ -n "$content" ] && echo "$content" | grep -q "code_challenge"; then
-        test_step "PKCE support implemented" 0
+    # Check that SSO button links to portal (which handles PKCE)
+    if [ -n "$content" ] && echo "$content" | grep -q 'href="/app/"'; then
+        test_step "SSO button links to portal" 0
     else
-        test_step "PKCE support implemented" 1
+        test_step "SSO button links to portal" 1
     fi
 }
 
