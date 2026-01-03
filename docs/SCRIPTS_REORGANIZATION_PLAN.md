@@ -228,13 +228,30 @@ Current naming is reasonably consistent. Document the convention in a README.
 
 | Script | Purpose | Priority |
 |--------|---------|----------|
+| `scripts/secrets/update-github-secrets.sh` | Automate `gh secret set` after terraform apply | High |
 | `scripts/test/run-integration-tests.sh` | Run integration test suite locally | Medium |
 | `scripts/infra/destroy.sh` | Completely destroy environment (companion to deploy) | Low |
 | `scripts/secrets/rotate-all.sh` | Rotate all secrets in sequence | Low |
 
-### No Immediate Action
+### Recommended New Script: update-github-secrets.sh
 
-These are suggestions for future development. The current script set covers primary use cases.
+Given recent SSH key rotation issues, this script would automate GitHub secret updates:
+
+```bash
+#!/bin/bash
+# Update GitHub secrets from Terraform output or Vault
+# Usage: ./update-github-secrets.sh [environment]
+
+# Example implementation:
+cd infrastructure/terraform/vps
+VPS_SSH_KEY=$(terraform output -raw ssh_private_key)
+echo "$VPS_SSH_KEY" | gh secret set VPS_SSH_KEY
+echo "Updated VPS_SSH_KEY in GitHub secrets"
+```
+
+### No Immediate Action for Low Priority
+
+The High priority script (`update-github-secrets.sh`) should be created. Others are suggestions for future development.
 
 ---
 
@@ -245,7 +262,7 @@ These are suggestions for future development. The current script set covers prim
 ### Actions Required
 
 1. **Update CLAUDE.md**: Verify all script references are accurate
-2. **Add scripts/README.md**: Create overview of script organization
+2. **Add scripts/README.md**: Create overview of script organization, reference `SCRIPTS_INDEX.md` for full catalog
 3. **Standardize headers**: Ensure all scripts have consistent documentation headers
 
 ### Documentation Header Template

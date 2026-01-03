@@ -21,7 +21,7 @@
 | Terraform/Cloud | 3 | `infrastructure/terraform/` |
 | Root Scripts | 8 | `scripts/` |
 | CI/CD Workflows | 26 | `.github/workflows/` |
-| Sample Data | 3 | `sample-data/` |
+| Sample Data | 4 | `sample-data/` |
 
 ---
 
@@ -177,6 +177,7 @@
 | `sample-data/finance-data.sql` | PostgreSQL finance sample data | dev, CI | Docker init | Yes | psql |
 | `sample-data/hr-data.sql` | PostgreSQL HR sample data | dev, CI | Docker init | Yes | psql |
 | `sample-data/sales-data.js` | MongoDB sales CRM sample data | dev, CI | Docker init | Yes | mongosh |
+| `sample-data/support-data.ndjson` | Elasticsearch support/KB sample data | dev, CI | Docker init | Yes | curl (bulk API) |
 
 ---
 
