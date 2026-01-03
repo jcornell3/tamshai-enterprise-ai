@@ -131,10 +131,12 @@ export default function () {
   sleep(0.5);
 
   // Test 4: Protected endpoint returns 401 (security check)
+  // Note: We use responseCallback to tell k6 that 401 is expected here
   {
     const start = Date.now();
     const res = http.get(`${GATEWAY_URL}/api/user`, {
       tags: { name: 'auth-check' },
+      responseCallback: http.expectedStatuses(401),  // 401 is expected, not a failure
     });
     apiDuration.add(Date.now() - start);
 
