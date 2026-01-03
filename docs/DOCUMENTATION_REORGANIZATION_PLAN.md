@@ -81,18 +81,40 @@ Analysis of the repository's 145+ markdown files revealed significant organizati
 
 **Goal**: Move dated debugging/investigation files to archive to declutter active docs.
 
-### Create Archive Structure
+### Step 1: Create Archive README FIRST
+
+Before moving any files, create `docs/archived/README.md`:
+
+```markdown
+# Archived Documentation
+
+This directory contains historical documentation that is no longer actively maintained
+but preserved for reference.
+
+## Contents
+
+- `keycloak-debugging-2025-12/` - Investigation files from December 2025 Keycloak integration
+- `legacy-scaffold/` - Deprecated tamshai_auth_scaffold documentation
+
+## Note
+
+These files may contain outdated information. For current documentation, see the main `docs/` directory.
+```
+
+### Step 2: Create Archive Structure
 
 ```
 docs/archived/
+├── README.md (create first!)
 ├── keycloak-debugging-2025-12/
-│   └── [18 investigation files]
-└── README.md (explains archive purpose)
+│   └── [16 investigation files]
+└── legacy-scaffold/
+    └── README.md
 ```
 
 ### Files to Archive
 
-Move all 18 files from `docs/keycloak-findings/` to `docs/archived/keycloak-debugging-2025-12/`:
+Move 16 dated files from `docs/keycloak-findings/` to `docs/archived/keycloak-debugging-2025-12/`:
 
 | File | Size | Date |
 |------|------|------|
@@ -113,12 +135,14 @@ Move all 18 files from `docs/keycloak-findings/` to `docs/archived/keycloak-debu
 | `2025-12-31-terraform-success-but-401-test-failures.md` | 14K | Dec 31 |
 | `ci-401-debug-strategy.md` | 11K | - |
 
-### Files to Keep in docs/keycloak-findings/
+### Files to Keep/Move from docs/keycloak-findings/
 
-| File | Reason |
-|------|--------|
-| `KEYCLOAK_MANAGEMENT.md` | Current operational guide |
-| `KEYCLOAK_USER_TESTING_METHODOLOGIES.md` | Current testing reference |
+| File | Action | Reason |
+|------|--------|--------|
+| `KEYCLOAK_MANAGEMENT.md` | **MOVE to `docs/operations/`** | Operational guide, not investigation findings |
+| `KEYCLOAK_USER_TESTING_METHODOLOGIES.md` | Keep in place | Testing reference still relevant to this directory |
+
+**Note**: After moving KEYCLOAK_MANAGEMENT.md, `docs/keycloak-findings/` can be renamed to `docs/keycloak-investigations/` for clarity, or kept as-is with only testing methodology docs.
 
 ---
 
@@ -291,11 +315,40 @@ rmdir docs/action-items
 
 ## Post-Reorganization Tasks
 
-1. **Update DOCUMENTATION_INDEX.md** - Regenerate with new file locations
-2. **Update CLAUDE.md** - Fix any broken documentation references
-3. **Update README.md** - Verify documentation links still work
-4. **Search for broken links** - `grep -r "docs/" --include="*.md" | grep -v node_modules`
-5. **Create docs/archived/README.md** - Explain archive purpose and contents
+1. **Create docs/archived/README.md FIRST** - Explain archive purpose before moving files
+2. **Update cross-references** - Files like `CI_TEST_ISSUES_2026-01-01.md` reference archived files; add redirect notes
+3. **Update DOCUMENTATION_INDEX.md** - Regenerate with new file locations
+4. **Update CLAUDE.md** - Fix Key Documentation References section (lines 1010-1050)
+5. **Update README.md** - Verify documentation links still work
+6. **Search for broken links**:
+   ```bash
+   grep -r "docs/" --include="*.md" | grep -v node_modules
+   grep -r "docs/" .specify/ --include="*.md"  # Also check .specify/
+   ```
+7. **Archive this plan** - Move to `docs/archived/` after completion
+
+---
+
+## Review Feedback (2026-01-03)
+
+### Addressed Issues
+
+1. **Missing clients/unified_flutter/** - FIXED: Added to DOCUMENTATION_INDEX.md
+2. **clients/unified/ deprecation** - FIXED: Marked as deprecated in index
+
+### Open Questions for Tech Writer
+
+| Question | Recommendation | Status |
+|----------|---------------|--------|
+| Should `docs/keycloak-findings/KEYCLOAK_MANAGEMENT.md` move to `docs/operations/`? | YES - It's operational guidance, not investigation findings | PENDING |
+| Historical context notes in active docs pointing to archived investigations? | Add "See also: docs/archived/..." notes where relevant | PENDING |
+| Update CLAUDE.md Key Documentation References after reorganization? | YES - Required post-task | PENDING |
+
+### This Plan's Fate
+
+After reorganization is complete, this file (`docs/DOCUMENTATION_REORGANIZATION_PLAN.md`) should be:
+- Moved to `docs/archived/2026-01-reorganization-plan.md`
+- Or deleted if execution is tracked in Git commits
 
 ---
 

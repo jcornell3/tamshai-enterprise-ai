@@ -99,13 +99,16 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `clients/desktop/TEST_RESULTS.md`
 - `clients/desktop/TESTING_GUIDE.md`
 
-### clients/unified/
+### clients/unified/ (React Native - DEPRECATED)
 - `clients/unified/docs/WEBVIEW2_INTEGRATION_ISSUES.md`
 - `clients/unified/docs/WINDOWS_BUILD_ISSUES.md`
 - `clients/unified/docs/WINDOWS_CRASH_INVESTIGATION.md`
 - `clients/unified/MACOS_SETUP.md`
 - `clients/unified/README.md`
 - `clients/unified/WINDOWS_SETUP.md`
+
+### clients/unified_flutter/ (Active Flutter Client)
+- `clients/unified_flutter/README.md`
 
 ### clients/web/
 - `clients/web/apps/finance/README.md`
@@ -336,7 +339,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | `clients/desktop/TEST_RESULTS.md` | Test execution results for the desktop client. |
 | `clients/desktop/TESTING_GUIDE.md` | Guide for testing the Electron desktop application. |
 
-### clients/unified/
+### clients/unified/ (React Native - DEPRECATED)
 
 | File | Description |
 |------|-------------|
@@ -344,8 +347,14 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | `clients/unified/docs/WINDOWS_BUILD_ISSUES.md` | Troubleshooting guide for Windows build problems with React Native. |
 | `clients/unified/docs/WINDOWS_CRASH_INVESTIGATION.md` | Investigation of crash issues on Windows platform. |
 | `clients/unified/MACOS_SETUP.md` | Setup instructions for developing the unified client on macOS. |
-| `clients/unified/README.md` | Documentation for the React Native unified client for all platforms. |
+| `clients/unified/README.md` | Documentation for the React Native unified client for all platforms (deprecated - see unified_flutter). |
 | `clients/unified/WINDOWS_SETUP.md` | Setup instructions for developing the unified client on Windows. |
+
+### clients/unified_flutter/ (Active Flutter Client)
+
+| File | Description |
+|------|-------------|
+| `clients/unified_flutter/README.md` | Documentation for the active Flutter unified client for Windows, macOS, Linux, iOS, and Android. |
 
 ### clients/web/
 
