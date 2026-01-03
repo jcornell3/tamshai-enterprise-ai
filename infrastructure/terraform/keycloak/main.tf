@@ -49,7 +49,9 @@ resource "keycloak_required_action" "configure_totp" {
   realm_id       = keycloak_realm.tamshai_corp.id
   alias          = "CONFIGURE_TOTP"
   enabled        = true
-  default_action = true # New users will be prompted to configure TOTP
+  # default_action = true means new users will be prompted to configure TOTP
+  # In CI environment, disable to allow automated testing with password-only auth
+  default_action = var.environment != "ci"
   name           = "Configure OTP"
 }
 
