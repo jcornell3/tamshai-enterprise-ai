@@ -155,7 +155,7 @@
             } else if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local') {
                 // Dev environment with Caddy - portal is deployed
                 keycloakUrl = window.location.origin + '/auth';
-                redirectUri = window.location.origin + '/app/';
+                redirectUri = window.location.origin + '/app/callback';
             } else if (hostname.includes('5.78.159.29') || hostname.includes('tamshai.com')) {
                 // Stage/Production environment (VPS)
                 // Portal not yet deployed on stage - redirect to homepage for now
