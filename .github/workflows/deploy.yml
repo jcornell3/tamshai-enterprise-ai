@@ -381,24 +381,31 @@ jobs:
   # STAGE 6: DEPLOY TO PRODUCTION (Manual approval required)
   # =============================================================================
   
+  # NOTE: Production deployment is disabled until production infrastructure is ready.
+  # The terraform plan validates configuration but cannot be applied against localhost.
+  # When production Keycloak is set up:
+  # 1. Create production.tfvars with actual production Keycloak URL
+  # 2. Configure Vault secrets for production
+  # 3. Set PRODUCTION_HOST secret
+  # 4. Remove 'false &&' from the condition below
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [terraform-plan]
-    if: github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.plan_status == 'success'
+    if: false && github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.plan_status == 'success'
     environment:
       name: production
       url: https://tamshai.com
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-      
+
       - name: Download Terraform plan
         uses: actions/download-artifact@v4
         with:
@@ -409,7 +416,7 @@ jobs:
         run: |
           terraform -chdir=./infrastructure/terraform/keycloak init -input=false -backend=false
           terraform -chdir=./infrastructure/terraform/keycloak apply -auto-approve keycloak.tfplan
-      
+
       - name: Get production secrets from Vault
         uses: hashicorp/vault-action@v2
         id: vault
@@ -425,7 +432,7 @@ jobs:
             kv/data/production/api-keys anthropic_api_key | ANTHROPIC_API_KEY ;
             kv/data/production/api-keys pinecone_api_key | PINECONE_API_KEY ;
             kv/data/production/api-keys supabase_key | SUPABASE_KEY
-      
+
       - name: Deploy to Production VPS
         uses: appleboy/ssh-action@master
         env:
@@ -443,7 +450,7 @@ jobs:
           envs: DB_PASSWORD,DB_HOST,KEYCLOAK_SECRET,ANTHROPIC_API_KEY,PINECONE_API_KEY,SUPABASE_KEY,COMMIT_SHA
           script: |
             cd /opt/tamshai
-            
+
             # Backup current version
             docker compose exec -T postgres pg_dump -U tamshai tamshai > backup_$(date +%Y%m%d_%H%M%S).sql
 
@@ -474,19 +481,19 @@ jobs:
 
             # Update remaining services
             docker compose up -d
-            
+
             # Cleanup old images
             docker image prune -af --filter "until=24h"
-            
+
             # Log deployment
             echo "$(date -u) - Deployed commit ${COMMIT_SHA} by ${{ github.actor }}" >> /var/log/deployments.log
-      
+
       - name: Run smoke tests
         run: |
           sleep 30
           curl -f https://tamshai.com/health
           curl -f https://tamshai.com/api/v1/status
-      
+
       - name: Notify deployment
         uses: 8398a7/action-slack@v3
         if: always()
@@ -539,7 +546,7 @@ jobs:
   audit-log:
     name: Audit Logging
     runs-on: ubuntu-latest
-    needs: [deploy-production]
+    needs: [terraform-plan, build-and-test]
     if: always()
     steps:
       - name: Create audit log entry
@@ -547,15 +554,17 @@ jobs:
           cat > audit-log.json <<EOF
           {
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "event": "deployment",
-            "environment": "production",
+            "event": "security_scan",
+            "environment": "ci",
             "actor": "${{ github.actor }}",
             "commit": "${{ github.sha }}",
             "workflow_run": "${{ github.run_id }}",
+            "terraform_plan_status": "${{ needs.terraform-plan.outputs.plan_status }}",
+            "build_test_status": "${{ needs.build-and-test.result }}",
             "status": "${{ job.status }}"
           }
           EOF
-      
+
       - name: Send to audit system
         run: |
           curl -X POST https://audit.tamshai.com/events \
