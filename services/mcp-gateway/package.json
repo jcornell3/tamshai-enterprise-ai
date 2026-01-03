@@ -66,6 +66,11 @@
       "**/*.test.ts",
       "**/*.spec.ts"
     ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/",
+      "/__tests__/integration/"
+    ],
     "collectCoverageFrom": [
       "src/**/*.ts",
       "!src/**/*.d.ts",
