@@ -46,17 +46,17 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
 
 # Set environment
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3100
 
 # Switch to non-root user
 USER nodejs
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3100
 
-# Health check
+# Health check (uses PORT env var via shell)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3100}/health || exit 1
 
 # Start server
 CMD ["node", "dist/index.js"]
