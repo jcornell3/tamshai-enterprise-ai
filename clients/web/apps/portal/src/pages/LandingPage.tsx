@@ -29,8 +29,37 @@ interface AppCard {
   color: string;
 }
 
+/**
+ * Get environment-aware app URLs
+ * - Local dev (localhost): Use separate ports
+ * - Deployed (Caddy): Use path-based routing
+ */
+function getAppUrls() {
+  const hostname = window.location.hostname;
+
+  // Deployed environment (Caddy routing)
+  if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local' ||
+      hostname.includes('tamshai.com') || hostname.includes('5.78.159.29')) {
+    return {
+      hr: '/hr/',
+      finance: '/finance/',
+      sales: '/sales/',
+      support: '/support/',
+    };
+  }
+
+  // Local development (separate dev servers)
+  return {
+    hr: 'http://localhost:4001',
+    finance: 'http://localhost:4002',
+    sales: 'http://localhost:4003',
+    support: 'http://localhost:4004',
+  };
+}
+
 export default function LandingPage() {
   const { userContext, signOut } = useAuth();
+  const appUrls = getAppUrls();
 
   const apps: AppCard[] = [
     {
@@ -46,7 +75,7 @@ export default function LandingPage() {
           />
         </svg>
       ),
-      url: 'http://localhost:4001',
+      url: appUrls.hr,
       canAccess: canAccessHR(userContext),
       color: 'primary',
     },
@@ -63,7 +92,7 @@ export default function LandingPage() {
           />
         </svg>
       ),
-      url: 'http://localhost:4002',
+      url: appUrls.finance,
       canAccess: canAccessFinance(userContext),
       color: 'success',
     },
@@ -80,7 +109,7 @@ export default function LandingPage() {
           />
         </svg>
       ),
-      url: 'http://localhost:4003',
+      url: appUrls.sales,
       canAccess: canAccessSales(userContext),
       color: 'warning',
     },
@@ -97,7 +126,7 @@ export default function LandingPage() {
           />
         </svg>
       ),
-      url: 'http://localhost:4004',
+      url: appUrls.support,
       canAccess: canAccessSupport(userContext),
       color: 'secondary',
     },
