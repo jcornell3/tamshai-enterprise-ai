@@ -1,9 +1,9 @@
 # Stage VPS Deployment Status
 
-**Date**: December 31, 2025 (Updated: After root password fix)
+**Date**: January 3, 2026 (Updated: Full rebuild with Host Vault)
 **Environment**: Staging (VPS)
 **Server**: Hetzner CPX31 (4 vCPU AMD, 8GB RAM)
-**Status**: ✅ **Infrastructure Deployed - Cloud-Init In Progress**
+**Status**: ✅ **Fully Deployed - All Services Running**
 
 ## Deployment Summary
 
@@ -29,6 +29,81 @@
 | Firewall Attachment | ✅ Created | Attached to VPS |
 | Random Passwords | ✅ Created | 7 secure passwords generated (including root) |
 | Private Keys | ✅ Saved | Stored in .keys/ (gitignored) |
+| Host Vault | ✅ Installed | Systemd service on port 8200 |
+
+## Full Rebuild Procedure
+
+When performing a full VPS rebuild (terraform destroy + apply), follow these steps **in order**:
+
+### Step 1: Terraform Destroy and Apply
+
+```bash
+cd infrastructure/terraform/vps
+terraform destroy -auto-approve
+terraform apply -auto-approve
+```
+
+### Step 2: Update GitHub SSH Secret
+
+The new VPS has a new SSH key. Update the `VPS_SSH_KEY` secret in GitHub:
+
+```bash
+# Get the new private key
+cat infrastructure/terraform/vps/.keys/deploy_key
+
+# Update in GitHub: Settings → Secrets → VPS_SSH_KEY
+```
+
+### Step 3: Install Docker and Clone Repo
+
+**Note**: Cloud-init on Hetzner may not execute custom runcmd properly. If Docker is not installed:
+
+```bash
+# SSH to VPS
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@<VPS_IP>
+
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+systemctl enable docker && systemctl start docker
+
+# Clone repo
+git clone --branch main https://github.com/jcornell3/tamshai-enterprise-ai.git /opt/tamshai
+```
+
+### Step 4: Run Bootstrap Workflow
+
+```bash
+gh workflow run bootstrap-vps.yml --ref main \
+  -f environment=staging \
+  -f rebuild=true \
+  -f pull_latest=true
+```
+
+### Step 5: Install Host Vault (Required)
+
+**IMPORTANT**: The Host Vault must be installed for GitHub OIDC and secrets management.
+
+```bash
+gh workflow run setup-vault.yml --ref main \
+  -f confirm_install=INSTALL \
+  -f vault_version=1.15.4
+```
+
+This installs Vault as a **systemd service on port 8200** (not Docker).
+
+### Step 6: Verify Deployment
+
+```bash
+# Check all services
+ssh root@<VPS_IP> "docker ps --format 'table {{.Names}}\t{{.Status}}'"
+
+# Verify Host Vault
+ssh root@<VPS_IP> "systemctl status vault"
+ssh root@<VPS_IP> "lsof -i :8200"
+
+# Test MCP Gateway
+curl https://www.tamshai.com/api/health
+```
 
 ### Terraform Outputs
 
@@ -303,17 +378,19 @@ docker logs caddy --tail 100 -f
 
 If deployment fails:
 
-1. **Destroy and redeploy**:
-   ```bash
-   cd infrastructure/terraform/vps
-   terraform destroy -auto-approve
-   terraform apply -auto-approve
-   ```
+1. **Full VPS Rebuild** (recommended):
+   Follow the **Full Rebuild Procedure** section above, which includes:
+   - Terraform destroy/apply
+   - Update GitHub SSH secret
+   - Install Docker (if cloud-init fails)
+   - Run bootstrap-vps.yml workflow
+   - **Install Host Vault** via setup-vault.yml workflow
 
 2. **Or fix via Hetzner console**:
-   - Access console
-   - Run cloud-init script manually
-   - Debug and fix issues
+   - Access console at https://console.hetzner.cloud/
+   - Username: `root`
+   - Password: `terraform output -raw root_password`
+   - Debug and fix issues manually
 
 ## Security Notes
 
