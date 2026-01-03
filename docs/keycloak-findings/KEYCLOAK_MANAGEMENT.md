@@ -16,6 +16,9 @@ This document describes how to manage Keycloak in the Tamshai Enterprise AI syst
 # Sync HR employees to Keycloak users
 ./scripts/infra/keycloak.sh sync-users dev
 
+# Re-import client configurations (keeps users, updates mappers)
+./scripts/infra/keycloak.sh reimport dev
+
 # Reset Keycloak (fresh database, re-import realm)
 ./scripts/infra/keycloak.sh reset dev
 
@@ -115,6 +118,25 @@ The `sync-users` command maps HR departments to Keycloak roles:
 
 Additionally:
 - Employees with `is_manager=true` get the `manager` role
+
+## Re-importing Client Configurations
+
+When you modify `realm-export-dev.json` (e.g., adding protocol mappers, audience claims), use `reimport` to apply changes without losing users:
+
+```bash
+./scripts/infra/keycloak.sh reimport dev
+```
+
+This will:
+1. Read client configurations from `realm-export-dev.json`
+2. Update protocol mappers for each client
+3. Preserve all user accounts and sessions
+
+**Use case**: When you add a new audience mapper to a client (e.g., `mcp-gateway-audience` for the `tamshai-website` client), run this command to apply it immediately.
+
+**After reimport**: Users must log out and log back in to get new tokens with the updated claims.
+
+**Note**: If `jq` is installed, the script will process all clients. Otherwise, it falls back to adding the critical `mcp-gateway-audience` mapper only.
 
 ## Resetting Keycloak
 
