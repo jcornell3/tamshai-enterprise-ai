@@ -466,7 +466,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: No budget data visible to intern
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.intern.userId,
         TEST_USERS.intern.roles,
         TEST_USERS.intern.department
@@ -486,7 +486,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: All department budgets visible
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.financeRead.userId,
         TEST_USERS.financeRead.roles,
         TEST_USERS.financeRead.department
@@ -506,7 +506,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: All invoices visible
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.financeRead.userId,
         TEST_USERS.financeRead.roles,
         TEST_USERS.financeRead.department
@@ -526,7 +526,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Only Engineering department budget visible
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.manager.userId,
         TEST_USERS.manager.roles,
         TEST_USERS.manager.department
@@ -549,7 +549,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: All budgets visible across departments
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.executive.userId,
         TEST_USERS.executive.roles,
         TEST_USERS.executive.department
@@ -573,7 +573,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: All invoices visible
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.executive.userId,
         TEST_USERS.executive.roles,
         TEST_USERS.executive.department
@@ -592,7 +592,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Sales role can access revenue data
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.sales.userId,
         TEST_USERS.sales.roles,
         TEST_USERS.sales.department
@@ -612,7 +612,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Public reports visible to everyone
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.intern.userId,
         TEST_USERS.intern.roles,
         TEST_USERS.intern.department
@@ -642,7 +642,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: RLS policy violation error
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.intern.userId,
         TEST_USERS.intern.roles,
         TEST_USERS.intern.department
@@ -651,8 +651,8 @@ describe('RLS Policies - Integration Tests', () => {
       try {
         await expect(
           client.query(`
-            INSERT INTO finance.department_budgets (budget_id, department, fiscal_year, amount)
-            VALUES ('test-budget-001', 'IT', 2026, 100000)
+            INSERT INTO finance.department_budgets (budget_id, department, department_code, fiscal_year, budgeted_amount, amount)
+            VALUES ('test-budget-001', 'IT', 'IT', 2026, 100000, 100000)
           `)
         ).rejects.toThrow(/permission denied|policy/i);
       } finally {
@@ -664,7 +664,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Success - finance-write can create budgets
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.financeWrite.userId,
         TEST_USERS.financeWrite.roles,
         TEST_USERS.financeWrite.department
@@ -674,8 +674,8 @@ describe('RLS Policies - Integration Tests', () => {
 
       try {
         const result = await client.query(`
-          INSERT INTO finance.department_budgets (budget_id, department, fiscal_year, amount)
-          VALUES ($1, 'IT', 2026, 100000)
+          INSERT INTO finance.department_budgets (budget_id, department, department_code, fiscal_year, budgeted_amount, amount)
+          VALUES ($1, 'IT', 'IT', 2026, 100000, 100000)
           RETURNING budget_id
         `, [testBudgetId]);
 
@@ -692,7 +692,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Success - finance-write can modify budgets
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.financeWrite.userId,
         TEST_USERS.financeWrite.roles,
         TEST_USERS.financeWrite.department
@@ -723,7 +723,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Success - finance-write can delete budgets
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.financeWrite.userId,
         TEST_USERS.financeWrite.roles,
         TEST_USERS.financeWrite.department
@@ -734,8 +734,8 @@ describe('RLS Policies - Integration Tests', () => {
       try {
         // First insert a test budget
         await client.query(`
-          INSERT INTO finance.department_budgets (budget_id, department, fiscal_year, amount)
-          VALUES ($1, 'IT', 2026, 50000)
+          INSERT INTO finance.department_budgets (budget_id, department, department_code, fiscal_year, budgeted_amount, amount)
+          VALUES ($1, 'IT', 'IT', 2026, 50000, 50000)
         `, [testBudgetId]);
 
         // Then delete it
@@ -754,7 +754,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Success - finance-write can delete invoices
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.financeWrite.userId,
         TEST_USERS.financeWrite.roles,
         TEST_USERS.financeWrite.department
@@ -791,6 +791,7 @@ describe('RLS Policies - Integration Tests', () => {
     test('sales role cannot INSERT into hr.employees', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: RLS blocks cross-schema write
+      // Note: Using HR database since this tests HR table access
 
       const client = await createUserClient(
         TEST_USERS.sales.userId,
@@ -813,8 +814,9 @@ describe('RLS Policies - Integration Tests', () => {
     test('hr role cannot INSERT into finance.invoices', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: RLS blocks cross-schema write
+      // Note: Using Finance database since this tests Finance table access
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.hrWrite.userId,
         TEST_USERS.hrWrite.roles,
         TEST_USERS.hrWrite.department
@@ -835,6 +837,7 @@ describe('RLS Policies - Integration Tests', () => {
     test('finance role cannot UPDATE hr.employees', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: RLS blocks cross-schema update
+      // Note: Using HR database since this tests HR table access
 
       const client = await createUserClient(
         TEST_USERS.financeWrite.userId,
@@ -860,8 +863,9 @@ describe('RLS Policies - Integration Tests', () => {
     test('hr role cannot DELETE from finance.department_budgets', async () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: RLS blocks cross-schema delete
+      // Note: Using Finance database since this tests Finance table access
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.hrWrite.userId,
         TEST_USERS.hrWrite.roles,
         TEST_USERS.hrWrite.department
@@ -892,6 +896,7 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Audit log readable for compliance/auditing purposes
       // Note: RLS intentionally disabled on audit tables
+      // Note: Using HR database since this tests HR audit table
 
       const client = await createUserClient(
         TEST_USERS.executive.userId,
@@ -914,8 +919,9 @@ describe('RLS Policies - Integration Tests', () => {
       // TDD: Define expected behavior FIRST
       // EXPECT: Audit log readable for compliance/auditing purposes
       // Note: RLS intentionally disabled on audit tables
+      // Note: Using Finance database since this tests Finance audit table
 
-      const client = await createUserClient(
+      const client = await createFinanceUserClient(
         TEST_USERS.executive.userId,
         TEST_USERS.executive.roles,
         TEST_USERS.executive.department
