@@ -12,6 +12,7 @@
 # Commands:
 #   sync       Sync clients and configuration
 #   sync-users Sync users from HR database to Keycloak
+#   reimport   Re-import client configs from realm-export (keeps users)
 #   reset      Reset Keycloak database (fresh realm import)
 #   status     Show Keycloak status and realm info
 #   clients    List all clients in realm
@@ -26,6 +27,7 @@
 # Examples:
 #   ./keycloak.sh sync dev              # Sync dev Keycloak
 #   ./keycloak.sh sync stage            # Sync stage Keycloak
+#   ./keycloak.sh reimport dev          # Re-import client configs (keeps users)
 #   ./keycloak.sh status dev            # Show Keycloak status
 #   ./keycloak.sh clients dev           # List all clients
 #   ./keycloak.sh users dev             # List all users
@@ -300,6 +302,143 @@ SYNC_VPS
     log_info "User sync complete"
 }
 
+cmd_reimport() {
+    log_header "Re-importing Client Configurations"
+    log_info "This updates client configurations from realm-export without losing users."
+
+    if [ "$ENV" = "dev" ]; then
+        local realm_file="$PROJECT_ROOT/keycloak/realm-export-dev.json"
+    else
+        local realm_file="$PROJECT_ROOT/keycloak/realm-export.json"
+    fi
+
+    if [ ! -f "$realm_file" ]; then
+        log_error "Realm export file not found: $realm_file"
+        return 1
+    fi
+
+    log_info "Using realm file: $realm_file"
+
+    # Get admin token
+    log_info "Getting admin token..."
+    local keycloak_url
+    local insecure=""
+    if [ "$ENV" = "dev" ]; then
+        keycloak_url="http://localhost:8180"
+    else
+        keycloak_url="https://${VPS_HOST:-5.78.159.29}"
+        insecure="-k"
+    fi
+
+    local admin_user="${KEYCLOAK_ADMIN:-admin}"
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+
+    local token_response
+    token_response=$(curl $insecure -sf -X POST "$keycloak_url/auth/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=$admin_user" \
+        -d "password=$admin_pass" \
+        -d "grant_type=password" 2>&1)
+
+    local token
+    token=$(echo "$token_response" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+
+    if [ -z "$token" ]; then
+        log_error "Failed to get admin token"
+        echo "$token_response"
+        return 1
+    fi
+
+    log_info "Got admin token"
+
+    # Parse clients from realm export and update each
+    log_info "Updating client configurations..."
+
+    # Use jq if available, otherwise use a simpler approach
+    if command -v jq &> /dev/null; then
+        local clients
+        clients=$(jq -c '.clients[] | select(.clientId != null)' "$realm_file")
+
+        echo "$clients" | while read -r client_json; do
+            local client_id
+            client_id=$(echo "$client_json" | jq -r '.clientId')
+
+            if [ -z "$client_id" ] || [ "$client_id" = "null" ]; then
+                continue
+            fi
+
+            log_info "  Processing client: $client_id"
+
+            # Get the internal ID for this client
+            local client_info
+            client_info=$(curl $insecure -sf -X GET \
+                "$keycloak_url/auth/admin/realms/$REALM/clients?clientId=$client_id" \
+                -H "Authorization: Bearer $token" 2>&1)
+
+            local internal_id
+            internal_id=$(echo "$client_info" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+            if [ -z "$internal_id" ]; then
+                log_warn "    Client not found in Keycloak, skipping"
+                continue
+            fi
+
+            # Get protocol mappers from the export
+            local mappers
+            mappers=$(echo "$client_json" | jq -c '.protocolMappers // []')
+
+            if [ "$mappers" != "[]" ] && [ "$mappers" != "null" ]; then
+                echo "$mappers" | jq -c '.[]' | while read -r mapper_json; do
+                    local mapper_name
+                    mapper_name=$(echo "$mapper_json" | jq -r '.name')
+
+                    log_info "    Adding/updating mapper: $mapper_name"
+
+                    # Try to create the mapper (will fail if exists, that's ok)
+                    curl $insecure -sf -X POST \
+                        "$keycloak_url/auth/admin/realms/$REALM/clients/$internal_id/protocol-mappers/models" \
+                        -H "Authorization: Bearer $token" \
+                        -H "Content-Type: application/json" \
+                        -d "$mapper_json" 2>/dev/null || \
+                        log_warn "      Mapper may already exist or update failed"
+                done
+            fi
+        done
+    else
+        log_warn "jq not installed - using simplified reimport"
+        log_info "Installing audience mapper for tamshai-website client..."
+
+        # Get tamshai-website client ID
+        local client_info
+        client_info=$(curl $insecure -sf -X GET \
+            "$keycloak_url/auth/admin/realms/$REALM/clients?clientId=tamshai-website" \
+            -H "Authorization: Bearer $token" 2>&1)
+
+        local internal_id
+        internal_id=$(echo "$client_info" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+        if [ -n "$internal_id" ]; then
+            curl $insecure -sf -X POST \
+                "$keycloak_url/auth/admin/realms/$REALM/clients/$internal_id/protocol-mappers/models" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                -d '{
+                    "name": "mcp-gateway-audience",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-audience-mapper",
+                    "consentRequired": false,
+                    "config": {
+                        "included.client.audience": "mcp-gateway",
+                        "id.token.claim": "false",
+                        "access.token.claim": "true"
+                    }
+                }' 2>/dev/null && log_info "  Audience mapper added" || log_warn "  Mapper may already exist"
+        fi
+    fi
+
+    log_info "Re-import complete. Users must log out and back in to get new tokens."
+}
+
 cmd_reset() {
     log_header "Resetting Keycloak Database"
     log_warn "This will DELETE all Keycloak data and re-import the realm!"
@@ -469,6 +608,7 @@ show_help() {
     echo "Commands:"
     echo "  sync       Sync clients and configuration"
     echo "  sync-users Sync users from HR database to Keycloak"
+    echo "  reimport   Re-import client configs from realm-export (keeps users)"
     echo "  reset      Reset Keycloak database (fresh realm import)"
     echo "  status     Show Keycloak status"
     echo "  clients    List all clients"
@@ -483,6 +623,7 @@ main() {
     case "$COMMAND" in
         sync)       cmd_sync ;;
         sync-users) cmd_sync_users ;;
+        reimport)   cmd_reimport ;;
         reset)      cmd_reset ;;
         status)     cmd_status ;;
         clients)    cmd_clients ;;
