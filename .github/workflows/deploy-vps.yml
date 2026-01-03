@@ -107,9 +107,11 @@ jobs:
           fi
           echo "should_deploy=true" >> $GITHUB_OUTPUT
 
-      - name: Validate docker-compose.vps.yml
+      - name: Validate docker-compose.yml
         env:
           # Default values for CI validation only (not used in real deployment)
+          COMPOSE_PROJECT_NAME: tamshai-vps
+          KEYCLOAK_MODE: start
           TAMSHAI_DB_PASSWORD: ci_test_value
           POSTGRES_PASSWORD: ci_test_value
           KEYCLOAK_DB_PASSWORD: ci_test_value
@@ -123,7 +125,7 @@ jobs:
           VITE_KEYCLOAK_URL: http://localhost:8180
         run: |
           # Validate docker-compose configuration (uses env vars above for syntax check)
-          docker compose -f docker-compose.vps.yml config --quiet
+          docker compose config --quiet
 
   # =============================================================================
   # BUILD AND TEST
@@ -215,7 +217,8 @@ jobs:
 
           echo "=== Building and deploying services ==="
           # Always build images on VPS (no container registry configured yet)
-          docker compose -f docker-compose.vps.yml up -d --build
+          # Uses root docker-compose.yml with VPS environment variables
+          docker compose up -d --build
 
           echo "=== Cleaning up ==="
           docker image prune -f

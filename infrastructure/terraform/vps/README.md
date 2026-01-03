@@ -212,8 +212,9 @@ Otherwise, use cloud provider console:
 
 2. Check Docker services:
    ```
-   docker compose -f /opt/tamshai/docker-compose.vps.yml ps
-   docker compose -f /opt/tamshai/docker-compose.vps.yml logs
+   cd /opt/tamshai
+   docker compose ps
+   docker compose logs
    ```
 
 3. Check Caddy (reverse proxy):
@@ -272,13 +273,41 @@ This removes:
 infrastructure/terraform/vps/
 ├── main.tf                    # Terraform configuration
 ├── cloud-init.yaml            # VPS bootstrap script
-├── terraform.tfvars.example   # Example variables
+├── terraform.tfvars.example   # Example variables (copy to terraform.tfvars)
+├── SECRETS_MANAGEMENT.md      # Secrets configuration guide
 ├── README.md                  # This file
 └── .keys/                     # Generated SSH keys (gitignored)
-    ├── deploy_key             # Private key
+    ├── deploy_key             # Private key (for SSH access)
     └── deploy_key.pub         # Public key
 
-docker-compose.vps.yml         # Production compose file
+docker-compose.yml             # Unified compose file (dev + VPS)
 scripts/deploy-vps.sh          # Local deployment script
-.github/workflows/deploy-vps.yml  # CI/CD workflow
+scripts/infra/teardown.sh      # Environment teardown script
+.github/workflows/deploy-vps.yml    # CI/CD deploy workflow
+.github/workflows/bootstrap-vps.yml # Full VPS bootstrap workflow
 ```
+
+## Tear Down and Redeploy
+
+### Method 1: Terraform (Complete Infrastructure Rebuild)
+
+```bash
+cd infrastructure/terraform/vps
+
+# Set required secrets
+export TF_VAR_claude_api_key="sk-ant-api03-your-key-here"
+
+# Destroy current VPS
+terraform destroy
+
+# Create new VPS with fresh cloud-init
+terraform apply
+```
+
+### Method 2: Bootstrap Workflow (Keep VPS, Redeploy Services)
+
+1. Ensure GitHub Secrets are configured (see SECRETS_MANAGEMENT.md)
+2. Go to GitHub Actions > Bootstrap VPS > Run workflow
+3. Select options:
+   - `fresh_start: true` to delete data volumes
+   - `rebuild: true` to rebuild all images

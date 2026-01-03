@@ -82,6 +82,13 @@ write_files:
       # Identity Sync (HR -> Keycloak provisioning)
       MCP_HR_SERVICE_CLIENT_SECRET=${mcp_hr_service_client_secret}
 
+      # Keycloak client secrets (must match realm-export.json)
+      MCP_GATEWAY_CLIENT_SECRET=mcp-gateway-secret
+
+      # Docker compose settings for VPS
+      COMPOSE_PROJECT_NAME=tamshai-vps
+      KEYCLOAK_MODE=start
+
       # Web Apps
       # NOTE: Authority URL must include full realm path for OIDC discovery
       VITE_KEYCLOAK_URL=https://${domain}/auth/realms/tamshai-corp
@@ -229,11 +236,11 @@ write_files:
 
       # Pull latest images
       echo "Pulling Docker images..."
-      docker compose -f docker-compose.vps.yml pull
+      docker compose pull
 
-      # Deploy with optional build
+      # Deploy with optional build (uses root docker-compose.yml)
       echo "Deploying services..."
-      docker compose -f docker-compose.vps.yml up -d $BUILD_FLAG
+      docker compose up -d $BUILD_FLAG
 
       # Cleanup old images
       echo "Cleaning up..."
@@ -347,7 +354,8 @@ runcmd:
   - chown tamshai:tamshai /opt/tamshai/.webhook-secret
 
   # Start services (build from source, pull base images)
-  - cd /opt/tamshai && docker compose -f docker-compose.vps.yml up -d --build
+  # Uses root docker-compose.yml with VPS environment variables
+  - cd /opt/tamshai && docker compose up -d --build
 
   # Enable fail2ban
   - systemctl enable fail2ban
