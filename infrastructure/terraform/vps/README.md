@@ -294,8 +294,8 @@ scripts/infra/teardown.sh      # Environment teardown script
 ```bash
 cd infrastructure/terraform/vps
 
-# Set required secrets
-export TF_VAR_claude_api_key="sk-ant-api03-your-key-here"
+# Set required secrets (use STAGE-specific API key, separate from dev!)
+export TF_VAR_claude_api_key_stage="sk-ant-api03-your-stage-key-here"
 
 # Destroy current VPS
 terraform destroy

@@ -100,8 +100,8 @@ variable "environment" {
   default     = "staging"
 }
 
-variable "claude_api_key" {
-  description = "Anthropic Claude API key"
+variable "claude_api_key_stage" {
+  description = "Anthropic Claude API key for Stage/VPS environment (separate from dev)"
   type        = string
   sensitive   = true
 }
@@ -396,7 +396,7 @@ locals {
     environment                  = var.environment
     github_repo                  = var.github_repo
     github_branch                = var.github_branch
-    claude_api_key               = var.claude_api_key
+    claude_api_key               = var.claude_api_key_stage
     postgres_password            = random_password.postgres_password.result
     keycloak_admin_pass          = random_password.keycloak_admin_password.result
     keycloak_db_password         = random_password.keycloak_db_password.result

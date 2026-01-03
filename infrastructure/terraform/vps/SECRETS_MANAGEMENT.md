@@ -19,7 +19,11 @@ This includes:
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
 | `TF_VAR_hcloud_token` | Hetzner Cloud API access | Terraform (creates VPS) |
-| `TF_VAR_claude_api_key` | Claude AI API access | cloud-init → .env file |
+| `TF_VAR_claude_api_key_stage_stage` | Claude AI API access for **Stage** | cloud-init → .env file |
+
+**IMPORTANT**: Use a **SEPARATE** Claude API key for stage vs dev!
+- Create keys at: https://console.anthropic.com/settings/keys
+- Name them "Tamshai Dev" and "Tamshai Stage" to track usage separately
 
 ### Method 2: GitHub Actions `bootstrap-vps` Workflow (Recommended)
 
@@ -54,11 +58,11 @@ Terraform automatically reads variables prefixed with `TF_VAR_`.
 ```powershell
 # Set for current session
 $env:TF_VAR_hcloud_token = "your-hetzner-token-here"
-$env:TF_VAR_claude_api_key = "sk-ant-api03-your-key-here"
+$env:TF_VAR_claude_api_key_stage = "sk-ant-api03-your-key-here"
 
 # Verify
 echo $env:TF_VAR_hcloud_token
-echo $env:TF_VAR_claude_api_key
+echo $env:TF_VAR_claude_api_key_stage
 
 # Deploy
 cd infrastructure/terraform/vps
@@ -72,11 +76,11 @@ terraform apply
 ```bash
 # Set for current session
 export TF_VAR_hcloud_token="your-hetzner-token-here"
-export TF_VAR_claude_api_key="sk-ant-api03-your-key-here"
+export TF_VAR_claude_api_key_stage="sk-ant-api03-your-key-here"
 
 # Verify
 echo $TF_VAR_hcloud_token
-echo $TF_VAR_claude_api_key
+echo $TF_VAR_claude_api_key_stage
 
 # Deploy
 cd infrastructure/terraform/vps
@@ -92,7 +96,7 @@ For permanent storage (use with caution):
 ```powershell
 # User-level (recommended)
 [System.Environment]::SetEnvironmentVariable('TF_VAR_hcloud_token', 'your-token', 'User')
-[System.Environment]::SetEnvironmentVariable('TF_VAR_claude_api_key', 'sk-ant-api03-...', 'User')
+[System.Environment]::SetEnvironmentVariable('TF_VAR_claude_api_key_stage', 'sk-ant-api03-...', 'User')
 
 # Restart PowerShell to load variables
 
@@ -175,7 +179,7 @@ jobs:
         working-directory: infrastructure/terraform/vps
         env:
           TF_VAR_hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
-          TF_VAR_claude_api_key: ${{ secrets.CLAUDE_API_KEY }}
+          TF_VAR_claude_api_key_stage: ${{ secrets.CLAUDE_API_KEY }}
         run: terraform apply -auto-approve
 ```
 
@@ -288,7 +292,7 @@ Only for local testing in isolated environments.
 ```bash
 # infrastructure/terraform/vps/.env
 export TF_VAR_hcloud_token="your-token"
-export TF_VAR_claude_api_key="sk-ant-api03-..."
+export TF_VAR_claude_api_key_stage="sk-ant-api03-..."
 
 # Load variables
 source .env
@@ -348,14 +352,14 @@ Before deploying, verify:
 
 ```bash
 # Windows PowerShell
-if ($env:TF_VAR_claude_api_key -and $env:TF_VAR_hcloud_token) {
+if ($env:TF_VAR_claude_api_key_stage -and $env:TF_VAR_hcloud_token) {
     Write-Host "✓ Secrets loaded" -ForegroundColor Green
 } else {
     Write-Host "✗ Secrets missing!" -ForegroundColor Red
 }
 
 # Linux/macOS Bash
-if [[ -n "$TF_VAR_claude_api_key" && -n "$TF_VAR_hcloud_token" ]]; then
+if [[ -n "$TF_VAR_claude_api_key_stage" && -n "$TF_VAR_hcloud_token" ]]; then
     echo "✓ Secrets loaded"
 else
     echo "✗ Secrets missing!"
@@ -386,7 +390,7 @@ value for this variable.
 ```bash
 # 1. Generate new key at https://console.anthropic.com/settings/keys
 # 2. Update environment variable
-$env:TF_VAR_claude_api_key = "sk-ant-api03-NEW-KEY"
+$env:TF_VAR_claude_api_key_stage = "sk-ant-api03-NEW-KEY"
 
 # 3. Redeploy (will update VPS .env file)
 terraform apply
@@ -460,18 +464,18 @@ git push origin --force --all
 **Wrong (will deploy with missing secrets)**:
 ```bash
 TF_VAR_root_password="$VPS_PW" terraform apply -replace='hcloud_server.tamshai[0]'
-# ❌ Missing TF_VAR_claude_api_key - MCP Gateway will crash!
+# ❌ Missing TF_VAR_claude_api_key_stage - MCP Gateway will crash!
 ```
 
 **Correct (all secrets included)**:
 ```bash
-TF_VAR_root_password="$VPS_PW" TF_VAR_claude_api_key="$CLAUDE_API_KEY" terraform apply -replace='hcloud_server.tamshai[0]'
+TF_VAR_root_password="$VPS_PW" TF_VAR_claude_api_key_stage="$CLAUDE_API_KEY" terraform apply -replace='hcloud_server.tamshai[0]'
 # ✅ All required variables set - deployment will succeed
 ```
 
 **Required Variables for VPS Deployment**:
 - `TF_VAR_hcloud_token` - Hetzner Cloud API (for creating VPS)
-- `TF_VAR_claude_api_key` - Claude API (for MCP Gateway runtime)
+- `TF_VAR_claude_api_key_stage` - Claude API (for MCP Gateway runtime)
 - `TF_VAR_root_password` - VPS console password (optional but recommended)
 
 ---
@@ -483,11 +487,11 @@ TF_VAR_root_password="$VPS_PW" TF_VAR_claude_api_key="$CLAUDE_API_KEY" terraform
 ```powershell
 # Set ALL required secrets
 $env:TF_VAR_hcloud_token = "your-hetzner-token"
-$env:TF_VAR_claude_api_key = "sk-ant-api03-your-key"
+$env:TF_VAR_claude_api_key_stage = "sk-ant-api03-your-key"
 $env:TF_VAR_root_password = "your-vps-password"
 
 # Verify ALL are set
-if ($env:TF_VAR_claude_api_key -and $env:TF_VAR_hcloud_token -and $env:TF_VAR_root_password) {
+if ($env:TF_VAR_claude_api_key_stage -and $env:TF_VAR_hcloud_token -and $env:TF_VAR_root_password) {
     Write-Host "✓ Ready to deploy" -ForegroundColor Green
 
     cd infrastructure/terraform/vps
@@ -498,7 +502,7 @@ if ($env:TF_VAR_claude_api_key -and $env:TF_VAR_hcloud_token -and $env:TF_VAR_ro
     Write-Host "✗ Set ALL secrets first!" -ForegroundColor Red
     Write-Host "Missing:" -ForegroundColor Yellow
     if (-not $env:TF_VAR_hcloud_token) { Write-Host "  - TF_VAR_hcloud_token" }
-    if (-not $env:TF_VAR_claude_api_key) { Write-Host "  - TF_VAR_claude_api_key" }
+    if (-not $env:TF_VAR_claude_api_key_stage) { Write-Host "  - TF_VAR_claude_api_key_stage" }
     if (-not $env:TF_VAR_root_password) { Write-Host "  - TF_VAR_root_password" }
 }
 ```
@@ -508,11 +512,11 @@ if ($env:TF_VAR_claude_api_key -and $env:TF_VAR_hcloud_token -and $env:TF_VAR_ro
 ```bash
 # Set ALL required secrets
 export TF_VAR_hcloud_token="your-hetzner-token"
-export TF_VAR_claude_api_key="sk-ant-api03-your-key"
+export TF_VAR_claude_api_key_stage="sk-ant-api03-your-key"
 export TF_VAR_root_password="your-vps-password"
 
 # Verify ALL are set
-if [[ -n "$TF_VAR_claude_api_key" && -n "$TF_VAR_hcloud_token" && -n "$TF_VAR_root_password" ]]; then
+if [[ -n "$TF_VAR_claude_api_key_stage" && -n "$TF_VAR_hcloud_token" && -n "$TF_VAR_root_password" ]]; then
     echo "✓ Ready to deploy"
     cd infrastructure/terraform/vps
     terraform init
@@ -522,7 +526,7 @@ else
     echo "✗ Set ALL secrets first!"
     echo "Missing:"
     [[ -z "$TF_VAR_hcloud_token" ]] && echo "  - TF_VAR_hcloud_token"
-    [[ -z "$TF_VAR_claude_api_key" ]] && echo "  - TF_VAR_claude_api_key"
+    [[ -z "$TF_VAR_claude_api_key_stage" ]] && echo "  - TF_VAR_claude_api_key_stage"
     [[ -z "$TF_VAR_root_password" ]] && echo "  - TF_VAR_root_password"
 fi
 ```
@@ -532,12 +536,12 @@ fi
 ```bash
 # Bash (Linux/macOS) - inline variables
 TF_VAR_hcloud_token="$HCLOUD_TOKEN" \
-TF_VAR_claude_api_key="$CLAUDE_API_KEY" \
+TF_VAR_claude_api_key_stage="$CLAUDE_API_KEY" \
 TF_VAR_root_password="$VPS_PW" \
 terraform apply -auto-approve
 
 # PowerShell (Windows) - set then deploy
-$env:TF_VAR_hcloud_token=$env:HCLOUD_TOKEN; $env:TF_VAR_claude_api_key=$env:CLAUDE_API_KEY; $env:TF_VAR_root_password=$env:VPS_PW; terraform apply -auto-approve
+$env:TF_VAR_hcloud_token=$env:HCLOUD_TOKEN; $env:TF_VAR_claude_api_key_stage=$env:CLAUDE_API_KEY; $env:TF_VAR_root_password=$env:VPS_PW; terraform apply -auto-approve
 ```
 
 ---
