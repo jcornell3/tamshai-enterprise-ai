@@ -17,6 +17,16 @@ export interface Opportunity {
 }
 
 /**
+ * Contact data type for customers
+ */
+export interface Contact {
+  name: string;
+  email: string;
+  phone?: string;
+  role?: string;
+}
+
+/**
  * Customer data types
  */
 export interface Customer {
@@ -29,6 +39,7 @@ export interface Customer {
     email: string;
     phone?: string;
   };
+  contacts?: Contact[];
   address?: {
     city: string;
     state: string;

@@ -19,7 +19,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 CREATE SCHEMA IF NOT EXISTS hr;
 
--- Grant permissions to tamshai user
+-- Grant permissions to tamshai user (admin/sync operations)
 GRANT USAGE ON SCHEMA hr TO tamshai;
 GRANT ALL ON ALL TABLES IN SCHEMA hr TO tamshai;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA hr TO tamshai;
@@ -29,6 +29,23 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON SEQUENCES TO tamshai;
 -- IMPORTANT: Allow tamshai to bypass Row-Level Security policies
 -- Required for identity-sync service account to read all employees
 ALTER USER tamshai BYPASSRLS;
+
+-- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)
+-- This user does NOT have BYPASSRLS - RLS policies will be enforced
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app') THEN
+        CREATE ROLE tamshai_app WITH LOGIN PASSWORD 'changeme';
+    END IF;
+END
+$$;
+
+-- Grant permissions to tamshai_app (same as tamshai but without BYPASSRLS)
+GRANT USAGE ON SCHEMA hr TO tamshai_app;
+GRANT ALL ON ALL TABLES IN SCHEMA hr TO tamshai_app;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA hr TO tamshai_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON TABLES TO tamshai_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON SEQUENCES TO tamshai_app;
 
 -- =============================================================================
 -- DEPARTMENTS
@@ -85,23 +102,27 @@ ON CONFLICT (grade) DO NOTHING;
 -- EMPLOYEES
 -- Key fields for access control:
 --   - id: Unique employee identifier (matches Keycloak sub claim)
+--   - employee_id: Test-friendly ID (alias for employee_number for test compatibility)
 --   - employee_number: Human-readable employee ID (matches Keycloak employeeId attribute)
 --   - manager_id: References the employee's direct manager (for manager access)
 --   - email: Matches Keycloak email (for self-access lookups)
+--   - department: Full department name for test compatibility
 --   - grade: Job grade level (L1-L9)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS hr.employees (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    employee_number VARCHAR(20) UNIQUE NOT NULL,
+    employee_id VARCHAR(50) UNIQUE,  -- Test-friendly ID for RLS tests
+    employee_number VARCHAR(20) UNIQUE,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     phone VARCHAR(20),
+    department VARCHAR(100),  -- Full department name for test compatibility
     department_id UUID REFERENCES hr.departments(id),
     manager_id UUID REFERENCES hr.employees(id),
     title VARCHAR(100),
     grade VARCHAR(10) REFERENCES hr.grade_levels(grade),
-    hire_date DATE NOT NULL,
+    hire_date DATE DEFAULT CURRENT_DATE,
     salary DECIMAL(12, 2),
     salary_currency VARCHAR(3) DEFAULT 'USD',
     bonus_target_pct DECIMAL(5, 2) DEFAULT 0,  -- Target bonus as % of salary
@@ -111,6 +132,7 @@ CREATE TABLE IF NOT EXISTS hr.employees (
     work_email VARCHAR(255),  -- Same as email for SSO matching
     is_manager BOOLEAN DEFAULT false,  -- Flag for manager role assignment
     keycloak_user_id VARCHAR(255),  -- Link to Keycloak identity
+    notes TEXT,  -- General notes field for update tests
     terminated_at TIMESTAMP WITH TIME ZONE,  -- Timestamp when employee was terminated
     deleted_at TIMESTAMP WITH TIME ZONE,  -- Soft delete timestamp
     created_at TIMESTAMP DEFAULT NOW(),
@@ -602,16 +624,49 @@ UPDATE hr.departments SET head_employee_id = 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e
 UPDATE hr.departments SET head_employee_id = 'e1000000-0000-0000-0000-000000000050' WHERE code = 'ENG';
 UPDATE hr.departments SET head_employee_id = 'e1000000-0000-0000-0000-000000000060' WHERE code = 'IT';
 
+-- Populate the department column from department_id join
+-- This enables RLS policies that filter by department name
+UPDATE hr.employees e
+SET department = d.name
+FROM hr.departments d
+WHERE e.department_id = d.id;
+
 -- =============================================================================
 -- ROW LEVEL SECURITY (RLS) - Defense in Depth
--- 
+--
 -- RLS policies enforce access control at the database level, providing
 -- protection even if the application layer has vulnerabilities.
 --
 -- Session variables (set by MCP server from JWT claims):
+--   app.current_user_id - The authenticated user's UUID
 --   app.current_user_email - The authenticated user's email
 --   app.current_user_roles - Comma-separated list of user's roles
+--   app.current_user_department - The user's department code
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- REFERENCE TABLES RLS (Public Read - any authenticated user)
+-- -----------------------------------------------------------------------------
+
+-- Enable RLS on departments (public read)
+ALTER TABLE hr.departments ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Any authenticated user can read departments
+CREATE POLICY department_public_read ON hr.departments
+    FOR SELECT
+    USING (true);  -- Any authenticated connection can read
+
+-- Enable RLS on grade_levels (public read)
+ALTER TABLE hr.grade_levels ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Any authenticated user can read grade levels
+CREATE POLICY grade_level_public_read ON hr.grade_levels
+    FOR SELECT
+    USING (true);  -- Any authenticated connection can read
+
+-- -----------------------------------------------------------------------------
+-- EMPLOYEES TABLE RLS
+-- -----------------------------------------------------------------------------
 
 -- Enable RLS on the employees table
 ALTER TABLE hr.employees ENABLE ROW LEVEL SECURITY;
@@ -643,6 +698,46 @@ CREATE POLICY employee_manager_access ON hr.employees
     USING (
         current_setting('app.current_user_roles', true) LIKE '%manager%'
         AND is_manager_of(current_setting('app.current_user_email', true), work_email)
+    );
+
+-- -----------------------------------------------------------------------------
+-- EMPLOYEES WRITE POLICIES (INSERT, UPDATE, DELETE)
+-- -----------------------------------------------------------------------------
+
+-- Policy 5: HR-write can INSERT new employees
+CREATE POLICY employee_hr_insert ON hr.employees
+    FOR INSERT
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%hr-write%'
+    );
+
+-- Policy 6: HR-write can UPDATE any employee
+CREATE POLICY employee_hr_update ON hr.employees
+    FOR UPDATE
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%hr-write%'
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%hr-write%'
+    );
+
+-- Policy 7: Managers can UPDATE their direct reports
+CREATE POLICY employee_manager_update ON hr.employees
+    FOR UPDATE
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND is_manager_of(current_setting('app.current_user_email', true), work_email)
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND is_manager_of(current_setting('app.current_user_email', true), work_email)
+    );
+
+-- Policy 8: HR-write can DELETE employees
+CREATE POLICY employee_hr_delete ON hr.employees
+    FOR DELETE
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%hr-write%'
     );
 
 -- Enable RLS on performance_reviews table
@@ -721,3 +816,11 @@ CREATE INDEX IF NOT EXISTS idx_audit_request ON hr.access_audit_log(request_id);
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO tamshai;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO tamshai;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO tamshai;
+
+-- Grant public schema permissions to tamshai_app for RLS-enforced access
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO tamshai_app;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO tamshai_app;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO tamshai_app;
+
+-- Grant execute on hr schema functions to tamshai_app (needed for is_manager_of, etc.)
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA hr TO tamshai_app;
