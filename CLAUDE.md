@@ -615,7 +615,7 @@ sysctl vm.max_map_count
 | MinIO API | 9100 | Object Storage |
 | MinIO Console | 9102 | MinIO UI |
 | Redis | 6380 | Token Cache |
-| Vault | 8201 | Secrets Management |
+| Vault | 8200 | Secrets Management (host, not Docker) |
 
 ### Environment Variables
 

@@ -38,54 +38,6 @@ services:
       - tamshai-network
 
   # =============================================================================
-  # SECRETS MANAGEMENT (HashiCorp Vault)
-  # =============================================================================
-  vault:
-    image: hashicorp/vault:1.15
-    container_name: tamshai-vault
-    restart: unless-stopped
-    cap_add:
-      - IPC_LOCK
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN:-dev-root-token}
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-      VAULT_ADDR: http://127.0.0.1:8200
-      VAULT_SKIP_VERIFY: "true"
-    volumes:
-      - vault_data:/vault/data
-      - ${VAULT_CONFIG:-./infrastructure/docker/vault/config}:/vault/config:ro
-    command: ${VAULT_MODE:-server -dev}
-    ports:
-      - "${VAULT_PORT:-8201}:8200"
-    healthcheck:
-      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - tamshai-network
-
-  # Vault initialization (dev only)
-  vault-init:
-    image: hashicorp/vault:1.15
-    container_name: tamshai-vault-init
-    profiles: ["dev"]
-    depends_on:
-      vault:
-        condition: service_healthy
-    environment:
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN:-dev-root-token}
-    volumes:
-      - ./infrastructure/docker/vault/init-dev.sh:/vault/init-dev.sh:ro
-    entrypoint: /bin/sh
-    command: /vault/init-dev.sh
-    restart: "no"
-    networks:
-      - tamshai-network
-
-  # =============================================================================
   # REVERSE PROXY (Caddy)
   # =============================================================================
   caddy:
@@ -700,6 +652,5 @@ volumes:
   elasticsearch_data:
   minio_data:
   redis_data:
-  vault_data:
   caddy_data:
   caddy_config:
