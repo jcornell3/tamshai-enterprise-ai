@@ -49,27 +49,27 @@
 
   # HR App (/hr/*)
   handle_path /hr/* {
-    reverse_proxy web-hr:80
+    reverse_proxy web-hr:8080
   }
 
   # Finance App (/finance/*)
   handle_path /finance/* {
-    reverse_proxy web-finance:80
+    reverse_proxy web-finance:8080
   }
 
   # Sales App (/sales/*)
   handle_path /sales/* {
-    reverse_proxy web-sales:80
+    reverse_proxy web-sales:8080
   }
 
   # Support App (/support/*)
   handle_path /support/* {
-    reverse_proxy web-support:80
+    reverse_proxy web-support:8080
   }
 
   # Web Portal (/app/*)
   handle_path /app/* {
-    reverse_proxy web-portal:80
+    reverse_proxy web-portal:8080
   }
 
   # Corporate website (default - static site at root)
