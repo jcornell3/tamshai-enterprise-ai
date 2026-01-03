@@ -69,6 +69,15 @@ jobs:
           echo "Testing SSH connection..."
           ssh $VPS_USER@$VPS_HOST "echo 'SSH connection successful' && hostname && uptime"
 
+      - name: Diagnose port 8200
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "Checking what is using port 8200..."
+          ssh $VPS_USER@$VPS_HOST "ss -tlnp | grep 8200 || echo 'Port 8200 not in use'"
+          ssh $VPS_USER@$VPS_HOST "lsof -i :8200 2>/dev/null || echo 'No process found on 8200'"
+
       - name: Create .env file from GitHub secrets
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
