@@ -211,6 +211,8 @@ services:
       # JWKS_URI: Internal container URL to fetch public keys (includes /auth prefix)
       JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp
+      # KEYCLOAK_CLIENT_ID: Must match the client that issues tokens (tamshai-website, not mcp-gateway)
+      KEYCLOAK_CLIENT_ID: tamshai-website
       # v1.4: Claude API
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
       # v1.4: Redis for confirmations

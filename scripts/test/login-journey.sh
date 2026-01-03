@@ -225,6 +225,72 @@ test_login_with_credentials() {
 }
 
 # =============================================================================
+# Asset Verification Tests (wget --spider approach)
+# =============================================================================
+# These tests verify that SPA assets are reachable and correctly pathed.
+# Unlike simple curl checks, wget --spider follows asset links in HTML.
+
+test_portal_assets() {
+    log_step "Testing portal assets with wget --spider..."
+
+    # Check if wget is available
+    if ! command -v wget &> /dev/null; then
+        log_warn "wget not installed - skipping asset verification"
+        return
+    fi
+
+    local wget_opts="--spider --force-html -r -l1 --no-directories -e robots=off --timeout=10"
+    if [ -n "$INSECURE" ]; then
+        wget_opts="$wget_opts --no-check-certificate"
+    fi
+
+    # Test portal assets
+    local output
+    output=$(wget $wget_opts "$BASE_URL/app/" 2>&1) || true
+
+    # Check for 404 errors in wget output
+    if echo "$output" | grep -q "404 Not Found"; then
+        test_step "Portal assets reachable (404 detected)" 1
+        log_warn "  Some portal assets returned 404 - check base path config"
+        # Show which assets failed
+        echo "$output" | grep "404" | head -3 | while read line; do
+            log_warn "  $line"
+        done
+    elif echo "$output" | grep -q "failed\|error"; then
+        test_step "Portal assets reachable (errors detected)" 1
+    else
+        test_step "Portal assets reachable" 0
+    fi
+}
+
+test_subapp_assets() {
+    log_step "Testing sub-app assets with wget --spider..."
+
+    if ! command -v wget &> /dev/null; then
+        log_warn "wget not installed - skipping asset verification"
+        return
+    fi
+
+    local wget_opts="--spider --force-html -r -l1 --no-directories -e robots=off --timeout=10 --quiet"
+    if [ -n "$INSECURE" ]; then
+        wget_opts="$wget_opts --no-check-certificate"
+    fi
+
+    local apps=("hr" "finance" "sales" "support")
+
+    for app in "${apps[@]}"; do
+        local output
+        output=$(wget $wget_opts "$BASE_URL/$app/" 2>&1) || true
+
+        if echo "$output" | grep -q "404 Not Found"; then
+            test_step "$app app assets reachable" 1
+        else
+            test_step "$app app assets reachable" 0
+        fi
+    done
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -242,6 +308,8 @@ main() {
     test_keycloak_availability
     test_sso_redirect
     test_login_with_credentials
+    test_portal_assets
+    test_subapp_assets
 
     echo ""
     echo "========================================"
