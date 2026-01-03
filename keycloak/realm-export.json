@@ -231,7 +231,7 @@
       "protocol": "openid-connect",
       "secret": "mcp-gateway-secret",
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -248,6 +248,23 @@
             "access.token.claim": "true"
           }
         }
+      ]
+    },
+    {
+      "clientId": "mcp-hr-service",
+      "name": "MCP HR Identity Sync Service",
+      "description": "Service account for syncing HR employees to Keycloak users",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "hr-service-secret",
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles"
       ]
     },
     {
