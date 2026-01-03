@@ -976,8 +976,11 @@ jobs:
         run: |
           echo "Waiting for Keycloak to be ready..."
           for i in {1..60}; do
-            if curl -sf http://localhost:8180/auth/health/ready > /dev/null 2>&1; then
+            # Check if Keycloak master realm is accessible (more reliable than /health in dev mode)
+            if curl -sf http://localhost:8180/auth/realms/master > /dev/null 2>&1; then
               echo "Keycloak is ready after $i attempts"
+              # Give it a few more seconds to fully initialize
+              sleep 5
               exit 0
             fi
             echo "Attempt $i/60: Keycloak not ready yet..."
