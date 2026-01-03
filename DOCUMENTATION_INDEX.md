@@ -149,6 +149,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/development/PORT_ALLOCATION.md`
 - `docs/development/PRODUCTION_SECURITY_CHECKLIST.md`
 - `docs/development/REACT_NATIVE_TO_FLUTTER_MIGRATION.md`
+- `docs/development/UX_DEPLOYMENT_GUIDE.md`
 - `docs/development/V1.4_CODE_EXAMPLES.md`
 
 ### docs/operations/
@@ -350,6 +351,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | File | Description |
 |------|-------------|
 | `docs/development/PORT_ALLOCATION.md` | Documents port assignments for all services to avoid conflicts. |
+| `docs/development/UX_DEPLOYMENT_GUIDE.md` | UX engineer guide for pushing content to dev/stage environments with Keycloak SSO, directory structure, and deployment scripts. |
 | `docs/development/V1.4_CODE_EXAMPLES.md` | Code examples demonstrating v1.4 architecture patterns. |
 | `docs/development/*.md` | Development guides for mobile, security checklist, and lessons learned. |
 
