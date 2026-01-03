@@ -550,6 +550,29 @@ services:
     networks:
       - tamshai-network
 
+  # Elasticsearch data seeder (loads support tickets and knowledge base)
+  elasticsearch-init:
+    image: curlimages/curl:latest
+    container_name: tamshai-elasticsearch-init
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ../../sample-data/support-data.ndjson:/data/support-data.ndjson:ro
+    command: >
+      sh -c '
+        echo "Loading support data into Elasticsearch..."
+        curl -sf -X POST "http://elasticsearch:9200/_bulk" \
+          -H "Content-Type: application/x-ndjson" \
+          --data-binary "@/data/support-data.ndjson" && \
+        echo "Support data loaded successfully" || \
+        echo "Failed to load support data"
+      '
+    networks:
+      - tamshai-network
+    # One-shot container - runs init and exits
+    restart: "no"
+
   minio:
     image: minio/minio
     container_name: tamshai-minio
