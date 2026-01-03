@@ -91,6 +91,23 @@ gh workflow run setup-vault.yml --ref main \
 
 This installs Vault as a **systemd service on port 8200** (not Docker).
 
+### Step 5.1: Populate Vault Secrets (Required)
+
+**IMPORTANT**: After installing Vault, populate it with application secrets to align with dev environment.
+
+```bash
+gh workflow run populate-vault-secrets.yml --ref main \
+  -f confirm_populate=POPULATE
+```
+
+This creates the same Vault structure as dev (`init-dev.sh`):
+- `tamshai/mcp-gateway` - Claude API key, OAuth client secrets
+- `tamshai/databases` - All database passwords
+- `tamshai/keycloak` - Keycloak admin password
+- `tamshai/storage` - MinIO credentials
+- Policies: `mcp-service`, `keycloak-service`, `storage-service`
+- AppRole auth for service authentication
+
 ### Step 6: Verify Deployment
 
 ```bash
