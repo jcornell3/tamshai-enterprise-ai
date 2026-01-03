@@ -338,10 +338,11 @@ services:
     container_name: tamshai-web-portal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - tamshai-network
 
@@ -353,10 +354,11 @@ services:
     container_name: tamshai-web-hr
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - tamshai-network
 
@@ -368,10 +370,11 @@ services:
     container_name: tamshai-web-finance
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - tamshai-network
 
@@ -383,10 +386,11 @@ services:
     container_name: tamshai-web-sales
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - tamshai-network
 
@@ -398,10 +402,11 @@ services:
     container_name: tamshai-web-support
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
     networks:
       - tamshai-network
 
