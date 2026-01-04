@@ -317,6 +317,24 @@ sync_mcp_hr_service_client() {
         $KCADM update "clients/$uuid" -r "$REALM" -s "fullScopeAllowed=true" 2>/dev/null || {
             log_warn "  Failed to enable fullScopeAllowed"
         }
+
+        # Add protocol mapper to include realm-management client roles in access token
+        # This is required because the default 'roles' scope only includes roles from the same client
+        log_info "  Adding realm-management client roles mapper..."
+        $KCADM create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+            -s name=realm-management-roles \
+            -s protocol=openid-connect \
+            -s protocolMapper=oidc-usermodel-client-role-mapper \
+            -s consentRequired=false \
+            -s 'config."multivalued"=true' \
+            -s 'config."userinfo.token.claim"=true' \
+            -s 'config."id.token.claim"=true' \
+            -s 'config."access.token.claim"=true' \
+            -s 'config."claim.name"=resource_access.realm-management.roles' \
+            -s 'config."jsonType.label"=String' \
+            -s 'config."usermodel.clientRoleMapping.clientId"=realm-management' 2>/dev/null || {
+            log_info "    Mapper already exists or update not needed"
+        }
     fi
 
     # Assign service account roles for user management
