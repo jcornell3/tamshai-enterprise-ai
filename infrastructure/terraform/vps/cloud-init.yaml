@@ -383,6 +383,7 @@ runcmd:
     docker cp keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
     docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
     docker exec -e KEYCLOAK_ADMIN_PASSWORD="$(grep KEYCLOAK_ADMIN_PASSWORD .env | cut -d= -f2)" \
+      -e MCP_HR_SERVICE_CLIENT_SECRET="$(grep MCP_HR_SERVICE_CLIENT_SECRET .env | cut -d= -f2)" \
       tamshai-keycloak /tmp/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
   # Sync HR employees to Keycloak users (must run AFTER realm sync)
