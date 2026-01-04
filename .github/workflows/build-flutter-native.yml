@@ -60,6 +60,20 @@ on:
           - mobile
         default: 'all'
 
+  # Allow this workflow to be called by other workflows (e.g., create-release.yml)
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: string
+        default: 'stage'
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        type: string
+        default: 'all'
+
 concurrency:
   group: build-flutter-${{ github.ref }}
   cancel-in-progress: true

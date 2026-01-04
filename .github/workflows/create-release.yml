@@ -1,0 +1,238 @@
+# Create GitHub Release with Native App Builds
+#
+# This workflow creates a GitHub release and attaches the Flutter native
+# app builds as release assets for public download.
+#
+# Triggers:
+#   - Push of version tags (v*, e.g., v1.0.0, v1.2.3-stage)
+#   - Manual dispatch with version and environment selection
+#
+# Flow:
+#   1. Build all native apps via build-flutter-native.yml
+#   2. Download build artifacts
+#   3. Create GitHub release
+#   4. Upload artifacts as release assets
+#
+# Release Asset Names:
+#   - tamshai-{env}-windows.msix
+#   - tamshai-{env}-windows-portable.zip
+#   - tamshai-{env}-macos.dmg
+#   - tamshai-{env}-macos-portable.zip
+#   - tamshai-{env}.apk
+#   - tamshai-{env}.aab
+#
+# The downloads page at /app/downloads links to:
+#   https://github.com/jcornell3/tamshai-enterprise-ai/releases/latest/download/{asset-name}
+
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - stage
+          - prod
+        default: 'stage'
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  FLUTTER_VERSION: '3.24.0'
+
+jobs:
+  # =============================================================================
+  # BUILD ALL PLATFORMS
+  # =============================================================================
+  build:
+    name: Build Native Apps
+    uses: ./.github/workflows/build-flutter-native.yml
+    with:
+      environment: ${{ github.event.inputs.environment || 'stage' }}
+      platforms: 'all'
+
+  # =============================================================================
+  # CREATE RELEASE
+  # =============================================================================
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Determine version and environment
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Extract version from tag (remove 'v' prefix)
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+
+            # Determine environment from tag suffix
+            # v1.0.0-stage → stage, v1.0.0 → prod
+            if [[ "$TAG" == *"-stage"* ]]; then
+              ENV="stage"
+              VERSION="${VERSION%-stage}"
+              PRERELEASE="true"
+            elif [[ "$TAG" == *"-dev"* ]]; then
+              ENV="dev"
+              VERSION="${VERSION%-dev}"
+              PRERELEASE="true"
+            else
+              ENV="prod"
+              PRERELEASE="false"
+            fi
+          else
+            # Manual dispatch
+            VERSION="${{ github.event.inputs.version }}"
+            ENV="${{ github.event.inputs.environment }}"
+            PRERELEASE="${{ github.event.inputs.prerelease }}"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION${ENV:+-$ENV}" >> $GITHUB_OUTPUT
+
+          echo "## Release Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: $ENV" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pre-release**: $PRERELEASE" >> $GITHUB_STEP_SUMMARY
+
+      # Download all build artifacts
+      - name: Download Windows MSIX
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        with:
+          name: tamshai-${{ steps.version.outputs.environment }}-windows-msix
+          path: ./release-assets/
+        continue-on-error: true
+
+      - name: Download Windows Portable
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        with:
+          name: tamshai-${{ steps.version.outputs.environment }}-windows-portable
+          path: ./release-assets/
+        continue-on-error: true
+
+      - name: Download macOS DMG
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        with:
+          name: tamshai-${{ steps.version.outputs.environment }}-macos-dmg
+          path: ./release-assets/
+        continue-on-error: true
+
+      - name: Download macOS Portable
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        with:
+          name: tamshai-${{ steps.version.outputs.environment }}-macos-portable
+          path: ./release-assets/
+        continue-on-error: true
+
+      - name: Download Android APK
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        with:
+          name: tamshai-${{ steps.version.outputs.environment }}-android-apk
+          path: ./release-assets/
+        continue-on-error: true
+
+      - name: Download Android AAB
+        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3
+        with:
+          name: tamshai-${{ steps.version.outputs.environment }}-android-aab
+          path: ./release-assets/
+        continue-on-error: true
+
+      - name: List downloaded assets
+        run: |
+          echo "## Downloaded Assets" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -la ./release-assets/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "No assets downloaded" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          ENV="${{ steps.version.outputs.environment }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          cat > release-notes.md << EOF
+          # Tamshai AI v$VERSION ($ENV)
+
+          ## Downloads
+
+          | Platform | Installer | Portable |
+          |----------|-----------|----------|
+          | Windows | [MSIX Installer](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/tamshai-$ENV-windows.msix) | [Portable ZIP](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/tamshai-$ENV-windows-portable.zip) |
+          | macOS | [DMG Installer](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/tamshai-$ENV-macos.dmg) | [App ZIP](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/tamshai-$ENV-macos-portable.zip) |
+          | Android | [APK](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/tamshai-$ENV.apk) | [AAB (Play Store)](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/tamshai-$ENV.aab) |
+          | iOS | Coming Soon | - |
+
+          ## System Requirements
+
+          - **Windows**: Windows 10/11 (64-bit), 4GB RAM
+          - **macOS**: macOS 12 Monterey or later
+          - **Android**: Android 8.0+, 3GB RAM
+          - **iOS**: iOS 15+
+
+          ## Environment
+
+          This release is configured for the **$ENV** environment.
+
+          - Stage: `https://www.tamshai.com`
+          - Production: `https://api.tamshai.com`
+
+          ## Changelog
+
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Tamshai AI v${{ steps.version.outputs.version }} (${{ steps.version.outputs.environment }})
+          body_path: release-notes.md
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          files: |
+            ./release-assets/*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "## Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag**: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ steps.version.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Download URLs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "These URLs will work after the release is published:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Windows MSIX: \`/releases/latest/download/tamshai-${{ steps.version.outputs.environment }}-windows.msix\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Windows Portable: \`/releases/latest/download/tamshai-${{ steps.version.outputs.environment }}-windows-portable.zip\`" >> $GITHUB_STEP_SUMMARY
+          echo "- macOS DMG: \`/releases/latest/download/tamshai-${{ steps.version.outputs.environment }}-macos.dmg\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Android APK: \`/releases/latest/download/tamshai-${{ steps.version.outputs.environment }}.apk\`" >> $GITHUB_STEP_SUMMARY
