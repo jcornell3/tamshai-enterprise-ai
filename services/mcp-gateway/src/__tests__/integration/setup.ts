@@ -29,7 +29,8 @@ const DB_CONFIG_FINANCE = {
   password: process.env.POSTGRES_PASSWORD || 'changeme',
 };
 
-// Default config - HR database
+// Default config - HR database (used as default for legacy compatibility)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const DB_CONFIG = DB_CONFIG_HR;
 
 // Connection pools for different test users

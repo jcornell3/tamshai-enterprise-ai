@@ -17,11 +17,7 @@ import {
   Column,
   SpecTables,
   SpecCollections,
-  TypeMismatch,
-  MissingForeignKey,
   CollectionMapping,
-  EnumMismatch,
-  FieldNameMismatch,
   RLSPolicyResult,
   DocumentSchemaResult,
   SchemaViolation,
@@ -34,7 +30,6 @@ import {
   Recommendation,
   FutureFeature,
   ReportInput,
-  Severity,
 } from './report';
 
 /**
@@ -68,7 +63,8 @@ export class SchemaValidator {
     };
 
     try {
-      const client = await this.getPostgresClient(database);
+      // Ensure connection is established (client stored in Map for reuse)
+      await this.getPostgresClient(database);
 
       // Get actual tables from database
       const actualTables = await this.getPostgreSQLTables(database);
@@ -523,7 +519,7 @@ export class SchemaValidator {
       `, [schema, tableName]);
 
       return result.rows;
-    } catch (error) {
+    } catch {
       return [];
     }
   }
@@ -573,7 +569,7 @@ export class SchemaValidator {
 
       const values = await coll.distinct(field);
       return values.filter((v: unknown) => typeof v === 'string') as string[];
-    } catch (error) {
+    } catch {
       return [];
     }
   }
@@ -678,7 +674,6 @@ export class SchemaValidator {
    */
   async generateSQLMigration(result: PostgreSQLSchemaInfo): Promise<string> {
     const statements: string[] = [];
-    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
 
     statements.push(`-- Migration generated on ${new Date().toISOString()}`);
     statements.push(`-- Database: ${result.database}`);
@@ -886,12 +881,12 @@ export class SchemaValidator {
     return dp[m][n];
   }
 
-  private extractFieldNames(obj: any, prefix: string, fields: Set<string>): void {
+  private extractFieldNames(obj: Record<string, unknown>, _prefix: string, fields: Set<string>): void {
     for (const key of Object.keys(obj)) {
-      const fullPath = prefix ? `${prefix}.${key}` : key;
       fields.add(key); // Add just the field name, not full path
 
-      if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key]) && !(obj[key] instanceof Date)) {
+      const value = obj[key];
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
         // Don't recurse into nested objects for simple field comparison
         // But we do add nested field names
       }
@@ -899,7 +894,7 @@ export class SchemaValidator {
   }
 
   private validateDocument(
-    doc: any,
+    doc: Record<string, unknown>,
     schema: JSONSchema
   ): Omit<SchemaViolation, 'documentId'>[] {
     const violations: Omit<SchemaViolation, 'documentId'>[] = [];
@@ -938,7 +933,7 @@ export class SchemaValidator {
     return violations;
   }
 
-  private getJsType(value: any): string {
+  private getJsType(value: unknown): string {
     if (value === null) return 'null';
     if (Array.isArray(value)) return 'array';
     return typeof value;

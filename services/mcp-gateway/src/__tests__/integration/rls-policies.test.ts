@@ -19,13 +19,12 @@
  */
 
 import { Client } from 'pg';
-import { createUserClient, createFinanceUserClient, getAdminPool, getAdminPoolFinance, TEST_USERS } from './setup';
+import { createUserClient, createFinanceUserClient, getAdminPool, TEST_USERS } from './setup';
 
 describe('RLS Policies - Integration Tests', () => {
-  let adminPool: ReturnType<typeof getAdminPool>;
-
   beforeAll(() => {
-    adminPool = getAdminPool();
+    // Establish admin pool connection (for future admin operations)
+    getAdminPool();
   });
 
   // ============================================================

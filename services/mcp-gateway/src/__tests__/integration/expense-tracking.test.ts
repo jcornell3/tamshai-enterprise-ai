@@ -28,7 +28,7 @@
  * - get_expense_report MCP tool functional
  */
 
-import { Client, Pool } from 'pg';
+import { Pool } from 'pg';
 import {
   createFinanceUserClient,
   getAdminPoolFinance,
@@ -54,6 +54,7 @@ type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REIMBURSED';
  * Expected expense record structure
  * This interface defines what we expect the finance.expenses table to contain
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ExpenseRecord {
   id: string; // UUID primary key
   employee_id: string; // FK to hr.employees
@@ -850,8 +851,6 @@ describe('Finance Expense Tracking - TDD RED Phase', () => {
         TEST_USERS.financeWrite.department,
         TEST_USERS.financeWrite.email
       );
-
-      const testExpenseId = `test-expense-${Date.now()}`;
 
       try {
         // RED PHASE: Query will fail - table doesn't exist

@@ -62,6 +62,7 @@ interface MCPToolResponse<T = unknown> {
 type BudgetStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
 
 // Budget with approval columns (v1.5 target schema)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface BudgetWithApproval {
   id: string;
   budget_id: string;
@@ -83,6 +84,7 @@ interface BudgetWithApproval {
 }
 
 // Budget approval history entry (v1.5 target)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface BudgetApprovalHistory {
   id: string;
   budget_id: string;
@@ -93,11 +95,11 @@ interface BudgetApprovalHistory {
 }
 
 describe('Budget Approval Workflow - TDD RED PHASE', () => {
-  let adminPool: ReturnType<typeof getAdminPoolFinance>;
   let financeClient: AxiosInstance;
 
   beforeAll(() => {
-    adminPool = getAdminPoolFinance();
+    // Establish admin pool connection (for future admin operations)
+    getAdminPoolFinance();
 
     // Create axios client for MCP Finance server
     financeClient = axios.create({
