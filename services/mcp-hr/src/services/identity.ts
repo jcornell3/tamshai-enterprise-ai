@@ -653,7 +653,21 @@ export class IdentityService {
    */
   private async syncEmployee(employee: EmployeeData): Promise<boolean> {
     // Check if user already exists in Keycloak by email
-    const existingUsers = await this.kcAdmin.users.find({ email: employee.email });
+    console.log(`[DEBUG] Checking if user exists: ${employee.email}`);
+    let existingUsers;
+    try {
+      existingUsers = await this.kcAdmin.users.find({ email: employee.email });
+      console.log(`[DEBUG] Found ${existingUsers.length} existing users for ${employee.email}`);
+    } catch (findError) {
+      console.error(`[DEBUG] users.find() failed for ${employee.email}:`, {
+        error: findError,
+        errorType: typeof findError,
+        errorName: (findError as any)?.name,
+        errorMessage: (findError as any)?.message,
+        errorResponse: (findError as any)?.response?.data,
+      });
+      throw findError;
+    }
 
     if (existingUsers.length > 0) {
       // User exists in Keycloak - update employee record with keycloak_user_id
