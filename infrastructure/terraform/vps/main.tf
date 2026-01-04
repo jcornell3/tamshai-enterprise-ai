@@ -227,14 +227,14 @@ resource "null_resource" "update_github_ssh_secret" {
   provisioner "local-exec" {
     command = <<-EOT
       echo "Updating GitHub secret VPS_SSH_KEY..."
-      gh secret set VPS_SSH_KEY --repo "${var.github_repo}" < "${local_file.deploy_key.filename}"
+      gh secret set VPS_SSH_KEY --repo "${var.github_repo}" < "${local_sensitive_file.deploy_private_key.filename}"
       echo "GitHub secret updated successfully"
     EOT
 
     interpreter = ["bash", "-c"]
   }
 
-  depends_on = [local_file.deploy_key]
+  depends_on = [local_sensitive_file.deploy_private_key]
 }
 
 # =============================================================================
