@@ -281,6 +281,33 @@ sync_flutter_client() {
     create_or_update_client "tamshai-flutter-client" "$client_json"
 }
 
+sync_mcp_hr_service_client() {
+    log_info "Syncing mcp-hr-service client (identity sync)..."
+
+    # Get client secret from environment or use default
+    local client_secret="${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-secret}"
+
+    local client_json="{
+        \"clientId\": \"mcp-hr-service\",
+        \"name\": \"MCP HR Identity Sync Service\",
+        \"description\": \"Service account for syncing HR employees to Keycloak users\",
+        \"enabled\": true,
+        \"publicClient\": false,
+        \"standardFlowEnabled\": false,
+        \"directAccessGrantsEnabled\": false,
+        \"serviceAccountsEnabled\": true,
+        \"protocol\": \"openid-connect\",
+        \"secret\": \"$client_secret\",
+        \"defaultClientScopes\": [\"profile\", \"email\", \"roles\"]
+    }"
+
+    create_or_update_client "mcp-hr-service" "$client_json"
+
+    # Note: Service account roles would need to be configured separately
+    # The service account needs realm-management roles to create/update users
+    log_info "  Service account created - may need realm-management roles for user provisioning"
+}
+
 sync_sample_app_clients() {
     log_info "Syncing sample app clients..."
 
@@ -336,6 +363,7 @@ main() {
     # Sync all clients
     sync_website_client
     sync_flutter_client
+    sync_mcp_hr_service_client
     sync_sample_app_clients
 
     log_info "=========================================="
