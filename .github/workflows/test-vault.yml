@@ -1,0 +1,248 @@
+# =============================================================================
+# Vault Integration Test Workflow
+# =============================================================================
+#
+# Validates that Vault initialization works correctly in the dev environment.
+# Tests:
+#   1. Vault starts and becomes healthy
+#   2. vault-init successfully populates secrets
+#   3. Secrets are retrievable via Vault API
+#   4. AppRole authentication works
+#   5. MCP Gateway can read secrets from Vault
+#
+# Triggers: Push to main, PRs, manual dispatch
+# =============================================================================
+
+name: Vault Integration Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/docker/vault/**'
+      - 'infrastructure/docker/docker-compose.yml'
+      - 'services/mcp-gateway/src/config/**'
+      - '.github/workflows/test-vault.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infrastructure/docker/vault/**'
+      - 'infrastructure/docker/docker-compose.yml'
+      - 'services/mcp-gateway/src/config/**'
+      - '.github/workflows/test-vault.yml'
+  workflow_dispatch:
+
+env:
+  VAULT_ADDR: http://localhost:8200
+  VAULT_TOKEN: dev-root-token
+  CLAUDE_API_KEY: sk-ant-test-key-for-ci
+
+jobs:
+  test-vault:
+    name: Test Vault Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create minimal .env file
+        working-directory: infrastructure/docker
+        run: |
+          cat > .env << 'EOF'
+          # CI Environment - Vault Integration Test
+          POSTGRES_PASSWORD=postgres_password
+          TAMSHAI_DB_PASSWORD=tamshai_password
+          KEYCLOAK_DB_PASSWORD=keycloak_password
+          MONGODB_ROOT_PASSWORD=tamshai_password
+          KEYCLOAK_ADMIN=admin
+          KEYCLOAK_ADMIN_PASSWORD=admin
+          MINIO_ROOT_USER=minioadmin
+          MINIO_ROOT_PASSWORD=minioadmin
+          REDIS_PASSWORD=redis_password
+          CLAUDE_API_KEY=${{ env.CLAUDE_API_KEY }}
+          VAULT_DEV_ROOT_TOKEN=${{ env.VAULT_TOKEN }}
+          EOF
+
+      - name: Start Vault and vault-init only
+        working-directory: infrastructure/docker
+        run: |
+          # Start only Vault-related services
+          docker compose up -d vault
+
+          echo "Waiting for Vault to be healthy..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:8200/v1/sys/health > /dev/null 2>&1; then
+              echo "Vault is healthy!"
+              break
+            fi
+            echo "Waiting for Vault... ($i/30)"
+            sleep 2
+          done
+
+          # Now run vault-init
+          docker compose up vault-init
+
+          echo "vault-init completed"
+
+      - name: Verify Vault secrets engine
+        run: |
+          echo "=== Checking Vault Status ==="
+          curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/sys/health | jq .
+
+          echo ""
+          echo "=== Listing Secret Engines ==="
+          curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/sys/mounts | jq 'keys'
+
+      - name: Verify MCP Gateway secrets
+        run: |
+          echo "=== Reading MCP Gateway Secrets ==="
+          RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/tamshai/data/mcp-gateway)
+
+          echo "$RESPONSE" | jq '.data.data | keys'
+
+          # Verify claude_api_key exists and matches
+          STORED_KEY=$(echo "$RESPONSE" | jq -r '.data.data.claude_api_key')
+          if [ "$STORED_KEY" = "$CLAUDE_API_KEY" ]; then
+            echo "✓ claude_api_key matches expected value"
+          else
+            echo "✗ claude_api_key mismatch!"
+            echo "  Expected: $CLAUDE_API_KEY"
+            echo "  Got: $STORED_KEY"
+            exit 1
+          fi
+
+          # Verify keycloak_client_secret exists
+          CLIENT_SECRET=$(echo "$RESPONSE" | jq -r '.data.data.keycloak_client_secret')
+          if [ -n "$CLIENT_SECRET" ] && [ "$CLIENT_SECRET" != "null" ]; then
+            echo "✓ keycloak_client_secret exists"
+          else
+            echo "✗ keycloak_client_secret missing!"
+            exit 1
+          fi
+
+      - name: Verify database secrets
+        run: |
+          echo "=== Reading Database Secrets ==="
+          RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/tamshai/data/databases)
+
+          echo "$RESPONSE" | jq '.data.data | keys'
+
+          # Verify all database passwords exist
+          for key in postgres_password mongodb_password keycloak_db_password; do
+            VALUE=$(echo "$RESPONSE" | jq -r ".data.data.$key")
+            if [ -n "$VALUE" ] && [ "$VALUE" != "null" ]; then
+              echo "✓ $key exists"
+            else
+              echo "✗ $key missing!"
+              exit 1
+            fi
+          done
+
+      - name: Verify Keycloak secrets
+        run: |
+          echo "=== Reading Keycloak Secrets ==="
+          RESPONSE=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/tamshai/data/keycloak)
+
+          echo "$RESPONSE" | jq '.data.data | keys'
+
+          # Verify admin_password exists
+          ADMIN_PASS=$(echo "$RESPONSE" | jq -r '.data.data.admin_password')
+          if [ -n "$ADMIN_PASS" ] && [ "$ADMIN_PASS" != "null" ]; then
+            echo "✓ admin_password exists"
+          else
+            echo "✗ admin_password missing!"
+            exit 1
+          fi
+
+      - name: Test AppRole authentication
+        run: |
+          echo "=== Testing AppRole Auth ==="
+
+          # Get MCP Gateway role ID
+          ROLE_ID=$(curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/auth/approle/role/mcp-gateway/role-id | jq -r '.data.role_id')
+
+          if [ -z "$ROLE_ID" ] || [ "$ROLE_ID" = "null" ]; then
+            echo "✗ Failed to get role_id for mcp-gateway"
+            exit 1
+          fi
+          echo "✓ Got role_id: ${ROLE_ID:0:8}..."
+
+          # Generate a secret ID
+          SECRET_ID=$(curl -s -X POST -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/auth/approle/role/mcp-gateway/secret-id | jq -r '.data.secret_id')
+
+          if [ -z "$SECRET_ID" ] || [ "$SECRET_ID" = "null" ]; then
+            echo "✗ Failed to generate secret_id"
+            exit 1
+          fi
+          echo "✓ Generated secret_id: ${SECRET_ID:0:8}..."
+
+          # Login with AppRole
+          LOGIN_RESPONSE=$(curl -s -X POST \
+            -d "{\"role_id\": \"$ROLE_ID\", \"secret_id\": \"$SECRET_ID\"}" \
+            $VAULT_ADDR/v1/auth/approle/login)
+
+          APP_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.auth.client_token')
+
+          if [ -z "$APP_TOKEN" ] || [ "$APP_TOKEN" = "null" ]; then
+            echo "✗ AppRole login failed!"
+            echo "$LOGIN_RESPONSE" | jq .
+            exit 1
+          fi
+          echo "✓ AppRole login successful, got token: ${APP_TOKEN:0:8}..."
+
+          # Verify the token can read mcp-gateway secrets
+          echo ""
+          echo "=== Testing AppRole Token Access ==="
+          READ_RESPONSE=$(curl -s -H "X-Vault-Token: $APP_TOKEN" \
+            $VAULT_ADDR/v1/tamshai/data/mcp-gateway)
+
+          CLAUDE_KEY=$(echo "$READ_RESPONSE" | jq -r '.data.data.claude_api_key')
+          if [ "$CLAUDE_KEY" = "$CLAUDE_API_KEY" ]; then
+            echo "✓ AppRole token can read mcp-gateway secrets"
+          else
+            echo "✗ AppRole token cannot read secrets!"
+            echo "$READ_RESPONSE" | jq .
+            exit 1
+          fi
+
+          # Verify token CANNOT read keycloak secrets (policy restriction)
+          KEYCLOAK_RESPONSE=$(curl -s -H "X-Vault-Token: $APP_TOKEN" \
+            $VAULT_ADDR/v1/tamshai/data/keycloak)
+
+          ERRORS=$(echo "$KEYCLOAK_RESPONSE" | jq -r '.errors // empty')
+          if [ -n "$ERRORS" ]; then
+            echo "✓ AppRole token correctly denied access to keycloak secrets (policy working)"
+          else
+            echo "⚠ AppRole token can read keycloak secrets (policy may be too permissive)"
+          fi
+
+      - name: Test Vault policies
+        run: |
+          echo "=== Listing Policies ==="
+          curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/sys/policies/acl | jq '.data.keys'
+
+          echo ""
+          echo "=== MCP Service Policy ==="
+          curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/sys/policies/acl/mcp-service | jq -r '.data.policy'
+
+          echo ""
+          echo "=== Keycloak Service Policy ==="
+          curl -s -H "X-Vault-Token: $VAULT_TOKEN" \
+            $VAULT_ADDR/v1/sys/policies/acl/keycloak-service | jq -r '.data.policy'
+
+      - name: Cleanup
+        if: always()
+        working-directory: infrastructure/docker
+        run: |
+          docker compose down -v --remove-orphans || true
