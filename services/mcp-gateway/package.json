@@ -76,7 +76,8 @@
     "collectCoverageFrom": [
       "src/**/*.ts",
       "!src/**/*.d.ts",
-      "!src/**/*.test.ts"
+      "!src/**/*.test.ts",
+      "!src/schema/**"
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!(uuid)/)"
