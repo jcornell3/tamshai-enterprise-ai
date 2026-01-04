@@ -296,19 +296,26 @@ sync_mcp_hr_service_client() {
         "standardFlowEnabled": false,
         "directAccessGrantsEnabled": false,
         "serviceAccountsEnabled": true,
+        "fullScopeAllowed": true,
         "protocol": "openid-connect",
         "defaultClientScopes": ["profile", "email", "roles"]
     }'
 
     create_or_update_client "mcp-hr-service" "$client_json"
 
-    # Set client secret explicitly (kcadm may not handle it in JSON)
+    # Set client secret and fullScopeAllowed explicitly (kcadm may not handle it in JSON)
     local uuid=$(get_client_uuid "mcp-hr-service")
     if [ -n "$uuid" ]; then
         log_info "  Setting client secret..."
         $KCADM update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
             log_warn "  Failed to set client secret via update, trying regenerate..."
             $KCADM create "clients/$uuid/client-secret" -r "$REALM" 2>/dev/null || true
+        }
+
+        # Enable fullScopeAllowed so service account roles appear in access token
+        log_info "  Enabling fullScopeAllowed for service account roles..."
+        $KCADM update "clients/$uuid" -r "$REALM" -s "fullScopeAllowed=true" 2>/dev/null || {
+            log_warn "  Failed to enable fullScopeAllowed"
         }
     fi
 
