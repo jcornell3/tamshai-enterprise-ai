@@ -85,9 +85,21 @@ variable "claude_api_key_stage" {
 }
 
 variable "github_repo" {
-  description = "GitHub repository URL for deployment"
+  description = "GitHub repository (owner/repo format for gh CLI, or full URL for git clone)"
+  type        = string
+  default     = "jcornell3/tamshai-enterprise-ai"
+}
+
+variable "github_repo_url" {
+  description = "Full GitHub repository URL for git clone operations"
   type        = string
   default     = "https://github.com/jcornell3/tamshai-enterprise-ai.git"
+}
+
+variable "auto_update_github_secrets" {
+  description = "Automatically update GitHub secrets (VPS_SSH_KEY) after terraform apply. Requires gh CLI."
+  type        = bool
+  default     = true
 }
 
 variable "github_branch" {
@@ -199,6 +211,33 @@ resource "local_file" "deploy_public_key" {
 }
 
 # =============================================================================
+# GITHUB SECRETS AUTOMATION
+# =============================================================================
+# Automatically updates GitHub Actions secret with the SSH key
+# Requires: gh CLI installed and authenticated (gh auth login)
+
+resource "null_resource" "update_github_ssh_secret" {
+  count = var.auto_update_github_secrets ? 1 : 0
+
+  triggers = {
+    # Re-run when the SSH key changes
+    ssh_key_fingerprint = tls_private_key.deploy_key.public_key_fingerprint_sha256
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Updating GitHub secret VPS_SSH_KEY..."
+      gh secret set VPS_SSH_KEY --repo "${var.github_repo}" < "${local_file.deploy_key.filename}"
+      echo "GitHub secret updated successfully"
+    EOT
+
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [local_file.deploy_key]
+}
+
+# =============================================================================
 # HETZNER RESOURCES
 # =============================================================================
 
@@ -281,7 +320,7 @@ locals {
     domain                       = var.domain
     email                        = var.email
     environment                  = var.environment
-    github_repo                  = var.github_repo
+    github_repo                  = var.github_repo_url
     github_branch                = var.github_branch
     claude_api_key               = var.claude_api_key_stage
     postgres_password            = random_password.postgres_password.result
