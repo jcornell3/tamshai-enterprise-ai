@@ -83,7 +83,30 @@ INSERT INTO finance.budget_categories (name, code, type, description) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- =============================================================================
+-- BUDGET STATUS ENUM (v1.5 - Issue #78)
+-- =============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'budget_status') THEN
+        CREATE TYPE finance.budget_status AS ENUM ('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED');
+    END IF;
+END
+$$;
+
+-- =============================================================================
+-- BUDGET APPROVAL ACTION ENUM (v1.5 - Issue #78)
+-- =============================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'budget_approval_action') THEN
+        CREATE TYPE finance.budget_approval_action AS ENUM ('SUBMITTED', 'APPROVED', 'REJECTED', 'REVISION_REQUESTED');
+    END IF;
+END
+$$;
+
+-- =============================================================================
 -- DEPARTMENT BUDGETS
+-- v1.5 Enhancement (Issue #78): Added approval workflow columns
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS finance.department_budgets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -97,10 +120,65 @@ CREATE TABLE IF NOT EXISTS finance.department_budgets (
     actual_amount DECIMAL(15, 2) DEFAULT 0,
     forecast_amount DECIMAL(15, 2),
     notes TEXT,
+    -- v1.5 Approval Workflow Columns (Issue #78)
+    status finance.budget_status DEFAULT 'DRAFT',
+    submitted_by UUID,  -- FK to hr.employees (cross-database reference, not enforced)
+    submitted_at TIMESTAMP,
+    approved_by UUID,   -- FK to hr.employees (cross-database reference, not enforced)
+    approved_at TIMESTAMP,
+    rejection_reason TEXT,
+    version INTEGER DEFAULT 1,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(department_code, fiscal_year, category_id)
 );
+
+-- Add approval columns if table already exists (for incremental migration)
+DO $$
+BEGIN
+    -- Add status column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'status') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN status finance.budget_status DEFAULT 'DRAFT';
+    END IF;
+
+    -- Add submitted_by column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'submitted_by') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN submitted_by UUID;
+    END IF;
+
+    -- Add submitted_at column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'submitted_at') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN submitted_at TIMESTAMP;
+    END IF;
+
+    -- Add approved_by column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'approved_by') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN approved_by UUID;
+    END IF;
+
+    -- Add approved_at column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'approved_at') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN approved_at TIMESTAMP;
+    END IF;
+
+    -- Add rejection_reason column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'rejection_reason') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN rejection_reason TEXT;
+    END IF;
+
+    -- Add version column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'version') THEN
+        ALTER TABLE finance.department_budgets ADD COLUMN version INTEGER DEFAULT 1;
+    END IF;
+END
+$$;
 
 -- 2024 Budgets (simplified - key departments)
 INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount)
@@ -130,6 +208,29 @@ ON CONFLICT DO NOTHING;
 INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount)
 SELECT 'BUD-IT-2024-TECH', 'IT', 'IT', 2024, id, 600000, 600000, 520000, 580000 FROM finance.budget_categories WHERE code = 'EXP-TECH'
 ON CONFLICT DO NOTHING;
+
+-- Update existing budgets to have status='DRAFT' and version=1 (v1.5 migration)
+UPDATE finance.department_budgets
+SET status = 'DRAFT', version = 1
+WHERE status IS NULL OR version IS NULL;
+
+-- =============================================================================
+-- BUDGET APPROVAL HISTORY (v1.5 - Issue #78)
+-- Audit trail for all budget approval workflow actions
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS finance.budget_approval_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    budget_id UUID NOT NULL REFERENCES finance.department_budgets(id) ON DELETE CASCADE,
+    action finance.budget_approval_action NOT NULL,
+    actor_id UUID NOT NULL,  -- FK to hr.employees (cross-database reference, not enforced)
+    action_at TIMESTAMP DEFAULT NOW(),
+    comments TEXT
+);
+
+-- Index for efficient history lookups
+CREATE INDEX IF NOT EXISTS idx_budget_approval_history_budget_id ON finance.budget_approval_history(budget_id);
+CREATE INDEX IF NOT EXISTS idx_budget_approval_history_action_at ON finance.budget_approval_history(action_at);
+CREATE INDEX IF NOT EXISTS idx_budget_approval_history_actor ON finance.budget_approval_history(actor_id);
 
 -- =============================================================================
 -- FINANCIAL REPORTS (Metadata - actual documents in MinIO)
@@ -368,6 +469,70 @@ CREATE POLICY budget_finance_modify ON finance.department_budgets
     )
     WITH CHECK (
         current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 5: Department heads can submit their department's budgets (v1.5 - Issue #78)
+-- Allows UPDATE on status column for budget submission
+CREATE POLICY budget_department_submit ON finance.department_budgets
+    FOR UPDATE
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND department = current_setting('app.current_user_department', true)
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND department = current_setting('app.current_user_department', true)
+    );
+
+-- -----------------------------------------------------------------------------
+-- BUDGET APPROVAL HISTORY RLS (v1.5 - Issue #78)
+-- -----------------------------------------------------------------------------
+ALTER TABLE finance.budget_approval_history ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Finance-read can view all budget approval history
+CREATE POLICY budget_history_finance_read ON finance.budget_approval_history
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 2: Executive role can view all budget approval history
+CREATE POLICY budget_history_executive_access ON finance.budget_approval_history
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%executive%'
+    );
+
+-- Policy 3: Department heads can see their department's budget history
+CREATE POLICY budget_history_department_access ON finance.budget_approval_history
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND EXISTS (
+            SELECT 1 FROM finance.department_budgets db
+            WHERE db.id = budget_approval_history.budget_id
+            AND db.department = current_setting('app.current_user_department', true)
+        )
+    );
+
+-- Policy 4: Finance-write can insert history records
+CREATE POLICY budget_history_finance_insert ON finance.budget_approval_history
+    FOR INSERT
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 5: Managers can insert history records (for submissions)
+CREATE POLICY budget_history_manager_insert ON finance.budget_approval_history
+    FOR INSERT
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND EXISTS (
+            SELECT 1 FROM finance.department_budgets db
+            WHERE db.id = budget_approval_history.budget_id
+            AND db.department = current_setting('app.current_user_department', true)
+        )
     );
 
 -- -----------------------------------------------------------------------------
