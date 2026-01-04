@@ -36,6 +36,7 @@ const createMockKcAdmin = () => ({
     del: jest.fn(),
     find: jest.fn(),
     findOne: jest.fn(),
+    resetPassword: jest.fn(),
     addClientRoleMappings: jest.fn(),
     listClientRoleMappings: jest.fn(),
     listSessions: jest.fn(),
