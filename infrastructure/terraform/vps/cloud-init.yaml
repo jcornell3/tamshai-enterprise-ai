@@ -78,12 +78,14 @@ write_files:
       KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai-corp
       JWKS_URI=http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       # KEYCLOAK_REALM is the path to realm export file (used in docker-compose volumes)
-      KEYCLOAK_REALM=./keycloak/realm-export.json
+      # Stage uses realm-export-dev.json (includes test users)
+      # Prod uses realm-export.json (no pre-configured users)
+      KEYCLOAK_REALM=./keycloak/realm-export-dev.json
 
       # Identity Sync (HR -> Keycloak provisioning)
       MCP_HR_SERVICE_CLIENT_SECRET=${mcp_hr_service_client_secret}
 
-      # Keycloak client secrets (must match realm-export.json)
+      # Keycloak client secrets (must match realm-export-dev.json)
       MCP_GATEWAY_CLIENT_SECRET=mcp-gateway-secret
 
       # Docker compose settings for VPS
