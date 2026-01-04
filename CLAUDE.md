@@ -508,6 +508,28 @@ function getAccessibleMcpServers(roles: string[]): string[] {
 
 ## Testing Strategy
 
+### Development Methodology: TDD for Service Applications
+
+We use **Test-Driven Development (TDD)** for all service application code:
+
+**TDD Cycle (RED-GREEN-REFACTOR)**:
+1. **RED Phase**: Write failing tests first that define expected behavior
+   - Create test file before implementation
+   - Tests should fail initially (no implementation exists)
+   - Focus on expected inputs, outputs, and edge cases
+2. **GREEN Phase**: Implement minimum code to make tests pass
+   - Write only enough code to satisfy the failing tests
+   - Avoid over-engineering or premature optimization
+3. **REFACTOR Phase**: Improve code quality while keeping tests green
+   - Clean up duplication, improve naming
+   - Extract functions/modules as needed
+   - All tests must remain passing
+
+**Scope of TDD**:
+- **Service Applications**: MCP Gateway, MCP HR, MCP Finance, MCP Sales, MCP Support
+- **Client Applications**: Flutter unified client, web clients
+- **NOT using TDD**: Infrastructure (Terraform, Docker, CI/CD configs)
+
 ### Test Coverage Philosophy
 
 We follow a **"Diff Coverage"** strategy to balance quality with velocity:
