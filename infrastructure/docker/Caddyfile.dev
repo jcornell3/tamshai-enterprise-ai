@@ -72,6 +72,9 @@ tamshai.local, www.tamshai.local {
     reverse_proxy web-portal:80
   }
 
+  # Redirect /downloads to portal app (auth handled by PrivateRoute/Keycloak)
+  redir /downloads /app/downloads permanent
+
   # Corporate website (default - static site at root)
   handle {
     reverse_proxy tamshai-website:80
