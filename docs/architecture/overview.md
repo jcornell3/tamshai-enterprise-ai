@@ -1,12 +1,13 @@
 # Architecture Overview
 
 ## Document Information
-- **Version**: 1.4
+- **Version**: 1.4.1
 - **Status**: Implementation Ready
 - **Author**: AI Architecture Assistant
 - **Organization**: Tamshai Corp
-- **Last Updated**: December 2024
+- **Last Updated**: January 2026
 - **Architecture Version**: v1.4 (December 2024)
+- **Testing Methodology**: TDD for service applications
 
 ---
 
@@ -586,6 +587,29 @@ services:
 ---
 
 ## 8. Testing Strategy
+
+### 8.0 Development Methodology: TDD
+
+We use **Test-Driven Development (TDD)** for all service application code. This ensures high test coverage and design quality from the start.
+
+**TDD Cycle (RED-GREEN-REFACTOR)**:
+1. **RED Phase**: Write failing tests first that define expected behavior
+2. **GREEN Phase**: Implement minimum code to make tests pass
+3. **REFACTOR Phase**: Improve code quality while keeping tests green
+
+**TDD Scope**:
+| Code Type | Uses TDD | Rationale |
+|-----------|----------|-----------|
+| Service Applications (MCP Gateway, MCP HR, etc.) | **YES** | Core business logic requires rigorous testing |
+| Client Applications (Flutter, Web) | **YES** | User-facing features benefit from TDD |
+| Infrastructure (Terraform, Docker) | **NO** | Declarative configs, validated by apply/deploy |
+
+**Coverage Targets**:
+- 90% diff coverage on new code (enforced by Codecov, BLOCKS PRs)
+- 49.06% overall coverage (gradually improving)
+- 70% target for new services
+
+See `.specify/specs/011-qa-testing/TEST_COVERAGE_STRATEGY.md` for complete strategy.
 
 ### 8.1 Integration Tests
 

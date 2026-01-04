@@ -1,6 +1,6 @@
 # Test Coverage Strategy - Tamshai Enterprise AI
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Last Updated:** January 2026
 **Status:** Active
 
@@ -10,7 +10,45 @@
 
 This document explains our test coverage strategy, current baselines, rationale for diff coverage enforcement, and the path to achieving industry-standard coverage targets.
 
-**Key Strategy:** **Diff Coverage Enforcement** - Require 90% coverage on all new/changed code while tracking overall coverage trends.
+**Key Strategy:** **TDD with Diff Coverage Enforcement** - Use Test-Driven Development for service applications and require 90% coverage on all new/changed code.
+
+---
+
+## Development Methodology: TDD
+
+We use **Test-Driven Development (TDD)** for all service application code. This ensures high test coverage and design quality from the start.
+
+### TDD Cycle (RED-GREEN-REFACTOR)
+
+1. **RED Phase**: Write failing tests first that define expected behavior
+   - Create test file before implementation
+   - Tests should fail initially (no implementation exists)
+   - Focus on expected inputs, outputs, and edge cases
+
+2. **GREEN Phase**: Implement minimum code to make tests pass
+   - Write only enough code to satisfy the failing tests
+   - Avoid over-engineering or premature optimization
+
+3. **REFACTOR Phase**: Improve code quality while keeping tests green
+   - Clean up duplication, improve naming
+   - Extract functions/modules as needed
+   - All tests must remain passing
+
+### TDD Scope
+
+| Code Type | Uses TDD | Rationale |
+|-----------|----------|-----------|
+| Service Applications (MCP Gateway, MCP HR, etc.) | **YES** | Core business logic requires rigorous testing |
+| Client Applications (Flutter, Web) | **YES** | User-facing features benefit from TDD |
+| Infrastructure (Terraform, Docker) | **NO** | Declarative configs, validated by apply/deploy |
+| CI/CD Configurations | **NO** | Tested by pipeline execution itself |
+
+### TDD Benefits for Coverage
+
+- **Natural 90%+ Coverage**: Writing tests first ensures high coverage by default
+- **No Retrofitting**: Tests exist before code, eliminating "add tests later" debt
+- **Design Clarity**: Forces clear interfaces and testable architecture
+- **Confidence in Refactoring**: Comprehensive tests enable safe code improvements
 
 ---
 
@@ -768,6 +806,7 @@ start coverage/index.html  # Windows
 |---------|------|---------|
 | 1.0 | Dec 2025 | Initial documentation - coverage strategy and rationale |
 | 1.1 | Jan 2026 | Updated coverage from 49% to 54%, added new modules (ai/, auth/, mcp/), updated integration test counts (96 tests) |
+| 1.2 | Jan 2026 | Added TDD methodology section, clarified scope of TDD vs non-TDD code |
 
 ---
 

@@ -6,6 +6,62 @@
 
 **Business Value:** Reduces production defects, accelerates release cycles, provides confidence for continuous deployment, and ensures security controls are validated.
 
+## 1.1 Development Methodology: TDD for Service Applications
+
+We use **Test-Driven Development (TDD)** for all service application code. This ensures high test coverage and design quality from the start.
+
+### TDD Cycle (RED-GREEN-REFACTOR)
+
+```
+   ┌─────────────────────────────────────────────────────────────┐
+   │                    TDD Cycle                                │
+   │                                                             │
+   │    ┌─────────┐    ┌─────────┐    ┌───────────┐             │
+   │    │   RED   │───>│  GREEN  │───>│ REFACTOR  │─────┐       │
+   │    │  Write  │    │  Write  │    │  Improve  │     │       │
+   │    │ Failing │    │ Minimal │    │   Code    │     │       │
+   │    │  Test   │    │  Code   │    │  Quality  │     │       │
+   │    └─────────┘    └─────────┘    └───────────┘     │       │
+   │         ^                                           │       │
+   │         └───────────────────────────────────────────┘       │
+   │                                                             │
+   └─────────────────────────────────────────────────────────────┘
+```
+
+**1. RED Phase**: Write failing tests first that define expected behavior
+   - Create test file before implementation
+   - Tests should fail initially (no implementation exists)
+   - Focus on expected inputs, outputs, and edge cases
+   - Example: `src/auth/jwt-validator.test.ts` written before `jwt-validator.ts`
+
+**2. GREEN Phase**: Implement minimum code to make tests pass
+   - Write only enough code to satisfy the failing tests
+   - Avoid over-engineering or premature optimization
+   - Focus on correctness, not elegance
+
+**3. REFACTOR Phase**: Improve code quality while keeping tests green
+   - Clean up duplication, improve naming
+   - Extract functions/modules as needed
+   - All tests must remain passing
+
+### TDD Scope
+
+| Code Type | Uses TDD | Rationale |
+|-----------|----------|-----------|
+| Service Applications (MCP Gateway, MCP HR, etc.) | **YES** | Core business logic requires rigorous testing |
+| Client Applications (Flutter, Web) | **YES** | User-facing features benefit from TDD |
+| Infrastructure (Terraform, Docker) | **NO** | Declarative configs, validated by apply/deploy |
+| CI/CD Configurations | **NO** | Tested by pipeline execution itself |
+| Sample Data Scripts | **NO** | One-time seeding, not production code |
+
+### TDD Benefits
+
+1. **Design Quality**: Tests force you to think about interfaces before implementation
+2. **Regression Prevention**: All code has tests from day one
+3. **Documentation**: Tests serve as executable documentation
+4. **Confidence**: Refactoring is safe with comprehensive test coverage
+5. **Faster Debugging**: Failing tests pinpoint issues immediately
+
 ## 2. Testing Pyramid
 
 ```
