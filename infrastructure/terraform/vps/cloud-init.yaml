@@ -90,6 +90,9 @@ write_files:
       COMPOSE_PROJECT_NAME=tamshai-vps
       KEYCLOAK_MODE=start
 
+      # Use VPS-specific Caddyfile (HTTP-only, Cloudflare handles TLS)
+      CADDYFILE=./Caddyfile
+
       # Web Apps
       # NOTE: Authority URL must include full realm path for OIDC discovery
       VITE_KEYCLOAK_URL=https://${domain}/auth/realms/tamshai-corp
