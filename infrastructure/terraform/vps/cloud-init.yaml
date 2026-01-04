@@ -364,6 +364,29 @@ runcmd:
   # Uses root docker-compose.yml with VPS environment variables
   - cd /opt/tamshai && docker compose up -d --build
 
+  # Wait for Keycloak to be healthy before syncing
+  - |
+    echo "Waiting for Keycloak to be ready..."
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      if curl -sf http://localhost:8080/auth/health/ready >/dev/null 2>&1; then
+        echo "Keycloak is ready"
+        break
+      fi
+      echo "Waiting for Keycloak... attempt $i/10"
+      sleep 30
+    done
+
+  # Sync Keycloak realm configuration (creates clients, roles)
+  - |
+    cd /opt/tamshai
+    docker cp keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
+    docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
+    docker exec -e KEYCLOAK_ADMIN_PASSWORD="$(grep KEYCLOAK_ADMIN_PASSWORD .env | cut -d= -f2)" \
+      tamshai-keycloak /tmp/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
+
+  # Sync HR employees to Keycloak users (must run AFTER realm sync)
+  - cd /opt/tamshai && docker compose run --rm identity-sync || echo "Identity sync failed - users may need manual provisioning"
+
   # Enable fail2ban
   - systemctl enable fail2ban
   - systemctl start fail2ban
