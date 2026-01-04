@@ -287,25 +287,52 @@ sync_mcp_hr_service_client() {
     # Get client secret from environment or use default
     local client_secret="${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-secret}"
 
-    local client_json="{
-        \"clientId\": \"mcp-hr-service\",
-        \"name\": \"MCP HR Identity Sync Service\",
-        \"description\": \"Service account for syncing HR employees to Keycloak users\",
-        \"enabled\": true,
-        \"publicClient\": false,
-        \"standardFlowEnabled\": false,
-        \"directAccessGrantsEnabled\": false,
-        \"serviceAccountsEnabled\": true,
-        \"protocol\": \"openid-connect\",
-        \"secret\": \"$client_secret\",
-        \"defaultClientScopes\": [\"profile\", \"email\", \"roles\"]
-    }"
+    local client_json='{
+        "clientId": "mcp-hr-service",
+        "name": "MCP HR Identity Sync Service",
+        "description": "Service account for syncing HR employees to Keycloak users",
+        "enabled": true,
+        "publicClient": false,
+        "standardFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": true,
+        "protocol": "openid-connect",
+        "defaultClientScopes": ["profile", "email", "roles"]
+    }'
 
     create_or_update_client "mcp-hr-service" "$client_json"
 
-    # Note: Service account roles would need to be configured separately
-    # The service account needs realm-management roles to create/update users
-    log_info "  Service account created - may need realm-management roles for user provisioning"
+    # Set client secret explicitly (kcadm may not handle it in JSON)
+    local uuid=$(get_client_uuid "mcp-hr-service")
+    if [ -n "$uuid" ]; then
+        log_info "  Setting client secret..."
+        $KCADM update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
+            log_warn "  Failed to set client secret via update, trying regenerate..."
+            $KCADM create "clients/$uuid/client-secret" -r "$REALM" 2>/dev/null || true
+        }
+    fi
+
+    # Assign service account roles for user management
+    log_info "  Assigning realm-management roles to service account..."
+    local service_account_id=$($KCADM get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4)
+    if [ -n "$service_account_id" ]; then
+        # Get realm-management client UUID
+        local realm_mgmt_uuid=$(get_client_uuid "realm-management")
+        if [ -n "$realm_mgmt_uuid" ]; then
+            # Assign manage-users role
+            $KCADM add-roles -r "$REALM" \
+                --uusername "service-account-mcp-hr-service" \
+                --cclientid realm-management \
+                --rolename manage-users 2>/dev/null || log_warn "  Could not assign manage-users role"
+            $KCADM add-roles -r "$REALM" \
+                --uusername "service-account-mcp-hr-service" \
+                --cclientid realm-management \
+                --rolename view-users 2>/dev/null || log_warn "  Could not assign view-users role"
+            log_info "  Service account roles assigned"
+        fi
+    fi
+
+    log_info "  mcp-hr-service client configured for identity sync"
 }
 
 sync_sample_app_clients() {
