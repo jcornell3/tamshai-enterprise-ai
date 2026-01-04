@@ -590,7 +590,24 @@ export class IdentityService {
           skipped++;
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        // Extract detailed error information from Keycloak/Axios errors
+        let message = 'Unknown error';
+        if (error instanceof Error) {
+          message = error.message;
+          // Check for Axios error with response data (Keycloak errors)
+          const axiosError = error as any;
+          if (axiosError.response?.data) {
+            const data = axiosError.response.data;
+            message = data.errorMessage || data.error_description || data.error || data.message || message;
+            // Log full error details for debugging
+            console.error('Keycloak API error:', {
+              status: axiosError.response.status,
+              statusText: axiosError.response.statusText,
+              data: axiosError.response.data,
+              employeeEmail: employee.email,
+            });
+          }
+        }
         errors.push({
           employeeId: employee.id,
           email: employee.email,
