@@ -101,3 +101,14 @@ elasticsearch_data/
 # Temporary specification notes
 *.spec.txt
 tamshai-enterprise-ai-spec.txt
+
+# Sensitive files - do not commit
+admin_token.txt
+token.json
+*_credentials.json
+*_user.json
+eve_*.json
+
+# Playwright artifacts
+tests/e2e/playwright-report/
+tests/e2e/test-results/

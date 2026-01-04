@@ -1,0 +1,2 @@
+# TOTP backup files (temporary, should not be committed)
+.totp-backups/
