@@ -22,7 +22,7 @@ chpasswd:
   expire: false
   users:
     - name: root
-      password: ${root_password}
+      password: "${root_password}"
       type: text
 
 # Create tamshai user for running services
