@@ -295,9 +295,13 @@ export class IdentityService {
     let keycloakUserId: string | undefined;
 
     try {
+      // Generate username in firstname.lastname format (consistent with dev realm)
+      // This allows users to log in with familiar usernames across environments
+      const username = `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}`;
+
       // Step 1: Create user in Keycloak
       const createResult = await this.kcAdmin.users.create({
-        username: employeeData.email,
+        username: username,
         email: employeeData.email,
         firstName: employeeData.firstName,
         lastName: employeeData.lastName,

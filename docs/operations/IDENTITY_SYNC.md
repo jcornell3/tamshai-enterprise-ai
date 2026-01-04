@@ -190,6 +190,16 @@ This means:
 - Identity sync must create all users from HR data
 - All code paths (create user, assign roles) are exercised
 
+## Username Format (Updated January 2026)
+
+The identity sync service creates Keycloak usernames in `firstname.lastname` format (e.g., `eve.thompson`) rather than using the email address. This ensures:
+
+- **Consistency**: Same username format across dev and stage/prod environments
+- **User Experience**: Users can log in with familiar `firstname.lastname` usernames
+- **Alignment**: Matches pre-configured users in `realm-export-dev.json`
+
+If users were previously created with email as username, they will need to be deleted and re-synced to get the correct username format.
+
 ## The Client UUID Bug (Fixed January 2026)
 
 ### Problem

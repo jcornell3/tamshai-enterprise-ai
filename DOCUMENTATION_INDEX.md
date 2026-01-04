@@ -1,8 +1,8 @@
 # Documentation Index
 
 **Generated**: January 3, 2026
-**Last Reorganized**: January 3, 2026
-**Total Documentation Files**: 148
+**Last Reorganized**: January 4, 2026
+**Total Documentation Files**: 150
 
 This index catalogs all markdown documentation files in the Tamshai Enterprise AI repository.
 
@@ -153,6 +153,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/development/V1.4_CODE_EXAMPLES.md`
 
 ### docs/operations/
+- `docs/operations/IDENTITY_SYNC.md`
 - `docs/operations/KEYCLOAK_MANAGEMENT.md`
 
 ### docs/security/
@@ -180,6 +181,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 ### docs/testing/
 - `docs/testing/DEV_INFRASTRUCTURE_TESTS.md`
+- `docs/testing/E2E_USER_TESTS.md`
 - `docs/testing/USER_MANAGEMENT.md`
 - `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md`
 
@@ -359,6 +361,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 | File | Description |
 |------|-------------|
+| `docs/operations/IDENTITY_SYNC.md` | Guide for syncing user identities from HR database to Keycloak for dev and stage environments. |
 | `docs/operations/KEYCLOAK_MANAGEMENT.md` | Guide for managing Keycloak realms, clients, and users. |
 
 ### docs/security/
@@ -391,6 +394,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | File | Description |
 |------|-------------|
 | `docs/testing/DEV_INFRASTRUCTURE_TESTS.md` | Infrastructure tests for development environment validation. |
+| `docs/testing/E2E_USER_TESTS.md` | E2E login testing approach with TOTP backup/restore strategy for Keycloak. |
 | `docs/testing/USER_MANAGEMENT.md` | Guide for managing users including test user credentials and login process. |
 | `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md` | Test results for human-in-the-loop confirmation flow implementation. |
 
@@ -479,4 +483,4 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 ---
 
-*This index was last updated 2026-01-03 (Phase 2 documentation reorganization).*
+*This index was last updated 2026-01-04 (Added IDENTITY_SYNC.md and E2E_USER_TESTS.md).*

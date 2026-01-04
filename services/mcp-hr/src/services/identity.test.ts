@@ -226,7 +226,7 @@ describe('IdentityService', () => {
       const result = await service.createUserInKeycloak(employee, poolClient);
 
       expect(kcAdmin.users.create).toHaveBeenCalledWith({
-        username: 'test@test.com',
+        username: 'test.user',  // firstname.lastname format (consistent with dev realm)
         email: 'test@test.com',
         firstName: 'Test',
         lastName: 'User',
