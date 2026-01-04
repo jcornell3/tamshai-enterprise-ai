@@ -55,8 +55,28 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
         await kcAdmin.users.del(query);
       },
       find: async (query: { email?: string; username?: string }): Promise<KcUserRepresentation[]> => {
-        const users = await kcAdmin.users.find(query);
-        return users as KcUserRepresentation[];
+        try {
+          const users = await kcAdmin.users.find(query);
+          return users as KcUserRepresentation[];
+        } catch (error) {
+          // Enhanced error logging for debugging
+          console.error('[ADAPTER] users.find() error:', {
+            query,
+            errorName: (error as any)?.name,
+            errorMessage: (error as any)?.message,
+            errorCode: (error as any)?.code,
+            response: {
+              status: (error as any)?.response?.status,
+              statusText: (error as any)?.response?.statusText,
+              data: (error as any)?.response?.data,
+            },
+            config: {
+              url: (error as any)?.config?.url,
+              method: (error as any)?.config?.method,
+            },
+          });
+          throw error;
+        }
       },
       findOne: async (query: { id: string }): Promise<KcUserRepresentation | null> => {
         const user = await kcAdmin.users.findOne(query);
@@ -193,13 +213,40 @@ async function main(): Promise<void> {
     log('info', 'PostgreSQL connection successful');
 
     // Authenticate with Keycloak
-    log('info', 'Authenticating with Keycloak...');
+    log('info', 'Authenticating with Keycloak...', {
+      clientId: config.keycloak.clientId,
+      hasSecret: !!config.keycloak.clientSecret,
+      secretLength: config.keycloak.clientSecret?.length || 0,
+    });
     await kcAdmin.auth({
       grantType: 'client_credentials',
       clientId: config.keycloak.clientId,
       clientSecret: config.keycloak.clientSecret,
     });
     log('info', 'Keycloak authentication successful');
+
+    // Debug: Inspect the access token to verify roles
+    const accessToken = (kcAdmin as any).accessToken;
+    if (accessToken) {
+      try {
+        const tokenParts = accessToken.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+          log('info', 'Access token payload:', {
+            sub: payload.sub,
+            azp: payload.azp,
+            scope: payload.scope,
+            realmAccess: payload.realm_access?.roles || [],
+            resourceAccess: Object.keys(payload.resource_access || {}),
+            realmManagementRoles: payload.resource_access?.['realm-management']?.roles || [],
+          });
+        }
+      } catch (e) {
+        log('warn', 'Could not decode access token for debugging', { error: String(e) });
+      }
+    } else {
+      log('warn', 'No access token found after authentication');
+    }
 
     // Create IdentityService with adapted Keycloak client
     const kcAdminAdapter = createKcAdminClientAdapter(kcAdmin);
