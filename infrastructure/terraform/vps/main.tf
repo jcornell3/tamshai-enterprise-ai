@@ -226,7 +226,7 @@ resource "hcloud_server" "tamshai" {
 
 #checkov:skip=CKV_HETZNER_1:Public web server requires open HTTP/HTTPS (0.0.0.0/0). Defense-in-depth: (1) SSH restricted to allowed_ssh_ips, (2) fail2ban blocks brute-force attempts (3 failed SSH attempts), (3) Caddy enforces HTTPS redirect and handles TLS termination.
 resource "hcloud_firewall" "tamshai" {
-  name  = "tamshai-${var.environment}-firewall"
+  name = "tamshai-${var.environment}-firewall"
 
   rule {
     direction  = "in"
