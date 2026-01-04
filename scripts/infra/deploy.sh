@@ -179,12 +179,26 @@ sync_keycloak_stage() {
 cd /opt/tamshai
 export $(cat .env | grep -v '^#' | xargs)
 
+echo "=== Waiting for Keycloak to be ready ==="
+for i in 1 2 3 4 5; do
+    if curl -sf http://localhost:8080/auth/health/ready >/dev/null 2>&1; then
+        echo "Keycloak is ready"
+        break
+    fi
+    echo "Waiting for Keycloak... attempt $i/5"
+    sleep 15
+done
+
+echo "=== Syncing Keycloak realm (clients, roles) ==="
 docker cp keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
 docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
 docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" tamshai-keycloak /tmp/sync-realm.sh stage
+
+echo "=== Syncing HR users to Keycloak ==="
+docker compose run --rm identity-sync || echo "[WARN] Identity sync failed - check logs: docker logs tamshai-identity-sync"
 SYNC_SCRIPT
 
-    log_info "Keycloak sync complete"
+    log_info "Keycloak sync complete (realm + users)"
 }
 
 main() {
