@@ -13,8 +13,8 @@ COPY tsconfig.json ./
 COPY packages/ ./packages/
 COPY apps/support/ ./apps/support/
 
-# Install dependencies
-RUN npm install
+# Install dependencies (remove lockfile to regenerate for Linux platform)
+RUN rm -f package-lock.json && npm install
 
 # Build the Support app
 WORKDIR /app/apps/support

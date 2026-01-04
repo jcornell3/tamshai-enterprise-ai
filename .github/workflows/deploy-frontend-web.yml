@@ -63,9 +63,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: clients/web
-        # Use npm install instead of npm ci to get platform-specific binaries
-        # (lockfile generated on Windows may not include Linux native modules)
-        run: npm install
+        # Remove lockfile and reinstall to get platform-specific binaries
+        # (lockfile generated on Windows doesn't include Linux native modules like @rollup/rollup-linux-x64-gnu)
+        run: rm -f package-lock.json && npm install
 
       - name: Build web app (Staging)
         if: env.ENVIRONMENT == 'staging'
