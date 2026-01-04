@@ -8,29 +8,23 @@
 # Copy this file to terraform.tfvars for local development.
 
 # =============================================================================
-# CLOUD PROVIDER CONFIGURATION
+# HETZNER CLOUD CONFIGURATION
 # =============================================================================
 
-# Choose your cloud provider: "digitalocean" or "hetzner"
-cloud_provider = "hetzner"
-
-# API tokens - NEVER store here! Use environment variables:
+# API token - NEVER store here! Use environment variables:
 #   export TF_VAR_hcloud_token="your-token"
-#   export TF_VAR_do_token="your-token"
 
 # =============================================================================
 # VPS CONFIGURATION
 # =============================================================================
 
-# Region
-# Hetzner: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki),
-#          hil (Hillsboro OR), ash (Ashburn VA)
-# DigitalOcean: nyc1, nyc3, sfo3, ams3, sgp1, lon1, fra1
+# Region (Hetzner locations)
+# nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki),
+# hil (Hillsboro OR), ash (Ashburn VA)
 region = "hil"
 
 # VPS Size (8GB RAM recommended for all services)
-# Hetzner: cpx11 (2GB), cpx21 (4GB), cpx31 (8GB), cpx41 (16GB)
-# DigitalOcean: s-2vcpu-4gb, s-4vcpu-8gb
+# cpx11 (2GB), cpx21 (4GB), cpx31 (8GB), cpx41 (16GB)
 vps_size = "cpx31"
 
 # Environment name (affects resource naming)

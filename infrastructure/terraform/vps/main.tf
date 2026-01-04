@@ -1,7 +1,7 @@
 # Tamshai Enterprise AI - Single VPS Deployment
 # Terraform configuration for automated VPS provisioning
 #
-# Supports: DigitalOcean, Hetzner, Linode (easily extensible)
+# Provider: Hetzner Cloud
 # All services run on a single VPS with Docker Compose
 #
 # Usage:
@@ -20,10 +20,6 @@ terraform {
   required_version = ">= 1.5"
 
   required_providers {
-    digitalocean = {
-      source  = "digitalocean/digitalocean"
-      version = "~> 2.0"
-    }
     hcloud = {
       source  = "hetznercloud/hcloud"
       version = "~> 1.45"
@@ -47,24 +43,6 @@ terraform {
 # VARIABLES
 # =============================================================================
 
-variable "cloud_provider" {
-  description = "Cloud provider to use: digitalocean, hetzner"
-  type        = string
-  default     = "digitalocean"
-
-  validation {
-    condition     = contains(["digitalocean", "hetzner"], var.cloud_provider)
-    error_message = "Cloud provider must be 'digitalocean' or 'hetzner'."
-  }
-}
-
-variable "do_token" {
-  description = "DigitalOcean API token"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "hcloud_token" {
   description = "Hetzner Cloud API token"
   type        = string
@@ -73,15 +51,15 @@ variable "hcloud_token" {
 }
 
 variable "region" {
-  description = "Region for VPS deployment"
+  description = "Region for VPS deployment (Hetzner locations: nbg1, fsn1, hel1, ash, hil)"
   type        = string
-  default     = "nyc1" # DigitalOcean NYC or Hetzner nbg1
+  default     = "hil" # Hillsboro, Oregon
 }
 
 variable "vps_size" {
-  description = "VPS size (RAM)"
+  description = "VPS size (Hetzner types: cx21, cx31, cx41, cpx31, etc.)"
   type        = string
-  default     = "s-4vcpu-8gb" # DigitalOcean slug or Hetzner type
+  default     = "cpx31" # 4 vCPU, 8GB RAM
 }
 
 variable "domain" {
@@ -140,10 +118,6 @@ variable "mcp_hr_service_client_secret" {
 # =============================================================================
 # PROVIDERS
 # =============================================================================
-
-provider "digitalocean" {
-  token = var.do_token
-}
 
 provider "hcloud" {
   token = var.hcloud_token
@@ -225,103 +199,22 @@ resource "local_file" "deploy_public_key" {
 }
 
 # =============================================================================
-# DIGITALOCEAN RESOURCES
-# =============================================================================
-
-resource "digitalocean_ssh_key" "deploy" {
-  count      = var.cloud_provider == "digitalocean" ? 1 : 0
-  name       = "tamshai-${var.environment}-deploy"
-  public_key = tls_private_key.deploy_key.public_key_openssh
-}
-
-resource "digitalocean_droplet" "tamshai" {
-  count  = var.cloud_provider == "digitalocean" ? 1 : 0
-  name   = "tamshai-${var.environment}"
-  region = var.region
-  size   = var.vps_size
-  image  = "ubuntu-24-04-x64"
-
-  ssh_keys = [digitalocean_ssh_key.deploy[0].fingerprint]
-
-  user_data = local.cloud_init_config
-
-  tags = ["tamshai", var.environment]
-
-  # Enable monitoring
-  monitoring = true
-
-  # Enable backups for production
-  backups = var.environment == "prod"
-}
-
-resource "digitalocean_firewall" "tamshai" {
-  count = var.cloud_provider == "digitalocean" ? 1 : 0
-  name  = "tamshai-${var.environment}-firewall"
-
-  droplet_ids = [digitalocean_droplet.tamshai[0].id]
-
-  # Allow HTTP (redirect to HTTPS)
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "80"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  # Allow HTTPS
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "443"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  # Allow SSH only from specified IPs
-  dynamic "inbound_rule" {
-    for_each = length(var.allowed_ssh_ips) > 0 ? [1] : []
-    content {
-      protocol         = "tcp"
-      port_range       = "22"
-      source_addresses = var.allowed_ssh_ips
-    }
-  }
-
-  # Allow all outbound
-  outbound_rule {
-    protocol              = "tcp"
-    port_range            = "1-65535"
-    destination_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  outbound_rule {
-    protocol              = "udp"
-    port_range            = "1-65535"
-    destination_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  outbound_rule {
-    protocol              = "icmp"
-    destination_addresses = ["0.0.0.0/0", "::/0"]
-  }
-}
-
-# =============================================================================
 # HETZNER RESOURCES
 # =============================================================================
 
 resource "hcloud_ssh_key" "deploy" {
-  count      = var.cloud_provider == "hetzner" ? 1 : 0
   name       = "tamshai-${var.environment}-deploy"
   public_key = tls_private_key.deploy_key.public_key_openssh
 }
 
 #checkov:skip=CKV_HETZNER_2:Hetzner Cloud provides disk encryption at platform level by default. Explicit customer-managed encryption not required for this use case.
 resource "hcloud_server" "tamshai" {
-  count       = var.cloud_provider == "hetzner" ? 1 : 0
   name        = "tamshai-${var.environment}"
-  server_type = var.vps_size == "s-4vcpu-8gb" ? "cx31" : var.vps_size # Map DO sizes
-  location    = var.region == "nyc1" ? "nbg1" : var.region
+  server_type = var.vps_size
+  location    = var.region
   image       = "ubuntu-24.04"
 
-  ssh_keys = [hcloud_ssh_key.deploy[0].id]
+  ssh_keys = [hcloud_ssh_key.deploy.id]
 
   user_data = local.cloud_init_config
 
@@ -333,7 +226,6 @@ resource "hcloud_server" "tamshai" {
 
 #checkov:skip=CKV_HETZNER_1:Public web server requires open HTTP/HTTPS (0.0.0.0/0). Defense-in-depth: (1) SSH restricted to allowed_ssh_ips, (2) fail2ban blocks brute-force attempts (3 failed SSH attempts), (3) Caddy enforces HTTPS redirect and handles TLS termination.
 resource "hcloud_firewall" "tamshai" {
-  count = var.cloud_provider == "hetzner" ? 1 : 0
   name  = "tamshai-${var.environment}-firewall"
 
   rule {
@@ -371,9 +263,8 @@ resource "hcloud_firewall" "tamshai" {
 }
 
 resource "hcloud_firewall_attachment" "tamshai" {
-  count       = var.cloud_provider == "hetzner" ? 1 : 0
-  firewall_id = hcloud_firewall.tamshai[0].id
-  server_ids  = [hcloud_server.tamshai[0].id]
+  firewall_id = hcloud_firewall.tamshai.id
+  server_ids  = [hcloud_server.tamshai.id]
 }
 
 # =============================================================================
@@ -381,11 +272,7 @@ resource "hcloud_firewall_attachment" "tamshai" {
 # =============================================================================
 
 locals {
-  vps_ip = var.cloud_provider == "digitalocean" ? (
-    length(digitalocean_droplet.tamshai) > 0 ? digitalocean_droplet.tamshai[0].ipv4_address : ""
-    ) : (
-    length(hcloud_server.tamshai) > 0 ? hcloud_server.tamshai[0].ipv4_address : ""
-  )
+  vps_ip = hcloud_server.tamshai.ipv4_address
 
   # Use provided secret or generate one
   mcp_hr_service_secret = var.mcp_hr_service_client_secret != "" ? var.mcp_hr_service_client_secret : random_password.mcp_hr_service_secret.result
