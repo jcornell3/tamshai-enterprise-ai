@@ -195,7 +195,8 @@ docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh &
 docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" tamshai-keycloak /tmp/sync-realm.sh stage
 
 echo "=== Syncing HR users to Keycloak ==="
-docker compose run --rm identity-sync || echo "[WARN] Identity sync failed - check logs: docker logs tamshai-identity-sync"
+# Use --build to ensure latest code is used (image may be cached)
+docker compose run --rm --build identity-sync || echo "[WARN] Identity sync failed - check logs: docker logs tamshai-identity-sync"
 SYNC_SCRIPT
 
     log_info "Keycloak sync complete (realm + users)"

@@ -385,7 +385,8 @@ runcmd:
       tamshai-keycloak /tmp/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
   # Sync HR employees to Keycloak users (must run AFTER realm sync)
-  - cd /opt/tamshai && docker compose run --rm identity-sync || echo "Identity sync failed - users may need manual provisioning"
+  # Use --build to ensure latest code is used (image may be cached)
+  - cd /opt/tamshai && docker compose run --rm --build identity-sync || echo "Identity sync failed - users may need manual provisioning"
 
   # Enable fail2ban
   - systemctl enable fail2ban

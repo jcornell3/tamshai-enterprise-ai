@@ -264,7 +264,8 @@ jobs:
           echo "=== Syncing HR users to Keycloak ==="
           # Run identity-sync to provision HR employees as Keycloak users
           # This must run AFTER realm sync to ensure mcp-hr-service client exists
-          docker compose run --rm identity-sync || {
+          # Use --build to ensure latest code is used (image may be cached)
+          docker compose run --rm --build identity-sync || {
             echo "[WARN] Identity sync failed - users may need manual provisioning"
             echo "Check logs: docker logs tamshai-identity-sync"
           }
