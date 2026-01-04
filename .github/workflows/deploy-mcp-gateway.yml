@@ -16,6 +16,9 @@
 #
 # Deployment Time: 1-2 minutes (vs 10-15 minutes monolithic)
 # Downtime: 0-5 seconds (rolling update)
+#
+# Note: Uses SSH key authentication (same as deploy-vps.yml) instead of Vault SSH
+# because Vault is not exposed to the internet from GitHub Actions.
 
 name: Deploy MCP Gateway
 
@@ -55,7 +58,6 @@ env:
 permissions:
   contents: read
   deployments: write
-  id-token: write  # Required for Vault OIDC authentication
 
 jobs:
   deploy:
@@ -68,49 +70,58 @@ jobs:
         if: ${{ github.event.inputs.rollback != 'true' }}
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup Vault SSH
-        uses: ./.github/actions/vault-ssh
-        with:
-          vault-addr: ${{ secrets.VAULT_ADDR }}
-          vps-host: ${{ secrets.VPS_HOST }}
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Validate key format
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null 2>&1 || {
+            echo "::error::SSH key format is invalid"
+            exit 1
+          }
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || {
+            echo "::warning::Could not scan host keys, continuing anyway"
+          }
+          echo "SSH key configured"
 
       - name: Deploy MCP Gateway
         if: ${{ github.event.inputs.rollback != 'true' }}
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e  # Exit on error
 
           cd /opt/tamshai
 
-          echo "📦 Deploying MCP Gateway..."
+          echo "Deploying MCP Gateway..."
 
           # Fix git ownership check (running as root but repo may be owned by another user)
           git config --global --add safe.directory /opt/tamshai
 
           # Tag current version for rollback
-          echo "🏷️  Tagging current version..."
+          echo "Tagging current version..."
           docker tag tamshai/mcp-gateway:latest tamshai/mcp-gateway:rollback || true
 
           # Pull latest code
-          echo "📥 Pulling latest code..."
+          echo "Pulling latest code..."
           git pull origin main
 
           # Build new version
-          echo "🔨 Building MCP Gateway..."
+          echo "Building MCP Gateway..."
           docker compose build mcp-gateway
 
           # Deploy (--no-deps = don't restart dependencies)
-          echo "🚀 Deploying MCP Gateway (no dependency restart)..."
+          echo "Deploying MCP Gateway (no dependency restart)..."
           docker compose up -d --no-deps mcp-gateway
 
           # Health check with timeout (use docker exec - ports not exposed to host)
-          echo "⏳ Waiting for health check..."
+          echo "Waiting for health check..."
           for i in {1..30}; do
             if docker exec tamshai-mcp-gateway wget -q -O- http://localhost:3100/health 2>/dev/null | grep -q '"healthy"'; then
-              echo "✅ MCP Gateway is healthy"
+              echo "MCP Gateway is healthy"
               exit 0
             fi
             echo "   Attempt $i/30..."
@@ -118,17 +129,17 @@ jobs:
           done
 
           # Health check failed - rollback
-          echo "❌ Health check failed after ${{ env.HEALTH_CHECK_TIMEOUT }} seconds"
-          echo "🔄 Rolling back to previous version..."
+          echo "Health check failed after 30 seconds"
+          echo "Rolling back to previous version..."
           docker tag tamshai/mcp-gateway:rollback tamshai/mcp-gateway:latest
           docker compose up -d --no-deps mcp-gateway
 
           # Verify rollback succeeded
           sleep 5
           if docker exec tamshai-mcp-gateway wget -q -O- http://localhost:3100/health 2>/dev/null | grep -q '"healthy"'; then
-            echo "✅ Rollback successful"
+            echo "Rollback successful"
           else
-            echo "❌ Rollback failed - manual intervention required"
+            echo "Rollback failed - manual intervention required"
           fi
 
           exit 1
@@ -138,14 +149,14 @@ jobs:
         if: ${{ github.event.inputs.rollback == 'true' }}
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
 
           cd /opt/tamshai
 
-          echo "🔄 Rolling back MCP Gateway..."
+          echo "Rolling back MCP Gateway..."
 
           # Restore rollback tag
           docker tag tamshai/mcp-gateway:rollback tamshai/mcp-gateway:latest
@@ -154,23 +165,23 @@ jobs:
           docker compose up -d --no-deps mcp-gateway
 
           # Health check (use docker exec - ports not exposed to host)
-          echo "⏳ Verifying rollback..."
+          echo "Verifying rollback..."
           for i in {1..30}; do
             if docker exec tamshai-mcp-gateway wget -q -O- http://localhost:3100/health 2>/dev/null | grep -q '"healthy"'; then
-              echo "✅ Rollback successful"
+              echo "Rollback successful"
               exit 0
             fi
             sleep 1
           done
 
-          echo "❌ Rollback health check failed"
+          echo "Rollback health check failed"
           exit 1
           EOF
 
       - name: Deployment summary
         if: success()
         run: |
-          echo "## ✅ MCP Gateway Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "## MCP Gateway Deployment Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
           echo "**Service**: mcp-gateway" >> $GITHUB_STEP_SUMMARY
@@ -180,7 +191,7 @@ jobs:
       - name: Deployment failed
         if: failure()
         run: |
-          echo "## ❌ MCP Gateway Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "## MCP Gateway Deployment Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment**: ${{ env.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
           echo "**Service**: mcp-gateway" >> $GITHUB_STEP_SUMMARY

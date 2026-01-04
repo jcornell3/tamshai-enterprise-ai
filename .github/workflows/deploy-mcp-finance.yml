@@ -41,7 +41,6 @@ env:
 permissions:
   contents: read
   deployments: write
-  id-token: write  # Required for Vault OIDC authentication
 
 jobs:
   deploy:
@@ -54,19 +53,27 @@ jobs:
         if: ${{ github.event.inputs.rollback != 'true' }}
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
-      - name: Setup Vault SSH
-        uses: ./.github/actions/vault-ssh
-        with:
-          vault-addr: ${{ secrets.VAULT_ADDR }}
-          vps-host: ${{ secrets.VPS_HOST }}
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null 2>&1 || {
+            echo "::error::SSH key format is invalid"
+            exit 1
+          }
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || {
+            echo "::warning::Could not scan host keys, continuing anyway"
+          }
+          echo "SSH key configured"
 
       - name: Deploy MCP Finance
         if: ${{ github.event.inputs.rollback != 'true' }}
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
           echo "📦 Deploying MCP Finance..."
@@ -94,9 +101,9 @@ jobs:
         if: ${{ github.event.inputs.rollback == 'true' }}
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'EOF'
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
           docker tag tamshai/mcp-finance:rollback tamshai/mcp-finance:latest
