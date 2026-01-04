@@ -380,12 +380,15 @@ runcmd:
     done
 
   # Sync Keycloak realm configuration (creates clients, roles)
+  # Note: Use sed to extract values after first '=' to handle passwords with special chars
   - |
     cd /opt/tamshai
     docker cp keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
     docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
-    docker exec -e KEYCLOAK_ADMIN_PASSWORD="$(grep KEYCLOAK_ADMIN_PASSWORD .env | cut -d= -f2)" \
-      -e MCP_HR_SERVICE_CLIENT_SECRET="$(grep MCP_HR_SERVICE_CLIENT_SECRET .env | cut -d= -f2)" \
+    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env)
+    HR_SECRET=$(sed -n "s/^MCP_HR_SERVICE_CLIENT_SECRET=//p" .env)
+    docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KC_PASS" \
+      -e MCP_HR_SERVICE_CLIENT_SECRET="$HR_SECRET" \
       tamshai-keycloak /tmp/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
   # Sync HR employees to Keycloak users (must run AFTER realm sync)
