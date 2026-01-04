@@ -82,6 +82,19 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
         const user = await kcAdmin.users.findOne(query);
         return user ?? null; // Convert undefined to null
       },
+      resetPassword: async (params: {
+        id: string;
+        credential: {
+          type: string;
+          value: string;
+          temporary: boolean;
+        };
+      }): Promise<void> => {
+        await kcAdmin.users.resetPassword({
+          id: params.id,
+          credential: params.credential,
+        });
+      },
       addClientRoleMappings: async (params: {
         id: string;
         clientUniqueId: string;

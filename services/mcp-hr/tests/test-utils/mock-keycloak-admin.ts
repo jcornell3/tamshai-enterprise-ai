@@ -43,6 +43,15 @@ export interface MockSessionRepresentation {
 }
 
 /**
+ * Credential representation for password reset
+ */
+export interface MockCredentialRepresentation {
+  type: string;
+  value: string;
+  temporary: boolean;
+}
+
+/**
  * Typed mock for KcAdminClient.users methods
  */
 export interface MockKeycloakUsers {
@@ -51,6 +60,10 @@ export interface MockKeycloakUsers {
   del: jest.Mock<Promise<void>, [{ id: string }]>;
   findOne: jest.Mock<Promise<MockUserRepresentation | null>, [{ id: string }]>;
   find: jest.Mock<Promise<MockUserRepresentation[]>, [{ email?: string; search?: string; max?: number }?]>;
+  resetPassword: jest.Mock<
+    Promise<void>,
+    [{ id: string; credential: MockCredentialRepresentation }]
+  >;
   addClientRoleMappings: jest.Mock<
     Promise<void>,
     [{ id: string; clientUniqueId: string; roles: MockRoleRepresentation[] }]
@@ -106,6 +119,7 @@ export function createMockKcAdmin(): MockKcAdminClient {
       del: jest.fn().mockResolvedValue(undefined),
       findOne: jest.fn().mockResolvedValue(null),
       find: jest.fn().mockResolvedValue([]),
+      resetPassword: jest.fn().mockResolvedValue(undefined),
       addClientRoleMappings: jest.fn().mockResolvedValue(undefined),
       listClientRoleMappings: jest.fn().mockResolvedValue([]),
       listSessions: jest.fn().mockResolvedValue([]),

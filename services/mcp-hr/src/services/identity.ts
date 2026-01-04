@@ -163,6 +163,14 @@ export interface KcAdminClient {
     del(query: { id: string }): Promise<void>;
     find(query: { email?: string; username?: string }): Promise<KcUserRepresentation[]>;
     findOne(query: { id: string }): Promise<KcUserRepresentation | null>;
+    resetPassword(params: {
+      id: string;
+      credential: {
+        type: string;
+        value: string;
+        temporary: boolean;
+      };
+    }): Promise<void>;
     addClientRoleMappings(params: {
       id: string;
       clientUniqueId: string;
@@ -315,16 +323,28 @@ export class IdentityService {
 
       keycloakUserId = createResult.id;
 
-      // Step 2: Assign department role (if applicable)
+      // Step 2: Set temporary password (must be changed on first login)
+      // Uses environment variable or default for stage/dev environments
+      const tempPassword = process.env.IDENTITY_SYNC_TEMP_PASSWORD || 'TamshaiTemp123!';
+      await this.kcAdmin.users.resetPassword({
+        id: keycloakUserId,
+        credential: {
+          type: 'password',
+          value: tempPassword,
+          temporary: true, // User must change on first login
+        },
+      });
+
+      // Step 3: Assign department role (if applicable)
       await this.assignDepartmentRole(keycloakUserId, employeeData.department);
 
-      // Step 3: Update employee record with Keycloak user ID
+      // Step 4: Update employee record with Keycloak user ID
       await client.query(SQL.UPDATE_EMPLOYEE_KEYCLOAK_ID, [
         keycloakUserId,
         employeeData.id,
       ]);
 
-      // Step 4: Write audit log
+      // Step 5: Write audit log
       // Params: user_email, action, resource, target_id, access_decision, access_justification
       await client.query(SQL.INSERT_AUDIT_LOG, [
         employeeData.email,

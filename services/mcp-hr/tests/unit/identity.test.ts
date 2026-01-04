@@ -66,6 +66,7 @@ describe('IdentityService', () => {
 
     it('should create user in Keycloak with correct attributes', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
       mockKcAdmin.clients.listRoles.mockResolvedValue([
         createMockRole('hr-read', 'role-1'),
       ]);
@@ -80,7 +81,7 @@ describe('IdentityService', () => {
       expect(result).toBe('kc-user-123');
       expect(mockKcAdmin.users.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          username: 'alice@tamshai.com',
+          username: 'alice.chen', // firstName.lastName format
           email: 'alice@tamshai.com',
           firstName: 'Alice',
           lastName: 'Chen',
@@ -95,6 +96,7 @@ describe('IdentityService', () => {
 
     it('should assign department role to user', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
       mockKcAdmin.clients.listRoles.mockResolvedValue([
         createMockRole('hr-read', 'role-hr-read'),
       ]);
@@ -116,6 +118,7 @@ describe('IdentityService', () => {
 
     it('should update employee record with Keycloak user ID', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
       mockKcAdmin.clients.listRoles.mockResolvedValue([]);
       mockClient.query.mockResolvedValue(createMockQueryResult());
 
@@ -132,6 +135,7 @@ describe('IdentityService', () => {
 
     it('should write audit log entry for USER_CREATED', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
       mockKcAdmin.clients.listRoles.mockResolvedValue([]);
       mockClient.query.mockResolvedValue(createMockQueryResult());
 
@@ -144,6 +148,28 @@ describe('IdentityService', () => {
       expect(mockClient.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO hr.access_audit_log'),
         expect.arrayContaining(['alice@tamshai.com', 'USER_CREATED', 'employee', 'emp-123'])
+      );
+    });
+
+    it('should set temporary password for new user', async () => {
+      mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
+      mockKcAdmin.clients.listRoles.mockResolvedValue([]);
+      mockClient.query.mockResolvedValue(createMockQueryResult());
+
+      await identityService.createUserInKeycloak(
+        employeeData,
+        mockClient as unknown as import('pg').PoolClient
+      );
+
+      expect(mockKcAdmin.users.resetPassword).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'kc-user-123',
+          credential: expect.objectContaining({
+            type: 'password',
+            temporary: true,
+          }),
+        })
       );
     });
 
@@ -184,6 +210,7 @@ describe('IdentityService', () => {
     it('should rollback Keycloak user if role assignment fails (compensating transaction)', async () => {
       // User creation succeeds
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
       // Role lookup succeeds
       mockKcAdmin.clients.listRoles.mockResolvedValue([
         createMockRole('hr-read', 'role-hr-read'),
@@ -212,6 +239,7 @@ describe('IdentityService', () => {
 
     it('should handle missing department role gracefully', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
+      mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
       // No roles found for department
       mockKcAdmin.clients.listRoles.mockResolvedValue([]);
       mockClient.query.mockResolvedValue(createMockQueryResult());
