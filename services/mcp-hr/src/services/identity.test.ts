@@ -42,6 +42,7 @@ const createMockKcAdmin = () => ({
     logout: jest.fn(),
   },
   clients: {
+    find: jest.fn(),
     listRoles: jest.fn(),
   },
 }) as unknown as KcAdminClient;
@@ -113,6 +114,7 @@ describe('IdentityService', () => {
       // Mock: Keycloak user not found (needs to be created)
       (kcAdmin.users.find as jest.Mock).mockResolvedValue([]);
       (kcAdmin.users.create as jest.Mock).mockResolvedValue({ id: 'kc-user-new' });
+      (kcAdmin.clients.find as jest.Mock).mockResolvedValue([{ id: 'client-uuid-123', clientId: 'mcp-gateway' }]);
       (kcAdmin.clients.listRoles as jest.Mock).mockResolvedValue([]);
 
       // Mock: Pool client for transactions
@@ -217,6 +219,7 @@ describe('IdentityService', () => {
 
     it('creates user in Keycloak with correct attributes', async () => {
       (kcAdmin.users.create as jest.Mock).mockResolvedValue({ id: 'kc-user-123' });
+      (kcAdmin.clients.find as jest.Mock).mockResolvedValue([{ id: 'client-uuid-123', clientId: 'mcp-gateway' }]);
       (kcAdmin.clients.listRoles as jest.Mock).mockResolvedValue([{ id: 'role-1', name: 'hr-read' }]);
       (poolClient.query as jest.Mock).mockResolvedValue(createQueryResult([]));
 
@@ -239,6 +242,7 @@ describe('IdentityService', () => {
 
     it('assigns department role to new user', async () => {
       (kcAdmin.users.create as jest.Mock).mockResolvedValue({ id: 'kc-user-123' });
+      (kcAdmin.clients.find as jest.Mock).mockResolvedValue([{ id: 'client-uuid-123', clientId: 'mcp-gateway' }]);
       (kcAdmin.clients.listRoles as jest.Mock).mockResolvedValue([{ id: 'role-hr', name: 'hr-read' }]);
       (poolClient.query as jest.Mock).mockResolvedValue(createQueryResult([]));
 
@@ -246,13 +250,14 @@ describe('IdentityService', () => {
 
       expect(kcAdmin.users.addClientRoleMappings).toHaveBeenCalledWith({
         id: 'kc-user-123',
-        clientUniqueId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
+        clientUniqueId: 'client-uuid-123', // Now uses the UUID from clients.find
         roles: [{ id: 'role-hr', name: 'hr-read' }],
       });
     });
 
     it('updates employee record with Keycloak user ID', async () => {
       (kcAdmin.users.create as jest.Mock).mockResolvedValue({ id: 'kc-user-123' });
+      (kcAdmin.clients.find as jest.Mock).mockResolvedValue([{ id: 'client-uuid-123', clientId: 'mcp-gateway' }]);
       (kcAdmin.clients.listRoles as jest.Mock).mockResolvedValue([]);
       (poolClient.query as jest.Mock).mockResolvedValue(createQueryResult([]));
 
@@ -266,6 +271,7 @@ describe('IdentityService', () => {
 
     it('writes audit log for user creation', async () => {
       (kcAdmin.users.create as jest.Mock).mockResolvedValue({ id: 'kc-user-123' });
+      (kcAdmin.clients.find as jest.Mock).mockResolvedValue([{ id: 'client-uuid-123', clientId: 'mcp-gateway' }]);
       (kcAdmin.clients.listRoles as jest.Mock).mockResolvedValue([]);
       (poolClient.query as jest.Mock).mockResolvedValue(createQueryResult([]));
 
@@ -288,6 +294,7 @@ describe('IdentityService', () => {
 
     it('performs compensating transaction if role assignment fails', async () => {
       (kcAdmin.users.create as jest.Mock).mockResolvedValue({ id: 'kc-user-123' });
+      (kcAdmin.clients.find as jest.Mock).mockResolvedValue([{ id: 'client-uuid-123', clientId: 'mcp-gateway' }]);
       (kcAdmin.clients.listRoles as jest.Mock).mockResolvedValue([{ id: 'role-1', name: 'hr-read' }]);
       (kcAdmin.users.addClientRoleMappings as jest.Mock).mockRejectedValue(new Error('Role assignment failed'));
 

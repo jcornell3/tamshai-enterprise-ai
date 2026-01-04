@@ -64,9 +64,18 @@ export interface MockKeycloakUsers {
 }
 
 /**
+ * Keycloak client representation
+ */
+export interface MockClientRepresentation {
+  id?: string;
+  clientId?: string;
+}
+
+/**
  * Typed mock for KcAdminClient.clients methods
  */
 export interface MockKeycloakClients {
+  find: jest.Mock<Promise<MockClientRepresentation[]>, [{ clientId: string }]>;
   listRoles: jest.Mock<Promise<MockRoleRepresentation[]>, [{ id: string }]>;
   findOne: jest.Mock<Promise<{ id: string; clientId: string } | null>, [{ id: string }]>;
 }
@@ -103,6 +112,7 @@ export function createMockKcAdmin(): MockKcAdminClient {
       logout: jest.fn().mockResolvedValue(undefined),
     },
     clients: {
+      find: jest.fn().mockResolvedValue([{ id: 'client-uuid-default', clientId: 'mcp-gateway' }]),
       listRoles: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
     },

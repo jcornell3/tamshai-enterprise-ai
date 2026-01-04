@@ -36,7 +36,7 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { Queue } from 'bullmq';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { IdentityService, BulkSyncResult, CleanupQueue, KcAdminClient, KcUserRepresentation, KcRoleRepresentation } from '../services/identity';
+import { IdentityService, BulkSyncResult, CleanupQueue, KcAdminClient, KcUserRepresentation, KcRoleRepresentation, KcClientRepresentation } from '../services/identity';
 
 /**
  * Wraps the KeycloakAdminClient to match the KcAdminClient interface.
@@ -93,6 +93,10 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
       },
     },
     clients: {
+      find: async (query: { clientId: string }): Promise<KcClientRepresentation[]> => {
+        const clients = await kcAdmin.clients.find(query);
+        return clients as KcClientRepresentation[];
+      },
       listRoles: async (query: { id: string }): Promise<KcRoleRepresentation[]> => {
         const roles = await kcAdmin.clients.listRoles(query);
         return roles as KcRoleRepresentation[];

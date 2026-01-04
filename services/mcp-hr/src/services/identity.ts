@@ -148,6 +148,14 @@ export interface KcSessionRepresentation {
  * Keycloak Admin Client interface
  * Abstracts the @keycloak/keycloak-admin-client for testability
  */
+/**
+ * Keycloak client representation
+ */
+export interface KcClientRepresentation {
+  id?: string;
+  clientId?: string;
+}
+
 export interface KcAdminClient {
   users: {
     create(user: Partial<KcUserRepresentation>): Promise<{ id: string }>;
@@ -168,6 +176,7 @@ export interface KcAdminClient {
     logout(query: { id: string }): Promise<void>;
   };
   clients: {
+    find(query: { clientId: string }): Promise<KcClientRepresentation[]>;
     listRoles(query: { id: string }): Promise<KcRoleRepresentation[]>;
   };
   auth(credentials: {
@@ -343,8 +352,18 @@ export class IdentityService {
     const roleName = DEPARTMENT_ROLE_MAP[department];
     if (!roleName) return;
 
+    // First, find the mcp-gateway client by clientId to get its internal UUID
+    const clients = await this.kcAdmin.clients.find({
+      clientId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
+    });
+    if (clients.length === 0 || !clients[0].id) {
+      // Client not found - skip role assignment (non-fatal for sync)
+      return;
+    }
+    const clientUUID = clients[0].id;
+
     const roles = await this.kcAdmin.clients.listRoles({
-      id: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
+      id: clientUUID,
     });
     const departmentRole = roles.find((r) => r.name === roleName);
     if (!departmentRole) return;
@@ -352,7 +371,7 @@ export class IdentityService {
     try {
       await this.kcAdmin.users.addClientRoleMappings({
         id: keycloakUserId,
-        clientUniqueId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
+        clientUniqueId: clientUUID,
         roles: [{ id: departmentRole.id!, name: departmentRole.name! }],
       });
     } catch (roleError) {
