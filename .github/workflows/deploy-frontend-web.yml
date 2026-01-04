@@ -63,7 +63,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: clients/web
-        run: npm ci
+        # Use npm install instead of npm ci to get platform-specific binaries
+        # (lockfile generated on Windows may not include Linux native modules)
+        run: npm install
 
       - name: Build web app (Staging)
         if: env.ENVIRONMENT == 'staging'
