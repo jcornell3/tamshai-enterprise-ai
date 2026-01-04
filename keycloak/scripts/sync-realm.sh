@@ -319,15 +319,38 @@ sync_mcp_hr_service_client() {
         # Get realm-management client UUID
         local realm_mgmt_uuid=$(get_client_uuid "realm-management")
         if [ -n "$realm_mgmt_uuid" ]; then
-            # Assign manage-users role
-            $KCADM add-roles -r "$REALM" \
+            # Assign manage-users role (show errors for debugging)
+            log_info "  Assigning manage-users role..."
+            if $KCADM add-roles -r "$REALM" \
                 --uusername "service-account-mcp-hr-service" \
                 --cclientid realm-management \
-                --rolename manage-users 2>/dev/null || log_warn "  Could not assign manage-users role"
-            $KCADM add-roles -r "$REALM" \
+                --rolename manage-users; then
+                log_info "    manage-users role assigned"
+            else
+                log_warn "    Could not assign manage-users role (may already be assigned)"
+            fi
+
+            log_info "  Assigning view-users role..."
+            if $KCADM add-roles -r "$REALM" \
                 --uusername "service-account-mcp-hr-service" \
                 --cclientid realm-management \
-                --rolename view-users 2>/dev/null || log_warn "  Could not assign view-users role"
+                --rolename view-users; then
+                log_info "    view-users role assigned"
+            else
+                log_warn "    Could not assign view-users role (may already be assigned)"
+            fi
+
+            # Also assign query-users role which is needed for user.find()
+            log_info "  Assigning query-users role..."
+            if $KCADM add-roles -r "$REALM" \
+                --uusername "service-account-mcp-hr-service" \
+                --cclientid realm-management \
+                --rolename query-users; then
+                log_info "    query-users role assigned"
+            else
+                log_warn "    Could not assign query-users role (may already be assigned)"
+            fi
+
             log_info "  Service account roles assigned"
         fi
     fi
