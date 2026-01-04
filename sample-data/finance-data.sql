@@ -334,6 +334,173 @@ SELECT 2024, 'Q3', id, 2400000, 14.3, 'Strong retention' FROM finance.budget_cat
 ON CONFLICT DO NOTHING;
 
 -- =============================================================================
+-- DEPARTMENT REFERENCE TABLE (Issue #77 - v1.5)
+-- Mirrors hr.departments for cross-database RLS policies
+-- Kept in sync by application layer or scheduled job
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS finance.departments (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(10) UNIQUE NOT NULL
+);
+
+-- Insert department reference data (mirrors hr.departments)
+INSERT INTO finance.departments (id, name, code) VALUES
+    ('d1000000-0000-0000-0000-000000000001', 'Executive', 'EXEC'),
+    ('d1000000-0000-0000-0000-000000000002', 'Human Resources', 'HR'),
+    ('d1000000-0000-0000-0000-000000000003', 'Finance', 'FIN'),
+    ('d1000000-0000-0000-0000-000000000004', 'Sales', 'SALES'),
+    ('d1000000-0000-0000-0000-000000000005', 'Customer Support', 'SUPPORT'),
+    ('d1000000-0000-0000-0000-000000000006', 'Engineering', 'ENG'),
+    ('d1000000-0000-0000-0000-000000000007', 'Marketing', 'MKT'),
+    ('d1000000-0000-0000-0000-000000000008', 'Operations', 'OPS'),
+    ('d1000000-0000-0000-0000-000000000009', 'Legal', 'LEGAL'),
+    ('d1000000-0000-0000-0000-000000000010', 'IT', 'IT')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, code = EXCLUDED.code;
+
+-- Enable RLS on departments (public read)
+ALTER TABLE finance.departments ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Any authenticated user can read departments
+CREATE POLICY departments_public_read ON finance.departments
+    FOR SELECT
+    USING (true);
+
+-- =============================================================================
+-- EXPENSE TRACKING (Issue #77 - v1.5)
+-- =============================================================================
+
+-- Create expense category enum type
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'expense_category' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'finance')) THEN
+        CREATE TYPE finance.expense_category AS ENUM ('TRAVEL', 'MEALS', 'SUPPLIES', 'SOFTWARE', 'OTHER');
+    END IF;
+END
+$$;
+
+-- Create expense status enum type
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'expense_status' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'finance')) THEN
+        CREATE TYPE finance.expense_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'REIMBURSED');
+    END IF;
+END
+$$;
+
+-- Create the expenses table
+CREATE TABLE IF NOT EXISTS finance.expenses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL,
+    department_id UUID NOT NULL,
+    expense_date DATE NOT NULL,
+    category finance.expense_category NOT NULL,
+    description TEXT NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL CHECK (amount > 0),
+    status finance.expense_status DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    approved_by UUID,
+    approved_at TIMESTAMP,
+    receipt_path VARCHAR(500)
+);
+
+-- Add columns if they don't exist (for incremental migration)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'expenses' AND column_name = 'approved_by') THEN
+        ALTER TABLE finance.expenses ADD COLUMN approved_by UUID;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'expenses' AND column_name = 'approved_at') THEN
+        ALTER TABLE finance.expenses ADD COLUMN approved_at TIMESTAMP;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'finance' AND table_name = 'expenses' AND column_name = 'receipt_path') THEN
+        ALTER TABLE finance.expenses ADD COLUMN receipt_path VARCHAR(500);
+    END IF;
+END
+$$;
+
+-- Create indexes for expenses table
+CREATE INDEX IF NOT EXISTS idx_expenses_employee ON finance.expenses(employee_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_department ON finance.expenses(department_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON finance.expenses(expense_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON finance.expenses(category);
+CREATE INDEX IF NOT EXISTS idx_expenses_status ON finance.expenses(status);
+CREATE INDEX IF NOT EXISTS idx_expenses_created ON finance.expenses(created_at);
+
+-- =============================================================================
+-- EXPENSE SAMPLE DATA
+-- Using employee_id and department_id values from hr-data.sql
+-- =============================================================================
+
+-- Employee IDs from hr-data.sql:
+-- Eve Thompson (CEO, Executive): e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b
+-- Alice Chen (VP HR): f104eddc-21ab-457c-a254-78051ad7ad67
+-- Bob Martinez (Finance Director): 1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1
+-- Carol Johnson (VP Sales): c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c
+-- Dan Williams (Support Director): d7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f
+-- Nina Patel (Engineering Manager): a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d
+-- Marcus Johnson (Software Engineer): e1000000-0000-0000-0000-000000000052
+-- Frank Davis (IT Intern): b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e
+-- Ryan Garcia (Sales Manager): e1000000-0000-0000-0000-000000000031
+-- Lisa Anderson (Senior Accountant): e1000000-0000-0000-0000-000000000021
+
+-- Department IDs from hr-data.sql:
+-- Executive: d1000000-0000-0000-0000-000000000001
+-- HR: d1000000-0000-0000-0000-000000000002
+-- Finance: d1000000-0000-0000-0000-000000000003
+-- Sales: d1000000-0000-0000-0000-000000000004
+-- Support: d1000000-0000-0000-0000-000000000005
+-- Engineering: d1000000-0000-0000-0000-000000000006
+-- Marketing: d1000000-0000-0000-0000-000000000007
+-- Operations: d1000000-0000-0000-0000-000000000008
+-- IT: d1000000-0000-0000-0000-000000000010
+
+INSERT INTO finance.expenses (id, employee_id, department_id, expense_date, category, description, amount, status, approved_by, approved_at, receipt_path) VALUES
+    -- TRAVEL expenses (diverse statuses)
+    ('exp00001-0000-0000-0000-000000000001', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-10-15', 'TRAVEL', 'Client visit flight to New York - Acme Corp deal', 850.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-20 10:30:00', '/receipts/2024/10/flight-nyc-001.pdf'),
+    ('exp00001-0000-0000-0000-000000000002', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-10-16', 'TRAVEL', 'NYC hotel - 2 nights for client meetings', 420.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-20 10:35:00', '/receipts/2024/10/hotel-nyc-001.pdf'),
+    ('exp00001-0000-0000-0000-000000000003', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'd1000000-0000-0000-0000-000000000001', '2024-11-01', 'TRAVEL', 'Board meeting travel - San Francisco', 1250.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-11-05 09:00:00', '/receipts/2024/11/travel-sf-ceo.pdf'),
+    ('exp00001-0000-0000-0000-000000000004', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-11-10', 'TRAVEL', 'Tech conference travel - AWS re:Invent', 2100.00, 'PENDING', NULL, NULL, '/receipts/2024/11/reinvent-travel.pdf'),
+
+    -- MEALS expenses
+    ('exp00001-0000-0000-0000-000000000005', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-10-15', 'MEALS', 'Client dinner - Acme Corp negotiations', 285.50, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-20 10:40:00', '/receipts/2024/10/dinner-acme.pdf'),
+    ('exp00001-0000-0000-0000-000000000006', 'e1000000-0000-0000-0000-000000000031', 'd1000000-0000-0000-0000-000000000004', '2024-10-22', 'MEALS', 'Team lunch - Q4 kickoff meeting', 156.75, 'APPROVED', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', '2024-10-25 14:00:00', '/receipts/2024/10/team-lunch-q4.pdf'),
+    ('exp00001-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2024-11-05', 'MEALS', 'Working lunch during sprint planning', 32.50, 'PENDING', NULL, NULL, NULL),
+    ('exp00001-0000-0000-0000-000000000008', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2024-09-15', 'MEALS', 'Candidate interview lunch - Senior HR Manager role', 89.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-09-20 11:00:00', '/receipts/2024/09/interview-lunch.pdf'),
+
+    -- SUPPLIES expenses
+    ('exp00001-0000-0000-0000-000000000009', 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'd1000000-0000-0000-0000-000000000010', '2024-10-01', 'SUPPLIES', 'Office supplies - notebooks and pens', 45.99, 'APPROVED', 'e1000000-0000-0000-0000-000000000060', '2024-10-03 09:00:00', '/receipts/2024/10/office-supplies.pdf'),
+    ('exp00001-0000-0000-0000-000000000010', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'd1000000-0000-0000-0000-000000000005', '2024-10-10', 'SUPPLIES', 'Headset for remote support calls', 129.99, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-15 10:00:00', '/receipts/2024/10/headset.pdf'),
+    ('exp00001-0000-0000-0000-000000000011', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-11-01', 'SUPPLIES', 'Ergonomic keyboard for team member', 175.00, 'PENDING', NULL, NULL, '/receipts/2024/11/keyboard.pdf'),
+    ('exp00001-0000-0000-0000-000000000012', 'e1000000-0000-0000-0000-000000000021', 'd1000000-0000-0000-0000-000000000003', '2024-08-20', 'SUPPLIES', 'Printer paper and toner - bulk order', 289.50, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-08-25 09:30:00', '/receipts/2024/08/printer-supplies.pdf'),
+
+    -- SOFTWARE expenses
+    ('exp00001-0000-0000-0000-000000000013', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2024-10-01', 'SOFTWARE', 'JetBrains annual license renewal', 249.00, 'APPROVED', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', '2024-10-05 08:00:00', '/receipts/2024/10/jetbrains.pdf'),
+    ('exp00001-0000-0000-0000-000000000014', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-09-15', 'SOFTWARE', 'GitHub Copilot team subscription - 6 months', 570.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-09-20 14:00:00', '/receipts/2024/09/copilot.pdf'),
+    ('exp00001-0000-0000-0000-000000000015', 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'd1000000-0000-0000-0000-000000000010', '2024-11-08', 'SOFTWARE', 'Udemy course - Cloud Security Fundamentals', 79.99, 'PENDING', NULL, NULL, NULL),
+    ('exp00001-0000-0000-0000-000000000016', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'd1000000-0000-0000-0000-000000000003', '2024-07-01', 'SOFTWARE', 'QuickBooks advanced features addon', 350.00, 'REIMBURSED', 'e1000000-0000-0000-0000-000000000002', '2024-07-05 10:00:00', '/receipts/2024/07/quickbooks.pdf'),
+
+    -- OTHER expenses
+    ('exp00001-0000-0000-0000-000000000017', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'd1000000-0000-0000-0000-000000000001', '2024-10-20', 'OTHER', 'Industry association membership renewal', 500.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-22 11:00:00', '/receipts/2024/10/association.pdf'),
+    ('exp00001-0000-0000-0000-000000000018', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2024-10-25', 'OTHER', 'HR certification exam fee - SHRM-SCP', 375.00, 'REJECTED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-28 15:00:00', NULL),
+    ('exp00001-0000-0000-0000-000000000019', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-11-12', 'OTHER', 'Trade show booth rental deposit', 1500.00, 'PENDING', NULL, NULL, '/receipts/2024/11/tradeshow.pdf'),
+    ('exp00001-0000-0000-0000-000000000020', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'd1000000-0000-0000-0000-000000000005', '2024-09-01', 'OTHER', 'Customer appreciation gifts - top 10 accounts', 450.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-09-10 09:00:00', '/receipts/2024/09/customer-gifts.pdf'),
+
+    -- Additional expenses to ensure good test coverage
+    ('exp00001-0000-0000-0000-000000000021', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2024-11-15', 'TRAVEL', 'Uber to client site for production issue', 45.00, 'PENDING', NULL, NULL, NULL),
+    ('exp00001-0000-0000-0000-000000000022', 'e1000000-0000-0000-0000-000000000031', 'd1000000-0000-0000-0000-000000000004', '2024-08-15', 'TRAVEL', 'Mileage reimbursement - customer visits', 156.80, 'REIMBURSED', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', '2024-08-20 10:00:00', '/receipts/2024/08/mileage.pdf'),
+    ('exp00001-0000-0000-0000-000000000023', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2024-11-01', 'MEALS', 'New hire onboarding lunch', 125.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-11-05 11:30:00', '/receipts/2024/11/onboarding-lunch.pdf'),
+    ('exp00001-0000-0000-0000-000000000024', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'd1000000-0000-0000-0000-000000000003', '2024-10-30', 'SUPPLIES', 'External monitor for WFH setup', 299.99, 'APPROVED', 'e1000000-0000-0000-0000-000000000002', '2024-11-02 14:00:00', '/receipts/2024/10/monitor.pdf'),
+    ('exp00001-0000-0000-0000-000000000025', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-10-20', 'OTHER', 'Team building activity - escape room', 320.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-25 16:00:00', '/receipts/2024/10/team-building.pdf')
+ON CONFLICT (id) DO NOTHING;
+
+-- =============================================================================
 -- VIEWS FOR ROLE-BASED ACCESS
 -- =============================================================================
 
@@ -643,6 +810,63 @@ CREATE POLICY revenue_sales_access ON finance.revenue_summary
     FOR SELECT
     USING (
         current_setting('app.current_user_roles', true) LIKE '%sales-read%'
+    );
+
+-- -----------------------------------------------------------------------------
+-- EXPENSES RLS (Issue #77 - v1.5)
+-- -----------------------------------------------------------------------------
+ALTER TABLE finance.expenses ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Users can see their own expenses (self-access)
+CREATE POLICY expense_self_access ON finance.expenses
+    FOR SELECT
+    USING (
+        employee_id::text = current_setting('app.current_user_id', true)
+    );
+
+-- Policy 2: Users can INSERT their own expenses only
+CREATE POLICY expense_self_insert ON finance.expenses
+    FOR INSERT
+    WITH CHECK (
+        employee_id::text = current_setting('app.current_user_id', true)
+    );
+
+-- Policy 3: Finance role (read) can see all expenses
+CREATE POLICY expense_finance_read_access ON finance.expenses
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+    );
+
+-- Policy 4: Finance role (write) can see and modify all expenses
+CREATE POLICY expense_finance_write_access ON finance.expenses
+    FOR ALL
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    )
+    WITH CHECK (
+        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+    );
+
+-- Policy 5: Executive role can see all expenses
+CREATE POLICY expense_executive_access ON finance.expenses
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%executive%'
+    );
+
+-- Policy 6: Manager role can see expenses from their department
+-- Note: Uses finance.departments (local copy of hr.departments) for cross-database RLS
+CREATE POLICY expense_manager_access ON finance.expenses
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        AND department_id IN (
+            SELECT d.id
+            FROM finance.departments d
+            WHERE d.name = current_setting('app.current_user_department', true)
+               OR d.code = current_setting('app.current_user_department', true)
+        )
     );
 
 -- =============================================================================
