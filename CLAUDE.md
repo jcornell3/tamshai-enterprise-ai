@@ -153,10 +153,15 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 ./scripts/infra/shell.sh mongodb         # MongoDB shell (mongosh)
 ./scripts/infra/shell.sh redis           # Redis CLI
 
-# Environment teardown
-./scripts/infra/teardown.sh dev          # Stop dev containers
-./scripts/infra/teardown.sh dev --volumes # Remove data volumes (DESTRUCTIVE)
-./scripts/infra/teardown.sh stage        # Stop stage containers
+# Container rebuild (stop containers, preserve infrastructure)
+./scripts/infra/rebuild.sh dev            # Stop dev containers
+./scripts/infra/rebuild.sh dev --volumes  # Remove data volumes (DESTRUCTIVE)
+./scripts/infra/rebuild.sh stage          # Stop stage containers
+
+# Environment teardown (DESTROYS infrastructure via Terraform)
+./scripts/infra/teardown.sh dev           # Terraform destroy dev environment
+./scripts/infra/teardown.sh stage         # Terraform destroy VPS (IRREVERSIBLE!)
+./scripts/infra/teardown.sh stage --force # Destroy without confirmation (DANGEROUS)
 
 # Database backup (alternative location)
 ./scripts/infra/backup.sh                # Backup all databases

@@ -11,7 +11,7 @@ For the complete inventory of all 58+ scripts with metadata (purpose, environmen
 ```
 scripts/
 ├── db/              # Database backup and restore
-├── infra/           # Infrastructure management (deploy, status, teardown)
+├── infra/           # Infrastructure management (deploy, status, teardown, rebuild)
 ├── mcp/             # MCP server health and restart
 ├── secrets/         # Secret management (GitHub, Vault)
 ├── test/            # Integration and login testing
@@ -26,6 +26,8 @@ scripts/
 |------|---------|
 | Check service status | `./scripts/infra/status.sh dev` |
 | Deploy services | `./scripts/infra/deploy.sh dev` |
+| Rebuild (stop containers) | `./scripts/infra/rebuild.sh dev` |
+| Teardown (destroy infra) | `./scripts/infra/teardown.sh stage` |
 | Backup databases | `./scripts/db/backup.sh dev` |
 | Check MCP health | `./scripts/mcp/health-check.sh dev` |
 | Update GitHub secrets | `./scripts/secrets/update-github-secrets.sh stage` |

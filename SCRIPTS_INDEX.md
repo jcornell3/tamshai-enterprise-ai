@@ -2,7 +2,7 @@
 
 **Repository**: Tamshai Enterprise AI
 **Generated**: 2026-01-03
-**Total Scripts**: 58 (42 shell, 16 PowerShell)
+**Total Scripts**: 59 (43 shell, 16 PowerShell)
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Category | Count | Location |
 |----------|-------|----------|
-| Infrastructure (infra) | 8 | `scripts/infra/` |
+| Infrastructure (infra) | 9 | `scripts/infra/` |
 | Database (db) | 2 | `scripts/db/` |
 | MCP Server | 2 | `scripts/mcp/` |
 | Vault | 2 | `scripts/vault/`, `scripts/` |
@@ -38,7 +38,8 @@
 | `logs.sh` | View service logs | dev | Manual | Yes | Docker Compose |
 | `rollback.sh` | Rollback deployments | dev, stage | Manual | No | Git, Docker |
 | `shell.sh` | Interactive shell into containers | dev | Manual | Yes | Docker |
-| `teardown.sh` | Stop and optionally remove containers | dev, stage | Manual | No | Docker Compose |
+| `rebuild.sh` | Stop and optionally remove containers (NOT infrastructure) | dev, stage | Manual | No | Docker Compose |
+| `teardown.sh` | Full Terraform destroy of infrastructure | dev, stage | Manual | No | Terraform |
 | `backup.sh` | Backup databases (PostgreSQL, MongoDB, Keycloak) | dev | Manual | Yes | Docker |
 
 ### Database Scripts (`scripts/db/`)
@@ -248,6 +249,7 @@ The following scripts are documented in `CLAUDE.md` under "Service Management Sc
 | `./scripts/test/login-journey.sh` | `scripts/test/login-journey.sh` | Exists |
 | `./scripts/infra/logs.sh` | `scripts/infra/logs.sh` | Exists |
 | `./scripts/infra/shell.sh` | `scripts/infra/shell.sh` | Exists |
+| `./scripts/infra/rebuild.sh` | `scripts/infra/rebuild.sh` | Exists |
 | `./scripts/infra/teardown.sh` | `scripts/infra/teardown.sh` | Exists |
 | `./scripts/infra/backup.sh` | `scripts/infra/backup.sh` | Exists |
 

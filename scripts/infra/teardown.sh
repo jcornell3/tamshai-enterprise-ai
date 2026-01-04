@@ -1,26 +1,29 @@
 #!/bin/bash
 # =============================================================================
-# Tamshai Environment Teardown
+# Tamshai Environment Teardown (Full Infrastructure Destruction)
 # =============================================================================
 #
-# Cleanly tear down Tamshai environments.
+# Completely destroys Tamshai environments using Terraform.
+# This script DESTROYS infrastructure - use rebuild.sh for container restarts.
 #
 # Usage:
 #   ./teardown.sh [environment] [options]
 #
 # Environments:
-#   dev         - Local development (default)
-#   stage       - VPS staging (requires SSH)
+#   dev         - Local development (Terraform destroy + container cleanup)
+#   stage       - VPS staging (Terraform destroy - DESTROYS VPS!)
 #
 # Options:
-#   --volumes   - Also remove data volumes (DESTRUCTIVE!)
-#   --all       - Remove everything including images
-#   --force     - Skip confirmation prompts
+#   --force     - Skip confirmation prompts (DANGEROUS!)
+#   --keep-state - Don't remove Terraform state files
 #
 # Examples:
-#   ./teardown.sh                   # Stop dev containers
-#   ./teardown.sh --volumes         # Stop and remove volumes
-#   ./teardown.sh stage             # Stop stage containers (via SSH)
+#   ./teardown.sh dev              # Destroy local dev environment
+#   ./teardown.sh stage            # Destroy VPS (IRREVERSIBLE!)
+#   ./teardown.sh stage --force    # Destroy without confirmation
+#
+# WARNING: This script DESTROYS infrastructure. Data will be LOST.
+#          For container restarts without destroying infra, use rebuild.sh
 #
 # =============================================================================
 
@@ -29,18 +32,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-ENV="${1:-dev}"
-REMOVE_VOLUMES=false
-REMOVE_ALL=false
+ENV="${1:-}"
 FORCE=false
+KEEP_STATE=false
 
 # Parse options
 shift || true
 while [ $# -gt 0 ]; do
     case "$1" in
-        --volumes|-v) REMOVE_VOLUMES=true; shift ;;
-        --all|-a) REMOVE_ALL=true; REMOVE_VOLUMES=true; shift ;;
         --force|-f) FORCE=true; shift ;;
+        --keep-state) KEEP_STATE=true; shift ;;
         *) shift ;;
     esac
 done
@@ -61,111 +62,189 @@ confirm() {
     fi
 
     local message="$1"
+    echo ""
+    echo -e "${RED}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║                    ⚠️  DESTRUCTIVE OPERATION ⚠️                  ║${NC}"
+    echo -e "${RED}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
     echo -e "${YELLOW}$message${NC}"
-    read -p "Continue? [y/N] " -n 1 -r
+    echo ""
+    read -p "Type 'DESTROY' to confirm: " -r
     echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log_info "Cancelled"
+    if [[ "$REPLY" != "DESTROY" ]]; then
+        log_info "Teardown cancelled"
         exit 0
     fi
 }
 
-teardown_dev() {
-    log_info "Tearing down dev environment..."
+check_terraform() {
+    if ! command -v terraform &> /dev/null; then
+        log_error "Terraform is not installed"
+        echo "Install Terraform: https://developer.hashicorp.com/terraform/downloads"
+        exit 1
+    fi
+}
 
+teardown_dev() {
+    log_warn "DESTROYING dev environment..."
+
+    local terraform_dir="$PROJECT_ROOT/infrastructure/terraform/dev"
     local compose_dir="$PROJECT_ROOT/infrastructure/docker"
 
-    if [ ! -f "$compose_dir/docker-compose.yml" ]; then
-        log_error "docker-compose.yml not found in $compose_dir"
+    if [ ! -d "$terraform_dir" ]; then
+        log_error "Terraform dev directory not found: $terraform_dir"
         exit 1
     fi
 
-    cd "$compose_dir"
+    confirm "This will DESTROY the local dev environment:
+  - Stop and remove all Docker containers
+  - Remove all Docker volumes (DATA WILL BE LOST)
+  - Remove Docker networks
+  - Clean up Terraform state"
 
-    # Show what will be affected
-    log_info "Containers to stop:"
-    docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "  (none running)"
-    echo ""
-
-    if [ "$REMOVE_VOLUMES" = "true" ]; then
-        confirm "WARNING: This will DELETE ALL DATA in volumes!"
+    # Step 1: Stop containers first
+    log_info "Stopping Docker containers..."
+    if [ -f "$compose_dir/docker-compose.yml" ]; then
+        cd "$compose_dir"
+        docker compose down -v --remove-orphans 2>/dev/null || true
     fi
 
-    # Perform teardown
-    if [ "$REMOVE_ALL" = "true" ]; then
-        log_info "Removing containers, volumes, and images..."
-        docker compose down -v --rmi all --remove-orphans
-    elif [ "$REMOVE_VOLUMES" = "true" ]; then
-        log_info "Removing containers and volumes..."
-        docker compose down -v --remove-orphans
+    # Step 2: Terraform destroy
+    log_info "Running Terraform destroy..."
+    cd "$terraform_dir"
+
+    if [ -f "terraform.tfstate" ] || [ -d ".terraform" ]; then
+        terraform destroy -auto-approve -var-file=dev.tfvars 2>/dev/null || {
+            log_warn "Terraform destroy had issues (may already be destroyed)"
+        }
     else
-        log_info "Stopping containers..."
-        docker compose down --remove-orphans
+        log_warn "No Terraform state found - skipping Terraform destroy"
     fi
 
-    log_info "Dev environment teardown complete"
+    # Step 3: Clean up state files if requested
+    if [ "$KEEP_STATE" = "false" ]; then
+        log_info "Cleaning up Terraform state files..."
+        rm -rf .terraform terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl 2>/dev/null || true
+    fi
+
+    # Step 4: Remove generated .env file
+    if [ -f "$compose_dir/.env" ]; then
+        log_info "Removing generated .env file..."
+        rm -f "$compose_dir/.env"
+    fi
+
+    log_info "Dev environment DESTROYED"
+    echo ""
+    echo "To recreate: cd infrastructure/terraform/dev && terraform apply -var-file=dev.tfvars"
 }
 
 teardown_stage() {
-    log_info "Tearing down stage environment..."
+    log_warn "DESTROYING stage VPS environment..."
 
-    # Check for VPS host
-    local VPS_HOST="${VPS_HOST:-5.78.159.29}"
-    local VPS_USER="${VPS_USER:-root}"
+    local terraform_dir="$PROJECT_ROOT/infrastructure/terraform/vps"
 
-    log_warn "This will tear down the VPS staging environment at $VPS_HOST"
-
-    if [ "$REMOVE_VOLUMES" = "true" ]; then
-        confirm "WARNING: This will DELETE ALL DATA on the VPS!"
-    else
-        confirm "This will stop all containers on the VPS."
-    fi
-
-    # SSH command builder
-    local ssh_cmd="ssh $VPS_USER@$VPS_HOST"
-
-    # Test SSH connection
-    if ! $ssh_cmd "echo 'SSH connection successful'" 2>/dev/null; then
-        log_error "Cannot connect to VPS via SSH"
-        log_info "Ensure SSH key is configured for $VPS_USER@$VPS_HOST"
+    if [ ! -d "$terraform_dir" ]; then
+        log_error "Terraform VPS directory not found: $terraform_dir"
         exit 1
     fi
 
-    # Build docker compose command
-    local compose_cmd="cd /opt/tamshai && docker compose"
+    cd "$terraform_dir"
 
-    if [ "$REMOVE_ALL" = "true" ]; then
-        $ssh_cmd "$compose_cmd down -v --rmi all --remove-orphans"
-    elif [ "$REMOVE_VOLUMES" = "true" ]; then
-        $ssh_cmd "$compose_cmd down -v --remove-orphans"
-    else
-        $ssh_cmd "$compose_cmd down --remove-orphans"
+    # Check for required environment variables
+    if [ -z "${TF_VAR_hcloud_token:-}" ]; then
+        log_error "TF_VAR_hcloud_token environment variable not set"
+        echo ""
+        echo "Set it with:"
+        echo "  export TF_VAR_hcloud_token='your-hetzner-token'"
+        echo ""
+        echo "Or use PowerShell:"
+        echo '  $env:TF_VAR_hcloud_token = "your-hetzner-token"'
+        exit 1
     fi
 
-    log_info "Stage environment teardown complete"
+    # Get current VPS info if available
+    local vps_ip=""
+    if [ -f "terraform.tfstate" ]; then
+        vps_ip=$(terraform output -raw vps_ip 2>/dev/null || echo "unknown")
+    fi
+
+    confirm "This will PERMANENTLY DESTROY the stage VPS:
+  - Hetzner VPS at ${vps_ip:-unknown} will be DELETED
+  - All data on the VPS will be LOST
+  - SSH keys will be removed from Hetzner
+  - Firewall rules will be deleted
+
+  This action is IRREVERSIBLE!"
+
+    # Step 1: Terraform destroy
+    log_info "Running Terraform destroy on VPS..."
+
+    if [ -f "terraform.tfstate" ] || [ -d ".terraform" ]; then
+        # Initialize if needed
+        if [ ! -d ".terraform" ]; then
+            terraform init
+        fi
+
+        terraform destroy -auto-approve || {
+            log_error "Terraform destroy failed"
+            echo ""
+            echo "You may need to manually delete resources in Hetzner Cloud Console:"
+            echo "  https://console.hetzner.cloud/"
+            exit 1
+        }
+    else
+        log_warn "No Terraform state found - VPS may already be destroyed"
+    fi
+
+    # Step 2: Clean up local files
+    if [ "$KEEP_STATE" = "false" ]; then
+        log_info "Cleaning up local files..."
+        rm -rf .terraform terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl 2>/dev/null || true
+        rm -rf .keys 2>/dev/null || true
+    fi
+
+    log_info "Stage VPS DESTROYED"
+    echo ""
+    echo -e "${YELLOW}IMPORTANT: Update GitHub secrets if you recreate the VPS:${NC}"
+    echo "  gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key"
+    echo ""
+    echo "To recreate: cd infrastructure/terraform/vps && terraform apply"
 }
 
 show_help() {
-    echo "Environment Teardown"
+    echo "Environment Teardown (Full Infrastructure Destruction)"
     echo ""
-    echo "Usage: $0 [environment] [options]"
+    echo "Usage: $0 <environment> [options]"
+    echo ""
+    echo -e "${RED}WARNING: This script DESTROYS infrastructure permanently!${NC}"
+    echo "For container restarts without destroying infra, use rebuild.sh instead."
     echo ""
     echo "Environments:"
-    echo "  dev      - Local development (default)"
-    echo "  stage    - VPS staging"
+    echo "  dev      - Local development environment"
+    echo "  stage    - VPS staging (Hetzner Cloud)"
     echo ""
     echo "Options:"
-    echo "  --volumes, -v   Remove data volumes (DESTRUCTIVE)"
-    echo "  --all, -a       Remove everything including images"
-    echo "  --force, -f     Skip confirmation prompts"
+    echo "  --force, -f     Skip confirmation (DANGEROUS!)"
+    echo "  --keep-state    Don't remove Terraform state files"
     echo ""
     echo "Examples:"
-    echo "  $0                    # Stop dev containers"
-    echo "  $0 --volumes          # Stop dev and remove volumes"
-    echo "  $0 stage              # Stop stage containers"
+    echo "  $0 dev                    # Destroy local dev"
+    echo "  $0 stage                  # Destroy VPS"
+    echo "  $0 stage --force          # Destroy VPS without confirmation"
+    echo ""
+    echo "Alternative scripts:"
+    echo "  rebuild.sh    - Stop containers without destroying infrastructure"
+    echo "  deploy.sh     - Deploy/redeploy containers"
 }
 
 main() {
+    if [ -z "$ENV" ]; then
+        show_help
+        exit 1
+    fi
+
+    check_terraform
+
     case "$ENV" in
         dev)
             teardown_dev

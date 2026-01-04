@@ -282,7 +282,8 @@ infrastructure/terraform/vps/
 
 docker-compose.yml             # Unified compose file (dev + VPS)
 scripts/deploy-vps.sh          # Local deployment script
-scripts/infra/teardown.sh      # Environment teardown script
+scripts/infra/rebuild.sh       # Container management (stop/restart, preserves infrastructure)
+scripts/infra/teardown.sh      # Full Terraform destroy (DESTROYS infrastructure)
 .github/workflows/deploy-vps.yml    # CI/CD deploy workflow
 .github/workflows/bootstrap-vps.yml # Full VPS bootstrap workflow
 ```
