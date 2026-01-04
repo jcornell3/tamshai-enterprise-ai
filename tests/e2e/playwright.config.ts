@@ -1,5 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Determine environment from TEST_ENV
+const testEnv = process.env.TEST_ENV || 'dev';
+
+// Base URLs per environment
+const envConfig: Record<string, { baseURL: string; ignoreHTTPSErrors: boolean }> = {
+  dev: {
+    baseURL: 'https://www.tamshai.local',
+    ignoreHTTPSErrors: true, // Self-signed certs in dev
+  },
+  stage: {
+    baseURL: 'https://www.tamshai.com',
+    ignoreHTTPSErrors: false,
+  },
+};
+
 /**
  * Playwright E2E Test Configuration
  * @see https://playwright.dev/docs/test-configuration
@@ -10,15 +25,18 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  timeout: 60000, // 60 seconds per test (login can be slow)
   reporter: [
     ['html', { outputFolder: 'playwright-report' }],
     ['list'],
     ...(process.env.CI ? [['github' as const]] : []),
   ],
   use: {
-    baseURL: process.env.GATEWAY_URL || 'http://localhost:3100',
+    baseURL: envConfig[testEnv]?.baseURL || 'https://www.tamshai.local',
+    ignoreHTTPSErrors: envConfig[testEnv]?.ignoreHTTPSErrors ?? true,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
 
   projects: [
