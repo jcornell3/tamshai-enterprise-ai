@@ -455,7 +455,9 @@ describe('MCP Sales Server - Read Tools', () => {
 
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('success');
-      expect(response.data.data.every((opp: any) => opp.stage === 'negotiation')).toBe(true);
+      // MongoDB stores stages in uppercase (NEGOTIATION, PROPOSAL, etc.)
+      // Server converts input to uppercase for query but returns original DB case
+      expect(response.data.data.every((opp: any) => opp.stage === 'NEGOTIATION')).toBe(true);
     });
 
     test('Includes truncation metadata for large result sets', async () => {
