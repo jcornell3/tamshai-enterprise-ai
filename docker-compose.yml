@@ -216,8 +216,9 @@ services:
       # Phoenix self-healing identity reconciliation
       # Note: KEYCLOAK_URL and KEYCLOAK_REALM are hardcoded because the .env values
       # are for different purposes (external URL for browsers, file path for volume mount)
+      # Keycloak is configured with /auth prefix (KC_HTTP_RELATIVE_PATH=/auth)
       ENVIRONMENT: ${ENVIRONMENT:-dev}
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_URL: http://keycloak:8080/auth
       KEYCLOAK_REALM: tamshai-corp
       KEYCLOAK_CLIENT_ID: mcp-hr-service
       MCP_HR_SERVICE_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-}
