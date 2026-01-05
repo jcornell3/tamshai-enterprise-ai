@@ -71,7 +71,7 @@ jobs:
 
       - name: Build web app
         working-directory: clients/unified_flutter
-        run: flutter build web --release --web-renderer canvaskit
+        run: flutter build web --release
 
       - name: Deploy to Cloudflare Pages (Staging)
         if: env.ENVIRONMENT == 'staging'
