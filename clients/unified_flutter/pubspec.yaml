@@ -40,7 +40,7 @@ dependencies:
   crypto: ^3.0.3
 
   # Voice Input (v1.5)
-  speech_to_text: ^6.6.0
+  speech_to_text: ^7.0.0
   permission_handler: ^11.3.0
 
 dev_dependencies:
