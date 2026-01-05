@@ -162,7 +162,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3100
-      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://keycloak:8080/auth}
+      # KEYCLOAK_URL hardcoded for internal Docker network (env var is for external browser access)
+      KEYCLOAK_URL: http://keycloak:8080/auth
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai.local/auth/realms/tamshai-corp}
       JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp
@@ -212,6 +213,15 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Phoenix self-healing identity reconciliation
+      # Note: KEYCLOAK_URL and KEYCLOAK_REALM are hardcoded because the .env values
+      # are for different purposes (external URL for browsers, file path for volume mount)
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: tamshai-corp
+      KEYCLOAK_CLIENT_ID: mcp-hr-service
+      MCP_HR_SERVICE_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-}
+      STAGE_TESTING_PASSWORD: ${STAGE_TESTING_PASSWORD:-}
     ports:
       - "${MCP_HR_PORT:-3101}:3101"
     depends_on:

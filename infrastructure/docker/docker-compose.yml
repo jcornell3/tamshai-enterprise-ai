@@ -260,6 +260,13 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       LOG_LEVEL: info
+      # Phoenix self-healing identity reconciliation
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: tamshai-corp
+      KEYCLOAK_CLIENT_ID: mcp-hr-service
+      MCP_HR_SERVICE_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-}
+      STAGE_TESTING_PASSWORD: ${STAGE_TESTING_PASSWORD:-}
     ports:
       - "3101:3101"
     depends_on:
