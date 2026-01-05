@@ -99,15 +99,15 @@ export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
 /**
  * Email Domain Transformation
  *
- * HR seed data uses @tamshai.local for local development compatibility.
- * In stage/production environments, emails are transformed to @tamshai.com.
+ * HR database uses @tamshai.com as the canonical email domain (source of truth).
+ * In development, emails are transformed to @tamshai.local to match the dev realm.
  *
  * Environment detection:
- * - ENVIRONMENT=dev or unset: No transformation (uses @tamshai.local)
- * - ENVIRONMENT=stage or prod: Transform @tamshai.local → @tamshai.com
+ * - ENVIRONMENT=dev or unset: Transform @tamshai.com → @tamshai.local
+ * - ENVIRONMENT=stage or prod: No transformation (uses @tamshai.com)
  *
  * This allows a single source of truth for employee data while supporting
- * different email domains per environment.
+ * local development without DNS/email conflicts.
  */
 export const EMAIL_DOMAIN_CONFIG = {
   DEV_DOMAIN: 'tamshai.local',
@@ -117,26 +117,26 @@ export const EMAIL_DOMAIN_CONFIG = {
 /**
  * Transform email domain based on environment.
  *
- * @param email - Original email from HR database (e.g., alice@tamshai.local)
- * @returns Transformed email for target environment (e.g., alice@tamshai.com in stage)
+ * @param email - Original email from HR database (e.g., alice@tamshai.com)
+ * @returns Transformed email for target environment (e.g., alice@tamshai.local in dev)
  */
 export function transformEmailForEnvironment(email: string): string {
   const environment = process.env.ENVIRONMENT || 'dev';
 
-  // In dev environment, keep emails as-is (@tamshai.local)
-  if (environment === 'dev') {
+  // In stage/prod, keep emails as-is (@tamshai.com)
+  if (environment === 'stage' || environment === 'prod') {
     return email;
   }
 
-  // In stage/prod, transform @tamshai.local to @tamshai.com
-  if (email.endsWith(`@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`)) {
+  // In dev, transform @tamshai.com to @tamshai.local
+  if (email.endsWith(`@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`)) {
     return email.replace(
-      `@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`,
-      `@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`
+      `@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`,
+      `@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`
     );
   }
 
-  // Email doesn't match dev domain - return as-is
+  // Email doesn't match prod domain - return as-is
   return email;
 }
 

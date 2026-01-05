@@ -268,9 +268,9 @@ The identity sync service supports **environment-based email domain transformati
 
 | Environment | Source Email (HR Database) | Keycloak Email |
 |-------------|---------------------------|----------------|
-| **dev** | `alice@tamshai.local` | `alice@tamshai.local` (unchanged) |
-| **stage** | `alice@tamshai.local` | `alice@tamshai.com` (transformed) |
-| **prod** | `alice@tamshai.local` | `alice@tamshai.com` (transformed) |
+| **dev** | `alice@tamshai.com` | `alice@tamshai.local` (transformed) |
+| **stage** | `alice@tamshai.com` | `alice@tamshai.com` (unchanged) |
+| **prod** | `alice@tamshai.com` | `alice@tamshai.com` (unchanged) |
 
 ### Implementation
 
@@ -280,14 +280,14 @@ The `transformEmailForEnvironment()` function in `services/mcp-hr/src/services/i
 export function transformEmailForEnvironment(email: string): string {
   const environment = process.env.ENVIRONMENT || 'dev';
 
-  // In dev environment, keep emails as-is (@tamshai.local)
-  if (environment === 'dev') {
+  // In stage/prod, keep emails as-is (@tamshai.com)
+  if (environment === 'stage' || environment === 'prod') {
     return email;
   }
 
-  // In stage/prod, transform @tamshai.local to @tamshai.com
-  if (email.endsWith('@tamshai.local')) {
-    return email.replace('@tamshai.local', '@tamshai.com');
+  // In dev, transform @tamshai.com to @tamshai.local
+  if (email.endsWith('@tamshai.com')) {
+    return email.replace('@tamshai.com', '@tamshai.local');
   }
 
   return email;
@@ -296,15 +296,15 @@ export function transformEmailForEnvironment(email: string): string {
 
 ### Why This Design?
 
-1. **Single source of truth**: One `hr-data.sql` file for all environments
-2. **Local development**: Uses `.local` domain to avoid DNS/email conflicts
-3. **Stage/Production**: Uses real `@tamshai.com` domain for user logins
+1. **Single source of truth**: HR database uses `@tamshai.com` (production domain)
+2. **Local development**: Transforms to `.local` domain to avoid DNS/email conflicts
+3. **Stage/Production**: Uses real `@tamshai.com` domain for user logins (no transformation)
 4. **Automatic**: No manual configuration needed - driven by `ENVIRONMENT` variable
 
 ### Configuration
 
 The `ENVIRONMENT` variable is set in:
-- **Dev**: Not set or `dev` (uses docker-compose defaults)
+- **Dev**: Not set or `dev` (uses docker-compose defaults, transforms to @tamshai.local)
 - **Stage/Prod**: Set in `cloud-init.yaml` via Terraform: `ENVIRONMENT=${environment}`
 
 ---
@@ -333,7 +333,8 @@ In development, users are **pre-configured** in `keycloak/realm-export-dev.json`
 This means:
 - Users exist immediately after Keycloak starts (via `--import-realm`)
 - Identity reconciliation finds existing users and verifies/updates them
-- Emails use `@tamshai.local` domain (no transformation in dev)
+- HR database has `@tamshai.com` emails, transformed to `@tamshai.local` for dev
+- Dev realm uses `@tamshai.local` to avoid DNS/email conflicts
 - Faster development cycle (no waiting for user creation)
 
 ### Stage/Production Environments
@@ -349,7 +350,7 @@ In stage and production, `keycloak/realm-export.json` has an **empty users array
 This means:
 - No users exist after Keycloak realm import
 - Identity reconciliation creates all users from HR database
-- Emails are transformed from `@tamshai.local` → `@tamshai.com`
+- Emails use `@tamshai.com` directly (no transformation in stage/prod)
 - All code paths (create user, assign roles) are exercised
 - Uses `STAGE_TESTING_PASSWORD` for predictable test credentials
 
