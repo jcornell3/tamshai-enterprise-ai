@@ -260,6 +260,55 @@ The `DEPARTMENT_ROLE_MAP` maps HR department codes to Keycloak realm roles:
 
 ---
 
+## Email Domain Transformation
+
+The identity sync service supports **environment-based email domain transformation**, allowing a single source of truth for employee data while using different email domains per environment.
+
+### How It Works
+
+| Environment | Source Email (HR Database) | Keycloak Email |
+|-------------|---------------------------|----------------|
+| **dev** | `alice@tamshai.local` | `alice@tamshai.local` (unchanged) |
+| **stage** | `alice@tamshai.local` | `alice@tamshai.com` (transformed) |
+| **prod** | `alice@tamshai.local` | `alice@tamshai.com` (transformed) |
+
+### Implementation
+
+The `transformEmailForEnvironment()` function in `services/mcp-hr/src/services/identity.ts` handles this:
+
+```typescript
+export function transformEmailForEnvironment(email: string): string {
+  const environment = process.env.ENVIRONMENT || 'dev';
+
+  // In dev environment, keep emails as-is (@tamshai.local)
+  if (environment === 'dev') {
+    return email;
+  }
+
+  // In stage/prod, transform @tamshai.local to @tamshai.com
+  if (email.endsWith('@tamshai.local')) {
+    return email.replace('@tamshai.local', '@tamshai.com');
+  }
+
+  return email;
+}
+```
+
+### Why This Design?
+
+1. **Single source of truth**: One `hr-data.sql` file for all environments
+2. **Local development**: Uses `.local` domain to avoid DNS/email conflicts
+3. **Stage/Production**: Uses real `@tamshai.com` domain for user logins
+4. **Automatic**: No manual configuration needed - driven by `ENVIRONMENT` variable
+
+### Configuration
+
+The `ENVIRONMENT` variable is set in:
+- **Dev**: Not set or `dev` (uses docker-compose defaults)
+- **Stage/Prod**: Set in `cloud-init.yaml` via Terraform: `ENVIRONMENT=${environment}`
+
+---
+
 ## Dev vs Stage Environments
 
 ### Development Environment
@@ -271,7 +320,7 @@ In development, users are **pre-configured** in `keycloak/realm-export-dev.json`
   "users": [
     {
       "username": "eve.thompson",
-      "email": "eve.thompson@tamshai.com",
+      "email": "eve@tamshai.local",
       "enabled": true,
       "credentials": [{"type": "password", "value": "..."}],
       ...
@@ -284,6 +333,7 @@ In development, users are **pre-configured** in `keycloak/realm-export-dev.json`
 This means:
 - Users exist immediately after Keycloak starts (via `--import-realm`)
 - Identity reconciliation finds existing users and verifies/updates them
+- Emails use `@tamshai.local` domain (no transformation in dev)
 - Faster development cycle (no waiting for user creation)
 
 ### Stage/Production Environments
@@ -299,6 +349,7 @@ In stage and production, `keycloak/realm-export.json` has an **empty users array
 This means:
 - No users exist after Keycloak realm import
 - Identity reconciliation creates all users from HR database
+- Emails are transformed from `@tamshai.local` → `@tamshai.com`
 - All code paths (create user, assign roles) are exercised
 - Uses `STAGE_TESTING_PASSWORD` for predictable test credentials
 

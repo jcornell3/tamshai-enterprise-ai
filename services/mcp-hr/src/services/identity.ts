@@ -97,6 +97,50 @@ export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
 };
 
 /**
+ * Email Domain Transformation
+ *
+ * HR seed data uses @tamshai.local for local development compatibility.
+ * In stage/production environments, emails are transformed to @tamshai.com.
+ *
+ * Environment detection:
+ * - ENVIRONMENT=dev or unset: No transformation (uses @tamshai.local)
+ * - ENVIRONMENT=stage or prod: Transform @tamshai.local → @tamshai.com
+ *
+ * This allows a single source of truth for employee data while supporting
+ * different email domains per environment.
+ */
+export const EMAIL_DOMAIN_CONFIG = {
+  DEV_DOMAIN: 'tamshai.local',
+  PROD_DOMAIN: 'tamshai.com',
+} as const;
+
+/**
+ * Transform email domain based on environment.
+ *
+ * @param email - Original email from HR database (e.g., alice@tamshai.local)
+ * @returns Transformed email for target environment (e.g., alice@tamshai.com in stage)
+ */
+export function transformEmailForEnvironment(email: string): string {
+  const environment = process.env.ENVIRONMENT || 'dev';
+
+  // In dev environment, keep emails as-is (@tamshai.local)
+  if (environment === 'dev') {
+    return email;
+  }
+
+  // In stage/prod, transform @tamshai.local to @tamshai.com
+  if (email.endsWith(`@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`)) {
+    return email.replace(
+      `@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`,
+      `@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`
+    );
+  }
+
+  // Email doesn't match dev domain - return as-is
+  return email;
+}
+
+/**
  * Keycloak client configuration
  */
 export const KeycloakConfig = {
@@ -351,10 +395,15 @@ export class IdentityService {
       // This allows users to log in with familiar usernames across environments
       const username = `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}`;
 
+      // Transform email domain based on environment
+      // Dev: @tamshai.local (from HR data as-is)
+      // Stage/Prod: @tamshai.com (transformed)
+      const email = transformEmailForEnvironment(employeeData.email);
+
       // Step 1: Create user in Keycloak with required first-login actions
       const createResult = await this.kcAdmin.users.create({
         username: username,
-        email: employeeData.email,
+        email: email,
         firstName: employeeData.firstName,
         lastName: employeeData.lastName,
         enabled: true,
@@ -398,7 +447,7 @@ export class IdentityService {
       // Step 5: Write audit log
       // Params: user_email, action, resource, target_id, access_decision, access_justification
       await client.query(SQL.INSERT_AUDIT_LOG, [
-        employeeData.email,
+        email, // Use transformed email for audit consistency
         AuditAction.USER_CREATED,
         'employee',
         employeeData.id,
@@ -406,6 +455,7 @@ export class IdentityService {
         JSON.stringify({
           keycloakUserId,
           department: employeeData.department,
+          originalEmail: employeeData.email, // Keep original for reference
         }),
       ]);
 
@@ -714,12 +764,15 @@ export class IdentityService {
    * @returns true if user was created, false if skipped (already exists)
    */
   private async syncEmployee(employee: EmployeeData): Promise<boolean> {
+    // Transform email domain based on environment before checking Keycloak
+    const email = transformEmailForEnvironment(employee.email);
+
     // Check if user already exists in Keycloak by email
-    console.log(`[DEBUG] Checking if user exists: ${employee.email}`);
+    console.log(`[DEBUG] Checking if user exists: ${email}`);
     let existingUsers;
     try {
-      existingUsers = await this.kcAdmin.users.find({ email: employee.email });
-      console.log(`[DEBUG] Found ${existingUsers.length} existing users for ${employee.email}`);
+      existingUsers = await this.kcAdmin.users.find({ email });
+      console.log(`[DEBUG] Found ${existingUsers.length} existing users for ${email}`);
     } catch (findError) {
       console.error(`[DEBUG] users.find() failed for ${employee.email}:`, {
         error: findError,
