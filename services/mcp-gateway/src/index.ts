@@ -268,6 +268,10 @@ async function sendToClaudeWithContext(
 
 const app = express();
 
+// Trust proxy headers from Kong/Caddy for correct client IP detection
+// Required for rate limiting by user IP in Docker environment
+app.set('trust proxy', 1);
+
 // Middleware - Strict Security Headers
 app.use(helmet({
   contentSecurityPolicy: {
@@ -314,10 +318,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // RATE LIMITING
 // =============================================================================
 
-// General API rate limiter - 100 requests per minute
+// General API rate limiter - 500 requests per minute
+// Increased from 100 to handle parallel requests from web apps
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 500,
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
