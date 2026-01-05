@@ -201,9 +201,11 @@ jobs:
           flutter --version
           flutter doctor -v
 
-      - name: Get dependencies
+      - name: Clean and get dependencies
         working-directory: clients/unified_flutter
-        run: flutter pub get
+        run: |
+          flutter clean
+          flutter pub get
 
       - name: Generate code (Freezed, JSON serialization)
         working-directory: clients/unified_flutter
