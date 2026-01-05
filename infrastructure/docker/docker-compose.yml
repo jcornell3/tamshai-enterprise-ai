@@ -648,6 +648,8 @@ services:
       # Redis for BullMQ cleanup queue
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Stage/Dev testing - fixed password for all synced users (NOT for production!)
+      STAGE_TESTING_PASSWORD: ${STAGE_TESTING_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy

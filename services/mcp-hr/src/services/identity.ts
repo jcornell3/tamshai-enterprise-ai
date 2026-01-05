@@ -88,6 +88,7 @@ export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
   SALES: 'sales-read',
   SUPPORT: 'support-read',
   ENG: 'engineering-read',
+  EXEC: 'executive', // Executive composite role (CEO, C-Suite)
   // Legacy mappings for backwards compatibility with tests
   Finance: 'finance-read',
   Sales: 'sales-read',
@@ -215,12 +216,20 @@ export interface KcAdminClient {
       id: string;
       clientUniqueId: string;
     }): Promise<KcRoleRepresentation[]>;
+    addRealmRoleMappings(params: {
+      id: string;
+      roles: KcRoleRepresentation[];
+    }): Promise<void>;
     listSessions(query: { id: string }): Promise<KcSessionRepresentation[]>;
     logout(query: { id: string }): Promise<void>;
   };
   clients: {
     find(query: { clientId: string }): Promise<KcClientRepresentation[]>;
     listRoles(query: { id: string }): Promise<KcRoleRepresentation[]>;
+  };
+  roles: {
+    find(): Promise<KcRoleRepresentation[]>;
+    findOneByName(query: { name: string }): Promise<KcRoleRepresentation | undefined>;
   };
   auth(credentials: {
     grantType: string;
@@ -409,6 +418,7 @@ export class IdentityService {
 
   /**
    * Assign department-specific role to user.
+   * Uses realm roles (not client roles) as defined in realm-export.json.
    * Implements compensating transaction: deletes user if role assignment fails.
    */
   private async assignDepartmentRole(
@@ -418,27 +428,17 @@ export class IdentityService {
     const roleName = DEPARTMENT_ROLE_MAP[department];
     if (!roleName) return;
 
-    // First, find the mcp-gateway client by clientId to get its internal UUID
-    const clients = await this.kcAdmin.clients.find({
-      clientId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,
-    });
-    if (clients.length === 0 || !clients[0].id) {
-      // Client not found - skip role assignment (non-fatal for sync)
+    // Find the realm role by name
+    const realmRole = await this.kcAdmin.roles.findOneByName({ name: roleName });
+    if (!realmRole || !realmRole.id) {
+      // Role not found - skip assignment (non-fatal for sync)
       return;
     }
-    const clientUUID = clients[0].id;
-
-    const roles = await this.kcAdmin.clients.listRoles({
-      id: clientUUID,
-    });
-    const departmentRole = roles.find((r) => r.name === roleName);
-    if (!departmentRole) return;
 
     try {
-      await this.kcAdmin.users.addClientRoleMappings({
+      await this.kcAdmin.users.addRealmRoleMappings({
         id: keycloakUserId,
-        clientUniqueId: clientUUID,
-        roles: [{ id: departmentRole.id!, name: departmentRole.name! }],
+        roles: [{ id: realmRole.id, name: realmRole.name! }],
       });
     } catch (roleError) {
       // COMPENSATING TRANSACTION: Delete Keycloak user if role assignment fails

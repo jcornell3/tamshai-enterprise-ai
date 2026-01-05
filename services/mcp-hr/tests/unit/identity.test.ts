@@ -98,10 +98,11 @@ describe('IdentityService', () => {
     it('should assign department role to user', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
       mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
-      mockKcAdmin.clients.listRoles.mockResolvedValue([
-        createMockRole('hr-read', 'role-hr-read'),
-      ]);
-      mockKcAdmin.users.addClientRoleMappings.mockResolvedValue(undefined);
+      // Mock realm role lookup
+      mockKcAdmin.roles.findOneByName.mockResolvedValue(
+        createMockRole('hr-read', 'role-hr-read')
+      );
+      mockKcAdmin.users.addRealmRoleMappings.mockResolvedValue(undefined);
       mockClient.query.mockResolvedValue(createMockQueryResult());
 
       await identityService.createUserInKeycloak(
@@ -109,7 +110,7 @@ describe('IdentityService', () => {
         mockClient as unknown as import('pg').PoolClient
       );
 
-      expect(mockKcAdmin.users.addClientRoleMappings).toHaveBeenCalledWith(
+      expect(mockKcAdmin.users.addRealmRoleMappings).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'kc-user-123',
           roles: [{ id: 'role-hr-read', name: 'hr-read' }],
@@ -212,12 +213,12 @@ describe('IdentityService', () => {
       // User creation succeeds
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
       mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
-      // Role lookup succeeds
-      mockKcAdmin.clients.listRoles.mockResolvedValue([
-        createMockRole('hr-read', 'role-hr-read'),
-      ]);
+      // Realm role lookup succeeds
+      mockKcAdmin.roles.findOneByName.mockResolvedValue(
+        createMockRole('hr-read', 'role-hr-read')
+      );
       // Role assignment fails
-      mockKcAdmin.users.addClientRoleMappings.mockRejectedValue(
+      mockKcAdmin.users.addRealmRoleMappings.mockRejectedValue(
         new Error('Role assignment failed')
       );
 
@@ -226,7 +227,7 @@ describe('IdentityService', () => {
           employeeData,
           mockClient as unknown as import('pg').PoolClient
         )
-      ).rejects.toThrow('Failed to provision Keycloak user');
+      ).rejects.toThrow('Role assignment failed');
 
       // Critical: Keycloak user should be deleted as compensating transaction
       expect(mockKcAdmin.users.del).toHaveBeenCalledWith({ id: 'kc-user-123' });
@@ -241,8 +242,8 @@ describe('IdentityService', () => {
     it('should handle missing department role gracefully', async () => {
       mockKcAdmin.users.create.mockResolvedValue({ id: 'kc-user-123' });
       mockKcAdmin.users.resetPassword.mockResolvedValue(undefined);
-      // No roles found for department
-      mockKcAdmin.clients.listRoles.mockResolvedValue([]);
+      // Realm role not found for department
+      mockKcAdmin.roles.findOneByName.mockResolvedValue(undefined);
       mockClient.query.mockResolvedValue(createMockQueryResult());
 
       // Should succeed but without role assignment
@@ -253,7 +254,7 @@ describe('IdentityService', () => {
 
       expect(result).toBe('kc-user-123');
       // Role assignment should NOT be called
-      expect(mockKcAdmin.users.addClientRoleMappings).not.toHaveBeenCalled();
+      expect(mockKcAdmin.users.addRealmRoleMappings).not.toHaveBeenCalled();
     });
   });
 

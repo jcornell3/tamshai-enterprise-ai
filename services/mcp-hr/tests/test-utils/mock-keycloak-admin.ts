@@ -68,6 +68,10 @@ export interface MockKeycloakUsers {
     Promise<void>,
     [{ id: string; clientUniqueId: string; roles: MockRoleRepresentation[] }]
   >;
+  addRealmRoleMappings: jest.Mock<
+    Promise<void>,
+    [{ id: string; roles: MockRoleRepresentation[] }]
+  >;
   listClientRoleMappings: jest.Mock<
     Promise<MockRoleRepresentation[]>,
     [{ id: string; clientUniqueId: string }]
@@ -94,11 +98,20 @@ export interface MockKeycloakClients {
 }
 
 /**
+ * Typed mock for KcAdminClient.roles methods (realm-level roles)
+ */
+export interface MockKeycloakRoles {
+  find: jest.Mock<Promise<MockRoleRepresentation[]>, []>;
+  findOneByName: jest.Mock<Promise<MockRoleRepresentation | undefined>, [{ name: string }]>;
+}
+
+/**
  * Typed mock for KcAdminClient
  */
 export interface MockKcAdminClient {
   users: MockKeycloakUsers;
   clients: MockKeycloakClients;
+  roles: MockKeycloakRoles;
   auth: jest.Mock<
     Promise<void>,
     [{ grantType: string; clientId: string; clientSecret: string }]
@@ -121,6 +134,7 @@ export function createMockKcAdmin(): MockKcAdminClient {
       find: jest.fn().mockResolvedValue([]),
       resetPassword: jest.fn().mockResolvedValue(undefined),
       addClientRoleMappings: jest.fn().mockResolvedValue(undefined),
+      addRealmRoleMappings: jest.fn().mockResolvedValue(undefined),
       listClientRoleMappings: jest.fn().mockResolvedValue([]),
       listSessions: jest.fn().mockResolvedValue([]),
       logout: jest.fn().mockResolvedValue(undefined),
@@ -129,6 +143,10 @@ export function createMockKcAdmin(): MockKcAdminClient {
       find: jest.fn().mockResolvedValue([{ id: 'client-uuid-default', clientId: 'mcp-gateway' }]),
       listRoles: jest.fn().mockResolvedValue([]),
       findOne: jest.fn().mockResolvedValue(null),
+    },
+    roles: {
+      find: jest.fn().mockResolvedValue([]),
+      findOneByName: jest.fn().mockResolvedValue(undefined),
     },
     auth: jest.fn().mockResolvedValue(undefined),
     setConfig: jest.fn(),
@@ -143,6 +161,7 @@ export function createMockKcAdmin(): MockKcAdminClient {
 export function resetMockKcAdmin(mock: MockKcAdminClient): void {
   Object.values(mock.users).forEach((fn) => fn.mockReset());
   Object.values(mock.clients).forEach((fn) => fn.mockReset());
+  Object.values(mock.roles).forEach((fn) => fn.mockReset());
   mock.auth.mockReset();
   mock.setConfig.mockReset();
 }
