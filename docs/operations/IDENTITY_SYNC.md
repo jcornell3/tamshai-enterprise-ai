@@ -46,20 +46,15 @@ The identity sync service bridges the gap between HR employee data (stored in Po
          │                        │  4b. If exists: Update     │
          │                        │───────────────────────────►│
          │                        │                            │
-         │                        │  5. Lookup mcp-gateway     │
-         │                        │     client UUID            │
+         │                        │  5. Look up realm role     │
+         │                        │     by name                │
          │                        │───────────────────────────►│
          │                        │                            │
-         │                        │  Client UUID               │
+         │                        │  Role (or not found)       │
          │                        │◄───────────────────────────│
          │                        │                            │
-         │                        │  6. List client roles      │
-         │                        │───────────────────────────►│
-         │                        │                            │
-         │                        │  Available roles           │
-         │                        │◄───────────────────────────│
-         │                        │                            │
-         │                        │  7. Assign department role │
+         │                        │  6. Assign realm role      │
+         │                        │     to user                │
          │                        │───────────────────────────►│
          │                        │                            │
          │                        │  Success                   │
@@ -113,14 +108,13 @@ The identity sync service bridges the gap between HR employee data (stored in Po
 │  └───────┬───────┘  │
 │          │          │
 │  ┌───────▼───────┐  │
-│  │  mcp-gateway  │  │  ← Client with role definitions
-│  │    client     │  │
+│  │  Realm Roles  │  │  ← Roles defined at realm level
 │  │  - hr-read    │  │
 │  │  - hr-write   │  │
 │  │  - finance-*  │  │
 │  │  - sales-*    │  │
 │  │  - support-*  │  │
-│  │  - executive  │  │
+│  │  - executive  │  │  ← Composite role (all read access)
 │  └───────────────┘  │
 └─────────────────────┘
 ```
@@ -200,73 +194,66 @@ The identity sync service creates Keycloak usernames in `firstname.lastname` for
 
 If users were previously created with email as username, they will need to be deleted and re-synced to get the correct username format.
 
-## The Client UUID Bug (Fixed January 2026)
+## Role Assignment Evolution
 
-### Problem
+### Original Issue: Client UUID Bug (January 2026)
 
-The identity sync service failed in stage with "unknown_error" for all 59 employees.
+The identity sync service originally used **client roles** (roles defined on the `mcp-gateway` client). This caused issues because:
 
-### Root Cause
+1. The Keycloak Admin API requires client UUID for `clients.listRoles()`
+2. The code was passing `clientId` (name) instead of UUID
+3. Resulted in "unknown_error" for all employees in stage
 
-The Keycloak Admin API expects the **client UUID** (internal identifier) when listing roles, but the code was passing the **clientId** (human-readable name):
+### Current Solution: Realm Roles (January 2026)
 
-```typescript
-// WRONG - uses clientId name 'mcp-gateway'
-const roles = await this.kcAdmin.clients.listRoles({
-  id: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,  // 'mcp-gateway'
-});
-```
-
-### Why It Worked in Dev
-
-In dev, users are pre-configured, so:
-1. Identity sync finds existing user
-2. Skips user creation
-3. Checks if user already has roles assigned
-4. Skips role assignment (never calls buggy code)
-
-### Why It Failed in Stage
-
-In stage, users don't exist, so:
-1. Identity sync must create each user
-2. After creation, assigns department role
-3. Calls `clients.listRoles` with wrong ID
-4. Keycloak returns 404/error
-5. Sync fails with "unknown_error"
-
-### The Fix
-
-Added a client lookup step before listing roles:
+The fix was refactored to use **realm roles** instead of client roles. This is simpler and more reliable:
 
 ```typescript
-// CORRECT - first lookup client UUID, then use it
 private async assignDepartmentRole(
   keycloakUserId: string,
   department: string
 ): Promise<void> {
-  // Step 1: Find client by clientId to get its internal UUID
-  const clients = await this.kcAdmin.clients.find({
-    clientId: KeycloakConfig.MCP_GATEWAY_CLIENT_ID,  // 'mcp-gateway'
-  });
+  const roleName = DEPARTMENT_ROLE_MAP[department];
+  if (!roleName) return;
 
-  if (clients.length === 0 || !clients[0].id) {
-    return; // Client not found - skip role assignment
+  // Look up the realm role by name (no client UUID needed)
+  const realmRole = await this.kcAdmin.roles.findOneByName({ name: roleName });
+  if (!realmRole || !realmRole.id) {
+    return; // Role not found - skip assignment
   }
 
-  const clientUUID = clients[0].id;  // e.g., '123e4567-e89b-12d3-a456-426614174000'
-
-  // Step 2: Now use the UUID to list roles
-  const roles = await this.kcAdmin.clients.listRoles({
-    id: clientUUID,  // Uses UUID, not clientId
+  // Assign realm role to user
+  await this.kcAdmin.users.addRealmRoleMappings({
+    id: keycloakUserId,
+    roles: [{ id: realmRole.id, name: realmRole.name! }],
   });
-
-  // ... assign matching role to user
 }
 ```
 
+**Why realm roles are better:**
+- No client UUID lookup required
+- Roles appear in `realm_access.roles` in JWT (standard location)
+- MCP Gateway already merges realm and client roles
+- Simpler code with fewer API calls
+
+### Department Role Mapping
+
+The `DEPARTMENT_ROLE_MAP` maps HR department codes to Keycloak realm roles:
+
+| Department Code | Realm Role |
+|-----------------|------------|
+| HR | hr-read |
+| FIN | finance-read |
+| SALES | sales-read |
+| SUPPORT | support-read |
+| ENG | engineering-read |
+| EXEC | executive |
+
+The `executive` role is a **composite role** that includes read access to all departments.
+
 ### Docker Cache Issue
 
-After deploying the fix, identity sync still failed because `docker compose run --rm identity-sync` used a cached image. The fix was to add the `--build` flag:
+When deploying fixes, always use the `--build` flag to rebuild containers:
 
 ```bash
 # Forces rebuild with latest code
@@ -289,6 +276,9 @@ This was added to:
 | `KEYCLOAK_CLIENT_ID` | Service account client | `mcp-hr-service` |
 | `KEYCLOAK_CLIENT_SECRET` | Service account secret | `MCP_HR_SERVICE_CLIENT_SECRET` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://...` |
+| `STAGE_TESTING_PASSWORD` | Fixed password for synced users (stage/dev only) | `TamshaiTemp123!` |
+
+**Note on STAGE_TESTING_PASSWORD:** In stage/dev environments, all synced users are given this fixed password for testing. In production, this should be left empty and users will receive cryptographically random passwords (requiring password reset on first login).
 
 ### Keycloak Client Requirements
 
@@ -343,8 +333,9 @@ The `deploy-vps.yml` workflow automatically runs identity sync after deployment.
 - Check Keycloak is accessible from identity-sync container
 
 **3. Roles not assigned**
-- Verify `mcp-gateway` client exists with role definitions
-- Check role names match department mapping
+- Verify realm roles exist in Keycloak (hr-read, finance-read, etc.)
+- Check department code in HR database matches DEPARTMENT_ROLE_MAP
+- Verify `mcp-hr-service` client has `realm-management/manage-users` role
 
 **4. Changes not taking effect**
 - Use `--build` flag to rebuild container with latest code
@@ -372,4 +363,4 @@ docker compose logs identity-sync
 ---
 
 *Last Updated: January 2026*
-*Fixed: Client UUID lookup bug, Docker cache issue*
+*Fixed: Realm roles instead of client roles, EXEC department mapping, Docker cache issue*
