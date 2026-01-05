@@ -202,7 +202,8 @@ describe('MCP Proxy Routes', () => {
         expect(mockedAxios.post).toHaveBeenCalledWith(
           'http://localhost:3001/tools/search_employees',
           expect.objectContaining({
-            input: { name: 'John', department: 'Engineering' },
+            name: 'John',
+            department: 'Engineering',
           }),
           expect.any(Object)
         );
@@ -216,7 +217,8 @@ describe('MCP Proxy Routes', () => {
         expect(mockedAxios.post).toHaveBeenCalledWith(
           'http://localhost:3001/tools/list_employees',
           expect.objectContaining({
-            input: { limit: 50, offset: 100 },
+            limit: 50,
+            offset: 100,
           }),
           expect.any(Object)
         );
@@ -230,7 +232,7 @@ describe('MCP Proxy Routes', () => {
         expect(mockedAxios.post).toHaveBeenCalledWith(
           'http://localhost:3001/tools/filter_employees',
           expect.objectContaining({
-            input: { roles: ['admin', 'manager'] },
+            roles: ['admin', 'manager'],
           }),
           expect.any(Object)
         );
@@ -241,8 +243,8 @@ describe('MCP Proxy Routes', () => {
           .get('/api/mcp/hr/get_employee?id=123')
           .expect(200);
 
-        const callArgs = mockedAxios.post.mock.calls[0] as [string, { input: Record<string, unknown> }, unknown];
-        expect(callArgs[1].input).toEqual({ id: 123 });
+        const callArgs = mockedAxios.post.mock.calls[0] as [string, Record<string, unknown>, unknown];
+        expect(callArgs[1].id).toEqual(123);
       });
     });
 
