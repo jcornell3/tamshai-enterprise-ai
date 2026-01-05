@@ -132,12 +132,12 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
     const hasMore = opportunities.length > limit;
     const rawResults = hasMore ? opportunities.slice(0, limit) : opportunities;
 
-    // Normalize results: convert stage to lowercase, ObjectId to string
+    // Normalize results: convert ObjectId to string, keep stage in original case (uppercase)
     const results = rawResults.map((opp: any) => ({
       ...opp,
       _id: opp._id.toString(),
       id: opp._id.toString(),
-      stage: opp.stage?.toLowerCase() || opp.stage,
+      stage: opp.stage,  // Keep original case (UPPERCASE from database)
       customer_id: opp.customer_id?.toString(),
     }));
 
