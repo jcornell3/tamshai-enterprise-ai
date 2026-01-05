@@ -212,9 +212,27 @@ class TestKcAdminClient implements KcAdminClient {
     logout: async (query: { id: string }): Promise<void> => {
       await this.request('POST', `/users/${query.id}/logout`);
     },
+
+    resetPassword: async (params: {
+      id: string;
+      credential: { type: string; value: string; temporary: boolean };
+    }): Promise<void> => {
+      await this.request('PUT', `/users/${params.id}/reset-password`, params.credential);
+    },
+
+    addRealmRoleMappings: async (params: {
+      id: string;
+      roles: Array<{ id?: string; name?: string }>;
+    }): Promise<void> => {
+      await this.request('POST', `/users/${params.id}/role-mappings/realm`, params.roles);
+    },
   };
 
   clients = {
+    find: async (query: { clientId: string }): Promise<Array<{ id: string; clientId: string }>> => {
+      return this.request('GET', `/clients?clientId=${encodeURIComponent(query.clientId)}`);
+    },
+
     listRoles: async (query: { id: string }): Promise<Array<{ id?: string; name?: string }>> => {
       const clients = await this.request<Array<{ id: string; clientId: string }>>(
         'GET',
@@ -223,6 +241,20 @@ class TestKcAdminClient implements KcAdminClient {
       if (clients.length === 0) return [];
 
       return this.request('GET', `/clients/${clients[0].id}/roles`);
+    },
+  };
+
+  roles = {
+    find: async (): Promise<Array<{ id?: string; name?: string }>> => {
+      return this.request('GET', '/roles');
+    },
+
+    findOneByName: async (query: { name: string }): Promise<{ id?: string; name?: string } | undefined> => {
+      try {
+        return await this.request('GET', `/roles/${encodeURIComponent(query.name)}`);
+      } catch {
+        return undefined;
+      }
     },
   };
 }
