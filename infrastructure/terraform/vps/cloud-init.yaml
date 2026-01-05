@@ -394,9 +394,10 @@ runcmd:
       -e MCP_HR_SERVICE_CLIENT_SECRET="$HR_SECRET" \
       tamshai-keycloak /tmp/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
-  # Sync HR employees to Keycloak users (must run AFTER realm sync)
-  # Use --build to ensure latest code is used (image may be cached)
-  - cd /opt/tamshai && docker compose run --rm --build identity-sync || echo "Identity sync failed - users may need manual provisioning"
+  # NOTE: Identity sync is now handled by mcp-hr on startup (Phoenix Architecture)
+  # The mcp-hr service automatically reconciles HR employees to Keycloak users
+  # when it starts. This is self-healing and runs on every boot/restart.
+  # See docs/operations/IDENTITY_SYNC.md for details.
 
   # Enable fail2ban
   - systemctl enable fail2ban

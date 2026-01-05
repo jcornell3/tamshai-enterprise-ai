@@ -13,7 +13,17 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import winston from 'winston';
+import { Queue } from 'bullmq';
+import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
 import pool, { UserContext, checkConnection, closePool, queryWithRLS } from './database/connection';
+import {
+  IdentityService,
+  CleanupQueue,
+  KcAdminClient,
+  KcUserRepresentation,
+  KcRoleRepresentation,
+  KcClientRepresentation,
+} from './services/identity';
 import { getEmployee, GetEmployeeInputSchema } from './tools/get-employee';
 import { listEmployees, ListEmployeesInputSchema } from './tools/list-employees';
 import {
@@ -452,19 +462,235 @@ app.post('/execute', async (req: Request, res: Response) => {
 });
 
 // =============================================================================
+// PHOENIX SELF-HEALING: Identity Reconciliation
+// =============================================================================
+
+/**
+ * Creates a KcAdminClient adapter that wraps the @keycloak/keycloak-admin-client
+ * to match the KcAdminClient interface expected by IdentityService.
+ */
+function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient {
+  return {
+    users: {
+      create: async (user: Partial<KcUserRepresentation>): Promise<{ id: string }> => {
+        return kcAdmin.users.create(user);
+      },
+      update: async (query: { id: string }, user: Partial<KcUserRepresentation>): Promise<void> => {
+        await kcAdmin.users.update(query, user);
+      },
+      del: async (query: { id: string }): Promise<void> => {
+        await kcAdmin.users.del(query);
+      },
+      find: async (query: { email?: string; username?: string }): Promise<KcUserRepresentation[]> => {
+        const users = await kcAdmin.users.find(query);
+        return users as KcUserRepresentation[];
+      },
+      findOne: async (query: { id: string }): Promise<KcUserRepresentation | null> => {
+        const user = await kcAdmin.users.findOne(query);
+        return user ?? null;
+      },
+      resetPassword: async (params: {
+        id: string;
+        credential: { type: string; value: string; temporary: boolean };
+      }): Promise<void> => {
+        await kcAdmin.users.resetPassword({ id: params.id, credential: params.credential });
+      },
+      addClientRoleMappings: async (params: {
+        id: string;
+        clientUniqueId: string;
+        roles: KcRoleRepresentation[];
+      }): Promise<void> => {
+        const rolesWithIds = params.roles.filter(
+          (r): r is KcRoleRepresentation & { id: string; name: string } => !!r.id && !!r.name
+        );
+        await kcAdmin.users.addClientRoleMappings({
+          id: params.id,
+          clientUniqueId: params.clientUniqueId,
+          roles: rolesWithIds.map((r) => ({ id: r.id, name: r.name })),
+        });
+      },
+      listClientRoleMappings: async (params: {
+        id: string;
+        clientUniqueId: string;
+      }): Promise<KcRoleRepresentation[]> => {
+        const roles = await kcAdmin.users.listClientRoleMappings(params);
+        return roles as KcRoleRepresentation[];
+      },
+      addRealmRoleMappings: async (params: {
+        id: string;
+        roles: KcRoleRepresentation[];
+      }): Promise<void> => {
+        const rolesWithIds = params.roles.filter(
+          (r): r is KcRoleRepresentation & { id: string; name: string } => !!r.id && !!r.name
+        );
+        await kcAdmin.users.addRealmRoleMappings({
+          id: params.id,
+          roles: rolesWithIds.map((r) => ({ id: r.id, name: r.name })),
+        });
+      },
+      listSessions: async (query: { id: string }): Promise<{ id: string }[]> => {
+        const sessions = await kcAdmin.users.listSessions(query);
+        return sessions.map((s: { id?: string }) => ({ id: s.id || '' }));
+      },
+      logout: async (query: { id: string }): Promise<void> => {
+        await kcAdmin.users.logout(query);
+      },
+    },
+    clients: {
+      find: async (query: { clientId: string }): Promise<KcClientRepresentation[]> => {
+        const clients = await kcAdmin.clients.find(query);
+        return clients as KcClientRepresentation[];
+      },
+      listRoles: async (query: { id: string }): Promise<KcRoleRepresentation[]> => {
+        const roles = await kcAdmin.clients.listRoles(query);
+        return roles as KcRoleRepresentation[];
+      },
+    },
+    roles: {
+      find: async (): Promise<KcRoleRepresentation[]> => {
+        const roles = await kcAdmin.roles.find();
+        return roles as KcRoleRepresentation[];
+      },
+      findOneByName: async (query: { name: string }): Promise<KcRoleRepresentation | undefined> => {
+        const role = await kcAdmin.roles.findOneByName(query);
+        return role as KcRoleRepresentation | undefined;
+      },
+    },
+    auth: async (credentials: {
+      grantType: string;
+      clientId: string;
+      clientSecret: string;
+    }): Promise<void> => {
+      await kcAdmin.auth({
+        grantType: credentials.grantType as 'client_credentials',
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+      });
+    },
+  };
+}
+
+/**
+ * Phoenix Architecture: Self-healing identity reconciliation on startup.
+ *
+ * This function ensures HR employees are synced to Keycloak users whenever
+ * mcp-hr starts. This enables "Phoenix Server" behavior where the VPS can
+ * be destroyed and recreated, and users will be automatically provisioned.
+ *
+ * The reconciliation is idempotent - it skips users that already exist in Keycloak.
+ */
+async function reconcileIdentitiesOnStartup(): Promise<void> {
+  const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
+  const keycloakRealm = process.env.KEYCLOAK_REALM || 'tamshai-corp';
+  const clientId = process.env.KEYCLOAK_CLIENT_ID || 'mcp-hr-service';
+  const clientSecret = process.env.MCP_HR_SERVICE_CLIENT_SECRET || '';
+
+  // Skip if no client secret configured (e.g., in unit tests)
+  if (!clientSecret) {
+    logger.warn('Skipping identity reconciliation: MCP_HR_SERVICE_CLIENT_SECRET not set');
+    return;
+  }
+
+  logger.info('Starting identity reconciliation (Phoenix self-healing)...', {
+    keycloakUrl,
+    realm: keycloakRealm,
+    clientId,
+  });
+
+  try {
+    // Create BullMQ queue for cleanup jobs (required by IdentityService)
+    const redisHost = process.env.REDIS_HOST || 'redis';
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+
+    const cleanupQueue = new Queue('identity-cleanup', {
+      connection: { host: redisHost, port: redisPort },
+    }) as CleanupQueue;
+
+    // Create Keycloak Admin Client
+    const kcAdmin = new KeycloakAdminClient({
+      baseUrl: keycloakUrl,
+      realmName: keycloakRealm,
+    });
+
+    // Authenticate with Keycloak
+    await kcAdmin.auth({
+      grantType: 'client_credentials',
+      clientId,
+      clientSecret,
+    });
+    logger.info('Keycloak authentication successful');
+
+    // Create IdentityService with adapted Keycloak client
+    const kcAdminAdapter = createKcAdminClientAdapter(kcAdmin);
+    const identityService = new IdentityService(pool, kcAdminAdapter, cleanupQueue);
+
+    // Check pending sync count
+    const pendingCount = await identityService.getPendingSyncCount();
+    if (pendingCount === 0) {
+      logger.info('No employees pending sync. Reconciliation complete.');
+      await closeQueue(cleanupQueue);
+      return;
+    }
+
+    logger.info(`Found ${pendingCount} employees pending sync`);
+
+    // Run bulk sync
+    const result = await identityService.syncAllEmployees();
+
+    logger.info('Identity reconciliation complete', {
+      totalEmployees: result.totalEmployees,
+      created: result.created,
+      skipped: result.skipped,
+      errors: result.errors.length,
+      duration: `${result.duration}ms`,
+    });
+
+    if (result.errors.length > 0) {
+      logger.warn(`${result.errors.length} errors during reconciliation`);
+      for (const err of result.errors) {
+        logger.error('Sync error', { employeeId: err.employeeId, email: err.email, error: err.error });
+      }
+    }
+
+    await closeQueue(cleanupQueue);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Identity reconciliation failed (non-fatal)', { error: message });
+    // Don't throw - allow server to continue running even if reconciliation fails
+  }
+}
+
+async function closeQueue(queue: CleanupQueue): Promise<void> {
+  try {
+    if ('close' in queue) {
+      await (queue as unknown as { close(): Promise<void> }).close();
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+// =============================================================================
 // SERVER STARTUP
 // =============================================================================
 
 const server = app.listen(PORT, async () => {
   logger.info(`MCP HR Server listening on port ${PORT}`);
-  logger.info('Architecture version: 1.4');
+  logger.info('Architecture version: 1.4 (Phoenix self-healing)');
 
   // Check database connection
   const dbHealthy = await checkConnection();
   if (dbHealthy) {
     logger.info('Database connection: OK');
+
+    // Phoenix Architecture: Reconcile identities on startup
+    // Wait for Keycloak to be ready, then sync HR employees to Keycloak users
+    setTimeout(async () => {
+      await reconcileIdentitiesOnStartup();
+    }, 5000); // 5 second delay to allow Keycloak to be ready
   } else {
     logger.error('Database connection: FAILED');
+    logger.warn('Skipping identity reconciliation due to database connection failure');
   }
 });
 
