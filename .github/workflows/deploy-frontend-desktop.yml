@@ -38,7 +38,7 @@ concurrency:
 
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
-  FLUTTER_VERSION: '3.24.0'
+  FLUTTER_VERSION: '3.29.0'  # Dart 3.7+ required for flutter_appauth ^11.0.0
 
 permissions:
   contents: read
