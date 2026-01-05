@@ -20,7 +20,8 @@ import type { Opportunity, APIResponse } from '../types';
 
 type DateRange = 'this_quarter' | 'last_quarter' | 'ytd' | 'all_time';
 
-const STAGES = ['LEAD', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST'] as const;
+// Stages must match MongoDB seed data: DISCOVERY, QUALIFICATION, PROPOSAL, NEGOTIATION, CLOSED_WON, CLOSED_LOST
+const STAGES = ['DISCOVERY', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST'] as const;
 
 export default function DashboardPage() {
   const { getAccessToken } = useAuth();
@@ -195,12 +196,12 @@ export default function DashboardPage() {
     return date < today;
   };
 
-  // Stage color mapping
+  // Stage color mapping (matches MongoDB seed data stages)
   const getStageColor = (stage: string) => {
     switch (stage) {
-      case 'LEAD':
+      case 'DISCOVERY':
         return 'bg-gray-500';
-      case 'QUALIFIED':
+      case 'QUALIFICATION':
         return 'bg-blue-500';
       case 'PROPOSAL':
         return 'bg-yellow-500';
