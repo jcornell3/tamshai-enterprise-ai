@@ -16,7 +16,7 @@ dependencies:
   # Authentication
   flutter_appauth: ^11.0.0
   flutter_secure_storage: ^10.0.0
-  local_auth: ^2.3.0
+  local_auth: ^3.0.0
 
   # HTTP & API
   dio: ^5.4.0
