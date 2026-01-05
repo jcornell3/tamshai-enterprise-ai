@@ -416,9 +416,23 @@ describe('IdentityService Integration Tests', () => {
     return `TEST-${randomUUID().substring(0, 8).toUpperCase()}`;
   }
 
+  /**
+   * Helper to generate unique first/last names for tests.
+   * Keycloak username is derived from firstName.lastName, so these must be unique
+   * across test runs to avoid "User exists with same username" conflicts.
+   */
+  function testName(baseName: string): { firstName: string; lastName: string } {
+    const suffix = randomUUID().substring(0, 6);
+    return {
+      firstName: `${baseName}${suffix}`,
+      lastName: `Test${suffix}`,
+    };
+  }
+
   describe('Onboarding Transaction (createUserInKeycloak)', () => {
     it('should create Keycloak user when employee is created', async () => {
       const email = testEmail('alice');
+      const names = testName('Alice');
       const client = await db.connect();
 
       try {
@@ -428,7 +442,7 @@ describe('IdentityService Integration Tests', () => {
         const result = await client.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'Alice', 'Chen', email, 'Human Resources']
+          [testEmployeeNumber(), names.firstName, names.lastName, email, 'Human Resources']
         );
         const employee = result.rows[0];
 
@@ -436,8 +450,8 @@ describe('IdentityService Integration Tests', () => {
         const employeeData: EmployeeData = {
           id: employee.id,
           email,
-          firstName: 'Alice',
-          lastName: 'Chen',
+          firstName: names.firstName,
+          lastName: names.lastName,
           department: 'HR',
         };
 
@@ -456,8 +470,8 @@ describe('IdentityService Integration Tests', () => {
         expect(kcUser).not.toBeNull();
         expect(kcUser?.enabled).toBe(true);
         expect(kcUser?.email).toBe(email);
-        expect(kcUser?.firstName).toBe('Alice');
-        expect(kcUser?.lastName).toBe('Chen');
+        expect(kcUser?.firstName).toBe(names.firstName);
+        expect(kcUser?.lastName).toBe(names.lastName);
 
         // Verify employee record has Keycloak ID
         const updatedEmployee = await db.query(
@@ -480,6 +494,8 @@ describe('IdentityService Integration Tests', () => {
 
     it('should rollback HR record if Keycloak creation fails (duplicate email)', async () => {
       const email = testEmail('duplicate');
+      const names1 = testName('First');
+      const names2 = testName('Second');
       const client1 = await db.connect();
       const client2 = await db.connect();
 
@@ -489,15 +505,15 @@ describe('IdentityService Integration Tests', () => {
         const result1 = await client1.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'First', 'User', email, 'Human Resources']
+          [testEmployeeNumber(), names1.firstName, names1.lastName, email, 'Human Resources']
         );
 
         const keycloakUserId = await identityService.createUserInKeycloak(
           {
             id: result1.rows[0].id,
             email,
-            firstName: 'First',
-            lastName: 'User',
+            firstName: names1.firstName,
+            lastName: names1.lastName,
             department: 'HR',
           },
           client1
@@ -510,7 +526,7 @@ describe('IdentityService Integration Tests', () => {
         const result2 = await client2.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'Second', 'User', `duplicate-${randomUUID()}@integration-test.tamshai.com`, 'Human Resources']
+          [testEmployeeNumber(), names2.firstName, names2.lastName, `duplicate-${randomUUID()}@integration-test.tamshai.com`, 'Human Resources']
         );
 
         // Try to create with duplicate email in Keycloak
@@ -519,8 +535,8 @@ describe('IdentityService Integration Tests', () => {
             {
               id: result2.rows[0].id,
               email, // Same email as first user
-              firstName: 'Second',
-              lastName: 'User',
+              firstName: names2.firstName,
+              lastName: names2.lastName,
               department: 'HR',
             },
             client2
@@ -541,6 +557,7 @@ describe('IdentityService Integration Tests', () => {
 
     beforeEach(async () => {
       const email = testEmail('terminate');
+      const names = testName('Dan');
       const client = await db.connect();
 
       try {
@@ -549,7 +566,7 @@ describe('IdentityService Integration Tests', () => {
         const result = await client.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'Dan', 'Williams', email, 'Finance']
+          [testEmployeeNumber(), names.firstName, names.lastName, email, 'Finance']
         );
         employeeId = result.rows[0].id;
 
@@ -557,8 +574,8 @@ describe('IdentityService Integration Tests', () => {
           {
             id: employeeId,
             email,
-            firstName: 'Dan',
-            lastName: 'Williams',
+            firstName: names.firstName,
+            lastName: names.lastName,
             department: 'Finance',
           },
           client
@@ -638,6 +655,7 @@ describe('IdentityService Integration Tests', () => {
   describe('72-Hour Data Retention (deleteUserPermanently)', () => {
     it('should permanently delete disabled user after 72 hours', async () => {
       const email = testEmail('delete-perm');
+      const names = testName('Eve');
       const client = await db.connect();
       let employeeId: string;
       let keycloakUserId: string;
@@ -648,7 +666,7 @@ describe('IdentityService Integration Tests', () => {
         const result = await client.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'Eve', 'Thompson', email, 'Human Resources']
+          [testEmployeeNumber(), names.firstName, names.lastName, email, 'Human Resources']
         );
         employeeId = result.rows[0].id;
 
@@ -656,8 +674,8 @@ describe('IdentityService Integration Tests', () => {
           {
             id: employeeId,
             email,
-            firstName: 'Eve',
-            lastName: 'Thompson',
+            firstName: names.firstName,
+            lastName: names.lastName,
             department: 'HR',
           },
           client
@@ -701,6 +719,7 @@ describe('IdentityService Integration Tests', () => {
 
     it('should block deletion if user was re-enabled (termination reversal)', async () => {
       const email = testEmail('re-enabled');
+      const names = testName('Frank');
       const client = await db.connect();
       let employeeId: string;
       let keycloakUserId: string;
@@ -711,7 +730,7 @@ describe('IdentityService Integration Tests', () => {
         const result = await client.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'Frank', 'Davis', email, 'Support']
+          [testEmployeeNumber(), names.firstName, names.lastName, email, 'Support']
         );
         employeeId = result.rows[0].id;
 
@@ -719,8 +738,8 @@ describe('IdentityService Integration Tests', () => {
           {
             id: employeeId,
             email,
-            firstName: 'Frank',
-            lastName: 'Davis',
+            firstName: names.firstName,
+            lastName: names.lastName,
             department: 'Support',
           },
           client
@@ -761,6 +780,7 @@ describe('IdentityService Integration Tests', () => {
   describe('Decoupling Test', () => {
     it('should allow Keycloak user to exist even when HR DB connection is separate', async () => {
       const email = testEmail('decoupling');
+      const names = testName('Grace');
 
       // Use a separate pool for this test
       const isolatedPool = new Pool(config.postgres);
@@ -775,15 +795,15 @@ describe('IdentityService Integration Tests', () => {
         const result = await client.query(
           `INSERT INTO hr.employees (employee_number, first_name, last_name, email, department_id, hire_date)
            VALUES ($1, $2, $3, $4, (SELECT id FROM hr.departments WHERE name = $5), CURRENT_DATE) RETURNING *`,
-          [testEmployeeNumber(), 'Grace', 'Hopper', email, 'Engineering']
+          [testEmployeeNumber(), names.firstName, names.lastName, email, 'Engineering']
         );
 
         keycloakUserId = await isolatedService.createUserInKeycloak(
           {
             id: result.rows[0].id,
             email,
-            firstName: 'Grace',
-            lastName: 'Hopper',
+            firstName: names.firstName,
+            lastName: names.lastName,
             department: 'Engineering',
           },
           client
