@@ -6,7 +6,133 @@ This document describes the identity synchronization service that provisions HR 
 
 The identity sync service bridges the gap between HR employee data (stored in PostgreSQL) and Keycloak user accounts. It enables single sign-on (SSO) for employees by automatically creating and maintaining their Keycloak accounts based on HR system data.
 
-## Architecture
+## Phoenix Architecture
+
+The system follows "Phoenix Server" principles - the VPS can be destroyed and recreated with `terraform destroy && terraform apply`, and the application stack will **self-converge** to the correct state without manual intervention.
+
+### Container-Native Seeding (Already Implemented)
+
+#### A. Database Seeding via Docker Entrypoint
+
+PostgreSQL automatically seeds data on first boot using Docker's native initialization:
+
+**Implementation** (`infrastructure/docker/docker-compose.yml`):
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init-multiple-databases.sh:/docker-entrypoint-initdb.d/01-init-multiple-databases.sh:ro
+      - ../../sample-data/hr-data.sql:/docker-entrypoint-initdb.d/02-hr-data.sql:ro
+      - ../../sample-data/finance-data.sql:/docker-entrypoint-initdb.d/03-finance-data.sql:ro
+```
+
+**How it works:**
+- Files in `/docker-entrypoint-initdb.d/` execute in alphabetical order on first container start
+- `01-init-multiple-databases.sh` creates the databases
+- `02-hr-data.sql` seeds HR schema and employee data
+- `03-finance-data.sql` seeds finance schema and data
+- Runs only once (when `postgres_data` volume is empty)
+
+**Result:** No manual database restore required. Fresh VPS gets seeded automatically.
+
+#### B. Keycloak Seeding via Native Realm Import
+
+Keycloak imports the realm configuration on every startup:
+
+**Implementation** (`infrastructure/docker/docker-compose.yml`):
+```yaml
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --import-realm
+    volumes:
+      - ../../keycloak/realm-export-dev.json:/opt/keycloak/data/import/realm-export.json:ro
+```
+
+**How it works:**
+- `--import-realm` flag tells Keycloak to import on startup
+- Realm file at `/opt/keycloak/data/import/realm-export.json` is loaded
+- Contains: realm settings, clients, roles, client scopes, authentication flows
+- Dev uses `realm-export-dev.json` (includes test users)
+- Stage/Prod uses `realm-export.json` (no pre-configured users)
+
+**Result:** No manual Keycloak configuration required. Realm is ready immediately.
+
+#### C. Runtime Identity Reconciliation (Self-Healing)
+
+The `mcp-hr` service reconciles HR employees to Keycloak users on startup:
+
+**How it works:**
+1. `mcp-hr` waits for PostgreSQL and Keycloak to be healthy
+2. On startup, calls `IdentityService.reconcileOnStartup()`
+3. Queries all active employees from PostgreSQL
+4. For each employee, checks if Keycloak user exists
+5. Creates missing users, updates existing users
+6. Assigns realm roles based on department
+
+**Result:** If VPS reboots or identity sync previously failed, users are automatically reconciled.
+
+### Phoenix Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     PHOENIX SELF-HEALING ARCHITECTURE                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  terraform apply
+        │
+        ▼
+┌───────────────────┐
+│   cloud-init      │
+│                   │
+│  1. Install Docker│
+│  2. Git clone     │
+│  3. docker compose│
+│     up -d         │
+│  4. DONE          │  ← No scripts, no manual steps
+└───────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         DOCKER COMPOSE                                      │
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
+│  │  PostgreSQL │    │  Keycloak   │    │    Redis    │    │   mcp-hr    │ │
+│  │             │    │             │    │             │    │             │ │
+│  │ Seeds from  │    │ Imports     │    │ Ready for   │    │ Reconciles  │ │
+│  │ /docker-    │    │ realm on    │    │ connections │    │ users on    │ │
+│  │ entrypoint- │    │ startup     │    │             │    │ startup     │ │
+│  │ initdb.d/   │    │             │    │             │    │             │ │
+│  └──────┬──────┘    └──────┬──────┘    └─────────────┘    └──────┬──────┘ │
+│         │                  │                                      │        │
+│         │    SELF-SEEDING  │         SELF-CONFIGURING            │        │
+│         ▼                  ▼                                      ▼        │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │                     HEALTHY SYSTEM STATE                             │  │
+│  │  - All databases seeded with sample data                            │  │
+│  │  - Keycloak realm configured with clients, roles, scopes            │  │
+│  │  - All HR employees synced as Keycloak users                        │  │
+│  │  - Ready to accept logins                                           │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### Old vs New Architecture
+
+| Aspect | Old (Brittle) | New (Phoenix) |
+|--------|---------------|---------------|
+| **Database seeding** | Manual `restore.sh` script | Automatic via `/docker-entrypoint-initdb.d/` |
+| **Keycloak config** | Manual `sync-realm.sh` script | Automatic via `--import-realm` |
+| **User provisioning** | One-shot `identity-sync` container | Self-healing reconciliation in `mcp-hr` |
+| **cloud-init** | Complex script orchestration | Simple `docker compose up -d` |
+| **VPS reboot** | Users may be missing | Automatically reconciled |
+| **Failure recovery** | Manual intervention required | Self-healing on next startup |
+
+---
+
+## Identity Sync Flow
 
 ### Flow Diagram
 
@@ -16,7 +142,7 @@ The identity sync service bridges the gap between HR employee data (stored in Po
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────────────┐
-│   PostgreSQL     │     │  identity-sync   │     │       Keycloak           │
+│   PostgreSQL     │     │     mcp-hr       │     │       Keycloak           │
 │   (HR Database)  │     │    Service       │     │   (Identity Provider)    │
 └────────┬─────────┘     └────────┬─────────┘     └────────────┬─────────────┘
          │                        │                            │
@@ -73,7 +199,7 @@ The identity sync service bridges the gap between HR employee data (stored in Po
 │     PostgreSQL      │
 │  ┌───────────────┐  │
 │  │  hr.employees │  │  ← Source of truth for employee data
-│  │  - employee_id│  │
+│  │  - employee_id│  │    Seeded via /docker-entrypoint-initdb.d/
 │  │  - email      │  │
 │  │  - first_name │  │
 │  │  - last_name  │  │
@@ -86,10 +212,10 @@ The identity sync service bridges the gap between HR employee data (stored in Po
            │ SQL Query
            ▼
 ┌─────────────────────┐
-│   identity-sync     │
+│      mcp-hr         │
 │   Docker Container  │
 │  ┌───────────────┐  │
-│  │ IdentitySync  │  │  ← Core service class
+│  │ IdentitySync  │  │  ← Reconciles on startup (self-healing)
 │  │   Service     │  │
 │  └───────┬───────┘  │
 │          │          │
@@ -103,7 +229,7 @@ The identity sync service bridges the gap between HR employee data (stored in Po
 ┌─────────────────────┐
 │      Keycloak       │
 │  ┌───────────────┐  │
-│  │  tamshai-corp │  │  ← Realm
+│  │  tamshai-corp │  │  ← Realm (imported via --import-realm)
 │  │     realm     │  │
 │  └───────┬───────┘  │
 │          │          │
@@ -121,27 +247,18 @@ The identity sync service bridges the gap between HR employee data (stored in Po
 
 ### Department to Role Mapping
 
-```
-┌────────────────────┐     ┌─────────────────────┐
-│    HR Department   │────►│  hr-read, hr-write  │
-└────────────────────┘     └─────────────────────┘
+The `DEPARTMENT_ROLE_MAP` maps HR department codes to Keycloak realm roles:
 
-┌────────────────────┐     ┌─────────────────────────────┐
-│ Finance Department │────►│  finance-read, finance-write│
-└────────────────────┘     └─────────────────────────────┘
+| Department Code | Realm Role | Description |
+|-----------------|------------|-------------|
+| HR | hr-read | HR department read access |
+| FIN | finance-read | Finance department read access |
+| SALES | sales-read | Sales department read access |
+| SUPPORT | support-read | Support department read access |
+| ENG | engineering-read | Engineering department read access |
+| EXEC | executive | Composite role (all department read access) |
 
-┌────────────────────┐     ┌───────────────────────────┐
-│  Sales Department  │────►│  sales-read, sales-write  │
-└────────────────────┘     └───────────────────────────┘
-
-┌────────────────────┐     ┌─────────────────────────────┐
-│ Support Department │────►│ support-read, support-write │
-└────────────────────┘     └─────────────────────────────┘
-
-┌────────────────────┐     ┌─────────────────────────────┐
-│     Executive      │────►│  executive (composite role) │
-└────────────────────┘     └─────────────────────────────┘
-```
+---
 
 ## Dev vs Stage Environments
 
@@ -165,9 +282,9 @@ In development, users are **pre-configured** in `keycloak/realm-export-dev.json`
 ```
 
 This means:
-- Users exist immediately after Keycloak starts
-- Identity sync finds existing users and skips creation
-- Role assignment code path is rarely exercised
+- Users exist immediately after Keycloak starts (via `--import-realm`)
+- Identity reconciliation finds existing users and verifies/updates them
+- Faster development cycle (no waiting for user creation)
 
 ### Stage/Production Environments
 
@@ -180,33 +297,18 @@ In stage and production, `keycloak/realm-export.json` has an **empty users array
 ```
 
 This means:
-- No users exist after Keycloak starts
-- Identity sync must create all users from HR data
+- No users exist after Keycloak realm import
+- Identity reconciliation creates all users from HR database
 - All code paths (create user, assign roles) are exercised
+- Uses `STAGE_TESTING_PASSWORD` for predictable test credentials
 
-## Username Format (Updated January 2026)
+---
 
-The identity sync service creates Keycloak usernames in `firstname.lastname` format (e.g., `eve.thompson`) rather than using the email address. This ensures:
+## Role Assignment
 
-- **Consistency**: Same username format across dev and stage/prod environments
-- **User Experience**: Users can log in with familiar `firstname.lastname` usernames
-- **Alignment**: Matches pre-configured users in `realm-export-dev.json`
+### Realm Roles (Current Implementation)
 
-If users were previously created with email as username, they will need to be deleted and re-synced to get the correct username format.
-
-## Role Assignment Evolution
-
-### Original Issue: Client UUID Bug (January 2026)
-
-The identity sync service originally used **client roles** (roles defined on the `mcp-gateway` client). This caused issues because:
-
-1. The Keycloak Admin API requires client UUID for `clients.listRoles()`
-2. The code was passing `clientId` (name) instead of UUID
-3. Resulted in "unknown_error" for all employees in stage
-
-### Current Solution: Realm Roles (January 2026)
-
-The fix was refactored to use **realm roles** instead of client roles. This is simpler and more reliable:
+The identity sync uses **realm roles** rather than client roles. This is simpler and more reliable:
 
 ```typescript
 private async assignDepartmentRole(
@@ -236,34 +338,11 @@ private async assignDepartmentRole(
 - MCP Gateway already merges realm and client roles
 - Simpler code with fewer API calls
 
-### Department Role Mapping
+### Historical Note: Client UUID Bug
 
-The `DEPARTMENT_ROLE_MAP` maps HR department codes to Keycloak realm roles:
+The original implementation used client roles, which required looking up the `mcp-gateway` client UUID. This caused issues because the code passed `clientId` (name) instead of UUID. The switch to realm roles eliminated this complexity entirely.
 
-| Department Code | Realm Role |
-|-----------------|------------|
-| HR | hr-read |
-| FIN | finance-read |
-| SALES | sales-read |
-| SUPPORT | support-read |
-| ENG | engineering-read |
-| EXEC | executive |
-
-The `executive` role is a **composite role** that includes read access to all departments.
-
-### Docker Cache Issue
-
-When deploying fixes, always use the `--build` flag to rebuild containers:
-
-```bash
-# Forces rebuild with latest code
-docker compose run --rm --build identity-sync
-```
-
-This was added to:
-- `.github/workflows/deploy-vps.yml`
-- `infrastructure/terraform/vps/cloud-init.yaml`
-- `scripts/infra/deploy.sh`
+---
 
 ## Configuration
 
@@ -275,7 +354,8 @@ This was added to:
 | `KEYCLOAK_REALM` | Target realm | `tamshai-corp` |
 | `KEYCLOAK_CLIENT_ID` | Service account client | `mcp-hr-service` |
 | `KEYCLOAK_CLIENT_SECRET` | Service account secret | `MCP_HR_SERVICE_CLIENT_SECRET` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://...` |
+| `POSTGRES_HOST` | PostgreSQL host | `postgres` |
+| `POSTGRES_DB` | Database name | `tamshai_hr` |
 | `STAGE_TESTING_PASSWORD` | Fixed password for synced users (stage/dev only) | `TamshaiTemp123!` |
 
 **Note on STAGE_TESTING_PASSWORD:** In stage/dev environments, all synced users are given this fixed password for testing. In production, this should be left empty and users will receive cryptographically random passwords (requiring password reset on first login).
@@ -290,20 +370,33 @@ The `mcp-hr-service` client must have:
   - `realm-management/view-clients`
   - `realm-management/query-clients`
 
+---
+
 ## Running Identity Sync
 
-### Via Deployment Scripts
+### Automatic (Recommended)
+
+With the Phoenix architecture, identity sync runs automatically:
+
+1. **On VPS creation**: `mcp-hr` reconciles users on startup
+2. **On VPS reboot**: `mcp-hr` reconciles users on startup
+3. **On container restart**: `mcp-hr` reconciles users on startup
+
+No manual intervention required.
+
+### Manual Trigger (If Needed)
 
 ```bash
-# Full deployment (includes identity sync)
-./scripts/infra/deploy.sh dev --sync
-./scripts/infra/deploy.sh stage
+# Restart mcp-hr to trigger reconciliation
+docker compose restart mcp-hr
 
-# Manual sync only
-./scripts/infra/keycloak.sh sync-users dev
+# View reconciliation logs
+docker compose logs -f mcp-hr | grep -i reconcil
 ```
 
-### Via Docker Compose
+### Legacy One-Shot Sync (Deprecated)
+
+The standalone `identity-sync` container is deprecated but still available:
 
 ```bash
 # In development
@@ -315,52 +408,54 @@ cd /opt/tamshai
 docker compose run --rm --build identity-sync
 ```
 
-### Via GitHub Actions
-
-The `deploy-vps.yml` workflow automatically runs identity sync after deployment.
+---
 
 ## Troubleshooting
 
 ### Common Issues
 
-**1. "unknown_error" for all employees**
-- Check if `mcp-hr-service` client has required realm-management roles
-- Verify client secret matches between Keycloak and environment variables
-
-**2. Users not created**
-- Check `identity-sync` container logs: `docker logs tamshai-identity-sync`
+**1. Users not created after VPS deploy**
+- Check `mcp-hr` container logs: `docker compose logs mcp-hr`
 - Verify PostgreSQL `hr.employees` table has data
-- Check Keycloak is accessible from identity-sync container
+- Check Keycloak is healthy: `curl http://localhost:8080/health/ready`
 
-**3. Roles not assigned**
+**2. Roles not assigned**
 - Verify realm roles exist in Keycloak (hr-read, finance-read, etc.)
 - Check department code in HR database matches DEPARTMENT_ROLE_MAP
 - Verify `mcp-hr-service` client has `realm-management/manage-users` role
 
-**4. Changes not taking effect**
-- Use `--build` flag to rebuild container with latest code
-- Verify code changes are committed and pushed
+**3. Reconciliation not running**
+- Check `mcp-hr` started successfully: `docker compose ps`
+- Look for "Starting Identity Reconciliation" in logs
+- Verify PostgreSQL and Keycloak health checks pass
+
+**4. Docker Hub rate limiting**
+- Error: "You have reached your unauthenticated pull rate limit"
+- Wait 6 hours for limit reset, or use Docker Hub authentication
+- Consider using alternative registries (quay.io for Keycloak)
 
 ### Viewing Logs
 
 ```bash
-# Container logs
-docker logs tamshai-identity-sync
+# mcp-hr reconciliation logs
+docker compose logs mcp-hr | grep -i "reconcil\|identity\|sync"
 
-# Follow logs in real-time
-docker logs -f tamshai-identity-sync
+# All mcp-hr logs
+docker compose logs -f mcp-hr
 
-# All logs from identity sync runs
-docker compose logs identity-sync
+# Check container health
+docker compose ps
 ```
+
+---
 
 ## Related Documentation
 
 - [Keycloak Management Guide](./KEYCLOAK_MANAGEMENT.md)
 - [VPS Deployment Guide](../deployment/VPS_SETUP_GUIDE.md)
-- [GitHub Actions Deployment](../.github/workflows/deploy-vps.yml)
+- [GitHub Actions Deployment](../../.github/workflows/deploy-vps.yml)
 
 ---
 
 *Last Updated: January 2026*
-*Fixed: Realm roles instead of client roles, EXEC department mapping, Docker cache issue*
+*Architecture: Phoenix self-healing with container-native seeding*

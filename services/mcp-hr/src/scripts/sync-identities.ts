@@ -117,6 +117,18 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
         const roles = await kcAdmin.users.listClientRoleMappings(params);
         return roles as KcRoleRepresentation[];
       },
+      addRealmRoleMappings: async (params: {
+        id: string;
+        roles: KcRoleRepresentation[];
+      }): Promise<void> => {
+        const rolesWithIds = params.roles.filter(
+          (r): r is KcRoleRepresentation & { id: string; name: string } => !!r.id && !!r.name
+        );
+        await kcAdmin.users.addRealmRoleMappings({
+          id: params.id,
+          roles: rolesWithIds.map((r) => ({ id: r.id, name: r.name })),
+        });
+      },
       listSessions: async (query: { id: string }): Promise<{ id: string }[]> => {
         const sessions = await kcAdmin.users.listSessions(query);
         return sessions.map((s: { id?: string }) => ({ id: s.id || '' }));
@@ -133,6 +145,16 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
       listRoles: async (query: { id: string }): Promise<KcRoleRepresentation[]> => {
         const roles = await kcAdmin.clients.listRoles(query);
         return roles as KcRoleRepresentation[];
+      },
+    },
+    roles: {
+      find: async (): Promise<KcRoleRepresentation[]> => {
+        const roles = await kcAdmin.roles.find();
+        return roles as KcRoleRepresentation[];
+      },
+      findOneByName: async (query: { name: string }): Promise<KcRoleRepresentation | undefined> => {
+        const role = await kcAdmin.roles.findOneByName(query);
+        return role as KcRoleRepresentation | undefined;
       },
     },
     auth: async (credentials: {
