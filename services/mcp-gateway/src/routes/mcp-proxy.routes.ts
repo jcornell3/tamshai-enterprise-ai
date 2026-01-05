@@ -119,12 +119,12 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
         return;
       }
 
-      // Forward request to MCP server (MCP servers expect POST with {input, userContext})
+      // Forward request to MCP server
       // SECURITY: toolName is validated above, server.url comes from trusted config
       const mcpResponse = await axios.post(
         `${server.url}/tools/${encodeURIComponent(toolName)}`,
         {
-          input: queryParams, // Query params become input
+          ...queryParams, // Spread query params at root level (MCP servers read directly from body)
           userContext: {
             userId: userContext.userId,
             username: userContext.username,

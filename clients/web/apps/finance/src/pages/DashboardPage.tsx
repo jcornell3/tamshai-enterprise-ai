@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, canModifyFinance } from '@tamshai/auth';
+import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { TruncationWarning } from '@tamshai/ui';
 import type { DashboardMetrics, Budget, Invoice } from '../types';
 
@@ -31,40 +31,27 @@ export function DashboardPage() {
   const { userContext } = useAuth();
   const canWrite = canModifyFinance(userContext);
 
-  // Fetch dashboard metrics
+  const { getAccessToken } = useAuth();
+
+  // Fetch budgets for metrics computation
   const {
-    data: metricsResponse,
-    isLoading: metricsLoading,
-    error: metricsError,
-    refetch: refetchMetrics,
+    data: budgetsResponse,
+    isLoading: budgetsLoading,
+    error: budgetsError,
+    refetch: refetchBudgets,
   } = useQuery({
-    queryKey: ['dashboard-metrics'],
+    queryKey: ['dashboard-budgets'],
     queryFn: async () => {
-      const response = await fetch('/api/finance/dashboard/metrics');
-      if (!response.ok) {
-        throw new Error('Failed to fetch metrics');
-      }
-      return response.json() as Promise<APIResponse<DashboardMetrics>>;
-    },
-  });
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
 
-  // Fetch recent invoices for activity
-  const { data: recentInvoicesResponse } = useQuery({
-    queryKey: ['recent-invoices'],
-    queryFn: async () => {
-      const response = await fetch('/api/finance/invoices?limit=5');
-      if (!response.ok) {
-        throw new Error('Failed to fetch invoices');
-      }
-      return response.json() as Promise<APIResponse<Invoice[]>>;
-    },
-  });
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets`
+        : '/api/mcp/finance/list_budgets';
 
-  // Fetch recent budget changes
-  const { data: recentBudgetsResponse } = useQuery({
-    queryKey: ['recent-budgets'],
-    queryFn: async () => {
-      const response = await fetch('/api/finance/budgets?limit=5');
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch budgets');
       }
@@ -72,10 +59,61 @@ export function DashboardPage() {
     },
   });
 
-  const metrics = metricsResponse?.data;
-  const isTruncated = metricsResponse?.metadata?.truncated;
-  const recentInvoices = recentInvoicesResponse?.data || [];
-  const recentBudgets = recentBudgetsResponse?.data || [];
+  // Fetch invoices for activity
+  const { data: invoicesResponse, isLoading: invoicesLoading } = useQuery({
+    queryKey: ['dashboard-invoices'],
+    queryFn: async () => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_invoices`
+        : '/api/mcp/finance/list_invoices';
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch invoices');
+      }
+      return response.json() as Promise<APIResponse<Invoice[]>>;
+    },
+  });
+
+  const budgets = budgetsResponse?.data || [];
+  const invoices = invoicesResponse?.data || [];
+  const isTruncated = budgetsResponse?.metadata?.truncated || invoicesResponse?.metadata?.truncated;
+  const isLoading = budgetsLoading || invoicesLoading;
+  const error = budgetsError;
+
+  // Compute dashboard metrics from budget data
+  const metrics: DashboardMetrics | undefined = budgets.length > 0 ? {
+    total_budget: budgets.reduce((sum, b) => sum + (b.allocated_amount || 0), 0),
+    total_spent: budgets.reduce((sum, b) => sum + (b.spent_amount || 0), 0),
+    remaining_budget: budgets.reduce((sum, b) => sum + ((b.allocated_amount || 0) - (b.spent_amount || 0)), 0),
+    budget_utilization_percent: Math.round(
+      (budgets.reduce((sum, b) => sum + (b.spent_amount || 0), 0) /
+        budgets.reduce((sum, b) => sum + (b.allocated_amount || 0), 0)) * 100
+    ) || 0,
+    pending_approvals: budgets.filter(b => b.status === 'PENDING_APPROVAL').length,
+    pending_invoices: invoices.filter(i => i.status === 'PENDING').length,
+    pending_expense_reports: 0, // Would need separate API call
+    departments: [...new Set(budgets.map(b => b.department))].map(dept => {
+      const deptBudgets = budgets.filter(b => b.department === dept);
+      const allocated = deptBudgets.reduce((sum, b) => sum + (b.allocated_amount || 0), 0);
+      const spent = deptBudgets.reduce((sum, b) => sum + (b.spent_amount || 0), 0);
+      return {
+        department: dept,
+        allocated,
+        spent,
+        remaining: allocated - spent,
+        utilization_percent: Math.round((spent / allocated) * 100) || 0,
+      };
+    }),
+  } : undefined;
+
+  const recentInvoices = invoices.slice(0, 5);
+  const recentBudgets = budgets.slice(0, 5);
 
   // Format currency
   const formatCurrency = (amount: number, compact = false): string => {
@@ -126,7 +164,7 @@ export function DashboardPage() {
   };
 
   // Loading state
-  if (metricsLoading) {
+  if (isLoading) {
     return (
       <div className="page-container" data-testid="dashboard-loading">
         <div className="page-header">
@@ -156,14 +194,14 @@ export function DashboardPage() {
   }
 
   // Error state
-  if (metricsError) {
+  if (error) {
     return (
       <div className="page-container">
         <div className="alert-danger" data-testid="error-state">
           <h3 className="font-semibold mb-2">Error Loading Dashboard</h3>
-          <p className="text-sm mb-4">{String(metricsError)}</p>
+          <p className="text-sm mb-4">{String(error)}</p>
           <button
-            onClick={() => refetchMetrics()}
+            onClick={() => refetchBudgets()}
             className="btn-primary"
             data-testid="retry-button"
           >
@@ -182,12 +220,12 @@ export function DashboardPage() {
       </div>
 
       {/* Truncation Warning */}
-      {isTruncated && metricsResponse?.metadata && (
+      {isTruncated && (budgetsResponse?.metadata || invoicesResponse?.metadata) && (
         <div className="mb-6" data-testid="truncation-warning">
           <TruncationWarning
-            message={metricsResponse.metadata.warning || 'Results truncated to 50 records'}
+            message={budgetsResponse?.metadata?.warning || invoicesResponse?.metadata?.warning || 'Results truncated to 50 records'}
             returnedCount={50}
-            totalEstimate={metricsResponse.metadata.totalCount || '50+'}
+            totalEstimate={budgetsResponse?.metadata?.totalCount || invoicesResponse?.metadata?.totalCount || '50+'}
           />
         </div>
       )}
