@@ -203,7 +203,12 @@ jobs:
 
       - name: Clean and get dependencies
         working-directory: clients/unified_flutter
+        shell: pwsh
         run: |
+          # Remove Windows ephemeral folder to force fresh plugin rebuild
+          if (Test-Path "windows/flutter/ephemeral") {
+            Remove-Item -Recurse -Force "windows/flutter/ephemeral"
+          }
           flutter clean
           flutter pub get
 
