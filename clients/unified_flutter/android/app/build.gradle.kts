@@ -25,6 +25,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Required by flutter_appauth for OAuth redirect
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.tamshai.unified_flutter"
     }
 
     buildTypes {

@@ -379,6 +379,74 @@ flutter pub run build_runner build --delete-conflicting-outputs
 
 ---
 
+### 11. Missing appAuthRedirectScheme for Android OAuth
+
+**Commit**: (pending) - fix(flutter): Add appAuthRedirectScheme manifest placeholder
+
+**Error**:
+```
+Attribute data@scheme at AndroidManifest.xml requires a placeholder substitution
+but no value for <appAuthRedirectScheme> is provided.
+```
+
+**Root Cause**:
+The `flutter_appauth` package requires an `appAuthRedirectScheme` manifest placeholder for OAuth redirect handling. This was missing from `build.gradle.kts`.
+
+**Fix** (build.gradle.kts):
+```kotlin
+defaultConfig {
+    // ... other config ...
+
+    // Required by flutter_appauth for OAuth redirect
+    manifestPlaceholders["appAuthRedirectScheme"] = "com.tamshai.unified_flutter"
+}
+```
+
+---
+
+### 12. Missing macOS Platform Support
+
+**Commit**: (pending) - fix(flutter): Add macOS platform support
+
+**Error**:
+```
+No macOS desktop project configured.
+See https://flutter.dev/to/add-desktop-support to learn about adding macOS support to a project.
+```
+
+**Root Cause**:
+The Flutter project was created without macOS platform support. The `macos/` folder was missing.
+
+**Fix**:
+```bash
+cd clients/unified_flutter
+flutter create --platforms=macos .
+```
+
+---
+
+### 13. Windows Plugin Registrant Stale Cache
+
+**Commit**: (pending) - fix(flutter): Regenerate Windows plugin registrant
+
+**Error**:
+```
+'SpeechToTextWindowsRegisterWithRegistrar': identifier not found
+```
+
+**Root Cause**:
+CI had stale cached `generated_plugin_registrant.cc` that didn't include the `speech_to_text_windows` plugin registration after upgrading to speech_to_text 7.x.
+
+**Fix**:
+```bash
+cd clients/unified_flutter
+flutter clean
+flutter pub get
+# Commit the regenerated windows/flutter/generated_plugin_registrant.cc
+```
+
+---
+
 ## Prevention Measures
 
 1. **Pin major versions** - Use `^2.5.1` not `^2.0.0` to avoid unexpected major version jumps
