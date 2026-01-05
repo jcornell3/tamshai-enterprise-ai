@@ -5,6 +5,7 @@ import '../storage/secure_storage_service.dart';
 import '../auth/providers/auth_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'certificate_pinner.dart';
+import '../config/environment_config.dart';
 
 /// Dio interceptor for automatic token injection and refresh
 /// 
@@ -142,12 +143,9 @@ class AuthTokenInterceptor extends Interceptor {
 
 /// Dio client provider with auth interceptor and certificate pinning
 final dioProvider = Provider<Dio>((ref) {
-  // Development: MCP Gateway at port 3100
-  // Production: Kong Gateway at port 8100
-  const baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://localhost:3100',
-  );
+  // Get API base URL from environment configuration
+  // Set via: flutter build --dart-define=ENV=stage
+  final baseUrl = EnvironmentConfig.current.apiBaseUrl;
 
   final dio = Dio(
     BaseOptions(

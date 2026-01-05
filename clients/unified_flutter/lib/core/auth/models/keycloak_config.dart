@@ -1,10 +1,11 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import '../../config/environment_config.dart';
 
 part 'keycloak_config.freezed.dart';
 part 'keycloak_config.g.dart';
 
 /// Keycloak server configuration
-/// 
+///
 /// Configure these values for your Keycloak instance:
 /// - issuer: Your Keycloak realm URL (e.g., https://auth.tamshai.com/realms/tamshai)
 /// - clientId: Your client ID configured in Keycloak (should be a public client)
@@ -25,43 +26,29 @@ class KeycloakConfig with _$KeycloakConfig {
       _$KeycloakConfigFromJson(json);
 }
 
-/// Keycloak configuration for Tamshai Enterprise AI
+/// Keycloak configuration provider for Tamshai Enterprise AI
 ///
-/// Development: Local Keycloak at port 8180
-/// Production: Production Keycloak server
+/// Uses EnvironmentConfig to determine the correct Keycloak settings
+/// based on the build-time ENV variable (dev, stage, prod).
 class KeycloakConfigProvider {
-  static KeycloakConfig getDevelopmentConfig() {
-    return const KeycloakConfig(
-      // Local Keycloak instance (Docker)
-      // See: infrastructure/docker/docker-compose.yml
-      // Realm name is 'tamshai-corp' (from keycloak/realm-export.json)
-      // Use 127.0.0.1 instead of localhost for Windows compatibility
-      issuer: 'http://127.0.0.1:8180/realms/tamshai-corp',
-
-      // Public client for Flutter app (PKCE enabled)
-      // Configured in keycloak/realm-export.json
-      clientId: 'tamshai-flutter-client',
-
-      // For desktop - redirect URI is built dynamically with available port
-      // This is a placeholder that won't be used by DesktopOAuthService
-      redirectUrl: 'http://127.0.0.1/callback',
-
-      // End session redirect
-      endSessionRedirectUrl: 'http://127.0.0.1/logout',
-
-      // Scopes for role-based access control
-      scopes: ['openid', 'profile', 'email', 'roles'],
+  /// Get Keycloak configuration for current environment
+  /// Set via: flutter build --dart-define=ENV=stage
+  static KeycloakConfig getConfig() {
+    final env = EnvironmentConfig.current;
+    return KeycloakConfig(
+      issuer: env.keycloakIssuer,
+      clientId: env.keycloakClientId,
+      redirectUrl: env.redirectUrl,
+      endSessionRedirectUrl: env.endSessionRedirectUrl,
+      scopes: env.scopes,
     );
   }
 
-  static KeycloakConfig getProductionConfig() {
-    return const KeycloakConfig(
-      // Production Keycloak URL
-      issuer: 'https://auth.tamshai.com/realms/tamshai-corp',
-      clientId: 'tamshai-flutter-client',
-      redirectUrl: 'com.tamshai.ai://callback',
-      endSessionRedirectUrl: 'com.tamshai.ai://logout',
-      scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
-    );
-  }
+  /// Legacy method - returns config for current environment
+  @Deprecated('Use getConfig() instead')
+  static KeycloakConfig getDevelopmentConfig() => getConfig();
+
+  /// Legacy method - returns config for current environment
+  @Deprecated('Use getConfig() instead')
+  static KeycloakConfig getProductionConfig() => getConfig();
 }
