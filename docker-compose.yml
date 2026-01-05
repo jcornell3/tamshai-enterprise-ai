@@ -132,6 +132,11 @@ services:
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_PROXY_LISTEN: 0.0.0.0:8000
+      # DNS settings to handle container IP changes (Docker assigns new IPs on restart)
+      # Without these, Kong caches DNS for 4+ days and fails after upstream restarts
+      KONG_DNS_STALE_TTL: 0        # Don't use stale DNS entries
+      KONG_DNS_VALID_TTL: 10       # Re-resolve DNS every 10 seconds
+      KONG_DNS_ERROR_TTL: 1        # Retry DNS errors after 1 second
     volumes:
       - ${KONG_CONFIG:-./infrastructure/docker/kong/kong.yml}:/etc/kong/kong.yml:ro
     ports:
