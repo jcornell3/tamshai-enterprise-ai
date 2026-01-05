@@ -299,12 +299,12 @@ export default function DownloadsPage() {
                 Access Tamshai AI directly in your browser - no download required
               </p>
             </div>
-            <a
-              href="/"
+            <Link
+              to="/"
               className="btn-primary"
             >
               Open Web App
-            </a>
+            </Link>
           </div>
         </div>
 
