@@ -363,8 +363,9 @@ export class IdentityService {
       keycloakUserId = createResult.id;
 
       // Step 2: Set temporary password (must be changed on first login)
-      // Generate cryptographically secure random password per user
-      const tempPassword = generateSecurePassword(20);
+      // For stage/dev: use STAGE_TESTING_PASSWORD if set (allows testing)
+      // For production: generate cryptographically secure random password
+      const tempPassword = process.env.STAGE_TESTING_PASSWORD || generateSecurePassword(20);
       await this.kcAdmin.users.resetPassword({
         id: keycloakUserId,
         credential: {
@@ -373,8 +374,8 @@ export class IdentityService {
           temporary: true, // User must change on first login
         },
       });
-      // Note: Password is not logged or stored. User receives password via
-      // secure channel (email/IT onboarding) configured separately.
+      // Note: In production, password is not logged or stored. User receives
+      // password via secure channel (email/IT onboarding) configured separately.
 
       // Step 3: Assign department role (if applicable)
       await this.assignDepartmentRole(keycloakUserId, employeeData.department);
