@@ -11,8 +11,7 @@ _$KeycloakConfigImpl _$$KeycloakConfigImplFromJson(Map<String, dynamic> json) =>
       issuer: json['issuer'] as String,
       clientId: json['clientId'] as String,
       redirectUrl: json['redirectUrl'] as String,
-      scopes:
-          (json['scopes'] as List<dynamic>?)
+      scopes: (json['scopes'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           const ['openid', 'profile', 'email', 'offline_access'],
@@ -21,12 +20,12 @@ _$KeycloakConfigImpl _$$KeycloakConfigImplFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$$KeycloakConfigImplToJson(
-  _$KeycloakConfigImpl instance,
-) => <String, dynamic>{
-  'issuer': instance.issuer,
-  'clientId': instance.clientId,
-  'redirectUrl': instance.redirectUrl,
-  'scopes': instance.scopes,
-  'discoveryUrl': instance.discoveryUrl,
-  'endSessionRedirectUrl': instance.endSessionRedirectUrl,
-};
+        _$KeycloakConfigImpl instance) =>
+    <String, dynamic>{
+      'issuer': instance.issuer,
+      'clientId': instance.clientId,
+      'redirectUrl': instance.redirectUrl,
+      'scopes': instance.scopes,
+      'discoveryUrl': instance.discoveryUrl,
+      'endSessionRedirectUrl': instance.endSessionRedirectUrl,
+    };

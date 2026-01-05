@@ -18,8 +18,7 @@ _$ChatMessageImpl _$$ChatMessageImplFromJson(Map<String, dynamic> json) =>
       pendingConfirmation: json['pendingConfirmation'] == null
           ? null
           : PendingConfirmation.fromJson(
-              json['pendingConfirmation'] as Map<String, dynamic>,
-            ),
+              json['pendingConfirmation'] as Map<String, dynamic>),
       metadata: json['metadata'] as Map<String, dynamic>?,
     );
 
@@ -43,29 +42,28 @@ const _$MessageRoleEnumMap = {
 };
 
 _$PendingConfirmationImpl _$$PendingConfirmationImplFromJson(
-  Map<String, dynamic> json,
-) => _$PendingConfirmationImpl(
-  confirmationId: json['confirmationId'] as String,
-  message: json['message'] as String,
-  action: json['action'] as String,
-  confirmationData: json['confirmationData'] as Map<String, dynamic>?,
-  isExpired: json['isExpired'] as bool? ?? false,
-);
+        Map<String, dynamic> json) =>
+    _$PendingConfirmationImpl(
+      confirmationId: json['confirmationId'] as String,
+      message: json['message'] as String,
+      action: json['action'] as String,
+      confirmationData: json['confirmationData'] as Map<String, dynamic>?,
+      isExpired: json['isExpired'] as bool? ?? false,
+    );
 
 Map<String, dynamic> _$$PendingConfirmationImplToJson(
-  _$PendingConfirmationImpl instance,
-) => <String, dynamic>{
-  'confirmationId': instance.confirmationId,
-  'message': instance.message,
-  'action': instance.action,
-  'confirmationData': instance.confirmationData,
-  'isExpired': instance.isExpired,
-};
+        _$PendingConfirmationImpl instance) =>
+    <String, dynamic>{
+      'confirmationId': instance.confirmationId,
+      'message': instance.message,
+      'action': instance.action,
+      'confirmationData': instance.confirmationData,
+      'isExpired': instance.isExpired,
+    };
 
 _$ChatStateImpl _$$ChatStateImplFromJson(Map<String, dynamic> json) =>
     _$ChatStateImpl(
-      messages:
-          (json['messages'] as List<dynamic>?)
+      messages: (json['messages'] as List<dynamic>?)
               ?.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],

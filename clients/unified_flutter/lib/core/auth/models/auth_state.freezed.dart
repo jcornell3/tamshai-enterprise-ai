@@ -12,8 +12,7 @@ part of 'auth_state.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
-);
+    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
 
 /// @nodoc
 mixin _$AuthState {
@@ -23,14 +22,16 @@ mixin _$AuthState {
     required TResult Function() authenticating,
     required TResult Function(AuthUser user) authenticated,
     required TResult Function(String message) error,
-  }) => throw _privateConstructorUsedError;
+  }) =>
+      throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? unauthenticated,
     TResult? Function()? authenticating,
     TResult? Function(AuthUser user)? authenticated,
     TResult? Function(String message)? error,
-  }) => throw _privateConstructorUsedError;
+  }) =>
+      throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? unauthenticated,
@@ -38,21 +39,24 @@ mixin _$AuthState {
     TResult Function(AuthUser user)? authenticated,
     TResult Function(String message)? error,
     required TResult orElse(),
-  }) => throw _privateConstructorUsedError;
+  }) =>
+      throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
     required TResult Function(Unauthenticated value) unauthenticated,
     required TResult Function(Authenticating value) authenticating,
     required TResult Function(Authenticated value) authenticated,
     required TResult Function(AuthError value) error,
-  }) => throw _privateConstructorUsedError;
+  }) =>
+      throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(Unauthenticated value)? unauthenticated,
     TResult? Function(Authenticating value)? authenticating,
     TResult? Function(Authenticated value)? authenticated,
     TResult? Function(AuthError value)? error,
-  }) => throw _privateConstructorUsedError;
+  }) =>
+      throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeMap<TResult extends Object?>({
     TResult Function(Unauthenticated value)? unauthenticated,
@@ -60,7 +64,8 @@ mixin _$AuthState {
     TResult Function(Authenticated value)? authenticated,
     TResult Function(AuthError value)? error,
     required TResult orElse(),
-  }) => throw _privateConstructorUsedError;
+  }) =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
@@ -85,10 +90,9 @@ class _$AuthStateCopyWithImpl<$Res, $Val extends AuthState>
 
 /// @nodoc
 abstract class _$$UnauthenticatedImplCopyWith<$Res> {
-  factory _$$UnauthenticatedImplCopyWith(
-    _$UnauthenticatedImpl value,
-    $Res Function(_$UnauthenticatedImpl) then,
-  ) = __$$UnauthenticatedImplCopyWithImpl<$Res>;
+  factory _$$UnauthenticatedImplCopyWith(_$UnauthenticatedImpl value,
+          $Res Function(_$UnauthenticatedImpl) then) =
+      __$$UnauthenticatedImplCopyWithImpl<$Res>;
 }
 
 /// @nodoc
@@ -96,9 +100,8 @@ class __$$UnauthenticatedImplCopyWithImpl<$Res>
     extends _$AuthStateCopyWithImpl<$Res, _$UnauthenticatedImpl>
     implements _$$UnauthenticatedImplCopyWith<$Res> {
   __$$UnauthenticatedImplCopyWithImpl(
-    _$UnauthenticatedImpl _value,
-    $Res Function(_$UnauthenticatedImpl) _then,
-  ) : super(_value, _then);
+      _$UnauthenticatedImpl _value, $Res Function(_$UnauthenticatedImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
@@ -204,10 +207,9 @@ abstract class Unauthenticated implements AuthState {
 
 /// @nodoc
 abstract class _$$AuthenticatingImplCopyWith<$Res> {
-  factory _$$AuthenticatingImplCopyWith(
-    _$AuthenticatingImpl value,
-    $Res Function(_$AuthenticatingImpl) then,
-  ) = __$$AuthenticatingImplCopyWithImpl<$Res>;
+  factory _$$AuthenticatingImplCopyWith(_$AuthenticatingImpl value,
+          $Res Function(_$AuthenticatingImpl) then) =
+      __$$AuthenticatingImplCopyWithImpl<$Res>;
 }
 
 /// @nodoc
@@ -215,9 +217,8 @@ class __$$AuthenticatingImplCopyWithImpl<$Res>
     extends _$AuthStateCopyWithImpl<$Res, _$AuthenticatingImpl>
     implements _$$AuthenticatingImplCopyWith<$Res> {
   __$$AuthenticatingImplCopyWithImpl(
-    _$AuthenticatingImpl _value,
-    $Res Function(_$AuthenticatingImpl) _then,
-  ) : super(_value, _then);
+      _$AuthenticatingImpl _value, $Res Function(_$AuthenticatingImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
@@ -324,9 +325,8 @@ abstract class Authenticating implements AuthState {
 /// @nodoc
 abstract class _$$AuthenticatedImplCopyWith<$Res> {
   factory _$$AuthenticatedImplCopyWith(
-    _$AuthenticatedImpl value,
-    $Res Function(_$AuthenticatedImpl) then,
-  ) = __$$AuthenticatedImplCopyWithImpl<$Res>;
+          _$AuthenticatedImpl value, $Res Function(_$AuthenticatedImpl) then) =
+      __$$AuthenticatedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({AuthUser user});
 
@@ -338,23 +338,22 @@ class __$$AuthenticatedImplCopyWithImpl<$Res>
     extends _$AuthStateCopyWithImpl<$Res, _$AuthenticatedImpl>
     implements _$$AuthenticatedImplCopyWith<$Res> {
   __$$AuthenticatedImplCopyWithImpl(
-    _$AuthenticatedImpl _value,
-    $Res Function(_$AuthenticatedImpl) _then,
-  ) : super(_value, _then);
+      _$AuthenticatedImpl _value, $Res Function(_$AuthenticatedImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? user = null}) {
-    return _then(
-      _$AuthenticatedImpl(
-        null == user
-            ? _value.user
-            : user // ignore: cast_nullable_to_non_nullable
-                  as AuthUser,
-      ),
-    );
+  $Res call({
+    Object? user = null,
+  }) {
+    return _then(_$AuthenticatedImpl(
+      null == user
+          ? _value.user
+          : user // ignore: cast_nullable_to_non_nullable
+              as AuthUser,
+    ));
   }
 
   /// Create a copy of AuthState
@@ -490,9 +489,8 @@ abstract class Authenticated implements AuthState {
 /// @nodoc
 abstract class _$$AuthErrorImplCopyWith<$Res> {
   factory _$$AuthErrorImplCopyWith(
-    _$AuthErrorImpl value,
-    $Res Function(_$AuthErrorImpl) then,
-  ) = __$$AuthErrorImplCopyWithImpl<$Res>;
+          _$AuthErrorImpl value, $Res Function(_$AuthErrorImpl) then) =
+      __$$AuthErrorImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String message});
 }
@@ -502,23 +500,22 @@ class __$$AuthErrorImplCopyWithImpl<$Res>
     extends _$AuthStateCopyWithImpl<$Res, _$AuthErrorImpl>
     implements _$$AuthErrorImplCopyWith<$Res> {
   __$$AuthErrorImplCopyWithImpl(
-    _$AuthErrorImpl _value,
-    $Res Function(_$AuthErrorImpl) _then,
-  ) : super(_value, _then);
+      _$AuthErrorImpl _value, $Res Function(_$AuthErrorImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of AuthState
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? message = null}) {
-    return _then(
-      _$AuthErrorImpl(
-        null == message
-            ? _value.message
-            : message // ignore: cast_nullable_to_non_nullable
-                  as String,
-      ),
-    );
+  $Res call({
+    Object? message = null,
+  }) {
+    return _then(_$AuthErrorImpl(
+      null == message
+          ? _value.message
+          : message // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
   }
 }
 
@@ -671,16 +668,15 @@ abstract class $AuthUserCopyWith<$Res> {
   factory $AuthUserCopyWith(AuthUser value, $Res Function(AuthUser) then) =
       _$AuthUserCopyWithImpl<$Res, AuthUser>;
   @useResult
-  $Res call({
-    String id,
-    String username,
-    String? email,
-    String? firstName,
-    String? lastName,
-    String? fullName,
-    List<String>? roles,
-    Map<String, dynamic>? attributes,
-  });
+  $Res call(
+      {String id,
+      String username,
+      String? email,
+      String? firstName,
+      String? lastName,
+      String? fullName,
+      List<String>? roles,
+      Map<String, dynamic>? attributes});
 }
 
 /// @nodoc
@@ -707,43 +703,40 @@ class _$AuthUserCopyWithImpl<$Res, $Val extends AuthUser>
     Object? roles = freezed,
     Object? attributes = freezed,
   }) {
-    return _then(
-      _value.copyWith(
-            id: null == id
-                ? _value.id
-                : id // ignore: cast_nullable_to_non_nullable
-                      as String,
-            username: null == username
-                ? _value.username
-                : username // ignore: cast_nullable_to_non_nullable
-                      as String,
-            email: freezed == email
-                ? _value.email
-                : email // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            firstName: freezed == firstName
-                ? _value.firstName
-                : firstName // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            lastName: freezed == lastName
-                ? _value.lastName
-                : lastName // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            fullName: freezed == fullName
-                ? _value.fullName
-                : fullName // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            roles: freezed == roles
-                ? _value.roles
-                : roles // ignore: cast_nullable_to_non_nullable
-                      as List<String>?,
-            attributes: freezed == attributes
-                ? _value.attributes
-                : attributes // ignore: cast_nullable_to_non_nullable
-                      as Map<String, dynamic>?,
-          )
-          as $Val,
-    );
+    return _then(_value.copyWith(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      username: null == username
+          ? _value.username
+          : username // ignore: cast_nullable_to_non_nullable
+              as String,
+      email: freezed == email
+          ? _value.email
+          : email // ignore: cast_nullable_to_non_nullable
+              as String?,
+      firstName: freezed == firstName
+          ? _value.firstName
+          : firstName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      lastName: freezed == lastName
+          ? _value.lastName
+          : lastName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fullName: freezed == fullName
+          ? _value.fullName
+          : fullName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      roles: freezed == roles
+          ? _value.roles
+          : roles // ignore: cast_nullable_to_non_nullable
+              as List<String>?,
+      attributes: freezed == attributes
+          ? _value.attributes
+          : attributes // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>?,
+    ) as $Val);
   }
 }
 
@@ -751,21 +744,19 @@ class _$AuthUserCopyWithImpl<$Res, $Val extends AuthUser>
 abstract class _$$AuthUserImplCopyWith<$Res>
     implements $AuthUserCopyWith<$Res> {
   factory _$$AuthUserImplCopyWith(
-    _$AuthUserImpl value,
-    $Res Function(_$AuthUserImpl) then,
-  ) = __$$AuthUserImplCopyWithImpl<$Res>;
+          _$AuthUserImpl value, $Res Function(_$AuthUserImpl) then) =
+      __$$AuthUserImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({
-    String id,
-    String username,
-    String? email,
-    String? firstName,
-    String? lastName,
-    String? fullName,
-    List<String>? roles,
-    Map<String, dynamic>? attributes,
-  });
+  $Res call(
+      {String id,
+      String username,
+      String? email,
+      String? firstName,
+      String? lastName,
+      String? fullName,
+      List<String>? roles,
+      Map<String, dynamic>? attributes});
 }
 
 /// @nodoc
@@ -773,9 +764,8 @@ class __$$AuthUserImplCopyWithImpl<$Res>
     extends _$AuthUserCopyWithImpl<$Res, _$AuthUserImpl>
     implements _$$AuthUserImplCopyWith<$Res> {
   __$$AuthUserImplCopyWithImpl(
-    _$AuthUserImpl _value,
-    $Res Function(_$AuthUserImpl) _then,
-  ) : super(_value, _then);
+      _$AuthUserImpl _value, $Res Function(_$AuthUserImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of AuthUser
   /// with the given fields replaced by the non-null parameter values.
@@ -791,59 +781,57 @@ class __$$AuthUserImplCopyWithImpl<$Res>
     Object? roles = freezed,
     Object? attributes = freezed,
   }) {
-    return _then(
-      _$AuthUserImpl(
-        id: null == id
-            ? _value.id
-            : id // ignore: cast_nullable_to_non_nullable
-                  as String,
-        username: null == username
-            ? _value.username
-            : username // ignore: cast_nullable_to_non_nullable
-                  as String,
-        email: freezed == email
-            ? _value.email
-            : email // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        firstName: freezed == firstName
-            ? _value.firstName
-            : firstName // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        lastName: freezed == lastName
-            ? _value.lastName
-            : lastName // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        fullName: freezed == fullName
-            ? _value.fullName
-            : fullName // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        roles: freezed == roles
-            ? _value._roles
-            : roles // ignore: cast_nullable_to_non_nullable
-                  as List<String>?,
-        attributes: freezed == attributes
-            ? _value._attributes
-            : attributes // ignore: cast_nullable_to_non_nullable
-                  as Map<String, dynamic>?,
-      ),
-    );
+    return _then(_$AuthUserImpl(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      username: null == username
+          ? _value.username
+          : username // ignore: cast_nullable_to_non_nullable
+              as String,
+      email: freezed == email
+          ? _value.email
+          : email // ignore: cast_nullable_to_non_nullable
+              as String?,
+      firstName: freezed == firstName
+          ? _value.firstName
+          : firstName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      lastName: freezed == lastName
+          ? _value.lastName
+          : lastName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      fullName: freezed == fullName
+          ? _value.fullName
+          : fullName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      roles: freezed == roles
+          ? _value._roles
+          : roles // ignore: cast_nullable_to_non_nullable
+              as List<String>?,
+      attributes: freezed == attributes
+          ? _value._attributes
+          : attributes // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>?,
+    ));
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$AuthUserImpl implements _AuthUser {
-  const _$AuthUserImpl({
-    required this.id,
-    required this.username,
-    this.email,
-    this.firstName,
-    this.lastName,
-    this.fullName,
-    final List<String>? roles,
-    final Map<String, dynamic>? attributes,
-  }) : _roles = roles,
-       _attributes = attributes;
+  const _$AuthUserImpl(
+      {required this.id,
+      required this.username,
+      this.email,
+      this.firstName,
+      this.lastName,
+      this.fullName,
+      final List<String>? roles,
+      final Map<String, dynamic>? attributes})
+      : _roles = roles,
+        _attributes = attributes;
 
   factory _$AuthUserImpl.fromJson(Map<String, dynamic> json) =>
       _$$AuthUserImplFromJson(json);
@@ -901,25 +889,22 @@ class _$AuthUserImpl implements _AuthUser {
             (identical(other.fullName, fullName) ||
                 other.fullName == fullName) &&
             const DeepCollectionEquality().equals(other._roles, _roles) &&
-            const DeepCollectionEquality().equals(
-              other._attributes,
-              _attributes,
-            ));
+            const DeepCollectionEquality()
+                .equals(other._attributes, _attributes));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-    runtimeType,
-    id,
-    username,
-    email,
-    firstName,
-    lastName,
-    fullName,
-    const DeepCollectionEquality().hash(_roles),
-    const DeepCollectionEquality().hash(_attributes),
-  );
+      runtimeType,
+      id,
+      username,
+      email,
+      firstName,
+      lastName,
+      fullName,
+      const DeepCollectionEquality().hash(_roles),
+      const DeepCollectionEquality().hash(_attributes));
 
   /// Create a copy of AuthUser
   /// with the given fields replaced by the non-null parameter values.
@@ -931,21 +916,22 @@ class _$AuthUserImpl implements _AuthUser {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$AuthUserImplToJson(this);
+    return _$$AuthUserImplToJson(
+      this,
+    );
   }
 }
 
 abstract class _AuthUser implements AuthUser {
-  const factory _AuthUser({
-    required final String id,
-    required final String username,
-    final String? email,
-    final String? firstName,
-    final String? lastName,
-    final String? fullName,
-    final List<String>? roles,
-    final Map<String, dynamic>? attributes,
-  }) = _$AuthUserImpl;
+  const factory _AuthUser(
+      {required final String id,
+      required final String username,
+      final String? email,
+      final String? firstName,
+      final String? lastName,
+      final String? fullName,
+      final List<String>? roles,
+      final Map<String, dynamic>? attributes}) = _$AuthUserImpl;
 
   factory _AuthUser.fromJson(Map<String, dynamic> json) =
       _$AuthUserImpl.fromJson;
@@ -1001,17 +987,15 @@ mixin _$StoredTokens {
 /// @nodoc
 abstract class $StoredTokensCopyWith<$Res> {
   factory $StoredTokensCopyWith(
-    StoredTokens value,
-    $Res Function(StoredTokens) then,
-  ) = _$StoredTokensCopyWithImpl<$Res, StoredTokens>;
+          StoredTokens value, $Res Function(StoredTokens) then) =
+      _$StoredTokensCopyWithImpl<$Res, StoredTokens>;
   @useResult
-  $Res call({
-    String accessToken,
-    String idToken,
-    String? refreshToken,
-    DateTime accessTokenExpirationDateTime,
-    Map<String, dynamic>? idTokenClaims,
-  });
+  $Res call(
+      {String accessToken,
+      String idToken,
+      String? refreshToken,
+      DateTime accessTokenExpirationDateTime,
+      Map<String, dynamic>? idTokenClaims});
 }
 
 /// @nodoc
@@ -1035,31 +1019,28 @@ class _$StoredTokensCopyWithImpl<$Res, $Val extends StoredTokens>
     Object? accessTokenExpirationDateTime = null,
     Object? idTokenClaims = freezed,
   }) {
-    return _then(
-      _value.copyWith(
-            accessToken: null == accessToken
-                ? _value.accessToken
-                : accessToken // ignore: cast_nullable_to_non_nullable
-                      as String,
-            idToken: null == idToken
-                ? _value.idToken
-                : idToken // ignore: cast_nullable_to_non_nullable
-                      as String,
-            refreshToken: freezed == refreshToken
-                ? _value.refreshToken
-                : refreshToken // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            accessTokenExpirationDateTime: null == accessTokenExpirationDateTime
-                ? _value.accessTokenExpirationDateTime
-                : accessTokenExpirationDateTime // ignore: cast_nullable_to_non_nullable
-                      as DateTime,
-            idTokenClaims: freezed == idTokenClaims
-                ? _value.idTokenClaims
-                : idTokenClaims // ignore: cast_nullable_to_non_nullable
-                      as Map<String, dynamic>?,
-          )
-          as $Val,
-    );
+    return _then(_value.copyWith(
+      accessToken: null == accessToken
+          ? _value.accessToken
+          : accessToken // ignore: cast_nullable_to_non_nullable
+              as String,
+      idToken: null == idToken
+          ? _value.idToken
+          : idToken // ignore: cast_nullable_to_non_nullable
+              as String,
+      refreshToken: freezed == refreshToken
+          ? _value.refreshToken
+          : refreshToken // ignore: cast_nullable_to_non_nullable
+              as String?,
+      accessTokenExpirationDateTime: null == accessTokenExpirationDateTime
+          ? _value.accessTokenExpirationDateTime
+          : accessTokenExpirationDateTime // ignore: cast_nullable_to_non_nullable
+              as DateTime,
+      idTokenClaims: freezed == idTokenClaims
+          ? _value.idTokenClaims
+          : idTokenClaims // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>?,
+    ) as $Val);
   }
 }
 
@@ -1067,18 +1048,16 @@ class _$StoredTokensCopyWithImpl<$Res, $Val extends StoredTokens>
 abstract class _$$StoredTokensImplCopyWith<$Res>
     implements $StoredTokensCopyWith<$Res> {
   factory _$$StoredTokensImplCopyWith(
-    _$StoredTokensImpl value,
-    $Res Function(_$StoredTokensImpl) then,
-  ) = __$$StoredTokensImplCopyWithImpl<$Res>;
+          _$StoredTokensImpl value, $Res Function(_$StoredTokensImpl) then) =
+      __$$StoredTokensImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({
-    String accessToken,
-    String idToken,
-    String? refreshToken,
-    DateTime accessTokenExpirationDateTime,
-    Map<String, dynamic>? idTokenClaims,
-  });
+  $Res call(
+      {String accessToken,
+      String idToken,
+      String? refreshToken,
+      DateTime accessTokenExpirationDateTime,
+      Map<String, dynamic>? idTokenClaims});
 }
 
 /// @nodoc
@@ -1086,9 +1065,8 @@ class __$$StoredTokensImplCopyWithImpl<$Res>
     extends _$StoredTokensCopyWithImpl<$Res, _$StoredTokensImpl>
     implements _$$StoredTokensImplCopyWith<$Res> {
   __$$StoredTokensImplCopyWithImpl(
-    _$StoredTokensImpl _value,
-    $Res Function(_$StoredTokensImpl) _then,
-  ) : super(_value, _then);
+      _$StoredTokensImpl _value, $Res Function(_$StoredTokensImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of StoredTokens
   /// with the given fields replaced by the non-null parameter values.
@@ -1101,43 +1079,41 @@ class __$$StoredTokensImplCopyWithImpl<$Res>
     Object? accessTokenExpirationDateTime = null,
     Object? idTokenClaims = freezed,
   }) {
-    return _then(
-      _$StoredTokensImpl(
-        accessToken: null == accessToken
-            ? _value.accessToken
-            : accessToken // ignore: cast_nullable_to_non_nullable
-                  as String,
-        idToken: null == idToken
-            ? _value.idToken
-            : idToken // ignore: cast_nullable_to_non_nullable
-                  as String,
-        refreshToken: freezed == refreshToken
-            ? _value.refreshToken
-            : refreshToken // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        accessTokenExpirationDateTime: null == accessTokenExpirationDateTime
-            ? _value.accessTokenExpirationDateTime
-            : accessTokenExpirationDateTime // ignore: cast_nullable_to_non_nullable
-                  as DateTime,
-        idTokenClaims: freezed == idTokenClaims
-            ? _value._idTokenClaims
-            : idTokenClaims // ignore: cast_nullable_to_non_nullable
-                  as Map<String, dynamic>?,
-      ),
-    );
+    return _then(_$StoredTokensImpl(
+      accessToken: null == accessToken
+          ? _value.accessToken
+          : accessToken // ignore: cast_nullable_to_non_nullable
+              as String,
+      idToken: null == idToken
+          ? _value.idToken
+          : idToken // ignore: cast_nullable_to_non_nullable
+              as String,
+      refreshToken: freezed == refreshToken
+          ? _value.refreshToken
+          : refreshToken // ignore: cast_nullable_to_non_nullable
+              as String?,
+      accessTokenExpirationDateTime: null == accessTokenExpirationDateTime
+          ? _value.accessTokenExpirationDateTime
+          : accessTokenExpirationDateTime // ignore: cast_nullable_to_non_nullable
+              as DateTime,
+      idTokenClaims: freezed == idTokenClaims
+          ? _value._idTokenClaims
+          : idTokenClaims // ignore: cast_nullable_to_non_nullable
+              as Map<String, dynamic>?,
+    ));
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$StoredTokensImpl implements _StoredTokens {
-  const _$StoredTokensImpl({
-    required this.accessToken,
-    required this.idToken,
-    this.refreshToken,
-    required this.accessTokenExpirationDateTime,
-    final Map<String, dynamic>? idTokenClaims,
-  }) : _idTokenClaims = idTokenClaims;
+  const _$StoredTokensImpl(
+      {required this.accessToken,
+      required this.idToken,
+      this.refreshToken,
+      required this.accessTokenExpirationDateTime,
+      final Map<String, dynamic>? idTokenClaims})
+      : _idTokenClaims = idTokenClaims;
 
   factory _$StoredTokensImpl.fromJson(Map<String, dynamic> json) =>
       _$$StoredTokensImplFromJson(json);
@@ -1175,28 +1151,23 @@ class _$StoredTokensImpl implements _StoredTokens {
             (identical(other.idToken, idToken) || other.idToken == idToken) &&
             (identical(other.refreshToken, refreshToken) ||
                 other.refreshToken == refreshToken) &&
-            (identical(
-                  other.accessTokenExpirationDateTime,
-                  accessTokenExpirationDateTime,
-                ) ||
+            (identical(other.accessTokenExpirationDateTime,
+                    accessTokenExpirationDateTime) ||
                 other.accessTokenExpirationDateTime ==
                     accessTokenExpirationDateTime) &&
-            const DeepCollectionEquality().equals(
-              other._idTokenClaims,
-              _idTokenClaims,
-            ));
+            const DeepCollectionEquality()
+                .equals(other._idTokenClaims, _idTokenClaims));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-    runtimeType,
-    accessToken,
-    idToken,
-    refreshToken,
-    accessTokenExpirationDateTime,
-    const DeepCollectionEquality().hash(_idTokenClaims),
-  );
+      runtimeType,
+      accessToken,
+      idToken,
+      refreshToken,
+      accessTokenExpirationDateTime,
+      const DeepCollectionEquality().hash(_idTokenClaims));
 
   /// Create a copy of StoredTokens
   /// with the given fields replaced by the non-null parameter values.
@@ -1208,18 +1179,19 @@ class _$StoredTokensImpl implements _StoredTokens {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$StoredTokensImplToJson(this);
+    return _$$StoredTokensImplToJson(
+      this,
+    );
   }
 }
 
 abstract class _StoredTokens implements StoredTokens {
-  const factory _StoredTokens({
-    required final String accessToken,
-    required final String idToken,
-    final String? refreshToken,
-    required final DateTime accessTokenExpirationDateTime,
-    final Map<String, dynamic>? idTokenClaims,
-  }) = _$StoredTokensImpl;
+  const factory _StoredTokens(
+      {required final String accessToken,
+      required final String idToken,
+      final String? refreshToken,
+      required final DateTime accessTokenExpirationDateTime,
+      final Map<String, dynamic>? idTokenClaims}) = _$StoredTokensImpl;
 
   factory _StoredTokens.fromJson(Map<String, dynamic> json) =
       _$StoredTokensImpl.fromJson;

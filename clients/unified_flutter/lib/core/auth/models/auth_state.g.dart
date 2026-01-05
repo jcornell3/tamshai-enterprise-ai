@@ -14,9 +14,8 @@ _$AuthUserImpl _$$AuthUserImplFromJson(Map<String, dynamic> json) =>
       firstName: json['firstName'] as String?,
       lastName: json['lastName'] as String?,
       fullName: json['fullName'] as String?,
-      roles: (json['roles'] as List<dynamic>?)
-          ?.map((e) => e as String)
-          .toList(),
+      roles:
+          (json['roles'] as List<dynamic>?)?.map((e) => e as String).toList(),
       attributes: json['attributes'] as Map<String, dynamic>?,
     );
 
@@ -37,9 +36,8 @@ _$StoredTokensImpl _$$StoredTokensImplFromJson(Map<String, dynamic> json) =>
       accessToken: json['accessToken'] as String,
       idToken: json['idToken'] as String,
       refreshToken: json['refreshToken'] as String?,
-      accessTokenExpirationDateTime: DateTime.parse(
-        json['accessTokenExpirationDateTime'] as String,
-      ),
+      accessTokenExpirationDateTime:
+          DateTime.parse(json['accessTokenExpirationDateTime'] as String),
       idTokenClaims: json['idTokenClaims'] as Map<String, dynamic>?,
     );
 
@@ -48,7 +46,7 @@ Map<String, dynamic> _$$StoredTokensImplToJson(_$StoredTokensImpl instance) =>
       'accessToken': instance.accessToken,
       'idToken': instance.idToken,
       'refreshToken': instance.refreshToken,
-      'accessTokenExpirationDateTime': instance.accessTokenExpirationDateTime
-          .toIso8601String(),
+      'accessTokenExpirationDateTime':
+          instance.accessTokenExpirationDateTime.toIso8601String(),
       'idTokenClaims': instance.idTokenClaims,
     };

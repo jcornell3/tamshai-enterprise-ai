@@ -12,8 +12,7 @@ part of 'keycloak_config.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
-);
+    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
 
 KeycloakConfig _$KeycloakConfigFromJson(Map<String, dynamic> json) {
   return _KeycloakConfig.fromJson(json);
@@ -41,18 +40,16 @@ mixin _$KeycloakConfig {
 /// @nodoc
 abstract class $KeycloakConfigCopyWith<$Res> {
   factory $KeycloakConfigCopyWith(
-    KeycloakConfig value,
-    $Res Function(KeycloakConfig) then,
-  ) = _$KeycloakConfigCopyWithImpl<$Res, KeycloakConfig>;
+          KeycloakConfig value, $Res Function(KeycloakConfig) then) =
+      _$KeycloakConfigCopyWithImpl<$Res, KeycloakConfig>;
   @useResult
-  $Res call({
-    String issuer,
-    String clientId,
-    String redirectUrl,
-    List<String> scopes,
-    String? discoveryUrl,
-    String? endSessionRedirectUrl,
-  });
+  $Res call(
+      {String issuer,
+      String clientId,
+      String redirectUrl,
+      List<String> scopes,
+      String? discoveryUrl,
+      String? endSessionRedirectUrl});
 }
 
 /// @nodoc
@@ -77,55 +74,50 @@ class _$KeycloakConfigCopyWithImpl<$Res, $Val extends KeycloakConfig>
     Object? discoveryUrl = freezed,
     Object? endSessionRedirectUrl = freezed,
   }) {
-    return _then(
-      _value.copyWith(
-            issuer: null == issuer
-                ? _value.issuer
-                : issuer // ignore: cast_nullable_to_non_nullable
-                      as String,
-            clientId: null == clientId
-                ? _value.clientId
-                : clientId // ignore: cast_nullable_to_non_nullable
-                      as String,
-            redirectUrl: null == redirectUrl
-                ? _value.redirectUrl
-                : redirectUrl // ignore: cast_nullable_to_non_nullable
-                      as String,
-            scopes: null == scopes
-                ? _value.scopes
-                : scopes // ignore: cast_nullable_to_non_nullable
-                      as List<String>,
-            discoveryUrl: freezed == discoveryUrl
-                ? _value.discoveryUrl
-                : discoveryUrl // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            endSessionRedirectUrl: freezed == endSessionRedirectUrl
-                ? _value.endSessionRedirectUrl
-                : endSessionRedirectUrl // ignore: cast_nullable_to_non_nullable
-                      as String?,
-          )
-          as $Val,
-    );
+    return _then(_value.copyWith(
+      issuer: null == issuer
+          ? _value.issuer
+          : issuer // ignore: cast_nullable_to_non_nullable
+              as String,
+      clientId: null == clientId
+          ? _value.clientId
+          : clientId // ignore: cast_nullable_to_non_nullable
+              as String,
+      redirectUrl: null == redirectUrl
+          ? _value.redirectUrl
+          : redirectUrl // ignore: cast_nullable_to_non_nullable
+              as String,
+      scopes: null == scopes
+          ? _value.scopes
+          : scopes // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      discoveryUrl: freezed == discoveryUrl
+          ? _value.discoveryUrl
+          : discoveryUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      endSessionRedirectUrl: freezed == endSessionRedirectUrl
+          ? _value.endSessionRedirectUrl
+          : endSessionRedirectUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+    ) as $Val);
   }
 }
 
 /// @nodoc
 abstract class _$$KeycloakConfigImplCopyWith<$Res>
     implements $KeycloakConfigCopyWith<$Res> {
-  factory _$$KeycloakConfigImplCopyWith(
-    _$KeycloakConfigImpl value,
-    $Res Function(_$KeycloakConfigImpl) then,
-  ) = __$$KeycloakConfigImplCopyWithImpl<$Res>;
+  factory _$$KeycloakConfigImplCopyWith(_$KeycloakConfigImpl value,
+          $Res Function(_$KeycloakConfigImpl) then) =
+      __$$KeycloakConfigImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({
-    String issuer,
-    String clientId,
-    String redirectUrl,
-    List<String> scopes,
-    String? discoveryUrl,
-    String? endSessionRedirectUrl,
-  });
+  $Res call(
+      {String issuer,
+      String clientId,
+      String redirectUrl,
+      List<String> scopes,
+      String? discoveryUrl,
+      String? endSessionRedirectUrl});
 }
 
 /// @nodoc
@@ -133,9 +125,8 @@ class __$$KeycloakConfigImplCopyWithImpl<$Res>
     extends _$KeycloakConfigCopyWithImpl<$Res, _$KeycloakConfigImpl>
     implements _$$KeycloakConfigImplCopyWith<$Res> {
   __$$KeycloakConfigImplCopyWithImpl(
-    _$KeycloakConfigImpl _value,
-    $Res Function(_$KeycloakConfigImpl) _then,
-  ) : super(_value, _then);
+      _$KeycloakConfigImpl _value, $Res Function(_$KeycloakConfigImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of KeycloakConfig
   /// with the given fields replaced by the non-null parameter values.
@@ -149,53 +140,51 @@ class __$$KeycloakConfigImplCopyWithImpl<$Res>
     Object? discoveryUrl = freezed,
     Object? endSessionRedirectUrl = freezed,
   }) {
-    return _then(
-      _$KeycloakConfigImpl(
-        issuer: null == issuer
-            ? _value.issuer
-            : issuer // ignore: cast_nullable_to_non_nullable
-                  as String,
-        clientId: null == clientId
-            ? _value.clientId
-            : clientId // ignore: cast_nullable_to_non_nullable
-                  as String,
-        redirectUrl: null == redirectUrl
-            ? _value.redirectUrl
-            : redirectUrl // ignore: cast_nullable_to_non_nullable
-                  as String,
-        scopes: null == scopes
-            ? _value._scopes
-            : scopes // ignore: cast_nullable_to_non_nullable
-                  as List<String>,
-        discoveryUrl: freezed == discoveryUrl
-            ? _value.discoveryUrl
-            : discoveryUrl // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        endSessionRedirectUrl: freezed == endSessionRedirectUrl
-            ? _value.endSessionRedirectUrl
-            : endSessionRedirectUrl // ignore: cast_nullable_to_non_nullable
-                  as String?,
-      ),
-    );
+    return _then(_$KeycloakConfigImpl(
+      issuer: null == issuer
+          ? _value.issuer
+          : issuer // ignore: cast_nullable_to_non_nullable
+              as String,
+      clientId: null == clientId
+          ? _value.clientId
+          : clientId // ignore: cast_nullable_to_non_nullable
+              as String,
+      redirectUrl: null == redirectUrl
+          ? _value.redirectUrl
+          : redirectUrl // ignore: cast_nullable_to_non_nullable
+              as String,
+      scopes: null == scopes
+          ? _value._scopes
+          : scopes // ignore: cast_nullable_to_non_nullable
+              as List<String>,
+      discoveryUrl: freezed == discoveryUrl
+          ? _value.discoveryUrl
+          : discoveryUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+      endSessionRedirectUrl: freezed == endSessionRedirectUrl
+          ? _value.endSessionRedirectUrl
+          : endSessionRedirectUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+    ));
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$KeycloakConfigImpl implements _KeycloakConfig {
-  const _$KeycloakConfigImpl({
-    required this.issuer,
-    required this.clientId,
-    required this.redirectUrl,
-    final List<String> scopes = const [
-      'openid',
-      'profile',
-      'email',
-      'offline_access',
-    ],
-    this.discoveryUrl,
-    this.endSessionRedirectUrl,
-  }) : _scopes = scopes;
+  const _$KeycloakConfigImpl(
+      {required this.issuer,
+      required this.clientId,
+      required this.redirectUrl,
+      final List<String> scopes = const [
+        'openid',
+        'profile',
+        'email',
+        'offline_access'
+      ],
+      this.discoveryUrl,
+      this.endSessionRedirectUrl})
+      : _scopes = scopes;
 
   factory _$KeycloakConfigImpl.fromJson(Map<String, dynamic> json) =>
       _$$KeycloakConfigImplFromJson(json);
@@ -245,14 +234,13 @@ class _$KeycloakConfigImpl implements _KeycloakConfig {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-    runtimeType,
-    issuer,
-    clientId,
-    redirectUrl,
-    const DeepCollectionEquality().hash(_scopes),
-    discoveryUrl,
-    endSessionRedirectUrl,
-  );
+      runtimeType,
+      issuer,
+      clientId,
+      redirectUrl,
+      const DeepCollectionEquality().hash(_scopes),
+      discoveryUrl,
+      endSessionRedirectUrl);
 
   /// Create a copy of KeycloakConfig
   /// with the given fields replaced by the non-null parameter values.
@@ -261,25 +249,24 @@ class _$KeycloakConfigImpl implements _KeycloakConfig {
   @pragma('vm:prefer-inline')
   _$$KeycloakConfigImplCopyWith<_$KeycloakConfigImpl> get copyWith =>
       __$$KeycloakConfigImplCopyWithImpl<_$KeycloakConfigImpl>(
-        this,
-        _$identity,
-      );
+          this, _$identity);
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$KeycloakConfigImplToJson(this);
+    return _$$KeycloakConfigImplToJson(
+      this,
+    );
   }
 }
 
 abstract class _KeycloakConfig implements KeycloakConfig {
-  const factory _KeycloakConfig({
-    required final String issuer,
-    required final String clientId,
-    required final String redirectUrl,
-    final List<String> scopes,
-    final String? discoveryUrl,
-    final String? endSessionRedirectUrl,
-  }) = _$KeycloakConfigImpl;
+  const factory _KeycloakConfig(
+      {required final String issuer,
+      required final String clientId,
+      required final String redirectUrl,
+      final List<String> scopes,
+      final String? discoveryUrl,
+      final String? endSessionRedirectUrl}) = _$KeycloakConfigImpl;
 
   factory _KeycloakConfig.fromJson(Map<String, dynamic> json) =
       _$KeycloakConfigImpl.fromJson;

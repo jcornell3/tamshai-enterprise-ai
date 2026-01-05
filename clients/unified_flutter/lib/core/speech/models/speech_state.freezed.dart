@@ -12,8 +12,7 @@ part of 'speech_state.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
-);
+    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
 
 /// @nodoc
 mixin _$SpeechState {
@@ -51,20 +50,18 @@ mixin _$SpeechState {
 /// @nodoc
 abstract class $SpeechStateCopyWith<$Res> {
   factory $SpeechStateCopyWith(
-    SpeechState value,
-    $Res Function(SpeechState) then,
-  ) = _$SpeechStateCopyWithImpl<$Res, SpeechState>;
+          SpeechState value, $Res Function(SpeechState) then) =
+      _$SpeechStateCopyWithImpl<$Res, SpeechState>;
   @useResult
-  $Res call({
-    bool isAvailable,
-    bool isListening,
-    bool isProcessing,
-    String transcribedText,
-    double soundLevel,
-    String? errorMessage,
-    String? errorCode,
-    String locale,
-  });
+  $Res call(
+      {bool isAvailable,
+      bool isListening,
+      bool isProcessing,
+      String transcribedText,
+      double soundLevel,
+      String? errorMessage,
+      String? errorCode,
+      String locale});
 }
 
 /// @nodoc
@@ -91,43 +88,40 @@ class _$SpeechStateCopyWithImpl<$Res, $Val extends SpeechState>
     Object? errorCode = freezed,
     Object? locale = null,
   }) {
-    return _then(
-      _value.copyWith(
-            isAvailable: null == isAvailable
-                ? _value.isAvailable
-                : isAvailable // ignore: cast_nullable_to_non_nullable
-                      as bool,
-            isListening: null == isListening
-                ? _value.isListening
-                : isListening // ignore: cast_nullable_to_non_nullable
-                      as bool,
-            isProcessing: null == isProcessing
-                ? _value.isProcessing
-                : isProcessing // ignore: cast_nullable_to_non_nullable
-                      as bool,
-            transcribedText: null == transcribedText
-                ? _value.transcribedText
-                : transcribedText // ignore: cast_nullable_to_non_nullable
-                      as String,
-            soundLevel: null == soundLevel
-                ? _value.soundLevel
-                : soundLevel // ignore: cast_nullable_to_non_nullable
-                      as double,
-            errorMessage: freezed == errorMessage
-                ? _value.errorMessage
-                : errorMessage // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            errorCode: freezed == errorCode
-                ? _value.errorCode
-                : errorCode // ignore: cast_nullable_to_non_nullable
-                      as String?,
-            locale: null == locale
-                ? _value.locale
-                : locale // ignore: cast_nullable_to_non_nullable
-                      as String,
-          )
-          as $Val,
-    );
+    return _then(_value.copyWith(
+      isAvailable: null == isAvailable
+          ? _value.isAvailable
+          : isAvailable // ignore: cast_nullable_to_non_nullable
+              as bool,
+      isListening: null == isListening
+          ? _value.isListening
+          : isListening // ignore: cast_nullable_to_non_nullable
+              as bool,
+      isProcessing: null == isProcessing
+          ? _value.isProcessing
+          : isProcessing // ignore: cast_nullable_to_non_nullable
+              as bool,
+      transcribedText: null == transcribedText
+          ? _value.transcribedText
+          : transcribedText // ignore: cast_nullable_to_non_nullable
+              as String,
+      soundLevel: null == soundLevel
+          ? _value.soundLevel
+          : soundLevel // ignore: cast_nullable_to_non_nullable
+              as double,
+      errorMessage: freezed == errorMessage
+          ? _value.errorMessage
+          : errorMessage // ignore: cast_nullable_to_non_nullable
+              as String?,
+      errorCode: freezed == errorCode
+          ? _value.errorCode
+          : errorCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      locale: null == locale
+          ? _value.locale
+          : locale // ignore: cast_nullable_to_non_nullable
+              as String,
+    ) as $Val);
   }
 }
 
@@ -135,21 +129,19 @@ class _$SpeechStateCopyWithImpl<$Res, $Val extends SpeechState>
 abstract class _$$SpeechStateImplCopyWith<$Res>
     implements $SpeechStateCopyWith<$Res> {
   factory _$$SpeechStateImplCopyWith(
-    _$SpeechStateImpl value,
-    $Res Function(_$SpeechStateImpl) then,
-  ) = __$$SpeechStateImplCopyWithImpl<$Res>;
+          _$SpeechStateImpl value, $Res Function(_$SpeechStateImpl) then) =
+      __$$SpeechStateImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({
-    bool isAvailable,
-    bool isListening,
-    bool isProcessing,
-    String transcribedText,
-    double soundLevel,
-    String? errorMessage,
-    String? errorCode,
-    String locale,
-  });
+  $Res call(
+      {bool isAvailable,
+      bool isListening,
+      bool isProcessing,
+      String transcribedText,
+      double soundLevel,
+      String? errorMessage,
+      String? errorCode,
+      String locale});
 }
 
 /// @nodoc
@@ -157,9 +149,8 @@ class __$$SpeechStateImplCopyWithImpl<$Res>
     extends _$SpeechStateCopyWithImpl<$Res, _$SpeechStateImpl>
     implements _$$SpeechStateImplCopyWith<$Res> {
   __$$SpeechStateImplCopyWithImpl(
-    _$SpeechStateImpl _value,
-    $Res Function(_$SpeechStateImpl) _then,
-  ) : super(_value, _then);
+      _$SpeechStateImpl _value, $Res Function(_$SpeechStateImpl) _then)
+      : super(_value, _then);
 
   /// Create a copy of SpeechState
   /// with the given fields replaced by the non-null parameter values.
@@ -175,58 +166,56 @@ class __$$SpeechStateImplCopyWithImpl<$Res>
     Object? errorCode = freezed,
     Object? locale = null,
   }) {
-    return _then(
-      _$SpeechStateImpl(
-        isAvailable: null == isAvailable
-            ? _value.isAvailable
-            : isAvailable // ignore: cast_nullable_to_non_nullable
-                  as bool,
-        isListening: null == isListening
-            ? _value.isListening
-            : isListening // ignore: cast_nullable_to_non_nullable
-                  as bool,
-        isProcessing: null == isProcessing
-            ? _value.isProcessing
-            : isProcessing // ignore: cast_nullable_to_non_nullable
-                  as bool,
-        transcribedText: null == transcribedText
-            ? _value.transcribedText
-            : transcribedText // ignore: cast_nullable_to_non_nullable
-                  as String,
-        soundLevel: null == soundLevel
-            ? _value.soundLevel
-            : soundLevel // ignore: cast_nullable_to_non_nullable
-                  as double,
-        errorMessage: freezed == errorMessage
-            ? _value.errorMessage
-            : errorMessage // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        errorCode: freezed == errorCode
-            ? _value.errorCode
-            : errorCode // ignore: cast_nullable_to_non_nullable
-                  as String?,
-        locale: null == locale
-            ? _value.locale
-            : locale // ignore: cast_nullable_to_non_nullable
-                  as String,
-      ),
-    );
+    return _then(_$SpeechStateImpl(
+      isAvailable: null == isAvailable
+          ? _value.isAvailable
+          : isAvailable // ignore: cast_nullable_to_non_nullable
+              as bool,
+      isListening: null == isListening
+          ? _value.isListening
+          : isListening // ignore: cast_nullable_to_non_nullable
+              as bool,
+      isProcessing: null == isProcessing
+          ? _value.isProcessing
+          : isProcessing // ignore: cast_nullable_to_non_nullable
+              as bool,
+      transcribedText: null == transcribedText
+          ? _value.transcribedText
+          : transcribedText // ignore: cast_nullable_to_non_nullable
+              as String,
+      soundLevel: null == soundLevel
+          ? _value.soundLevel
+          : soundLevel // ignore: cast_nullable_to_non_nullable
+              as double,
+      errorMessage: freezed == errorMessage
+          ? _value.errorMessage
+          : errorMessage // ignore: cast_nullable_to_non_nullable
+              as String?,
+      errorCode: freezed == errorCode
+          ? _value.errorCode
+          : errorCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      locale: null == locale
+          ? _value.locale
+          : locale // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
   }
 }
 
 /// @nodoc
 
 class _$SpeechStateImpl extends _SpeechState {
-  const _$SpeechStateImpl({
-    this.isAvailable = false,
-    this.isListening = false,
-    this.isProcessing = false,
-    this.transcribedText = '',
-    this.soundLevel = 0.0,
-    this.errorMessage,
-    this.errorCode,
-    this.locale = 'en_US',
-  }) : super._();
+  const _$SpeechStateImpl(
+      {this.isAvailable = false,
+      this.isListening = false,
+      this.isProcessing = false,
+      this.transcribedText = '',
+      this.soundLevel = 0.0,
+      this.errorMessage,
+      this.errorCode,
+      this.locale = 'en_US'})
+      : super._();
 
   /// Whether speech recognition is available on this device
   @override
@@ -295,16 +284,15 @@ class _$SpeechStateImpl extends _SpeechState {
 
   @override
   int get hashCode => Object.hash(
-    runtimeType,
-    isAvailable,
-    isListening,
-    isProcessing,
-    transcribedText,
-    soundLevel,
-    errorMessage,
-    errorCode,
-    locale,
-  );
+      runtimeType,
+      isAvailable,
+      isListening,
+      isProcessing,
+      transcribedText,
+      soundLevel,
+      errorMessage,
+      errorCode,
+      locale);
 
   /// Create a copy of SpeechState
   /// with the given fields replaced by the non-null parameter values.
@@ -316,16 +304,15 @@ class _$SpeechStateImpl extends _SpeechState {
 }
 
 abstract class _SpeechState extends SpeechState {
-  const factory _SpeechState({
-    final bool isAvailable,
-    final bool isListening,
-    final bool isProcessing,
-    final String transcribedText,
-    final double soundLevel,
-    final String? errorMessage,
-    final String? errorCode,
-    final String locale,
-  }) = _$SpeechStateImpl;
+  const factory _SpeechState(
+      {final bool isAvailable,
+      final bool isListening,
+      final bool isProcessing,
+      final String transcribedText,
+      final double soundLevel,
+      final String? errorMessage,
+      final String? errorCode,
+      final String locale}) = _$SpeechStateImpl;
   const _SpeechState._() : super._();
 
   /// Whether speech recognition is available on this device
