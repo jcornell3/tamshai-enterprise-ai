@@ -636,6 +636,9 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-secret}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Password for all provisioned users (stage/prod only)
+      STAGE_TESTING_PASSWORD: ${STAGE_TESTING_PASSWORD:-}
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
     depends_on:
       postgres:
         condition: service_healthy
