@@ -153,7 +153,7 @@ resource "random_password" "postgres_password" {
 
 resource "random_password" "keycloak_admin_password" {
   length  = 24
-  special = false  # Avoid shell/docker-compose expansion issues with $, (, ), etc.
+  special = false # Avoid shell/docker-compose expansion issues with $, (, ), etc.
 }
 
 resource "random_password" "keycloak_db_password" {
@@ -329,7 +329,7 @@ locals {
     environment                  = var.environment
     github_repo                  = var.github_repo_url
     github_branch                = var.github_branch
-    claude_api_key               = replace(var.claude_api_key_stage, "$", "$$")  # User-provided, may have special chars
+    claude_api_key               = replace(var.claude_api_key_stage, "$", "$$") # User-provided, may have special chars
     postgres_password            = random_password.postgres_password.result
     keycloak_admin_pass          = random_password.keycloak_admin_password.result
     keycloak_db_password         = random_password.keycloak_db_password.result

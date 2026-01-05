@@ -23,6 +23,7 @@ import {
   KcUserRepresentation,
   KcRoleRepresentation,
   KcClientRepresentation,
+  transformEmailForDatabaseLookup,
 } from './services/identity';
 import { getEmployee, GetEmployeeInputSchema } from './tools/get-employee';
 import { listEmployees, ListEmployeesInputSchema } from './tools/list-employees';
@@ -188,45 +189,62 @@ app.post('/query', async (req: Request, res: Response) => {
     } else if (isMyTeamQuery && !isPaginationRequest) {
       // Query for the current user's direct reports
       // First, find the user's employee ID by their email
-      logger.info('Looking up user employee ID for team query', { email: userContext.email });
 
-      try {
-        // Use queryWithRLS to respect RLS policies while looking up user
-        const userLookupResult = await queryWithRLS(
-          userContext,
-          'SELECT id FROM hr.employees WHERE work_email = $1 OR email = $1',
-          [userContext.email]
-        );
-
-        if (userLookupResult.rows.length === 0) {
-          // User not found in employee database
-          result = {
-            status: 'error',
-            code: 'USER_NOT_FOUND',
-            message: `Could not find your employee record (${userContext.email})`,
-            suggestedAction: 'Ensure your Keycloak email matches your employee record in the HR database',
-          };
-        } else {
-          const managerId = userLookupResult.rows[0].id;
-          logger.info('Found user employee ID, querying direct reports', { managerId });
-
-          // Query for employees who report to this manager
-          result = await listEmployees({ managerId, limit: 50 }, userContext);
-
-          // Add context to the response for clarity
-          if (result.status === 'success') {
-            const directReports = result.data as any[];
-            logger.info('Found direct reports', { count: directReports.length });
-          }
-        }
-      } catch (dbError) {
-        logger.error('Database error looking up user', dbError);
+      // Check if email is available for lookup
+      if (!userContext.email) {
         result = {
           status: 'error',
-          code: 'DATABASE_ERROR',
-          message: 'Failed to look up your employee record',
-          suggestedAction: 'Please try again or contact support',
+          code: 'MISSING_EMAIL',
+          message: 'Your email is required to look up your team members',
+          suggestedAction: 'Ensure your authentication token includes your email address',
         };
+      } else {
+        // Transform email from Keycloak format (@tamshai.local in dev) to DB format (@tamshai.com)
+        const dbEmail = transformEmailForDatabaseLookup(userContext.email);
+        logger.info('Looking up user employee ID for team query', {
+          email: userContext.email,
+          dbEmail,
+        });
+
+        try {
+          // Use queryWithRLS to respect RLS policies while looking up user
+          // Search by both original and transformed email for robustness
+          const userLookupResult = await queryWithRLS(
+            userContext,
+            'SELECT id FROM hr.employees WHERE work_email = $1 OR email = $1 OR work_email = $2 OR email = $2',
+            [userContext.email, dbEmail]
+          );
+
+          if (userLookupResult.rows.length === 0) {
+            // User not found in employee database
+            result = {
+              status: 'error',
+              code: 'USER_NOT_FOUND',
+              message: `Could not find your employee record (${userContext.email})`,
+              suggestedAction: 'Ensure your Keycloak email matches your employee record in the HR database',
+            };
+          } else {
+            const managerId = userLookupResult.rows[0].id;
+            logger.info('Found user employee ID, querying direct reports', { managerId });
+
+            // Query for employees who report to this manager
+            result = await listEmployees({ managerId, limit: 50 }, userContext);
+
+            // Add context to the response for clarity
+            if (result.status === 'success') {
+              const directReports = result.data as any[];
+              logger.info('Found direct reports', { count: directReports.length });
+            }
+          }
+        } catch (dbError) {
+          logger.error('Database error looking up user', dbError);
+          result = {
+            status: 'error',
+            code: 'DATABASE_ERROR',
+            message: 'Failed to look up your employee record',
+            suggestedAction: 'Please try again or contact support',
+          };
+        }
       }
     } else if (isListQuery || isPaginationRequest) {
       // List employees with optional filters and pagination

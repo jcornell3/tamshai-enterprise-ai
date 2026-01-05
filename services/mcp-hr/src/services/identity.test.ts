@@ -14,6 +14,8 @@ import {
   DEPARTMENT_ROLE_MAP,
   KeycloakConfig,
   generateSecurePassword,
+  transformEmailForDatabaseLookup,
+  EMAIL_DOMAIN_CONFIG,
 } from './identity';
 import { Pool, PoolClient, QueryResult } from 'pg';
 
@@ -509,5 +511,77 @@ describe('generateSecurePassword', () => {
       // No special chars that could cause shell/docker-compose issues
       expect(password).not.toMatch(/[$`'"\\!@#%^&*(){}\[\]|;:<>?,./~]/);
     }
+  });
+});
+
+describe('transformEmailForDatabaseLookup', () => {
+  const originalEnv = process.env.ENVIRONMENT;
+
+  afterEach(() => {
+    process.env.ENVIRONMENT = originalEnv;
+  });
+
+  describe('in dev environment', () => {
+    beforeEach(() => {
+      process.env.ENVIRONMENT = 'dev';
+    });
+
+    it('transforms @tamshai.local to @tamshai.com', () => {
+      const result = transformEmailForDatabaseLookup('alice@tamshai.local');
+      expect(result).toBe('alice@tamshai.com');
+    });
+
+    it('transforms email with subdomain correctly', () => {
+      const result = transformEmailForDatabaseLookup('bob.smith@tamshai.local');
+      expect(result).toBe('bob.smith@tamshai.com');
+    });
+
+    it('leaves non-tamshai.local emails unchanged', () => {
+      const result = transformEmailForDatabaseLookup('user@example.com');
+      expect(result).toBe('user@example.com');
+    });
+
+    it('leaves @tamshai.com emails unchanged (already in DB format)', () => {
+      const result = transformEmailForDatabaseLookup('alice@tamshai.com');
+      expect(result).toBe('alice@tamshai.com');
+    });
+  });
+
+  describe('in stage environment', () => {
+    beforeEach(() => {
+      process.env.ENVIRONMENT = 'stage';
+    });
+
+    it('leaves emails unchanged', () => {
+      const result = transformEmailForDatabaseLookup('alice@tamshai.local');
+      expect(result).toBe('alice@tamshai.local');
+    });
+
+    it('leaves @tamshai.com emails unchanged', () => {
+      const result = transformEmailForDatabaseLookup('alice@tamshai.com');
+      expect(result).toBe('alice@tamshai.com');
+    });
+  });
+
+  describe('in prod environment', () => {
+    beforeEach(() => {
+      process.env.ENVIRONMENT = 'prod';
+    });
+
+    it('leaves emails unchanged', () => {
+      const result = transformEmailForDatabaseLookup('alice@tamshai.com');
+      expect(result).toBe('alice@tamshai.com');
+    });
+  });
+
+  describe('when ENVIRONMENT is unset (defaults to dev)', () => {
+    beforeEach(() => {
+      delete process.env.ENVIRONMENT;
+    });
+
+    it('transforms @tamshai.local to @tamshai.com', () => {
+      const result = transformEmailForDatabaseLookup('eve@tamshai.local');
+      expect(result).toBe('eve@tamshai.com');
+    });
   });
 });

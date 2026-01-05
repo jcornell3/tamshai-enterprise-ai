@@ -141,6 +141,36 @@ export function transformEmailForEnvironment(email: string): string {
 }
 
 /**
+ * Transform email domain from Keycloak format to HR database format for lookups.
+ *
+ * This is the reverse of transformEmailForEnvironment(). When Keycloak users
+ * have @tamshai.local emails (dev environment), we need to transform them
+ * to @tamshai.com to look up records in the HR database.
+ *
+ * @param email - Email from Keycloak/user context (e.g., alice@tamshai.local in dev)
+ * @returns Email for HR database lookup (e.g., alice@tamshai.com)
+ */
+export function transformEmailForDatabaseLookup(email: string): string {
+  const environment = process.env.ENVIRONMENT || 'dev';
+
+  // In stage/prod, emails are already @tamshai.com
+  if (environment === 'stage' || environment === 'prod') {
+    return email;
+  }
+
+  // In dev, transform @tamshai.local back to @tamshai.com for DB lookup
+  if (email.endsWith(`@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`)) {
+    return email.replace(
+      `@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`,
+      `@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`
+    );
+  }
+
+  // Email doesn't match dev domain - return as-is
+  return email;
+}
+
+/**
  * Keycloak client configuration
  */
 export const KeycloakConfig = {
