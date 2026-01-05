@@ -11,6 +11,40 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
+import { randomBytes } from 'crypto';
+
+/**
+ * Generate a cryptographically secure random password.
+ * Uses only alphanumeric characters to avoid shell/docker-compose issues.
+ *
+ * @param length Password length (default 20)
+ * @returns Random alphanumeric password
+ */
+export function generateSecurePassword(length = 20): string {
+  // Alphanumeric characters only (no special chars to avoid shell issues)
+  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // Excluding I, O (confusable)
+  const lowercase = 'abcdefghjkmnpqrstuvwxyz';   // Excluding i, l, o (confusable)
+  const numbers = '23456789';                     // Excluding 0, 1 (confusable)
+  const charset = uppercase + lowercase + numbers;
+
+  // Generate cryptographically secure random bytes
+  const bytes = randomBytes(length);
+  let password = '';
+
+  for (let i = 0; i < length; i++) {
+    password += charset[bytes[i] % charset.length];
+  }
+
+  // Ensure at least one of each character type for password policy compliance
+  // Replace first 3 chars to guarantee mix (still random)
+  const guaranteedChars = [
+    uppercase[randomBytes(1)[0] % uppercase.length],
+    lowercase[randomBytes(1)[0] % lowercase.length],
+    numbers[randomBytes(1)[0] % numbers.length],
+  ];
+
+  return guaranteedChars.join('') + password.slice(3);
+}
 
 // ============================================================================
 // Constants
@@ -127,6 +161,7 @@ export interface KcUserRepresentation {
   enabled?: boolean;
   emailVerified?: boolean;
   attributes?: Record<string, string[]>;
+  requiredActions?: string[];
 }
 
 /**
@@ -307,7 +342,7 @@ export class IdentityService {
       // This allows users to log in with familiar usernames across environments
       const username = `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}`;
 
-      // Step 1: Create user in Keycloak
+      // Step 1: Create user in Keycloak with required first-login actions
       const createResult = await this.kcAdmin.users.create({
         username: username,
         email: employeeData.email,
@@ -319,13 +354,17 @@ export class IdentityService {
           employeeId: [employeeData.id],
           department: [employeeData.department],
         },
+        // Required actions for first login:
+        // - UPDATE_PASSWORD: Change the temporary password
+        // - CONFIGURE_TOTP: Set up authenticator app for MFA
+        requiredActions: ['UPDATE_PASSWORD', 'CONFIGURE_TOTP'],
       });
 
       keycloakUserId = createResult.id;
 
       // Step 2: Set temporary password (must be changed on first login)
-      // Uses environment variable or default for stage/dev environments
-      const tempPassword = process.env.IDENTITY_SYNC_TEMP_PASSWORD || 'TamshaiTemp123!';
+      // Generate cryptographically secure random password per user
+      const tempPassword = generateSecurePassword(20);
       await this.kcAdmin.users.resetPassword({
         id: keycloakUserId,
         credential: {
@@ -334,6 +373,8 @@ export class IdentityService {
           temporary: true, // User must change on first login
         },
       });
+      // Note: Password is not logged or stored. User receives password via
+      // secure channel (email/IT onboarding) configured separately.
 
       // Step 3: Assign department role (if applicable)
       await this.assignDepartmentRole(keycloakUserId, employeeData.department);

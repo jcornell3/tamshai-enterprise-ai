@@ -90,6 +90,7 @@ describe('IdentityService', () => {
             employeeId: ['emp-123'],
             department: ['HR'],
           },
+          requiredActions: ['UPDATE_PASSWORD', 'CONFIGURE_TOTP'],
         })
       );
     });

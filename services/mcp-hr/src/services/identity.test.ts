@@ -13,6 +13,7 @@ import {
   BulkSyncResult,
   DEPARTMENT_ROLE_MAP,
   KeycloakConfig,
+  generateSecurePassword,
 } from './identity';
 import { Pool, PoolClient, QueryResult } from 'pg';
 
@@ -237,6 +238,7 @@ describe('IdentityService', () => {
           employeeId: ['emp-123'],
           department: ['HR'],
         },
+        requiredActions: ['UPDATE_PASSWORD', 'CONFIGURE_TOTP'],
       });
       expect(result).toBe('kc-user-123');
     });
@@ -446,5 +448,64 @@ describe('IdentityService', () => {
     it('returns undefined for unknown departments', () => {
       expect(DEPARTMENT_ROLE_MAP['Unknown']).toBeUndefined();
     });
+  });
+});
+
+describe('generateSecurePassword', () => {
+  it('generates password of default length (20)', () => {
+    const password = generateSecurePassword();
+    expect(password).toHaveLength(20);
+  });
+
+  it('generates password of specified length', () => {
+    const password = generateSecurePassword(32);
+    expect(password).toHaveLength(32);
+  });
+
+  it('contains only allowed alphanumeric characters', () => {
+    const password = generateSecurePassword(100);
+    // Allowed chars: ABCDEFGHJKLMNPQRSTUVWXYZ + abcdefghjkmnpqrstuvwxyz + 23456789
+    const allowedChars = /^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789]+$/;
+    expect(password).toMatch(allowedChars);
+  });
+
+  it('excludes confusable characters (0, 1, I, O, i, l, o)', () => {
+    // Generate many passwords to ensure confusable chars never appear
+    for (let i = 0; i < 50; i++) {
+      const password = generateSecurePassword(50);
+      expect(password).not.toMatch(/[01IOilo]/);
+    }
+  });
+
+  it('contains at least one uppercase letter', () => {
+    const password = generateSecurePassword();
+    expect(password).toMatch(/[A-Z]/);
+  });
+
+  it('contains at least one lowercase letter', () => {
+    const password = generateSecurePassword();
+    expect(password).toMatch(/[a-z]/);
+  });
+
+  it('contains at least one number', () => {
+    const password = generateSecurePassword();
+    expect(password).toMatch(/[0-9]/);
+  });
+
+  it('generates different passwords each call', () => {
+    const passwords = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      passwords.add(generateSecurePassword());
+    }
+    // All 100 passwords should be unique
+    expect(passwords.size).toBe(100);
+  });
+
+  it('does not contain shell-problematic characters', () => {
+    for (let i = 0; i < 50; i++) {
+      const password = generateSecurePassword(50);
+      // No special chars that could cause shell/docker-compose issues
+      expect(password).not.toMatch(/[$`'"\\!@#%^&*(){}\[\]|;:<>?,./~]/);
+    }
   });
 });
