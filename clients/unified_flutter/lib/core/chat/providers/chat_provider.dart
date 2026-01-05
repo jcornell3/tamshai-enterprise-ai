@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// ignore: depend_on_referenced_packages
-import 'package:flutter_riverpod/legacy.dart'; // For StateNotifier/StateNotifierProvider (Riverpod 3.0+)
 import 'package:logger/logger.dart';
 import 'package:uuid/uuid.dart';
 import '../../api/token_interceptor.dart';

@@ -1,8 +1,6 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// ignore: depend_on_referenced_packages
-import 'package:flutter_riverpod/legacy.dart'; // For StateNotifier/StateNotifierProvider (Riverpod 3.0+)
 import 'package:logger/logger.dart';
 import '../models/auth_state.dart';
 import '../models/keycloak_config.dart';

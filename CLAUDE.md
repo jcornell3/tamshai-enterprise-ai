@@ -800,6 +800,45 @@ gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
 gh workflow run deploy-vps.yml --ref main
 ```
 
+**VPS Teardown and Redeploy (Full Reprovision)**:
+
+Use this process to completely destroy and recreate the VPS. This is useful when:
+- Cloud-init changes need to be applied
+- The VPS is in an unrecoverable state
+- A fresh environment is needed
+
+```bash
+# Step 1: Navigate to VPS terraform directory
+cd infrastructure/terraform/vps
+
+# Step 2: Destroy the existing VPS (DESTRUCTIVE - removes all data)
+terraform destroy -auto-approve
+# This destroys: VPS, firewall, SSH keys, passwords
+# Takes ~30 seconds
+
+# Step 3: Reprovision a new VPS
+terraform apply -auto-approve
+# This creates: new VPS, firewall, SSH keys, generates new passwords
+# Takes ~30-60 seconds
+# NOTE: Terraform automatically updates the GitHub VPS_SSH_KEY secret
+
+# Step 4: Wait for cloud-init to complete on the VPS (~5-10 minutes)
+# Cloud-init installs Docker, clones repo, and starts initial services
+
+# Step 5: Trigger the deployment workflow
+gh workflow run deploy-vps.yml --ref main
+
+# Step 6: Monitor deployment progress
+gh run list --workflow=deploy-vps.yml --limit 5
+gh run watch  # Watch the latest run
+```
+
+**Important Notes**:
+- The VPS IP may change after reprovisioning (check terraform output)
+- Terraform automatically updates `VPS_SSH_KEY` GitHub secret during apply
+- The deploy-vps workflow handles Keycloak sync and identity provisioning
+- Cloud-init logs: `ssh root@<VPS_IP> 'cat /var/log/cloud-init-output.log'`
+
 **Access**:
 - API Gateway: `https://5.78.159.29/api` (via Cloudflare)
 - Keycloak: `https://5.78.159.29/auth`
@@ -1128,6 +1167,6 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 
 ---
 
-*Last Updated: January 3, 2026*
+*Last Updated: January 5, 2026*
 *Architecture Version: 1.4 (Flutter Desktop Complete, VPS Staging Deployed, Sample Apps GREEN Phase)*
 *Document Version: 2.2 (Sample Apps & RLS Implementation)*

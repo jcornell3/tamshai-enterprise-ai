@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// ignore: depend_on_referenced_packages
-import 'package:flutter_riverpod/legacy.dart'; // For StateNotifier (Riverpod 3.0+)
 import 'package:logger/logger.dart';
 import 'package:unified_flutter/features/chat/widgets/chat_input.dart';
 import 'package:unified_flutter/core/speech/providers/speech_provider.dart';
