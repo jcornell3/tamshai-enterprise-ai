@@ -19,6 +19,137 @@ This document summarizes the issues encountered with data not being available on
 
 ---
 
+## SSH Access to VPS
+
+### SSH Key Location
+
+Terraform generates an SSH key pair during VPS provisioning. The keys are stored locally and in GitHub Secrets:
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `deploy_key` | Private key for SSH access | `infrastructure/terraform/vps/.keys/deploy_key` |
+| `deploy_key.pub` | Public key (installed on VPS) | `infrastructure/terraform/vps/.keys/deploy_key.pub` |
+| `VPS_SSH_KEY` | GitHub Secret (for CI/CD) | GitHub Repository Settings → Secrets |
+
+**Note**: The `.keys/` directory is in `.gitignore` and should NEVER be committed.
+
+### Connecting to VPS from Local Machine
+
+```bash
+# Navigate to terraform directory (where keys are stored)
+cd infrastructure/terraform/vps
+
+# Connect using the deploy key
+ssh -i .keys/deploy_key root@5.78.159.29
+
+# Or with explicit options (useful if you have multiple keys)
+ssh -i .keys/deploy_key -o IdentitiesOnly=yes root@5.78.159.29
+```
+
+### One-Line Commands (Without Interactive Session)
+
+```bash
+# Check container status
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'docker ps'
+
+# View MCP Gateway logs
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'docker logs mcp-gateway --tail 50'
+
+# Restart a service
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'docker restart mcp-gateway'
+
+# Check disk space
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'df -h'
+```
+
+### Setting Up SSH Config (Recommended)
+
+Add to `~/.ssh/config` for easier access:
+
+```
+# Windows: C:\Users\<username>\.ssh\config
+# Linux/macOS: ~/.ssh/config
+
+Host tamshai-vps
+    HostName 5.78.159.29
+    User root
+    IdentityFile ~/path/to/tamshai-enterprise-ai/infrastructure/terraform/vps/.keys/deploy_key
+    IdentitiesOnly yes
+```
+
+Then connect with just:
+```bash
+ssh tamshai-vps
+```
+
+### Retrieving VPS IP Address
+
+If the VPS IP changes (after terraform destroy/apply):
+
+```bash
+# From terraform directory
+cd infrastructure/terraform/vps
+terraform output vps_ip
+```
+
+### GitHub Actions SSH Access
+
+CI/CD workflows use the `VPS_SSH_KEY` GitHub Secret. After running `terraform apply`, the key is automatically updated in GitHub Secrets.
+
+**Manual update** (if needed):
+```bash
+# Update GitHub secret with current deploy key
+gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
+```
+
+### Regenerating SSH Keys
+
+If keys are compromised or lost:
+
+```bash
+cd infrastructure/terraform/vps
+
+# Force recreate the SSH key resource
+terraform apply -replace='tls_private_key.deploy'
+
+# This will:
+# 1. Generate new key pair
+# 2. Update VPS authorized_keys
+# 3. Update GitHub VPS_SSH_KEY secret (automatically)
+```
+
+### Troubleshooting SSH Connection
+
+**Permission denied (publickey)**:
+```bash
+# Check key file permissions (Linux/macOS)
+chmod 600 infrastructure/terraform/vps/.keys/deploy_key
+
+# Verify key matches VPS
+ssh -i .keys/deploy_key -v root@5.78.159.29 2>&1 | grep "Offering public key"
+```
+
+**Key not found**:
+```bash
+# Regenerate keys from Terraform state
+cd infrastructure/terraform/vps
+terraform output -raw deploy_private_key > .keys/deploy_key
+terraform output -raw deploy_public_key > .keys/deploy_key.pub
+chmod 600 .keys/deploy_key
+```
+
+**Connection timeout**:
+```bash
+# Check if VPS is running
+cd infrastructure/terraform/vps
+terraform show | grep "status"
+
+# Check firewall allows SSH (port 22)
+# Hetzner firewall should allow SSH from any IP
+```
+
+---
+
 ## Issues Identified and Fixed
 
 ### 1. MCP Gateway Rate Limiting in Docker Proxy Environment
@@ -162,13 +293,17 @@ const stages = ['DISCOVERY', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'CLOSED
 
 ## Diagnostic Commands
 
+**Prerequisite**: All commands assume you're either:
+1. Connected to VPS via SSH: `ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29`
+2. Or using one-liner format: `ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'command'`
+
 ### Check Service Health
 
 ```bash
-# SSH into VPS
-ssh root@5.78.159.29
+# SSH into VPS (interactive session)
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29
 
-# Check all container status
+# Once connected, check all container status
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 # Check MCP Gateway health
@@ -179,6 +314,21 @@ curl -s http://localhost:8001/status | jq
 
 # Check Keycloak health
 curl -s http://localhost:8080/health/ready
+```
+
+**One-liner versions** (run from local machine):
+```bash
+# Set shorthand for SSH command
+VPS_SSH="ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29"
+
+# Check container status
+$VPS_SSH 'docker ps --format "table {{.Names}}\t{{.Status}}"'
+
+# Check MCP Gateway health
+$VPS_SSH 'curl -s http://localhost:3100/health'
+
+# Check all services health at once
+$VPS_SSH 'docker ps --format "{{.Names}}: {{.Status}}" | sort'
 ```
 
 ### Check MCP Gateway Logs
