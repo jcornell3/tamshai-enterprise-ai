@@ -1,6 +1,6 @@
 # VPS Data Availability Issues - Troubleshooting Guide
 
-**Document Version**: 1.1
+**Document Version**: 1.2
 **Created**: January 5, 2026
 **Last Updated**: January 6, 2026
 
@@ -14,14 +14,19 @@ This document summarizes the issues encountered with data not being available on
 |-----------|--------|------------|------------|
 | **HR** | ✅ Working | N/A | N/A |
 | **Support** | ✅ Working | N/A | N/A |
-| **Finance** | ✅ Fixed | Field name mismatch | Fixed - `allocated_amount`→`budgeted_amount`, `spent_amount`→`actual_amount` |
+| **Finance Dashboard** | ✅ Fixed | Field name mismatch | Fixed - `allocated_amount`→`budgeted_amount` |
+| **Finance Pages** | ✅ Fixed | Wrong API paths | Fixed - Use `/api/mcp/finance/*` not `/api/finance/*` |
 | **Sales** | ✅ Fixed | Stale sample data | Fixed - Sample data timestamps updated to 2025-2026 |
 
 ### Root Causes & Fixes Applied (January 6, 2026)
 
-**Finance:** Dashboard field names didn't match API response. **FIXED** - Updated `DashboardPage.tsx`, `BudgetsPage.tsx`, and `types.ts` to use correct field names (`budgeted_amount`/`actual_amount`).
+**Finance Dashboard:** Field names didn't match API response. **FIXED** - Updated `DashboardPage.tsx`, `BudgetsPage.tsx`, and `types.ts` to use correct field names (`budgeted_amount`/`actual_amount`).
+
+**Finance Pages (Budgets/Invoices/Expense Reports):** Used wrong API paths. **FIXED** - Updated `BudgetsPage.tsx`, `InvoicesPage.tsx`, `ExpenseReportsPage.tsx` to use MCP proxy paths (`/api/mcp/finance/*` instead of `/api/finance/*`).
 
 **Sales:** Sample data timestamps were hardcoded to 2024, but dashboard defaults to "this_quarter" (Q1 2026). **FIXED** - Updated `sample-data/sales-data.js` with current dates (2025-2026).
+
+**Kong DNS:** After VPS reprovision, Kong cached DNS failures for mcp-gateway. **FIXED** - Restart Kong after all services are up.
 
 **Note:** VPS sample data must be re-seeded for fixes to take effect. Run `docker exec mongodb mongosh < /sample-data/sales-data.js` after deploying.
 
@@ -472,6 +477,76 @@ docker compose down && docker compose up -d
 # On VPS
 cd /opt/tamshai
 docker exec -i mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" < sample-data/sales-data.js
+```
+
+---
+
+### Finance App Pages Return Connection Errors - ✅ RESOLVED
+
+**Commit**: `451a311` - fix(finance): Update API paths to use MCP proxy pattern
+
+**Issue**: Budgets, Invoices, and Expense Reports tabs in Finance app returned "Error Loading..." with "Failed to fetch" errors.
+
+**Root Cause**: Finance app pages used REST-style API paths (`/api/finance/budgets`, `/api/finance/invoices`, `/api/finance/expense-reports`) that don't exist in Kong routing. Kong only routes `/api/mcp/*` paths to the MCP Gateway.
+
+**Symptoms**:
+- Finance Dashboard worked (already used `/api/mcp/finance/list_budgets`)
+- Budgets tab: "Error Loading Budgets"
+- Invoices tab: "Error Loading Invoices"
+- Expense Reports tab: "Error Loading Expense Reports"
+- AI Query: "Connection error. Please try again."
+
+**Kong 404 errors in logs**:
+```
+"GET /api/finance/ai-query?query=... HTTP/1.1" 404 52
+```
+
+**Fix Applied**:
+- `clients/web/apps/finance/src/pages/BudgetsPage.tsx`:
+  - `/api/finance/budgets` → `/api/mcp/finance/list_budgets`
+  - Added `Authorization: Bearer ${token}` header
+  - Updated all mutations to POST with JSON body
+- `clients/web/apps/finance/src/pages/InvoicesPage.tsx`:
+  - `/api/finance/invoices` → `/api/mcp/finance/list_invoices`
+  - Added auth headers to all fetch calls
+- `clients/web/apps/finance/src/pages/ExpenseReportsPage.tsx`:
+  - `/api/finance/expense-reports` → `/api/mcp/finance/list_expense_reports`
+  - Added auth headers to all fetch calls
+
+**MCP Pattern Required**:
+```typescript
+// WRONG - REST pattern (no Kong route)
+fetch('/api/finance/budgets')
+
+// CORRECT - MCP proxy pattern (routes through Kong)
+const url = apiConfig.mcpGatewayUrl
+  ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets`
+  : '/api/mcp/finance/list_budgets';
+fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+```
+
+---
+
+### Kong DNS Resolution Failure After VPS Reprovision - ✅ RESOLVED
+
+**Issue**: After VPS teardown/reprovision, Kong couldn't resolve `mcp-gateway` hostname even though all containers were healthy.
+
+**Symptoms**:
+- Kong logs: `querying dns for mcp-gateway failed: dns server error: 3 name error`
+- Kong health check: `mcp-gateway-upstream reported health status changed to UNHEALTHY`
+- All API requests returned 503 or hung
+
+**Root Cause**: Kong started before mcp-gateway container was ready during cloud-init. Docker DNS resolver caches failed lookups, and Kong's aggressive DNS caching (default 4+ days TTL) keeps returning stale failures.
+
+**Fix Applied**:
+- Restart Kong after all services are up: `docker restart tamshai-kong`
+- Or wait for Kong's DNS TTL to expire and health checks to pass
+
+**Prevention**: The `docker-compose.yml` already has Kong DNS settings to reduce TTL:
+```yaml
+KONG_DNS_STALE_TTL: 0        # Don't use stale DNS entries
+KONG_DNS_VALID_TTL: 10       # Re-resolve DNS every 10 seconds
+KONG_DNS_ERROR_TTL: 1        # Retry DNS errors after 1 second
 ```
 
 ---
