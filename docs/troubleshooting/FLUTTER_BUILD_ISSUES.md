@@ -492,6 +492,32 @@ dependency_overrides:
 
 ---
 
+### 15. Gradle Download 504 Timeout in CI
+
+**Commit**: `74478d5` - fix(flutter): Downgrade Gradle to 8.10.1 for stable Android builds
+
+**Error**:
+```
+java.io.IOException: Server returned HTTP response code: 504 for URL:
+https://github.com/gradle/gradle-distributions/releases/download/v8.14.0/gradle-8.14-all.zip
+```
+
+**Root Cause**:
+Gradle's distribution service (`services.gradle.org`) redirects to GitHub releases (`github.com/gradle/gradle-distributions`). GitHub Actions runners were experiencing repeated 504 gateway timeouts when downloading Gradle 8.14 from GitHub's release CDN.
+
+**Fix** (gradle-wrapper.properties):
+```properties
+# BEFORE - Gradle 8.14 causing timeouts
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.14-all.zip
+
+# AFTER - Stable version with reliable downloads
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.1-all.zip
+```
+
+**Status**: ✅ Fixed - Using stable Gradle 8.10.1
+
+---
+
 ## Prevention Measures
 
 1. **Pin major versions** - Use `^2.5.1` not `^2.0.0` to avoid unexpected major version jumps
