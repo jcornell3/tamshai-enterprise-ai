@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { useAuth, canModifyFinance } from '@tamshai/auth';
+import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
 import type { Budget } from '../types';
 
@@ -31,7 +31,7 @@ interface APIResponse<T> {
 export function BudgetsPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const { userContext } = useAuth();
+  const { userContext, getAccessToken } = useAuth();
   const canWrite = canModifyFinance(userContext);
 
   // Filters
@@ -61,7 +61,16 @@ export function BudgetsPage() {
   } = useQuery({
     queryKey: ['budgets'],
     queryFn: async () => {
-      const response = await fetch('/api/finance/budgets');
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets`
+        : '/api/mcp/finance/list_budgets';
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch budgets');
       }
@@ -72,9 +81,20 @@ export function BudgetsPage() {
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: async (budgetId: string) => {
-      const response = await fetch(`/api/finance/budgets/${budgetId}/approve`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/approve_budget`
+        : '/api/mcp/finance/approve_budget';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ budgetId }),
       });
       if (!response.ok) {
         throw new Error('Failed to approve budget');
@@ -98,13 +118,23 @@ export function BudgetsPage() {
     },
   });
 
-  // Reject mutation
+  // Reject mutation - Note: reject_budget MCP tool may not exist yet
   const rejectMutation = useMutation({
     mutationFn: async ({ budgetId, reason }: { budgetId: string; reason: string }) => {
-      const response = await fetch(`/api/finance/budgets/${budgetId}/reject`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/reject_budget`
+        : '/api/mcp/finance/reject_budget';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ budgetId, reason }),
       });
       if (!response.ok) {
         throw new Error('Failed to reject budget');
@@ -118,11 +148,23 @@ export function BudgetsPage() {
     },
   });
 
-  // Delete mutation
+  // Delete mutation - Note: delete_budget MCP tool may not exist yet
   const deleteMutation = useMutation({
     mutationFn: async (budgetId: string) => {
-      const response = await fetch(`/api/finance/budgets/${budgetId}`, {
-        method: 'DELETE',
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/delete_budget`
+        : '/api/mcp/finance/delete_budget';
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ budgetId }),
       });
       if (!response.ok) {
         throw new Error('Failed to delete budget');
