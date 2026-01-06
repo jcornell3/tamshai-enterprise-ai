@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { useAuth, canModifyFinance } from '@tamshai/auth';
+import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
 import type { ExpenseReport, Expense } from '../types';
 
@@ -33,7 +33,7 @@ interface APIResponse<T> {
 export function ExpenseReportsPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const { userContext } = useAuth();
+  const { userContext, getAccessToken } = useAuth();
   const canWrite = canModifyFinance(userContext);
 
   // Filters
@@ -69,7 +69,16 @@ export function ExpenseReportsPage() {
   } = useQuery({
     queryKey: ['expense-reports'],
     queryFn: async () => {
-      const response = await fetch('/api/finance/expense-reports');
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_expense_reports`
+        : '/api/mcp/finance/list_expense_reports';
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch expense reports');
       }
@@ -80,9 +89,20 @@ export function ExpenseReportsPage() {
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: async (reportId: string) => {
-      const response = await fetch(`/api/finance/expense-reports/${reportId}/approve`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/approve_expense_report`
+        : '/api/mcp/finance/approve_expense_report';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reportId }),
       });
       if (!response.ok) {
         throw new Error('Failed to approve expense report');
@@ -109,10 +129,20 @@ export function ExpenseReportsPage() {
   // Reject mutation
   const rejectMutation = useMutation({
     mutationFn: async ({ reportId, reason }: { reportId: string; reason: string }) => {
-      const response = await fetch(`/api/finance/expense-reports/${reportId}/reject`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/reject_expense_report`
+        : '/api/mcp/finance/reject_expense_report';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reportId, reason }),
       });
       if (!response.ok) {
         throw new Error('Failed to reject expense report');
@@ -129,9 +159,20 @@ export function ExpenseReportsPage() {
   // Mark as reimbursed mutation
   const reimburseMutation = useMutation({
     mutationFn: async (reportId: string) => {
-      const response = await fetch(`/api/finance/expense-reports/${reportId}/reimburse`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/reimburse_expense_report`
+        : '/api/mcp/finance/reimburse_expense_report';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reportId }),
       });
       if (!response.ok) {
         throw new Error('Failed to mark as reimbursed');
@@ -158,8 +199,20 @@ export function ExpenseReportsPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (reportId: string) => {
-      const response = await fetch(`/api/finance/expense-reports/${reportId}`, {
-        method: 'DELETE',
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/delete_expense_report`
+        : '/api/mcp/finance/delete_expense_report';
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reportId }),
       });
       if (!response.ok) {
         throw new Error('Failed to delete expense report');

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { useAuth, canModifyFinance } from '@tamshai/auth';
+import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
 import type { Invoice } from '../types';
 
@@ -32,7 +32,7 @@ interface APIResponse<T> {
 export function InvoicesPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const { userContext } = useAuth();
+  const { userContext, getAccessToken } = useAuth();
   const canWrite = canModifyFinance(userContext);
 
   // Filters
@@ -63,7 +63,16 @@ export function InvoicesPage() {
   } = useQuery({
     queryKey: ['invoices'],
     queryFn: async () => {
-      const response = await fetch('/api/finance/invoices');
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_invoices`
+        : '/api/mcp/finance/list_invoices';
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch invoices');
       }
@@ -74,9 +83,20 @@ export function InvoicesPage() {
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
-      const response = await fetch(`/api/finance/invoices/${invoiceId}/approve`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/approve_invoice`
+        : '/api/mcp/finance/approve_invoice';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ invoiceId }),
       });
       if (!response.ok) {
         throw new Error('Failed to approve invoice');
@@ -103,8 +123,20 @@ export function InvoicesPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
-      const response = await fetch(`/api/finance/invoices/${invoiceId}`, {
-        method: 'DELETE',
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/delete_invoice`
+        : '/api/mcp/finance/delete_invoice';
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ invoiceId }),
       });
       if (!response.ok) {
         throw new Error('Failed to delete invoice');
@@ -131,9 +163,20 @@ export function InvoicesPage() {
   // Mark as paid mutation
   const payMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
-      const response = await fetch(`/api/finance/invoices/${invoiceId}/pay`, {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/pay_invoice`
+        : '/api/mcp/finance/pay_invoice';
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ invoiceId }),
       });
       if (!response.ok) {
         throw new Error('Failed to mark invoice as paid');
