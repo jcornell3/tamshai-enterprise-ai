@@ -1,21 +1,29 @@
 # VPS Data Availability Issues - Troubleshooting Guide
 
-**Document Version**: 1.0
+**Document Version**: 1.1
 **Created**: January 5, 2026
-**Last Updated**: January 5, 2026
+**Last Updated**: January 6, 2026
 
 This document summarizes the issues encountered with data not being available on the VPS staging environment, the bugs fixed, and diagnostic commands for future troubleshooting.
 
 ---
 
-## Current Status (as of January 5, 2026)
+## Current Status (as of January 6, 2026)
 
-| Dashboard | Status | Notes |
-|-----------|--------|-------|
-| **HR** | ✅ Working | All data displays correctly |
-| **Support** | ✅ Working | All data displays correctly |
-| **Finance** | ⚠️ Partial | $0 for all summary fields; Recent Invoices and Recent Budget Changes ARE visible |
-| **Sales** | ⚠️ Partial | $0 for all summary fields; No pipeline stages listed (Discovery, Qualification, Proposal, Negotiation, Closed Won) |
+| Dashboard | Status | Root Cause | Fix Status |
+|-----------|--------|------------|------------|
+| **HR** | ✅ Working | N/A | N/A |
+| **Support** | ✅ Working | N/A | N/A |
+| **Finance** | ✅ Fixed | Field name mismatch | Fixed - `allocated_amount`→`budgeted_amount`, `spent_amount`→`actual_amount` |
+| **Sales** | ✅ Fixed | Stale sample data | Fixed - Sample data timestamps updated to 2025-2026 |
+
+### Root Causes & Fixes Applied (January 6, 2026)
+
+**Finance:** Dashboard field names didn't match API response. **FIXED** - Updated `DashboardPage.tsx`, `BudgetsPage.tsx`, and `types.ts` to use correct field names (`budgeted_amount`/`actual_amount`).
+
+**Sales:** Sample data timestamps were hardcoded to 2024, but dashboard defaults to "this_quarter" (Q1 2026). **FIXED** - Updated `sample-data/sales-data.js` with current dates (2025-2026).
+
+**Note:** VPS sample data must be re-seeded for fixes to take effect. Run `docker exec mongodb mongosh < /sample-data/sales-data.js` after deploying.
 
 ---
 
@@ -430,53 +438,45 @@ docker compose down && docker compose up -d
 
 ---
 
-## Outstanding Issues to Investigate
+## Resolved Issues (January 6, 2026)
 
-### Finance Dashboard Shows $0
+### Finance Dashboard Shows $0 - ✅ RESOLVED
 
-**Current Behavior**:
-- All summary fields show $0 (Total Revenue, Outstanding, etc.)
-- Recent Invoices section IS populated
-- Recent Budget Changes section IS populated
+**Issue**: All summary fields showed $0 (Total Revenue, Outstanding, etc.)
 
-**Possible Causes**:
-1. Aggregation query not matching date ranges
-2. Field mapping mismatch in dashboard summary tool
-3. Currency/amount field parsing issue
+**Root Cause**: Field name mismatch - Dashboard used `allocated_amount`/`spent_amount`, API returns `budgeted_amount`/`actual_amount`.
 
-**Next Steps**:
+**Fix Applied** (Commit pending):
+- `clients/web/apps/finance/src/pages/DashboardPage.tsx` - Updated metrics computation
+- `clients/web/apps/finance/src/pages/BudgetsPage.tsx` - Updated 6 field references
+- `clients/web/apps/finance/src/types.ts` - Updated Budget interface
+
+---
+
+### Sales Dashboard Pipeline Empty - ✅ RESOLVED
+
+**Issue**: All pipeline stage counts showed 0, no opportunities listed.
+
+**Root Cause**: Sample data timestamps hardcoded to 2024, dashboard defaults to "this_quarter" (Q1 2026) filter.
+
+**Fix Applied** (Commit pending):
+- `sample-data/sales-data.js` - Updated all timestamps to 2025-2026:
+  - Customer `updated_at` → December 2025
+  - Deal `created_at`/`updated_at` → October-December 2025
+  - Deal `expected_close_date` → January-June 2026
+  - Activity dates → September-December 2025
+  - Pipeline summary → Q1 2026
+
+**Deployment Note**: VPS MongoDB needs re-seeding after deployment:
 ```bash
-# Check get_dashboard_summary tool response
-curl -s "http://localhost:3100/api/mcp/finance/get_dashboard_summary" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# Check raw invoice data
-docker exec -it mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" --eval \
-  'use tamshai_finance; db.invoices.aggregate([{$group:{_id:null, total:{$sum:"$amount"}}}])'
+# On VPS
+cd /opt/tamshai
+docker exec -i mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" < sample-data/sales-data.js
 ```
 
-### Sales Dashboard Pipeline Empty
+---
 
-**Current Behavior**:
-- All pipeline stage counts show 0
-- Total pipeline value shows $0
-- Individual opportunity queries may return data
-
-**Possible Causes**:
-1. Dashboard using wrong aggregation field names
-2. Stage filter case sensitivity issue
-3. Date range filter excluding all data
-
-**Next Steps**:
-```bash
-# Check list_opportunities with no filter
-curl -s "http://localhost:3100/api/mcp/sales/list_opportunities" \
-  -H "Authorization: Bearer $TOKEN" | jq '.data | length'
-
-# Check stage distribution in MongoDB
-docker exec -it mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" --eval \
-  'use tamshai_sales; db.opportunities.aggregate([{$group:{_id:"$stage", count:{$sum:1}}}])'
-```
+## Diagnostic Commands (Updated)
 
 ---
 

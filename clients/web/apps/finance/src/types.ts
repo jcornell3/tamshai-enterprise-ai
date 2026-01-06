@@ -7,8 +7,8 @@ export interface Budget {
   department: string;
   fiscal_year: string;
   fiscal_quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
-  allocated_amount: number;
-  spent_amount: number;
+  budgeted_amount: number;  // Note: API returns budgeted_amount (not allocated_amount)
+  actual_amount: number;    // Note: API returns actual_amount (not spent_amount)
   remaining_amount: number;
   status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CLOSED';
   owner_id: string;

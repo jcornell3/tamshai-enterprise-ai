@@ -87,21 +87,22 @@ export function DashboardPage() {
   const error = budgetsError;
 
   // Compute dashboard metrics from budget data
+  // Note: API returns budgeted_amount/actual_amount (not allocated_amount/spent_amount)
   const metrics: DashboardMetrics | undefined = budgets.length > 0 ? {
-    total_budget: budgets.reduce((sum, b) => sum + (b.allocated_amount || 0), 0),
-    total_spent: budgets.reduce((sum, b) => sum + (b.spent_amount || 0), 0),
-    remaining_budget: budgets.reduce((sum, b) => sum + ((b.allocated_amount || 0) - (b.spent_amount || 0)), 0),
+    total_budget: budgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0),
+    total_spent: budgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0),
+    remaining_budget: budgets.reduce((sum, b) => sum + ((b.budgeted_amount || 0) - (b.actual_amount || 0)), 0),
     budget_utilization_percent: Math.round(
-      (budgets.reduce((sum, b) => sum + (b.spent_amount || 0), 0) /
-        budgets.reduce((sum, b) => sum + (b.allocated_amount || 0), 0)) * 100
+      (budgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0) /
+        budgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0)) * 100
     ) || 0,
     pending_approvals: budgets.filter(b => b.status === 'PENDING_APPROVAL').length,
     pending_invoices: invoices.filter(i => i.status === 'PENDING').length,
     pending_expense_reports: 0, // Would need separate API call
     departments: [...new Set(budgets.map(b => b.department))].map(dept => {
       const deptBudgets = budgets.filter(b => b.department === dept);
-      const allocated = deptBudgets.reduce((sum, b) => sum + (b.allocated_amount || 0), 0);
-      const spent = deptBudgets.reduce((sum, b) => sum + (b.spent_amount || 0), 0);
+      const allocated = deptBudgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0);
+      const spent = deptBudgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0);
       return {
         department: dept,
         allocated,

@@ -44,8 +44,8 @@ db.customers.insertMany([
     ],
     tags: ["enterprise", "manufacturing", "high-value"],
     status: "ACTIVE",
-    created_at: new Date("2023-03-15"),
-    updated_at: new Date("2024-10-20"),
+    created_at: new Date("2024-03-15"),
+    updated_at: new Date("2025-12-20"),
     account_owner: "carol.johnson"
   },
   {
@@ -75,8 +75,8 @@ db.customers.insertMany([
     ],
     tags: ["technology", "startup", "fast-growth"],
     status: "ACTIVE",
-    created_at: new Date("2024-01-10"),
-    updated_at: new Date("2024-11-01"),
+    created_at: new Date("2025-01-10"),
+    updated_at: new Date("2025-12-15"),
     account_owner: "ryan.garcia"
   },
   {
@@ -114,8 +114,8 @@ db.customers.insertMany([
     ],
     tags: ["enterprise", "financial", "regulated"],
     status: "ACTIVE",
-    created_at: new Date("2022-08-20"),
-    updated_at: new Date("2024-09-15"),
+    created_at: new Date("2023-08-20"),
+    updated_at: new Date("2025-12-18"),
     account_owner: "amanda.white"
   },
   {
@@ -145,8 +145,8 @@ db.customers.insertMany([
     ],
     tags: ["healthcare", "hipaa", "compliance-sensitive"],
     status: "ACTIVE",
-    created_at: new Date("2023-11-05"),
-    updated_at: new Date("2024-10-30"),
+    created_at: new Date("2024-11-05"),
+    updated_at: new Date("2025-12-22"),
     account_owner: "chris.taylor"
   },
   {
@@ -176,8 +176,8 @@ db.customers.insertMany([
     ],
     tags: ["enterprise", "retail", "omnichannel"],
     status: "PROSPECT",
-    created_at: new Date("2024-06-15"),
-    updated_at: new Date("2024-11-10"),
+    created_at: new Date("2025-06-15"),
+    updated_at: new Date("2025-12-28"),
     account_owner: "carol.johnson"
   }
 ]);
@@ -195,19 +195,19 @@ db.deals.insertMany([
     value: 450000,                    // CONFIDENTIAL: sales-write for exact value
     currency: "USD",
     probability: 100,
-    expected_close_date: new Date("2024-03-31"),
-    actual_close_date: new Date("2024-03-28"),
+    expected_close_date: new Date("2025-11-30"),
+    actual_close_date: new Date("2025-11-28"),
     deal_type: "NEW_BUSINESS",
     products: ["Enterprise Platform", "Premium Support"],
     notes: "Multi-year agreement with expansion clause",
     owner: "carol.johnson",
-    created_at: new Date("2024-01-15"),
-    updated_at: new Date("2024-03-28"),
+    created_at: new Date("2025-09-15"),
+    updated_at: new Date("2025-11-28"),
     activities: [
-      { type: "CALL", date: new Date("2024-01-20"), summary: "Initial discovery call" },
-      { type: "DEMO", date: new Date("2024-02-05"), summary: "Platform demo" },
-      { type: "PROPOSAL", date: new Date("2024-02-20"), summary: "Sent proposal" },
-      { type: "NEGOTIATION", date: new Date("2024-03-15"), summary: "Contract negotiation" }
+      { type: "CALL", date: new Date("2025-09-20"), summary: "Initial discovery call" },
+      { type: "DEMO", date: new Date("2025-10-05"), summary: "Platform demo" },
+      { type: "PROPOSAL", date: new Date("2025-10-20"), summary: "Sent proposal" },
+      { type: "NEGOTIATION", date: new Date("2025-11-15"), summary: "Contract negotiation" }
     ]
   },
   {
@@ -218,18 +218,18 @@ db.deals.insertMany([
     value: 85000,
     currency: "USD",
     probability: 60,
-    expected_close_date: new Date("2024-12-15"),
+    expected_close_date: new Date("2026-01-31"),
     actual_close_date: null,
     deal_type: "NEW_BUSINESS",
     products: ["Growth Platform", "Standard Support"],
     notes: "Fast-growing startup, budget conscious",
     owner: "ryan.garcia",
-    created_at: new Date("2024-09-01"),
-    updated_at: new Date("2024-11-15"),
+    created_at: new Date("2025-11-01"),
+    updated_at: new Date("2025-12-28"),
     activities: [
-      { type: "CALL", date: new Date("2024-09-05"), summary: "Intro call with CTO" },
-      { type: "DEMO", date: new Date("2024-09-20"), summary: "Technical demo" },
-      { type: "PROPOSAL", date: new Date("2024-10-30"), summary: "Proposal sent" }
+      { type: "CALL", date: new Date("2025-11-05"), summary: "Intro call with CTO" },
+      { type: "DEMO", date: new Date("2025-11-20"), summary: "Technical demo" },
+      { type: "PROPOSAL", date: new Date("2025-12-15"), summary: "Proposal sent" }
     ]
   },
   {
@@ -240,19 +240,19 @@ db.deals.insertMany([
     value: 750000,
     currency: "USD",
     probability: 75,
-    expected_close_date: new Date("2024-12-31"),
+    expected_close_date: new Date("2026-01-31"),
     actual_close_date: null,
     deal_type: "EXPANSION",
     products: ["Enterprise Platform", "Premium Support", "Security Add-on"],
     notes: "Expanding from 3 to 8 departments",
     owner: "amanda.white",
-    created_at: new Date("2024-07-01"),
-    updated_at: new Date("2024-11-20"),
+    created_at: new Date("2025-10-01"),
+    updated_at: new Date("2025-12-30"),
     activities: [
-      { type: "MEETING", date: new Date("2024-07-15"), summary: "QBR with stakeholders" },
-      { type: "DEMO", date: new Date("2024-08-10"), summary: "New features demo" },
-      { type: "PROPOSAL", date: new Date("2024-09-15"), summary: "Expansion proposal" },
-      { type: "NEGOTIATION", date: new Date("2024-11-01"), summary: "Legal review" }
+      { type: "MEETING", date: new Date("2025-10-15"), summary: "QBR with stakeholders" },
+      { type: "DEMO", date: new Date("2025-11-10"), summary: "New features demo" },
+      { type: "PROPOSAL", date: new Date("2025-12-01"), summary: "Expansion proposal" },
+      { type: "NEGOTIATION", date: new Date("2025-12-20"), summary: "Legal review" }
     ]
   },
   {
@@ -263,17 +263,17 @@ db.deals.insertMany([
     value: 125000,
     currency: "USD",
     probability: 30,
-    expected_close_date: new Date("2025-02-28"),
+    expected_close_date: new Date("2026-03-31"),
     actual_close_date: null,
     deal_type: "NEW_BUSINESS",
     products: ["Healthcare Edition", "Compliance Module"],
     notes: "Requires HIPAA compliance certification review",
     owner: "chris.taylor",
-    created_at: new Date("2024-10-01"),
-    updated_at: new Date("2024-11-10"),
+    created_at: new Date("2025-12-01"),
+    updated_at: new Date("2025-12-28"),
     activities: [
-      { type: "CALL", date: new Date("2024-10-05"), summary: "Initial outreach" },
-      { type: "MEETING", date: new Date("2024-10-20"), summary: "Discovery meeting" }
+      { type: "CALL", date: new Date("2025-12-05"), summary: "Initial outreach" },
+      { type: "MEETING", date: new Date("2025-12-20"), summary: "Discovery meeting" }
     ]
   },
   {
@@ -284,17 +284,17 @@ db.deals.insertMany([
     value: 1200000,
     currency: "USD",
     probability: 20,
-    expected_close_date: new Date("2025-06-30"),
+    expected_close_date: new Date("2026-06-30"),
     actual_close_date: null,
     deal_type: "NEW_BUSINESS",
     products: ["Enterprise Platform", "Retail Module", "Integration Services"],
     notes: "Large opportunity, long sales cycle expected",
     owner: "carol.johnson",
-    created_at: new Date("2024-08-15"),
-    updated_at: new Date("2024-11-05"),
+    created_at: new Date("2025-11-15"),
+    updated_at: new Date("2025-12-29"),
     activities: [
-      { type: "CALL", date: new Date("2024-08-20"), summary: "Cold outreach" },
-      { type: "MEETING", date: new Date("2024-09-10"), summary: "Initial meeting" }
+      { type: "CALL", date: new Date("2025-11-20"), summary: "Cold outreach" },
+      { type: "MEETING", date: new Date("2025-12-10"), summary: "Initial meeting" }
     ]
   },
   {
@@ -305,17 +305,17 @@ db.deals.insertMany([
     value: 95000,
     currency: "USD",
     probability: 100,
-    expected_close_date: new Date("2024-09-30"),
-    actual_close_date: new Date("2024-09-25"),
+    expected_close_date: new Date("2025-12-31"),
+    actual_close_date: new Date("2025-12-20"),
     deal_type: "RENEWAL",
     products: ["Premium Support"],
     notes: "Annual support renewal",
     owner: "carol.johnson",
-    created_at: new Date("2024-08-01"),
-    updated_at: new Date("2024-09-25"),
+    created_at: new Date("2025-11-01"),
+    updated_at: new Date("2025-12-20"),
     activities: [
-      { type: "CALL", date: new Date("2024-08-15"), summary: "Renewal discussion" },
-      { type: "CONTRACT", date: new Date("2024-09-20"), summary: "Signed renewal" }
+      { type: "CALL", date: new Date("2025-11-15"), summary: "Renewal discussion" },
+      { type: "CONTRACT", date: new Date("2025-12-15"), summary: "Signed renewal" }
     ]
   }
 ]);
@@ -326,9 +326,9 @@ db.deals.insertMany([
 db.pipeline_summary.drop();
 db.pipeline_summary.insertMany([
   {
-    _id: "2024-Q4",
-    quarter: "Q4",
-    fiscal_year: 2024,
+    _id: "2026-Q1",
+    quarter: "Q1",
+    fiscal_year: 2026,
     updated_at: new Date(),
     stages: {
       qualification: { count: 1, value: 1200000 },
@@ -340,9 +340,9 @@ db.pipeline_summary.insertMany([
     },
     total_pipeline: 2160000,
     weighted_pipeline: 645000,
-    closed_won_ytd: 1850000,
+    closed_won_ytd: 545000,
     target: 2500000,
-    attainment_pct: 74
+    attainment_pct: 22
   }
 ]);
 
@@ -359,7 +359,7 @@ db.activities.insertMany([
     customer_id: ObjectId("650000000000000000000001"),
     deal_id: ObjectId("670000000000000000000001"),
     owner: "carol.johnson",
-    date: new Date("2024-01-20"),
+    date: new Date("2025-09-20"),
     duration_minutes: 45,
     outcome: "POSITIVE",
     next_steps: "Schedule technical demo"
@@ -372,7 +372,7 @@ db.activities.insertMany([
     customer_id: ObjectId("650000000000000000000002"),
     deal_id: ObjectId("670000000000000000000002"),
     owner: "ryan.garcia",
-    date: new Date("2024-10-30"),
+    date: new Date("2025-12-15"),
     duration_minutes: 0,
     outcome: "NEUTRAL",
     next_steps: "Follow up in one week"
@@ -385,7 +385,7 @@ db.activities.insertMany([
     customer_id: ObjectId("650000000000000000000003"),
     deal_id: ObjectId("670000000000000000000003"),
     owner: "amanda.white",
-    date: new Date("2024-07-15"),
+    date: new Date("2025-10-15"),
     duration_minutes: 90,
     outcome: "POSITIVE",
     next_steps: "Prepare expansion proposal"

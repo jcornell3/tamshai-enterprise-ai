@@ -87,7 +87,7 @@ export function BudgetsPage() {
         if (budget) {
           setPendingConfirmation({
             confirmationId: data.confirmationId!,
-            message: data.message || `Approve ${budget.department} ${budget.fiscal_quarter} ${budget.fiscal_year} budget for ${formatCurrency(budget.allocated_amount)}?`,
+            message: data.message || `Approve ${budget.department} ${budget.fiscal_quarter} ${budget.fiscal_year} budget for ${formatCurrency(budget.budgeted_amount)}?`,
             budget,
             action: 'approve',
           });
@@ -150,7 +150,7 @@ export function BudgetsPage() {
 
   // Calculate stats
   const stats = useMemo(() => {
-    const totalAllocated = filteredBudgets.reduce((sum, b) => sum + b.allocated_amount, 0);
+    const totalAllocated = filteredBudgets.reduce((sum, b) => sum + b.budgeted_amount, 0);
     const pendingCount = filteredBudgets.filter((b) => b.status === 'PENDING_APPROVAL').length;
     return { totalCount: filteredBudgets.length, totalAllocated, pendingCount };
   }, [filteredBudgets]);
@@ -269,7 +269,7 @@ export function BudgetsPage() {
             confirmationData={{
               action: pendingConfirmation.action,
               department: pendingConfirmation.budget.department,
-              amount: formatCurrency(pendingConfirmation.budget.allocated_amount),
+              amount: formatCurrency(pendingConfirmation.budget.budgeted_amount),
               fiscalPeriod: `${pendingConfirmation.budget.fiscal_year} ${pendingConfirmation.budget.fiscal_quarter}`,
             }}
             onComplete={handleConfirmationComplete}
@@ -443,8 +443,8 @@ export function BudgetsPage() {
               </thead>
               <tbody className="bg-white divide-y divide-secondary-200">
                 {filteredBudgets.map((budget) => {
-                  const utilization = budget.allocated_amount > 0
-                    ? Math.round((budget.spent_amount / budget.allocated_amount) * 100)
+                  const utilization = budget.budgeted_amount > 0
+                    ? Math.round((budget.actual_amount / budget.budgeted_amount) * 100)
                     : 0;
 
                   return (
@@ -458,9 +458,9 @@ export function BudgetsPage() {
                         {budget.fiscal_year} {budget.fiscal_quarter}
                       </td>
                       <td className="table-cell" data-testid="allocated-amount">
-                        {formatCurrency(budget.allocated_amount)}
+                        {formatCurrency(budget.budgeted_amount)}
                       </td>
-                      <td className="table-cell">{formatCurrency(budget.spent_amount)}</td>
+                      <td className="table-cell">{formatCurrency(budget.actual_amount)}</td>
                       <td className="table-cell">{formatCurrency(budget.remaining_amount)}</td>
                       <td className="table-cell">
                         <div className="flex items-center gap-2">
