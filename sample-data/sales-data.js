@@ -45,7 +45,7 @@ db.customers.insertMany([
     tags: ["enterprise", "manufacturing", "high-value"],
     status: "ACTIVE",
     created_at: new Date("2024-03-15"),
-    updated_at: new Date("2025-12-20"),
+    updated_at: new Date("2026-01-03"),
     account_owner: "carol.johnson"
   },
   {
@@ -76,7 +76,7 @@ db.customers.insertMany([
     tags: ["technology", "startup", "fast-growth"],
     status: "ACTIVE",
     created_at: new Date("2025-01-10"),
-    updated_at: new Date("2025-12-15"),
+    updated_at: new Date("2026-01-02"),
     account_owner: "ryan.garcia"
   },
   {
@@ -115,7 +115,7 @@ db.customers.insertMany([
     tags: ["enterprise", "financial", "regulated"],
     status: "ACTIVE",
     created_at: new Date("2023-08-20"),
-    updated_at: new Date("2025-12-18"),
+    updated_at: new Date("2026-01-04"),
     account_owner: "amanda.white"
   },
   {
@@ -146,7 +146,7 @@ db.customers.insertMany([
     tags: ["healthcare", "hipaa", "compliance-sensitive"],
     status: "ACTIVE",
     created_at: new Date("2024-11-05"),
-    updated_at: new Date("2025-12-22"),
+    updated_at: new Date("2026-01-05"),
     account_owner: "chris.taylor"
   },
   {
@@ -177,7 +177,7 @@ db.customers.insertMany([
     tags: ["enterprise", "retail", "omnichannel"],
     status: "PROSPECT",
     created_at: new Date("2025-06-15"),
-    updated_at: new Date("2025-12-28"),
+    updated_at: new Date("2026-01-02"),
     account_owner: "carol.johnson"
   }
 ]);
@@ -202,7 +202,7 @@ db.deals.insertMany([
     notes: "Multi-year agreement with expansion clause",
     owner: "carol.johnson",
     created_at: new Date("2025-09-15"),
-    updated_at: new Date("2025-11-28"),
+    updated_at: new Date("2026-01-02"),
     activities: [
       { type: "CALL", date: new Date("2025-09-20"), summary: "Initial discovery call" },
       { type: "DEMO", date: new Date("2025-10-05"), summary: "Platform demo" },
@@ -225,7 +225,7 @@ db.deals.insertMany([
     notes: "Fast-growing startup, budget conscious",
     owner: "ryan.garcia",
     created_at: new Date("2025-11-01"),
-    updated_at: new Date("2025-12-28"),
+    updated_at: new Date("2026-01-03"),
     activities: [
       { type: "CALL", date: new Date("2025-11-05"), summary: "Intro call with CTO" },
       { type: "DEMO", date: new Date("2025-11-20"), summary: "Technical demo" },
@@ -247,7 +247,7 @@ db.deals.insertMany([
     notes: "Expanding from 3 to 8 departments",
     owner: "amanda.white",
     created_at: new Date("2025-10-01"),
-    updated_at: new Date("2025-12-30"),
+    updated_at: new Date("2026-01-04"),
     activities: [
       { type: "MEETING", date: new Date("2025-10-15"), summary: "QBR with stakeholders" },
       { type: "DEMO", date: new Date("2025-11-10"), summary: "New features demo" },
@@ -270,7 +270,7 @@ db.deals.insertMany([
     notes: "Requires HIPAA compliance certification review",
     owner: "chris.taylor",
     created_at: new Date("2025-12-01"),
-    updated_at: new Date("2025-12-28"),
+    updated_at: new Date("2026-01-05"),
     activities: [
       { type: "CALL", date: new Date("2025-12-05"), summary: "Initial outreach" },
       { type: "MEETING", date: new Date("2025-12-20"), summary: "Discovery meeting" }
@@ -291,7 +291,7 @@ db.deals.insertMany([
     notes: "Large opportunity, long sales cycle expected",
     owner: "carol.johnson",
     created_at: new Date("2025-11-15"),
-    updated_at: new Date("2025-12-29"),
+    updated_at: new Date("2026-01-02"),
     activities: [
       { type: "CALL", date: new Date("2025-11-20"), summary: "Cold outreach" },
       { type: "MEETING", date: new Date("2025-12-10"), summary: "Initial meeting" }
@@ -312,7 +312,7 @@ db.deals.insertMany([
     notes: "Annual support renewal",
     owner: "carol.johnson",
     created_at: new Date("2025-11-01"),
-    updated_at: new Date("2025-12-20"),
+    updated_at: new Date("2026-01-02"),
     activities: [
       { type: "CALL", date: new Date("2025-11-15"), summary: "Renewal discussion" },
       { type: "CONTRACT", date: new Date("2025-12-15"), summary: "Signed renewal" }
@@ -359,7 +359,7 @@ db.activities.insertMany([
     customer_id: ObjectId("650000000000000000000001"),
     deal_id: ObjectId("670000000000000000000001"),
     owner: "carol.johnson",
-    date: new Date("2025-09-20"),
+    date: new Date("2026-01-02"),
     duration_minutes: 45,
     outcome: "POSITIVE",
     next_steps: "Schedule technical demo"
@@ -372,7 +372,7 @@ db.activities.insertMany([
     customer_id: ObjectId("650000000000000000000002"),
     deal_id: ObjectId("670000000000000000000002"),
     owner: "ryan.garcia",
-    date: new Date("2025-12-15"),
+    date: new Date("2026-01-03"),
     duration_minutes: 0,
     outcome: "NEUTRAL",
     next_steps: "Follow up in one week"
@@ -385,7 +385,7 @@ db.activities.insertMany([
     customer_id: ObjectId("650000000000000000000003"),
     deal_id: ObjectId("670000000000000000000003"),
     owner: "amanda.white",
-    date: new Date("2025-10-15"),
+    date: new Date("2026-01-04"),
     duration_minutes: 90,
     outcome: "POSITIVE",
     next_steps: "Prepare expansion proposal"
