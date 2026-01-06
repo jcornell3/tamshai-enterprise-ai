@@ -381,7 +381,7 @@ flutter pub run build_runner build --delete-conflicting-outputs
 
 ### 11. Missing appAuthRedirectScheme for Android OAuth
 
-**Commit**: (pending) - fix(flutter): Add appAuthRedirectScheme manifest placeholder
+**Commit**: `ac75fd4` - fix(flutter): Fix Android, macOS, and Windows native builds
 
 **Error**:
 ```
@@ -402,11 +402,13 @@ defaultConfig {
 }
 ```
 
+**Status**: ✅ Fixed - Android build now passing
+
 ---
 
 ### 12. Missing macOS Platform Support
 
-**Commit**: (pending) - fix(flutter): Add macOS platform support
+**Commit**: `ac75fd4` - fix(flutter): Fix Android, macOS, and Windows native builds
 
 **Error**:
 ```
@@ -423,27 +425,68 @@ cd clients/unified_flutter
 flutter create --platforms=macos .
 ```
 
+**Status**: ✅ Fixed - macOS platform folder created
+
 ---
 
-### 13. Windows Plugin Registrant Stale Cache
+### 13. macOS Deployment Target Too Low for speech_to_text
 
-**Commit**: (pending) - fix(flutter): Regenerate Windows plugin registrant
+**Commits**:
+- `27ce66a` - fix(flutter): Fix macOS deployment target and Windows CI cache
+- `40ec1ee` - fix(flutter): Add macOS Podfile with platform 11.0
+
+**Error**:
+```
+speech_to_text requires a higher minimum macOS deployment version (11.00)
+```
+
+**Root Cause**:
+The `speech_to_text` package requires macOS 11.0 (Big Sur) or later, but the default Flutter macOS configuration uses 10.15 (Catalina). Both the Xcode project and CocoaPods Podfile needed to be updated.
+
+**Fix** (project.pbxproj):
+Changed all instances of `MACOSX_DEPLOYMENT_TARGET = 10.15;` to `MACOSX_DEPLOYMENT_TARGET = 11.0;`
+
+**Fix** (Podfile):
+Created/updated `clients/unified_flutter/macos/Podfile` with:
+```ruby
+platform :osx, '11.0'
+```
+
+**Status**: ✅ Fixed - macOS build now passing
+
+---
+
+### 14. Windows speech_to_text_windows Plugin Registration Missing
+
+**Commits**:
+- `27ce66a` - fix(flutter): Fix macOS deployment target and Windows CI cache
+- `fe89a92` - fix(flutter): Force clean Windows ephemeral folder in CI
 
 **Error**:
 ```
 'SpeechToTextWindowsRegisterWithRegistrar': identifier not found
+[build\windows\x64\runner\unified_flutter.vcxproj]
 ```
 
 **Root Cause**:
-CI had stale cached `generated_plugin_registrant.cc` that didn't include the `speech_to_text_windows` plugin registration after upgrading to speech_to_text 7.x.
+The `speech_to_text` 7.0.0 package includes `speech_to_text_windows` as a federated plugin for Windows support. However, this plugin doesn't properly expose a `SpeechToTextWindowsRegisterWithRegistrar` function for the Flutter Windows plugin registration system.
 
-**Fix**:
-```bash
-cd clients/unified_flutter
-flutter clean
-flutter pub get
-# Commit the regenerated windows/flutter/generated_plugin_registrant.cc
-```
+The `generated_plugin_registrant.cc` file expects this function to exist, but the speech_to_text_windows package either:
+1. Doesn't implement Windows plugin registration correctly
+2. Has a version mismatch with the main speech_to_text package
+3. Uses a different registration mechanism not compatible with standard Flutter Windows builds
+
+**Attempted Fixes (Not Working)**:
+- `flutter clean` + `flutter pub get` in CI
+- Deleting `windows/flutter/ephemeral` folder before build
+- Regenerating plugin registrant locally
+
+**Potential Solutions**:
+1. **Disable speech_to_text on Windows**: Use conditional imports to exclude the package on Windows
+2. **Pin to older speech_to_text version**: Downgrade to a version without Windows support
+3. **Create mock Windows plugin**: Create a no-op Windows implementation
+
+**Status**: ❌ In Progress - Investigating solution
 
 ---
 

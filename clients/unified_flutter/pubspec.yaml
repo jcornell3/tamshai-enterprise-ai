@@ -53,5 +53,10 @@ dev_dependencies:
   freezed: ^2.5.7  # Pinned to 2.x for Dart 3.6 compatibility
   json_serializable: ^6.8.0  # Pinned to 6.8.x for Dart 3.6 compatibility
 
+# Override broken beta Windows speech plugin with local stub
+dependency_overrides:
+  speech_to_text_windows:
+    path: packages/speech_to_text_windows_stub
+
 flutter:
   uses-material-design: true
