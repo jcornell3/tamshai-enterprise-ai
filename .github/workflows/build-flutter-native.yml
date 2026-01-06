@@ -237,14 +237,16 @@ jobs:
 
           # Create MSIX with environment-specific identity
           # This allows side-by-side installation of dev/stage/prod
-          # Note: --dont-install-certificate prevents interactive prompt in CI
+          # Note: --install-certificate false prevents interactive prompt in CI
+          # Note: --build-windows false since we already built above
           flutter pub run msix:create `
             --display-name "$appName" `
             --publisher-display-name "Tamshai Corporation" `
             --identity-name "$identityName" `
             --version "1.0.0.0" `
             --capabilities "internetClient" `
-            --dont-install-certificate
+            --install-certificate false `
+            --build-windows false
 
           # Rename MSIX to include environment
           $msixPath = Get-ChildItem -Path "build/windows/x64/runner/Release/*.msix" | Select-Object -First 1
