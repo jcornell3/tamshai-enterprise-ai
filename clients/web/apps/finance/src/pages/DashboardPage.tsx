@@ -88,14 +88,14 @@ export function DashboardPage() {
 
   // Compute dashboard metrics from budget data
   // Note: API returns budgeted_amount/actual_amount (not allocated_amount/spent_amount)
+  const totalBudget = budgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0);
+  const totalSpent = budgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0);
+
   const metrics: DashboardMetrics | undefined = budgets.length > 0 ? {
-    total_budget: budgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0),
-    total_spent: budgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0),
-    remaining_budget: budgets.reduce((sum, b) => sum + ((b.budgeted_amount || 0) - (b.actual_amount || 0)), 0),
-    budget_utilization_percent: Math.round(
-      (budgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0) /
-        budgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0)) * 100
-    ) || 0,
+    total_budget: totalBudget,
+    total_spent: totalSpent,
+    remaining_budget: totalBudget - totalSpent,
+    budget_utilization_percent: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0,
     pending_approvals: budgets.filter(b => b.status === 'PENDING_APPROVAL').length,
     pending_invoices: invoices.filter(i => i.status === 'PENDING').length,
     pending_expense_reports: 0, // Would need separate API call
@@ -108,7 +108,7 @@ export function DashboardPage() {
         allocated,
         spent,
         remaining: allocated - spent,
-        utilization_percent: Math.round((spent / allocated) * 100) || 0,
+        utilization_percent: allocated > 0 ? Math.round((spent / allocated) * 100) : 0,
       };
     }),
   } : undefined;
