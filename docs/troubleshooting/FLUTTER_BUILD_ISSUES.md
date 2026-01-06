@@ -458,9 +458,7 @@ platform :osx, '11.0'
 
 ### 14. Windows speech_to_text_windows Plugin Registration Missing
 
-**Commits**:
-- `27ce66a` - fix(flutter): Fix macOS deployment target and Windows CI cache
-- `fe89a92` - fix(flutter): Force clean Windows ephemeral folder in CI
+**Commit**: `8f76076` - fix(flutter): Add stub for broken speech_to_text_windows beta plugin
 
 **Error**:
 ```
@@ -469,24 +467,28 @@ platform :osx, '11.0'
 ```
 
 **Root Cause**:
-The `speech_to_text` 7.0.0 package includes `speech_to_text_windows` as a federated plugin for Windows support. However, this plugin doesn't properly expose a `SpeechToTextWindowsRegisterWithRegistrar` function for the Flutter Windows plugin registration system.
+The `speech_to_text` 7.0.0 package includes `speech_to_text_windows` 1.0.0+beta.8 as a federated plugin for Windows support. However, this beta plugin doesn't properly implement Flutter FFI plugin registration - it's missing the expected `SpeechToTextWindowsRegisterWithRegistrar` C++ function.
 
-The `generated_plugin_registrant.cc` file expects this function to exist, but the speech_to_text_windows package either:
-1. Doesn't implement Windows plugin registration correctly
-2. Has a version mismatch with the main speech_to_text package
-3. Uses a different registration mechanism not compatible with standard Flutter Windows builds
+The `generated_plugin_registrant.cc` file expects this function to exist based on the plugin's pubspec.yaml configuration, but the beta package doesn't implement it.
 
-**Attempted Fixes (Not Working)**:
-- `flutter clean` + `flutter pub get` in CI
-- Deleting `windows/flutter/ephemeral` folder before build
-- Regenerating plugin registrant locally
+**Fix**:
+Created a local stub package at `clients/unified_flutter/packages/speech_to_text_windows_stub/` that:
+1. Uses Dart-only plugin registration (no native C++ code needed)
+2. Returns `isAvailable: false` so the app gracefully handles lack of speech on Windows
+3. Implements the `SpeechToTextPlatform` interface with no-op methods
 
-**Potential Solutions**:
-1. **Disable speech_to_text on Windows**: Use conditional imports to exclude the package on Windows
-2. **Pin to older speech_to_text version**: Downgrade to a version without Windows support
-3. **Create mock Windows plugin**: Create a no-op Windows implementation
+Added dependency override in `pubspec.yaml`:
+```yaml
+dependency_overrides:
+  speech_to_text_windows:
+    path: packages/speech_to_text_windows_stub
+```
 
-**Status**: ❌ In Progress - Investigating solution
+**Note**: When `speech_to_text_windows` reaches stable release with proper FFI registration, the stub can be removed by deleting:
+1. The `packages/speech_to_text_windows_stub/` directory
+2. The `dependency_overrides` section in `pubspec.yaml`
+
+**Status**: ✅ Fixed - Windows build now passing
 
 ---
 
