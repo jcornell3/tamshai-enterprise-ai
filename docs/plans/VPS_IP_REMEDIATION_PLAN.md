@@ -243,9 +243,9 @@ VPS_HOST=<your-vps-ip> ssh root@$VPS_HOST 'docker ps'
 
 ### Phase 3: Keycloak
 
-- [ ] Update `keycloak/realm-export-dev.json` to use domains
-- [ ] Update `keycloak/realm-export-stage.json` to use domains
-- [ ] Update `keycloak/scripts/sync-realm.sh` to use `$VPS_DOMAIN`
+- [x] Update `keycloak/realm-export-dev.json` to use domains
+- [x] Update `keycloak/realm-export-stage.json` to use domains
+- [x] Update `keycloak/scripts/sync-realm.sh` to use `$VPS_DOMAIN`
 - [ ] Run Keycloak sync on stage
 - [ ] Test OAuth flows
 

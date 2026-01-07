@@ -23,6 +23,9 @@
 #   - Admin credentials must be available
 #   - For Docker: run inside container or with docker exec
 #
+# Environment Variables:
+#   VPS_DOMAIN - VPS domain name for redirect URIs (default: vps.tamshai.com)
+#
 # =============================================================================
 
 set -euo pipefail
@@ -226,7 +229,7 @@ sync_website_client() {
             "http://localhost:8080/*",
             "https://tamshai.local/*",
             "https://www.tamshai.local/*",
-            "https://5.78.159.29/*",
+            "https://${VPS_DOMAIN:-vps.tamshai.com}/*",
             "https://tamshai.com/*",
             "https://www.tamshai.com/*"
         ],
@@ -234,13 +237,13 @@ sync_website_client() {
             "http://localhost:8080",
             "https://tamshai.local",
             "https://www.tamshai.local",
-            "https://5.78.159.29",
+            "https://${VPS_DOMAIN:-vps.tamshai.com}",
             "https://tamshai.com",
             "https://www.tamshai.com"
         ],
         "attributes": {
             "pkce.code.challenge.method": "S256",
-            "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://5.78.159.29/*##https://tamshai.com/*##https://www.tamshai.com/*"
+            "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://${VPS_DOMAIN:-vps.tamshai.com}/*##https://tamshai.com/*##https://www.tamshai.com/*"
         },
         "defaultClientScopes": ["openid", "profile", "email", "roles"]
     }'
@@ -403,12 +406,12 @@ sync_sample_app_clients() {
             \"redirectUris\": [
                 \"http://localhost:$port/*\",
                 \"https://tamshai.local/$app/*\",
-                \"https://5.78.159.29/$app/*\"
+                \"https://\${VPS_DOMAIN:-vps.tamshai.com}/$app/*\"
             ],
             \"webOrigins\": [
                 \"http://localhost:$port\",
                 \"https://tamshai.local\",
-                \"https://5.78.159.29\"
+                \"https://\${VPS_DOMAIN:-vps.tamshai.com}\"
             ],
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\"
