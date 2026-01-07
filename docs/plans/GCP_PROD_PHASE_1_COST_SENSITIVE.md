@@ -3,7 +3,7 @@
 **Document Version**: 1.1
 **Created**: January 2026
 **Updated**: January 7, 2026
-**Status**: Prerequisites Complete (7/8) - Pending Service Account Setup
+**Status**: Prerequisites Complete (8/8) - Ready for Implementation
 
 ## Executive Summary
 
@@ -44,9 +44,9 @@ These items require your input or action before deployment can proceed:
 | | | • ⬜ Self-host on Utility VM | |
 | 6 | **Choose GCP Region** | `us-central1` | ✅ |
 | 7 | **Confirm Budget** | Approved (~$50-80/mo) | ✅ |
-| 8 | **Service Account Permissions** | See [Appendix B](#appendix-b-gcp-service-account-setup) for detailed instructions | ⬜ |
-| | | • ⬜ Option A: Create Service Account + JSON key (recommended for automation) | |
-| | | • ⬜ Option B: Use `gcloud auth login` (simpler, interactive sessions only) | |
+| 8 | **Service Account Permissions** | Service account created with all roles | ✅ |
+| | | • ✅ `claude-deployer` SA with 8 roles granted | |
+| | | • ✅ Key stored in `GCP_SA_KEY_PROD` GitHub secret | |
 
 > **Note:** GCP Project credentials and Claude API key are stored securely and not committed to the repository.
 
