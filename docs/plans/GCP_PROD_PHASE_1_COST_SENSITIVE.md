@@ -12,6 +12,87 @@ This deployment phase is designed for **very low traffic** (e.g., internal testi
 
 ---
 
+## Action Items & Responsibilities
+
+This section clarifies what **you (project owner)** must provide vs. what **Claude (deployment expert)** will implement.
+
+### 🔴 User Actions (Prerequisites)
+
+These items require your input or action before deployment can proceed:
+
+| # | Action | Details | Status |
+|---|--------|---------|--------|
+| 1 | **Provide GCP Project** | Create or designate a GCP project for production | ⬜ |
+| | | • Project ID: `________________` | |
+| | | • Project Number: `________________` | |
+| | | • Billing Account linked: Yes / No | |
+| 2 | **Enable Required APIs** | Enable these APIs in GCP Console (or Claude can do via `gcloud`) | ⬜ |
+| | | • Cloud Run API | |
+| | | • Cloud SQL Admin API | |
+| | | • Secret Manager API | |
+| | | • Compute Engine API | |
+| | | • Artifact Registry API | |
+| 3 | **Provide Domain Decision** | Which domain(s) will be used? | ⬜ |
+| | | • API: `api.________________` | |
+| | | • Auth: `auth.________________` | |
+| | | • App: `app.________________` | |
+| | | • DNS Provider: Cloudflare / Google Cloud DNS / Other | |
+| 4 | **Provide Claude API Key** | From https://console.anthropic.com | ⬜ |
+| | | • Key will be stored in Secret Manager | |
+| 5 | **MongoDB Atlas Decision** | Choose one: | ⬜ |
+| | | • ⬜ Use MongoDB Atlas M0 (Free) - provide Atlas org/project | |
+| | | • ⬜ Self-host on Utility VM (simpler, no external dependency) | |
+| 6 | **Choose GCP Region** | Recommended: `us-central1` (cheapest) | ⬜ |
+| | | • Alternative: `________________` | |
+| 7 | **Confirm Budget** | Approve estimated $50-80/mo spend | ⬜ |
+| 8 | **Service Account Permissions** | Grant Claude deployment access (one of): | ⬜ |
+| | | • ⬜ Provide Service Account JSON key | |
+| | | • ⬜ Grant `roles/editor` to Claude's SA | |
+| | | • ⬜ Use `gcloud auth login` interactively | |
+
+### 🟢 Claude Actions (Implementation)
+
+Once prerequisites are provided, Claude will execute these tasks:
+
+| Phase | Task | Estimated Time |
+|-------|------|----------------|
+| **Setup** | | |
+| 1.1 | Create/update `infrastructure/terraform/gcp/` Terraform modules | 2-3 hours |
+| 1.2 | Configure GCP provider with your project ID | 10 min |
+| 1.3 | Create `terraform.tfvars` with your inputs | 10 min |
+| **Infrastructure** | | |
+| 2.1 | Deploy VPC and networking (Serverless VPC Connector) | 15 min |
+| 2.2 | Deploy Cloud SQL PostgreSQL instance | 10-15 min |
+| 2.3 | Deploy Utility VM (Redis + Bastion) | 5 min |
+| 2.4 | Configure Secret Manager with credentials | 10 min |
+| **Services** | | |
+| 3.1 | Build and push container images to Artifact Registry | 20 min |
+| 3.2 | Deploy MCP Gateway to Cloud Run | 5 min |
+| 3.3 | Deploy MCP Suite (HR, Finance, Sales, Support) to Cloud Run | 10 min |
+| 3.4 | Deploy Keycloak to Cloud Run | 10 min |
+| **Configuration** | | |
+| 4.1 | Configure Cloud Run domain mappings | 10 min |
+| 4.2 | Provide DNS records for you to add | 5 min |
+| 4.3 | Run database migrations | 10 min |
+| 4.4 | Sync Keycloak realm configuration | 10 min |
+| 4.5 | Run smoke tests and verify deployment | 15 min |
+| **Documentation** | | |
+| 5.1 | Update CLAUDE.md with GCP deployment instructions | 15 min |
+| 5.2 | Create runbook for common operations | 30 min |
+
+**Total Estimated Implementation Time:** ~4-5 hours (spread across sessions)
+
+### 🟡 Shared Actions (Collaboration Required)
+
+| Task | Your Role | Claude's Role |
+|------|-----------|---------------|
+| DNS Configuration | Add records in your DNS provider | Provide exact records needed |
+| SSL Certificates | Verify domain ownership if prompted | Configure Google-managed certs |
+| Initial Testing | Log in and test as end user | Run automated health checks |
+| Cost Monitoring | Set up billing alerts in GCP Console | Configure Cloud Monitoring dashboards |
+
+---
+
 ## Infrastructure Specification
 
 ### 1. Compute Layer (Serverless)
