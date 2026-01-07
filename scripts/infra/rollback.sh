@@ -25,6 +25,10 @@
 #   ./rollback.sh stage --list           # List recent commits
 #   ./rollback.sh stage --backup         # Backup then rollback
 #
+# Environment Variables (for stage):
+#   VPS_HOST     - VPS IP address or hostname (required for stage rollbacks)
+#   VPS_SSH_USER - SSH username (default: root)
+#
 # =============================================================================
 
 set -euo pipefail

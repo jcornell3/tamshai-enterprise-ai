@@ -34,6 +34,11 @@
 #   ./keycloak.sh scopes dev            # List client scopes
 #   ./keycloak.sh logs dev              # Show Keycloak logs
 #
+# Environment Variables (for stage):
+#   VPS_HOST               - VPS IP address or hostname (required for stage)
+#   VPS_SSH_USER           - SSH username (default: root)
+#   KEYCLOAK_ADMIN_PASSWORD - Keycloak admin password (for admin commands)
+#
 # =============================================================================
 
 set -euo pipefail

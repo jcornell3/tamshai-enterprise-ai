@@ -28,6 +28,10 @@
 #   ./vault.sh set dev tamshai/test key=value
 #   ./vault.sh ui dev
 #
+# Environment Variables (for stage):
+#   VPS_HOST     - VPS IP address or hostname (required for stage operations)
+#   VPS_SSH_USER - SSH username (default: root)
+#
 # =============================================================================
 
 set -euo pipefail

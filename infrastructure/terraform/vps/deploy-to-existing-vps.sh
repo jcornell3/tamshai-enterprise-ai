@@ -2,8 +2,11 @@
 set -e
 
 # Tamshai Enterprise AI - Manual VPS Deployment Script
-# For deploying to existing VPS (ubuntu-8gb-hil-2 at 5.78.159.29)
+# For deploying to an existing VPS instance
 # Run this script as root on the VPS
+#
+# Environment variables:
+#   CLAUDE_API_KEY - Required: Anthropic API key for Claude integration
 
 echo "=========================================="
 echo "Tamshai Enterprise AI - VPS Deployment"

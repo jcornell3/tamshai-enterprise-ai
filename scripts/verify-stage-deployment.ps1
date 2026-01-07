@@ -3,14 +3,51 @@
     Verify Stage VPS Deployment Status
 .DESCRIPTION
     Checks if the stage VPS deployment is complete and all services are operational
+.PARAMETER VpsHost
+    VPS IP address or hostname. If not provided, reads from VPS_HOST environment variable
+    or attempts to get from Terraform output.
 .EXAMPLE
     .\verify-stage-deployment.ps1
+.EXAMPLE
+    .\verify-stage-deployment.ps1 -VpsHost "192.168.1.100"
+.EXAMPLE
+    $env:VPS_HOST = "192.168.1.100"; .\verify-stage-deployment.ps1
 #>
+
+param(
+    [string]$VpsHost
+)
 
 $ErrorActionPreference = "Continue"
 
+# Determine VPS host from parameter, environment variable, or Terraform output
+if (-not $VpsHost) {
+    $VpsHost = $env:VPS_HOST
+}
+
+if (-not $VpsHost) {
+    # Try to get from Terraform output
+    try {
+        Push-Location infrastructure/terraform/vps -ErrorAction SilentlyContinue
+        $VpsHost = terraform output -raw vps_ip 2>$null
+        Pop-Location
+    } catch {
+        Pop-Location -ErrorAction SilentlyContinue
+    }
+}
+
+if (-not $VpsHost) {
+    Write-Host "ERROR: VPS host not specified." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Provide VPS host via one of these methods:" -ForegroundColor Yellow
+    Write-Host "  1. Parameter:    .\verify-stage-deployment.ps1 -VpsHost '192.168.1.100'" -ForegroundColor Gray
+    Write-Host "  2. Environment:  `$env:VPS_HOST = '192.168.1.100'" -ForegroundColor Gray
+    Write-Host "  3. Terraform:    Run from repo root with terraform state initialized" -ForegroundColor Gray
+    exit 1
+}
+
 # Direct IP uses HTTP (Cloudflare handles SSL for domain)
-$STAGE_URL = "http://5.78.159.29"
+$STAGE_URL = "http://$VpsHost"
 $STAGE_DOMAIN = "https://vps.tamshai.com"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -123,7 +160,7 @@ Write-Host " Verification Summary" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Stage VPS URL: $STAGE_DOMAIN" -ForegroundColor Cyan
-Write-Host "IP Address: $STAGE_URL" -ForegroundColor Cyan
+Write-Host "VPS Host: $VpsHost" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Service URLs:" -ForegroundColor Cyan
 Write-Host "  Main Portal:    $STAGE_DOMAIN/" -ForegroundColor Gray

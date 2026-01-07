@@ -18,6 +18,10 @@
 #   ./status.sh dev       # Check local dev
 #   ./status.sh stage     # Check VPS stage (requires SSH)
 #
+# Environment Variables (for stage):
+#   VPS_HOST     - VPS IP address or hostname (required for stage checks)
+#   VPS_SSH_USER - SSH username (default: root)
+#
 # =============================================================================
 
 set -euo pipefail
