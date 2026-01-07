@@ -39,16 +39,15 @@ These items require your input or action before deployment can proceed:
 | | | • DNS Provider: Cloudflare / Google Cloud DNS / Other | |
 | 4 | **Provide Claude API Key** | From https://console.anthropic.com | ⬜ |
 | | | • Key will be stored in Secret Manager | |
-| 5 | **MongoDB Atlas Decision** | Choose one: | ⬜ |
-| | | • ⬜ Use MongoDB Atlas M0 (Free) - provide Atlas org/project | |
-| | | • ⬜ Self-host on Utility VM (simpler, no external dependency) | |
+| 5 | **MongoDB Atlas Decision** | Choose one (see [Appendix A](#appendix-a-mongodb-atlas-m0-setup)): | ⬜ |
+| | | • ⬜ Use MongoDB Atlas M0 (Free) - requires account setup, ~15 min | |
+| | | • ⬜ Self-host on Utility VM (simpler, no external dependency) ✅ Recommended | |
 | 6 | **Choose GCP Region** | Recommended: `us-central1` (cheapest) | ⬜ |
 | | | • Alternative: `________________` | |
 | 7 | **Confirm Budget** | Approve estimated $50-80/mo spend | ⬜ |
-| 8 | **Service Account Permissions** | Grant Claude deployment access (one of): | ⬜ |
-| | | • ⬜ Provide Service Account JSON key | |
-| | | • ⬜ Grant `roles/editor` to Claude's SA | |
-| | | • ⬜ Use `gcloud auth login` interactively | |
+| 8 | **Service Account Permissions** | See [Appendix B](#appendix-b-gcp-service-account-setup) for detailed instructions | ⬜ |
+| | | • ⬜ Option A: Create Service Account + JSON key (recommended for automation) | |
+| | | • ⬜ Option B: Use `gcloud auth login` (simpler, interactive sessions only) | |
 
 ### 🟢 Claude Actions (Implementation)
 
@@ -272,6 +271,211 @@ See: `GCP_PROD_PHASE_2_HIGH_AVAILABILITY.md`
 - [Cloud SQL Pricing](https://cloud.google.com/sql/pricing)
 - [Keycloak on Cloud Run](https://www.keycloak.org/guides#getting-started)
 - [CLAUDE.md - Production Section](../../CLAUDE.md)
+
+---
+
+## Appendix A: MongoDB Atlas M0 Setup
+
+If you choose **MongoDB Atlas M0 (Free Tier)** instead of self-hosting on the Utility VM, you'll need to complete these steps:
+
+### What You Need to Provide
+
+| Item | Required? | Notes |
+|------|-----------|-------|
+| MongoDB Atlas Account | Yes | Free to create at https://cloud.mongodb.com |
+| Connection String | Yes | Claude will store this in Secret Manager |
+| IP Allowlist Entry | Yes | Cloud Run's egress IP (provided after deployment) |
+
+### Step-by-Step Setup (~15 minutes)
+
+**1. Create Atlas Account** (skip if you have one)
+```
+1. Go to https://cloud.mongodb.com/
+2. Sign up with Google, GitHub, or email
+3. Verify your email
+```
+
+**2. Create a Free Cluster**
+```
+1. Click "Build a Database"
+2. Select "M0 FREE" tier
+3. Choose cloud provider: Google Cloud (recommended for lower latency)
+4. Choose region: Same as your GCP region (e.g., us-central1 → Iowa)
+5. Cluster name: tamshai-prod (or your preference)
+6. Click "Create Cluster" (takes 1-3 minutes)
+```
+
+**3. Create Database User**
+```
+1. Go to "Database Access" in left sidebar
+2. Click "Add New Database User"
+3. Authentication: Password
+4. Username: tamshai_app
+5. Password: (generate a strong password, save it securely)
+6. Database User Privileges: "Read and write to any database"
+7. Click "Add User"
+```
+
+**4. Configure Network Access**
+```
+1. Go to "Network Access" in left sidebar
+2. Click "Add IP Address"
+3. For initial setup: "Allow Access from Anywhere" (0.0.0.0/0)
+   ⚠️ After deployment, Claude will provide Cloud Run's egress IP to restrict this
+4. Click "Confirm"
+```
+
+**5. Get Connection String**
+```
+1. Go to "Database" → Click "Connect" on your cluster
+2. Select "Connect your application"
+3. Driver: Node.js, Version: 5.5 or later
+4. Copy the connection string (looks like):
+   mongodb+srv://tamshai_app:<password>@tamshai-prod.xxxxx.mongodb.net/
+5. Replace <password> with your actual password
+```
+
+**6. Provide to Claude**
+```
+Connection String: mongodb+srv://tamshai_app:YOUR_PASSWORD@tamshai-prod.xxxxx.mongodb.net/tamshai
+```
+
+### Self-Hosted Alternative (Recommended)
+
+If this seems like too much overhead, choose **self-host on Utility VM**:
+- No external account needed
+- Claude deploys MongoDB in Docker on the Utility VM
+- Same functionality, simpler setup
+- Slight trade-off: Backups are manual (but Claude will configure automated backup scripts)
+
+---
+
+## Appendix B: GCP Service Account Setup
+
+Claude needs permissions to deploy infrastructure to your GCP project. Choose one of these options:
+
+### Option A: Service Account with JSON Key (Recommended)
+
+Best for: Automation, CI/CD, or when you want Claude to work independently.
+
+**Step 1: Create Service Account**
+
+```bash
+# Set your project ID
+PROJECT_ID="your-project-id"
+
+# Create the service account
+gcloud iam service-accounts create claude-deployer \
+  --project=$PROJECT_ID \
+  --display-name="Claude Code Deployer" \
+  --description="Service account for Claude Code to deploy Tamshai infrastructure"
+```
+
+**Step 2: Grant Required Roles**
+
+```bash
+# The service account email
+SA_EMAIL="claude-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Grant required roles (least privilege for this deployment)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/run.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/cloudsql.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/compute.instanceAdmin.v1"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/secretmanager.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/artifactregistry.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/vpcaccess.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.admin"
+```
+
+**Step 3: Create and Download Key**
+
+```bash
+# Create JSON key file
+gcloud iam service-accounts keys create claude-deployer-key.json \
+  --iam-account=$SA_EMAIL \
+  --project=$PROJECT_ID
+
+# The key is saved to claude-deployer-key.json
+# ⚠️ Keep this file secure - it grants access to your GCP project
+```
+
+**Step 4: Provide Key to Claude**
+
+Either:
+- Share the contents of `claude-deployer-key.json` securely
+- Or place it at `infrastructure/terraform/gcp/credentials.json` (gitignored)
+
+### Option B: Interactive gcloud Login (Simpler)
+
+Best for: One-time deployments, working together in real-time.
+
+**Step 1: Authenticate**
+
+```bash
+# Login with your Google account
+gcloud auth login
+
+# Set the project
+gcloud config set project your-project-id
+
+# Enable application default credentials (for Terraform)
+gcloud auth application-default login
+```
+
+**Step 2: Verify Access**
+
+```bash
+# Test that you have access
+gcloud projects describe your-project-id
+```
+
+**That's it!** Claude will use your authenticated session.
+
+> **Note:** This option requires you to be logged in during deployment. The session expires after ~1 hour of inactivity.
+
+### Roles Explained
+
+| Role | Purpose |
+|------|---------|
+| `roles/run.admin` | Deploy and manage Cloud Run services |
+| `roles/cloudsql.admin` | Create and configure Cloud SQL instances |
+| `roles/compute.instanceAdmin.v1` | Create Utility VM (Compute Engine) |
+| `roles/secretmanager.admin` | Store API keys and credentials |
+| `roles/artifactregistry.admin` | Push Docker images |
+| `roles/iam.serviceAccountUser` | Allow Cloud Run to use service accounts |
+| `roles/vpcaccess.admin` | Create Serverless VPC Connector |
+| `roles/storage.admin` | Create Cloud Storage buckets |
+
+### Security Best Practices
+
+1. **Rotate keys regularly** - Delete and recreate keys every 90 days
+2. **Delete key after deployment** - If using Option A for one-time setup
+3. **Use Workload Identity** - For production CI/CD (Phase 2+)
+4. **Audit access** - Check IAM audit logs periodically
 
 ---
 
