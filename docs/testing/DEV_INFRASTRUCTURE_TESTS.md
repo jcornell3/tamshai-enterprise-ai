@@ -374,7 +374,7 @@ CLAUDE_API_KEY=sk-ant-api03-...
 - Client secret: `test-client-secret` (exported from Terraform)
 
 ### Stage Environment (VPS)
-- Keycloak URL: `https://5.78.159.29/auth`
+- Keycloak URL: `https://$VPS_HOST/auth`
 - Port: 8080 (internal), 443 (external via Caddy)
 - Server: Hetzner CPX31
 - Database: PostgreSQL container on VPS

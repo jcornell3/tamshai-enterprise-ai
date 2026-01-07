@@ -636,9 +636,9 @@ See [Production Deployment Guide](./PRODUCTION.md) for details.
 
 **Infrastructure:**
 - **VPS**: Hetzner CPX31 (4 vCPU, 8GB RAM, 160GB NVMe)
-- **IP**: 5.78.159.29
-- **Location**: Helsinki, Finland
-- **Domain**: tamshai.com (via Cloudflare)
+- **IP**: Set via `$VPS_HOST` (get from Terraform: `terraform output -raw vps_ip`)
+- **Location**: Hillsboro, Oregon (hil datacenter)
+- **Domain**: vps.tamshai.com (via Cloudflare)
 
 **Services Running:**
 - All 18 containers healthy
@@ -647,10 +647,10 @@ See [Production Deployment Guide](./PRODUCTION.md) for details.
 - Full stack: PostgreSQL, MongoDB, Redis, Elasticsearch, MinIO
 
 **Access:**
-- Website: http://tamshai.com (pending Cloudflare DNS)
-- Direct IP: http://5.78.159.29 (with Host header)
-- Vault: https://5.78.159.29:8200
-- MCP Gateway: http://5.78.159.29:3100
+- Website: https://vps.tamshai.com
+- Keycloak: https://vps.tamshai.com/auth
+- API Gateway: https://vps.tamshai.com/api
+- MCP Gateway: http://$VPS_HOST:3100 (internal)
 
 ### Cloudflare Configuration
 
@@ -663,8 +663,8 @@ In Cloudflare Dashboard:
 2. Add/Update A record:
    ```
    Type: A
-   Name: @ (for tamshai.com) or www
-   IPv4 Address: 5.78.159.29
+   Name: vps (for vps.tamshai.com)
+   IPv4 Address: <VPS_IP from terraform output>
    Proxy status: Proxied (orange cloud icon)
    TTL: Auto
    ```
@@ -712,7 +712,7 @@ Add page rules for better performance:
 When ready to expose applications, update Caddyfile on VPS:
 
 ```bash
-ssh -i ~/.ssh/tamshai_staging root@5.78.159.29
+ssh root@$VPS_HOST  # Use IP, not domain (Cloudflare can't proxy SSH)
 
 # Edit Caddyfile
 nano /opt/caddy/Caddyfile

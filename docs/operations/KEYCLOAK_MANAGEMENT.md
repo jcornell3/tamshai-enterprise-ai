@@ -234,7 +234,7 @@ Credentials are managed via environment variables and should never be committed 
 | Environment | URL |
 |-------------|-----|
 | Dev | http://localhost:8180/auth/health/ready |
-| Stage | https://5.78.159.29/auth/health/ready |
+| Stage | https://$VPS_HOST/auth/health/ready |
 
 ## Related Files
 

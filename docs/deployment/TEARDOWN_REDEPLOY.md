@@ -199,7 +199,7 @@ This stops containers and prunes volumes but doesn't rebuild.
 These indicate network/DNS issues or services still starting:
 - Wait 2-3 minutes and retry
 - Check if Cloudflare proxy is enabled
-- Verify VPS is reachable: `ping 5.78.159.29`
+- Verify VPS is reachable: `ping $VPS_HOST`
 
 ---
 

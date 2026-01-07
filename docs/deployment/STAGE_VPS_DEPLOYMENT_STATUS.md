@@ -10,7 +10,7 @@
 ### Infrastructure Created
 
 **Terraform Apply**: ✅ Complete (14 resources created)
-**VPS IP**: 5.78.159.29
+**VPS IP**: Set via `$VPS_HOST` (get from Terraform: `terraform output -raw vps_ip`)
 **Location**: Hillsboro, Oregon (hil datacenter)
 **Domain**: vps.tamshai.com (DNS already configured via Cloudflare)
 
@@ -105,7 +105,7 @@ gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
 ssh-keygen -lf ~/.ssh/tamshai_vps.pub
 
 # Compare with VPS authorized_keys (requires console access or working SSH)
-ssh root@5.78.159.29 "ssh-keygen -lf ~/.ssh/authorized_keys"
+ssh root@$VPS_HOST "ssh-keygen -lf ~/.ssh/authorized_keys"
 ```
 
 #### Troubleshooting SSH Failures
@@ -268,10 +268,10 @@ Cloud-init typically takes **5-10 minutes**. You can check status:
 
 ```bash
 # Method 1: Try accessing the main portal
-curl -I https://5.78.159.29/
+curl -I https://vps.tamshai.com/
 
 # Method 2: SSH into server and check cloud-init logs (if SSH enabled)
-# ssh root@5.78.159.29
+# ssh root@$VPS_HOST
 # tail -f /var/log/cloud-init-output.log
 ```
 

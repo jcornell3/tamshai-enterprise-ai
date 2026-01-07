@@ -157,8 +157,8 @@ import 'app_config.dart';
 class StageConfig {
   static final AppConfig config = AppConfig(
     // VPS environment
-    apiBaseUrl: 'https://5.78.159.29/api',
-    keycloakUrl: 'https://5.78.159.29/auth',
+    apiBaseUrl: 'https://$VPS_HOST/api',
+    keycloakUrl: 'https://$VPS_HOST/auth',
     keycloakRealm: 'tamshai-corp',
     keycloakClientId: 'mcp-gateway',
 
@@ -535,8 +535,8 @@ class DebugInfoScreen extends StatelessWidget {
 2. **Install Stage App**:
    - Verify app name in Start Menu shows "Tamshai Stage"
    - Open app, check Settings → Debug Info
-   - Verify API URL: `https://5.78.159.29/api`
-   - Verify Keycloak URL: `https://5.78.159.29/auth`
+   - Verify API URL: `https://$VPS_HOST/api`
+   - Verify Keycloak URL: `https://$VPS_HOST/auth`
 
 3. **Side-by-Side Test**:
    - Run both apps simultaneously
@@ -550,8 +550,8 @@ class DebugInfoScreen extends StatelessWidget {
 | Aspect | Development | Stage | Production |
 |--------|------------|-------|------------|
 | **App Name** | Tamshai Dev | Tamshai Stage | Tamshai |
-| **API URL** | http://localhost:3100 | https://5.78.159.29/api | https://api.tamshai.com |
-| **Keycloak URL** | http://localhost:8180/auth | https://5.78.159.29/auth | https://auth.tamshai.com |
+| **API URL** | http://localhost:3100 | https://$VPS_HOST/api | https://api.tamshai.com |
+| **Keycloak URL** | http://localhost:8180/auth | https://$VPS_HOST/auth | https://auth.tamshai.com |
 | **Realm** | tamshai-corp | tamshai-corp | tamshai-corp |
 | **Backend** | Local Docker | Hetzner VPS | GCP GKE |
 | **Debug Logs** | Enabled | Enabled | Disabled |

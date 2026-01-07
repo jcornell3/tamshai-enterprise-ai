@@ -176,6 +176,18 @@ export VPS_SSH_USER="root"               # SSH user
 export KEYCLOAK_ADMIN_PASSWORD="xxx"     # For Keycloak admin commands
 ```
 
+> **Important: VPS_HOST vs VPS_DOMAIN**
+>
+> These variables serve different purposes due to Cloudflare proxy configuration:
+>
+> | Variable | Purpose | Value | Why |
+> |----------|---------|-------|-----|
+> | `VPS_HOST` | SSH connections (port 22) | IP address (e.g., `5.78.159.29`) | Cloudflare cannot proxy SSH traffic |
+> | `VPS_DOMAIN` | OAuth redirect URIs | Domain (e.g., `vps.tamshai.com`) | HTTPS traffic routes through Cloudflare |
+> | `VITE_STAGE_HOST` | Browser hostname detection | IP address | Matches URL bar when accessing via IP |
+>
+> **Never use `vps.tamshai.com` for SSH** - it will timeout because Cloudflare only proxies HTTP/HTTPS (ports 80/443).
+
 ### MCP Gateway Development
 
 ```bash
@@ -771,8 +783,8 @@ docker compose up -d
 **Platform**: Hetzner Cloud
 **Location**: Hillsboro, Oregon (hil datacenter)
 **Server**: CPX31 (4 vCPU, 8GB RAM)
-**IP**: 5.78.159.29
-**Domain**: Configured via Cloudflare
+**IP**: Set via `VPS_HOST` environment variable (get from Terraform: `terraform output -raw vps_ip`)
+**Domain**: `vps.tamshai.com` (Cloudflare-proxied)
 
 **Deployment Method**: Terraform + cloud-init
 **Files**:
@@ -840,9 +852,9 @@ gh run watch  # Watch the latest run
 - Cloud-init logs: `ssh root@<VPS_IP> 'cat /var/log/cloud-init-output.log'`
 
 **Access**:
-- API Gateway: `https://5.78.159.29/api` (via Cloudflare)
-- Keycloak: `https://5.78.159.29/auth`
-- Health Check: `https://5.78.159.29/health`
+- API Gateway: `https://vps.tamshai.com/api`
+- Keycloak: `https://vps.tamshai.com/auth`
+- Health Check: `https://vps.tamshai.com/health`
 
 ### Production (Planned)
 
@@ -992,7 +1004,7 @@ cd keycloak/scripts
 
 **Stage/VPS (via SSH):**
 ```bash
-ssh root@5.78.159.29
+ssh root@$VPS_HOST  # Use IP address, not domain (Cloudflare can't proxy SSH)
 cd /opt/tamshai
 docker cp keycloak/scripts/sync-realm.sh keycloak:/tmp/
 docker exec keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh'

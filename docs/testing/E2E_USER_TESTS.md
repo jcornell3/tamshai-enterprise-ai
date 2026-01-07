@@ -117,7 +117,7 @@ Location: `scripts/test/e2e-login-with-totp-backup.sh`
 ./scripts/test/e2e-login-with-totp-backup.sh dev eve.thompson
 
 # Stage environment (requires SSH)
-VPS_HOST=5.78.159.29 ./scripts/test/e2e-login-with-totp-backup.sh stage eve.thompson
+VPS_HOST=$VPS_HOST ./scripts/test/e2e-login-with-totp-backup.sh stage eve.thompson
 ```
 
 ### npm Scripts
@@ -233,7 +233,7 @@ await expect(page.locator('h2:has-text("Available Applications")')).toBeVisible(
 **Solution**:
 ```bash
 # Test SSH connection
-ssh -o BatchMode=yes root@5.78.159.29 "echo ok"
+ssh -o BatchMode=yes root@$VPS_HOST "echo ok"
 
 # Set custom host if needed
 VPS_HOST=your-vps-ip ./scripts/test/e2e-login-with-totp-backup.sh stage eve.thompson

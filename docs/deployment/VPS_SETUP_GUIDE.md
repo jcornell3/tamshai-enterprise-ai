@@ -634,8 +634,8 @@ Before going to production:
 **VPS Details:**
 - **Provider**: Hetzner
 - **Plan**: CPX31 (4 vCPU, 8GB RAM, 160GB NVMe)
-- **IP**: 5.78.159.29
-- **Location**: Helsinki, Finland
+- **IP**: Set via `$VPS_HOST` (get from Terraform: `terraform output -raw vps_ip`)
+- **Location**: Hillsboro, Oregon (hil datacenter)
 - **OS**: Ubuntu 24.04 LTS
 - **Cost**: €11.90/month
 
@@ -661,7 +661,7 @@ Before going to production:
    - TLS self-signed certificates generated
    - Vault initialized with 5 unseal keys (threshold: 3)
    - Unseal keys stored in GitHub Secrets
-   - Vault accessible at: https://5.78.159.29:8200
+   - Vault accessible at: https://$VPS_HOST:8200
 
 4. ✅ **Tamshai Services** (2.5 hours)
    - Repository cloned to `/opt/tamshai`
@@ -671,29 +671,29 @@ Before going to production:
 
 **Services Deployed:**
 
-Infrastructure (7 services):
-- PostgreSQL 16 → 5.78.159.29:5433
-- MongoDB 7 → 5.78.159.29:27018
-- Redis 7 → 5.78.159.29:6380
-- Elasticsearch 8.11 → 5.78.159.29:9201
-- MinIO → 5.78.159.29:9100 (API), 9102 (Console)
-- Keycloak 24.0 → 5.78.159.29:8180
-- Kong 3.4 → 5.78.159.29:8100
+Infrastructure (7 services) - all accessed via `$VPS_HOST`:
+- PostgreSQL 16 → port 5433
+- MongoDB 7 → port 27018
+- Redis 7 → port 6380
+- Elasticsearch 8.11 → port 9201
+- MinIO → port 9100 (API), 9102 (Console)
+- Keycloak 24.0 → port 8180
+- Kong 3.4 → port 8100
 
-MCP Servers (5 services):
-- MCP Gateway v0.1.0 → 5.78.159.29:3100
-- MCP HR → 5.78.159.29:3101
-- MCP Finance → 5.78.159.29:3102
-- MCP Sales → 5.78.159.29:3103
-- MCP Support → 5.78.159.29:3104
+MCP Servers (5 services) - all accessed via `$VPS_HOST`:
+- MCP Gateway v0.1.0 → port 3100
+- MCP HR → port 3101
+- MCP Finance → port 3102
+- MCP Sales → port 3103
+- MCP Support → port 3104
 
-Web Applications (6 services):
-- Portal → 5.78.159.29:4000
-- HR → 5.78.159.29:4001
-- Finance → 5.78.159.29:4002
-- Sales → 5.78.159.29:4003
-- Support → 5.78.159.29:4004
-- Public Website → 5.78.159.29:8080
+Web Applications (6 services) - accessed via https://vps.tamshai.com:
+- Portal → /app
+- HR → /hr
+- Finance → /finance
+- Sales → /sales
+- Support → /support
+- Public Website → /
 
 **Health Check Results:**
 ```json

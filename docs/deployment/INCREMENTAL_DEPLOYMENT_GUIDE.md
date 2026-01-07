@@ -353,7 +353,7 @@ If health check fails after deployment:
 
 **GitHub CLI**:
 ```bash
-gh secret set VPS_HOST --body "5.78.159.29"
+gh secret set VPS_HOST --body "$VPS_HOST"
 gh secret set VPS_USER --body "tamshai"
 gh secret set VPS_SSH_KEY < ~/.ssh/id_rsa
 ```
@@ -373,7 +373,7 @@ gh secret set VPS_SSH_KEY < ~/.ssh/id_rsa
 
 **Method 2: Manual SSH**
 ```bash
-ssh tamshai@5.78.159.29
+ssh tamshai@$VPS_HOST
 cd /opt/tamshai
 docker tag mcp-hr:rollback mcp-hr:latest
 docker compose -f docker-compose.yml up -d --no-deps mcp-hr
@@ -442,7 +442,7 @@ gh run download 12345678
 
 **SSH to VPS**:
 ```bash
-ssh tamshai@5.78.159.29
+ssh tamshai@$VPS_HOST
 
 # View all services
 docker compose -f /opt/tamshai/docker-compose.yml logs -f
@@ -459,16 +459,16 @@ docker compose -f /opt/tamshai/docker-compose.yml logs --tail=100 mcp-hr
 **Check Service Health**:
 ```bash
 # MCP Gateway
-curl http://5.78.159.29:3100/health | jq
+curl http://$VPS_HOST:3100/health | jq
 
 # MCP HR
-curl http://5.78.159.29:3101/health | jq
+curl http://$VPS_HOST:3101/health | jq
 
 # Keycloak
-curl http://5.78.159.29:8180/health/ready
+curl http://$VPS_HOST:8180/health/ready
 
 # Kong
-curl http://5.78.159.29:8100/api/health
+curl http://$VPS_HOST:8100/api/health
 ```
 
 ---
@@ -567,11 +567,11 @@ curl http://5.78.159.29:8100/api/health
 **Resolution**:
 1. Verify VPS is accessible:
    ```bash
-   ping 5.78.159.29
+   ping $VPS_HOST
    ```
 2. Test SSH manually:
    ```bash
-   ssh tamshai@5.78.159.29
+   ssh tamshai@$VPS_HOST
    ```
 3. Check GitHub secret `VPS_SSH_KEY` is correct
 4. Verify VPS firewall allows SSH (port 22)
@@ -591,7 +591,7 @@ curl http://5.78.159.29:8100/api/health
 2. Verify package.json dependencies exist
 3. Check VPS disk space:
    ```bash
-   ssh tamshai@5.78.159.29 df -h
+   ssh tamshai@$VPS_HOST df -h
    ```
 4. Prune old Docker images:
    ```bash

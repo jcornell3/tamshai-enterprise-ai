@@ -53,26 +53,26 @@ Terraform generates an SSH key pair during VPS provisioning. The keys are stored
 cd infrastructure/terraform/vps
 
 # Connect using the deploy key
-ssh -i .keys/deploy_key root@5.78.159.29
+ssh -i .keys/deploy_key root@$VPS_HOST
 
 # Or with explicit options (useful if you have multiple keys)
-ssh -i .keys/deploy_key -o IdentitiesOnly=yes root@5.78.159.29
+ssh -i .keys/deploy_key -o IdentitiesOnly=yes root@$VPS_HOST
 ```
 
 ### One-Line Commands (Without Interactive Session)
 
 ```bash
 # Check container status
-ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'docker ps'
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST 'docker ps'
 
 # View MCP Gateway logs
-ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'docker logs mcp-gateway --tail 50'
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST 'docker logs mcp-gateway --tail 50'
 
 # Restart a service
-ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'docker restart mcp-gateway'
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST 'docker restart mcp-gateway'
 
 # Check disk space
-ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'df -h'
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST 'df -h'
 ```
 
 ### Setting Up SSH Config (Recommended)
@@ -84,7 +84,7 @@ Add to `~/.ssh/config` for easier access:
 # Linux/macOS: ~/.ssh/config
 
 Host tamshai-vps
-    HostName 5.78.159.29
+    HostName $VPS_HOST
     User root
     IdentityFile ~/path/to/tamshai-enterprise-ai/infrastructure/terraform/vps/.keys/deploy_key
     IdentitiesOnly yes
@@ -139,7 +139,7 @@ terraform apply -replace='tls_private_key.deploy'
 chmod 600 infrastructure/terraform/vps/.keys/deploy_key
 
 # Verify key matches VPS
-ssh -i .keys/deploy_key -v root@5.78.159.29 2>&1 | grep "Offering public key"
+ssh -i .keys/deploy_key -v root@$VPS_HOST 2>&1 | grep "Offering public key"
 ```
 
 **Key not found**:
@@ -307,14 +307,14 @@ const stages = ['DISCOVERY', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'CLOSED
 ## Diagnostic Commands
 
 **Prerequisite**: All commands assume you're either:
-1. Connected to VPS via SSH: `ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29`
-2. Or using one-liner format: `ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29 'command'`
+1. Connected to VPS via SSH: `ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST`
+2. Or using one-liner format: `ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST 'command'`
 
 ### Check Service Health
 
 ```bash
 # SSH into VPS (interactive session)
-ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST
 
 # Once connected, check all container status
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -332,7 +332,7 @@ curl -s http://localhost:8080/health/ready
 **One-liner versions** (run from local machine):
 ```bash
 # Set shorthand for SSH command
-VPS_SSH="ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29"
+VPS_SSH="ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST"
 
 # Check container status
 $VPS_SSH 'docker ps --format "table {{.Names}}\t{{.Status}}"'

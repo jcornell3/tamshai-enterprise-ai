@@ -704,7 +704,7 @@ See individual guides:
 
 **Infrastructure:**
 - **VPS**: Hetzner CPX31 (4 vCPU, 8GB RAM, 160GB NVMe)
-- **IP**: 5.78.159.29
+- **IP**: $VPS_HOST
 - **Location**: Helsinki, Finland
 - **OS**: Ubuntu 24.04 LTS
 - **Cost**: €11.90/month
@@ -714,7 +714,7 @@ See individual guides:
 - **Status**: ✅ All services operational
 
 **Components Deployed:**
-- ✅ HashiCorp Vault 1.15.4 (https://5.78.159.29:8200)
+- ✅ HashiCorp Vault 1.15.4 (https://$VPS_HOST:8200)
 - ✅ 18 Docker containers (all healthy)
 - ✅ Caddy reverse proxy (serving tamshai.com)
 - ✅ UFW firewall + Fail2ban
@@ -733,7 +733,7 @@ See individual guides:
 - Ready for secrets management
 
 **Pending Configuration:**
-- ⏳ Cloudflare DNS → 5.78.159.29
+- ⏳ Cloudflare DNS → $VPS_HOST
 - ⏳ SSL/TLS mode: Flexible or Full
 - ⏳ Keycloak realm import
 - ⏳ Flutter client connection test

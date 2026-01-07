@@ -14,7 +14,7 @@ Analysis of the repository's 58+ scripts revealed organizational issues affectin
 - 5 duplicate scripts in `.specify/scripts/` (root vs bash/ subdirectory)
 - 2 overlapping backup scripts with different features
 - 2 deprecated scripts that should be archived or removed
-- Hardcoded VPS IP (`5.78.159.29`) in 6+ scripts
+- Hardcoded VPS IP (`$VPS_HOST`) in 6+ scripts
 - Inconsistent naming conventions (sh vs ps1 duplicates)
 - Missing script for common operations
 
@@ -139,7 +139,7 @@ git commit -m "chore: Archive deprecated scripts, remove unified client scripts"
 
 | Value | Current Location | Occurrences |
 |-------|------------------|-------------|
-| VPS IP `5.78.159.29` | Multiple scripts | 6+ |
+| VPS IP `$VPS_HOST` | Multiple scripts | 6+ |
 | Default ports (3100, 8180, etc.) | Service scripts | 10+ |
 | Container names (tamshai-*) | All scripts | 20+ |
 
@@ -157,7 +157,7 @@ Create a shared configuration file:
 # Shared configuration for all scripts. Source this file to get common values.
 
 # VPS Configuration
-export DEFAULT_VPS_HOST="${VPS_HOST:-5.78.159.29}"
+export DEFAULT_VPS_HOST="${VPS_HOST:-$VPS_HOST}"
 export DEFAULT_VPS_SSH_USER="${VPS_SSH_USER:-root}"
 
 # Service Ports

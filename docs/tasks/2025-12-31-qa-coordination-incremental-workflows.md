@@ -322,13 +322,13 @@ When QA testing complete, update this document with:
 ### Phase 2 Integration Test Results (2026-01-01 22:55 UTC)
 
 **Test Environment**:
-- VPS IP: `5.78.159.29`
+- VPS IP: `$VPS_HOST`
 - DNS: `staging-api.tamshai.com` (not yet propagated, tested via IP)
 - Protocol: HTTP (HTTPS requires domain for Let's Encrypt)
 
 **Phase 2.1 - Keycloak Token Acquisition**: ✅ **PASSED**
 ```
-Endpoint: POST http://5.78.159.29/auth/realms/tamshai-corp/protocol/openid-connect/token
+Endpoint: POST http://$VPS_HOST/auth/realms/tamshai-corp/protocol/openid-connect/token
 User: alice.chen (HR role)
 Result: Access token obtained successfully
 Token expires_in: 300 seconds
@@ -337,14 +337,14 @@ Token claims: aud=mcp-gateway, roles=[hr-write, manager, hr-read]
 
 **Phase 2.2 - MCP Gateway JWT Validation**: ✅ **PASSED**
 ```
-Endpoint: POST http://5.78.159.29/api/query
+Endpoint: POST http://$VPS_HOST/api/query
 Authorization: Bearer <valid_token>
 Response: 200 OK (SSE stream)
 ```
 
 **Fixes Applied by Dev Team**:
 1. ✅ Audience mapper added to Keycloak `mcp-gateway` client
-2. ✅ KEYCLOAK_ISSUER set to `https://5.78.159.29/auth/realms/tamshai-corp`
+2. ✅ KEYCLOAK_ISSUER set to `https://$VPS_HOST/auth/realms/tamshai-corp`
 3. ✅ Fixed heredoc quoting in bootstrap script for env var expansion
 
 **Full Authentication Flow Verified**:
@@ -425,7 +425,7 @@ gh workflow run bootstrap-vps.yml -f environment=staging -f rebuild=true -f pull
 
 **Resolution**:
 1. ✅ GitHub secrets configured:
-   - `VPS_HOST` = `5.78.159.29`
+   - `VPS_HOST` = `$VPS_HOST`
    - `VPS_USER` = `tamshai` (non-root for security)
    - `VPS_SSH_KEY` = Terraform-generated deploy key
 
