@@ -454,7 +454,52 @@ paths:
         '403':
           description: Requires hr-write role
 
+  /api/admin/gdpr/erase/{erasureId}:
+    get:
+      summary: Get erasure status
+      description: Get the current status and details of an erasure request
+      tags: [GDPR]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: erasureId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Erasure request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GDPREraseStatusResponse'
+        '404':
+          description: Erasure request not found
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Requires hr-write role
+
   /api/admin/gdpr/breach:
+    get:
+      summary: List all breaches
+      description: Get a list of all registered data breaches
+      tags: [GDPR]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of breaches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GDPRBreachListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Requires hr-write or security-admin role
     post:
       summary: Register data breach
       description: |
@@ -826,6 +871,37 @@ components:
             type: integer
           description: Count of records affected per system
 
+    GDPREraseStatusResponse:
+      type: object
+      properties:
+        erasureId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending_confirmation, processing, completed, failed, cancelled]
+        employeeId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        affectedSystems:
+          type: array
+          items:
+            type: string
+        affectedRecords:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count of records affected per system
+
     GDPRBreachRequest:
       type: object
       required: [breachType, discoveryDate, description]
@@ -884,6 +960,35 @@ components:
         affectedUserList:
           type: string
           description: URL to get list of affected users
+
+    GDPRBreachListResponse:
+      type: object
+      properties:
+        breaches:
+          type: array
+          items:
+            type: object
+            properties:
+              breachId:
+                type: string
+                format: uuid
+              breachType:
+                type: string
+                enum: [unauthorized_access, data_loss, ransomware, disclosure, system_compromise]
+              status:
+                type: string
+                enum: [registered, investigating, contained, notified, closed]
+              affectedCount:
+                type: integer
+              discoveryDate:
+                type: string
+                format: date-time
+              notificationDeadline:
+                type: string
+                format: date-time
+        total:
+          type: integer
+          description: Total number of breaches
 
   responses:
     BadRequest:
