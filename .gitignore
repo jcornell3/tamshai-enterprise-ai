@@ -112,3 +112,6 @@ eve_*.json
 # Playwright artifacts
 tests/e2e/playwright-report/
 tests/e2e/test-results/
+
+# GCP Service Account Key
+claude-deployer-key.json
