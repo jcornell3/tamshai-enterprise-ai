@@ -1,8 +1,14 @@
 # Set Vault Secrets Script
 # Run this after copying values from the GitHub Actions job summary
 # Usage: .\scripts\set-vault-secrets.ps1
+#
+# Required environment variables:
+#   VPS_HOST - VPS IP address or hostname (used in example prompts)
 
 $repo = "jcornell3/tamshai-enterprise-ai"
+
+# Get VPS host for example prompts
+$vpsHost = if ($env:VPS_HOST) { $env:VPS_HOST } else { "<VPS_IP>" }
 
 Write-Host "=== Vault Secrets Setup ===" -ForegroundColor Cyan
 Write-Host "Get values from: https://github.com/$repo/actions/runs/20647438669" -ForegroundColor Yellow
@@ -15,7 +21,7 @@ $key3 = Read-Host "Enter VAULT_UNSEAL_KEY_3"
 $key4 = Read-Host "Enter VAULT_UNSEAL_KEY_4"
 $key5 = Read-Host "Enter VAULT_UNSEAL_KEY_5"
 $token = Read-Host "Enter VAULT_ROOT_TOKEN"
-$addr = Read-Host "Enter VAULT_ADDR (e.g., https://5.78.159.29:8200)"
+$addr = Read-Host "Enter VAULT_ADDR (e.g., https://${vpsHost}:8200)"
 
 Write-Host ""
 Write-Host "Setting secrets..." -ForegroundColor Green

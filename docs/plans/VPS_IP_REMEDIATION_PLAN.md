@@ -235,10 +235,10 @@ VPS_HOST=<your-vps-ip> ssh root@$VPS_HOST 'docker ps'
 
 ### Phase 2: Scripts
 
-- [ ] Review and document all script `VPS_HOST` usage
-- [ ] Update `scripts/verify-stage-deployment.ps1`
-- [ ] Update `scripts/set-vault-secrets.ps1`
-- [ ] Add script header documentation
+- [x] Review and document all script `VPS_HOST` usage
+- [x] Update `scripts/verify-stage-deployment.ps1`
+- [x] Update `scripts/set-vault-secrets.ps1`
+- [x] Add script header documentation
 - [ ] Test all stage scripts with explicit `VPS_HOST`
 
 ### Phase 3: Keycloak

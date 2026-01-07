@@ -26,6 +26,10 @@
 #   ./deploy.sh dev --service=mcp-gateway # Deploy only MCP Gateway
 #   ./deploy.sh dev --sync                # Deploy and sync Keycloak
 #
+# Environment Variables (for stage):
+#   VPS_HOST     - VPS IP address or hostname (required for stage deployments)
+#   VPS_SSH_USER - SSH username (default: root)
+#
 # =============================================================================
 
 set -euo pipefail
