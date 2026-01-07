@@ -1,8 +1,9 @@
 # Phase 1: Cost-Optimized Production (Pilot)
 
-**Document Version**: 1.0
+**Document Version**: 1.1
 **Created**: January 2026
-**Status**: Planning
+**Updated**: January 7, 2026
+**Status**: Prerequisites Complete (7/8) - Pending Service Account Setup
 
 ## Executive Summary
 
@@ -22,32 +23,32 @@ These items require your input or action before deployment can proceed:
 
 | # | Action | Details | Status |
 |---|--------|---------|--------|
-| 1 | **Provide GCP Project** | Create or designate a GCP project for production | ⬜ |
-| | | • Project ID: `________________` | |
-| | | • Project Number: `________________` | |
-| | | • Billing Account linked: Yes / No | |
-| 2 | **Enable Required APIs** | Enable these APIs in GCP Console (or Claude can do via `gcloud`) | ⬜ |
+| 1 | **Provide GCP Project** | GCP project designated for production | ✅ |
+| | | • Project ID/Number: *(stored in secrets)* | |
+| | | • Billing Account linked: Yes | |
+| 2 | **Enable Required APIs** | Claude will enable via `gcloud` | ✅ |
 | | | • Cloud Run API | |
 | | | • Cloud SQL Admin API | |
 | | | • Secret Manager API | |
 | | | • Compute Engine API | |
 | | | • Artifact Registry API | |
-| 3 | **Provide Domain Decision** | Which domain(s) will be used? | ⬜ |
-| | | • API: `api.________________` | |
-| | | • Auth: `auth.________________` | |
-| | | • App: `app.________________` | |
-| | | • DNS Provider: Cloudflare / Google Cloud DNS / Other | |
-| 4 | **Provide Claude API Key** | From https://console.anthropic.com | ⬜ |
-| | | • Key will be stored in Secret Manager | |
-| 5 | **MongoDB Atlas Decision** | Choose one (see [Appendix A](#appendix-a-mongodb-atlas-m0-setup)): | ⬜ |
-| | | • ⬜ Use MongoDB Atlas M0 (Free) - requires account setup, ~15 min | |
-| | | • ⬜ Self-host on Utility VM (simpler, no external dependency) ✅ Recommended | |
-| 6 | **Choose GCP Region** | Recommended: `us-central1` (cheapest) | ⬜ |
-| | | • Alternative: `________________` | |
-| 7 | **Confirm Budget** | Approve estimated $50-80/mo spend | ⬜ |
+| 3 | **Provide Domain Decision** | Domain configuration confirmed | ✅ |
+| | | • API: `api.tamshai.com` | |
+| | | • Auth: `auth.tamshai.com` | |
+| | | • App: `app.tamshai.com` | |
+| | | • DNS Provider: Cloudflare | |
+| 4 | **Provide Claude API Key** | Key provided *(stored in secrets)* | ✅ |
+| | | • Will be stored in GCP Secret Manager | |
+| 5 | **MongoDB Atlas Decision** | See [Appendix A](#appendix-a-mongodb-atlas-m0-setup) | ✅ |
+| | | • ✅ Use MongoDB Atlas M0 (Free) | |
+| | | • ⬜ Self-host on Utility VM | |
+| 6 | **Choose GCP Region** | `us-central1` | ✅ |
+| 7 | **Confirm Budget** | Approved (~$50-80/mo) | ✅ |
 | 8 | **Service Account Permissions** | See [Appendix B](#appendix-b-gcp-service-account-setup) for detailed instructions | ⬜ |
 | | | • ⬜ Option A: Create Service Account + JSON key (recommended for automation) | |
 | | | • ⬜ Option B: Use `gcloud auth login` (simpler, interactive sessions only) | |
+
+> **Note:** GCP Project credentials and Claude API key are stored securely and not committed to the repository.
 
 ### 🟢 Claude Actions (Implementation)
 
