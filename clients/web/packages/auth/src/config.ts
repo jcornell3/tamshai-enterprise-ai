@@ -18,6 +18,35 @@ function getAppBasePath(): string {
 }
 
 /**
+ * Check if the current hostname indicates a deployed environment
+ * (dev with Caddy, stage VPS, or production)
+ */
+function isDeployedEnvironment(hostname: string): boolean {
+  // Known deployed hostnames
+  const deployedHosts = [
+    'tamshai.local',
+    'www.tamshai.local',
+    'tamshai.com',
+    'www.tamshai.com',
+    'vps.tamshai.com',
+  ];
+
+  // Check known hosts
+  if (deployedHosts.some(h => hostname.includes(h))) {
+    return true;
+  }
+
+  // Check for VPS IP via environment variable (set at build time)
+  // This allows stage builds to recognize the VPS IP without hardcoding
+  const stageHost = import.meta.env.VITE_STAGE_HOST;
+  if (stageHost && hostname.includes(stageHost)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Determine environment-specific Keycloak configuration
  */
 function getKeycloakConfig() {
@@ -25,18 +54,8 @@ function getKeycloakConfig() {
   const origin = window.location.origin;
   const basePath = getAppBasePath();
 
-  // Dev environment with Caddy (tamshai.local)
-  if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local') {
-    return {
-      authority: `${origin}/auth/realms/tamshai-corp`,
-      client_id: 'tamshai-website',
-      redirect_uri: `${origin}${basePath}/callback`,
-      post_logout_redirect_uri: origin,
-    };
-  }
-
-  // Stage/Prod environment (tamshai.com or VPS IP)
-  if (hostname.includes('tamshai.com') || hostname.includes('5.78.159.29')) {
+  // Deployed environment (Caddy routing, stage VPS, or production)
+  if (isDeployedEnvironment(hostname)) {
     return {
       authority: `${origin}/auth/realms/tamshai-corp`,
       client_id: 'tamshai-website',

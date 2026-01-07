@@ -30,6 +30,35 @@ interface AppCard {
 }
 
 /**
+ * Check if the current hostname indicates a deployed environment
+ * (dev with Caddy, stage VPS, or production)
+ */
+function isDeployedEnvironment(hostname: string): boolean {
+  // Known deployed hostnames
+  const deployedHosts = [
+    'tamshai.local',
+    'www.tamshai.local',
+    'tamshai.com',
+    'www.tamshai.com',
+    'vps.tamshai.com',
+  ];
+
+  // Check known hosts
+  if (deployedHosts.some(h => hostname.includes(h))) {
+    return true;
+  }
+
+  // Check for VPS IP via environment variable (set at build time)
+  // This allows stage builds to recognize the VPS IP without hardcoding
+  const stageHost = import.meta.env.VITE_STAGE_HOST;
+  if (stageHost && hostname.includes(stageHost)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Get environment-aware app URLs
  * - Local dev (localhost): Use separate ports
  * - Deployed (Caddy): Use path-based routing
@@ -38,8 +67,7 @@ function getAppUrls() {
   const hostname = window.location.hostname;
 
   // Deployed environment (Caddy routing)
-  if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local' ||
-      hostname.includes('tamshai.com') || hostname.includes('5.78.159.29')) {
+  if (isDeployedEnvironment(hostname)) {
     return {
       hr: '/hr/',
       finance: '/finance/',
