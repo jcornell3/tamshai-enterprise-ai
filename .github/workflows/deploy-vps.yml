@@ -253,31 +253,8 @@ jobs:
             sleep 15
           done
 
-          echo "=== Syncing Keycloak configuration ==="
-          # Copy sync script and fix permissions using root user
-          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
-          docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh' || true
-          # Run as keycloak user (non-fatal - deployment succeeds even if sync fails)
-          # Pass both KEYCLOAK_ADMIN_PASSWORD and MCP_HR_SERVICE_CLIENT_SECRET to container
-          docker exec \
-            -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
-            -e MCP_HR_SERVICE_CLIENT_SECRET="$MCP_HR_SERVICE_CLIENT_SECRET" \
-            tamshai-keycloak /tmp/sync-realm.sh stage || {
-              echo "[WARN] Keycloak sync failed - clients may need manual configuration"
-              echo "Run: ./keycloak/scripts/docker-sync-realm.sh stage tamshai-keycloak"
-            }
-
-          echo "=== Syncing HR users to Keycloak ==="
-          # Run identity-sync to provision HR employees as Keycloak users
-          # This must run AFTER realm sync to ensure mcp-hr-service client exists
-          # Use --build to ensure latest code is used (image may be cached)
-          # Use -T to disable TTY allocation (prevents consuming heredoc stdin)
-          docker compose run -T --rm --build identity-sync || {
-            echo "[WARN] Identity sync failed - users may need manual provisioning"
-            echo "Check logs: docker logs tamshai-identity-sync"
-          }
-
           # Re-seed sample data if requested (DROP and RELOAD for clean data)
+          # NOTE: Run this BEFORE Keycloak sync to avoid heredoc termination issues
           # NOTE: Currently always enabled. To make conditional, need to pass as env var to VPS
           if [ "true" = "true" ]; then
             echo "=== Re-seeding sample data (clean reload) ==="
@@ -325,6 +302,30 @@ jobs:
           else
             echo "=== Skipping sample data re-seed (use reseed_data=true to enable) ==="
           fi
+
+          echo "=== Syncing Keycloak configuration ==="
+          # Copy sync script and fix permissions using root user
+          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
+          docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh' || true
+          # Run as keycloak user (non-fatal - deployment succeeds even if sync fails)
+          # Pass both KEYCLOAK_ADMIN_PASSWORD and MCP_HR_SERVICE_CLIENT_SECRET to container
+          docker exec \
+            -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
+            -e MCP_HR_SERVICE_CLIENT_SECRET="$MCP_HR_SERVICE_CLIENT_SECRET" \
+            tamshai-keycloak /tmp/sync-realm.sh stage || {
+              echo "[WARN] Keycloak sync failed - clients may need manual configuration"
+              echo "Run: ./keycloak/scripts/docker-sync-realm.sh stage tamshai-keycloak"
+            }
+
+          echo "=== Syncing HR users to Keycloak ==="
+          # Run identity-sync to provision HR employees as Keycloak users
+          # This must run AFTER realm sync to ensure mcp-hr-service client exists
+          # Use --build to ensure latest code is used (image may be cached)
+          # Use -T to disable TTY allocation (prevents consuming heredoc stdin)
+          docker compose run -T --rm --build identity-sync || {
+            echo "[WARN] Identity sync failed - users may need manual provisioning"
+            echo "Check logs: docker logs tamshai-identity-sync"
+          }
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
