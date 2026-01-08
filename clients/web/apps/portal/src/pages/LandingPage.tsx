@@ -291,7 +291,7 @@ export default function LandingPage() {
         <div className="mt-12">
           <h2 className="text-xl font-bold text-secondary-900 mb-4">Desktop & Mobile Apps</h2>
           <a
-            href="/downloads"
+            href="downloads"
             className="card-hover group flex items-center gap-6 p-6"
           >
             <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white shadow-lg">
