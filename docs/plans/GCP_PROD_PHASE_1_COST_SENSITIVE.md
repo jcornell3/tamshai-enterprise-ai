@@ -54,31 +54,33 @@ These items require your input or action before deployment can proceed:
 
 Once prerequisites are provided, Claude will execute these tasks:
 
-| Phase | Task | Estimated Time |
-|-------|------|----------------|
-| **Setup** | | |
-| 1.1 | Create/update `infrastructure/terraform/gcp/` Terraform modules | 2-3 hours |
-| 1.2 | Configure GCP provider with your project ID | 10 min |
-| 1.3 | Create `terraform.tfvars` with your inputs | 10 min |
-| **Infrastructure** | | |
-| 2.1 | Deploy VPC and networking (Serverless VPC Connector) | 15 min |
-| 2.2 | Deploy Cloud SQL PostgreSQL instance | 10-15 min |
-| 2.3 | Deploy Utility VM (Redis + Bastion) | 5 min |
-| 2.4 | Configure Secret Manager with credentials | 10 min |
-| **Services** | | |
-| 3.1 | Build and push container images to Artifact Registry | 20 min |
-| 3.2 | Deploy MCP Gateway to Cloud Run | 5 min |
-| 3.3 | Deploy MCP Suite (HR, Finance, Sales, Support) to Cloud Run | 10 min |
-| 3.4 | Deploy Keycloak to Cloud Run | 10 min |
-| **Configuration** | | |
-| 4.1 | Configure Cloud Run domain mappings | 10 min |
-| 4.2 | Provide DNS records for you to add | 5 min |
-| 4.3 | Run database migrations | 10 min |
-| 4.4 | Sync Keycloak realm configuration | 10 min |
-| 4.5 | Run smoke tests and verify deployment | 15 min |
-| **Documentation** | | |
-| 5.1 | Update CLAUDE.md with GCP deployment instructions | 15 min |
-| 5.2 | Create runbook for common operations | 30 min |
+| Phase | Task | Estimated Time | Status |
+|-------|------|----------------|--------|
+| **Setup** | | | |
+| 1.1 | Create `scripts/gcp/gcp-infra-deploy.sh` deployment script | 30 min | ✅ |
+| 1.2 | Create `scripts/gcp/gcp-infra-teardown.sh` teardown script | 20 min | ✅ |
+| 1.3 | Create/update `infrastructure/terraform/gcp/` Terraform modules | 2-3 hours | ⬜ |
+| 1.4 | Configure GCP provider with your project ID | 10 min | ⬜ |
+| 1.5 | Create `terraform.tfvars` with your inputs | 10 min | ⬜ |
+| **Infrastructure** | | | |
+| 2.1 | Deploy VPC and networking (Serverless VPC Connector) | 15 min | ⬜ |
+| 2.2 | Deploy Cloud SQL PostgreSQL instance | 10-15 min | ⬜ |
+| 2.3 | Deploy Utility VM (Redis + Bastion) | 5 min | ⬜ |
+| 2.4 | Configure Secret Manager with credentials | 10 min | ⬜ |
+| **Services** | | | |
+| 3.1 | Build and push container images to Artifact Registry | 20 min | ⬜ |
+| 3.2 | Deploy MCP Gateway to Cloud Run | 5 min | ⬜ |
+| 3.3 | Deploy MCP Suite (HR, Finance, Sales, Support) to Cloud Run | 10 min | ⬜ |
+| 3.4 | Deploy Keycloak to Cloud Run | 10 min | ⬜ |
+| **Configuration** | | | |
+| 4.1 | Configure Cloud Run domain mappings | 10 min | ⬜ |
+| 4.2 | Provide DNS records for you to add | 5 min | ⬜ |
+| 4.3 | Run database migrations | 10 min | ⬜ |
+| 4.4 | Sync Keycloak realm configuration | 10 min | ⬜ |
+| 4.5 | Run smoke tests and verify deployment | 15 min | ⬜ |
+| **Documentation** | | | |
+| 5.1 | Update CLAUDE.md with GCP deployment instructions | 15 min | ⬜ |
+| 5.2 | Create runbook for common operations | 30 min | ⬜ |
 
 **Total Estimated Implementation Time:** ~4-5 hours (spread across sessions)
 
