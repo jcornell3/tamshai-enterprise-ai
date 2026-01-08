@@ -243,6 +243,186 @@ VPS_DOMAIN=tamshai.com ./keycloak/scripts/sync-realm.sh prod
 
 ---
 
+## Backup & Recovery Strategy
+
+This section outlines a cost-effective backup strategy that maintains "Phoenix" capability - the ability to completely reprovision the environment from scratch while preserving critical data.
+
+### Design Principles
+
+1. **Leverage GCP Native Features** - No expensive third-party backup tools
+2. **Pay-as-you-go Storage** - Only pay for what you store
+3. **Phoenix Architecture** - Don't back up what you can rebuild
+4. **Portable Exports** - SQL/JSON dumps for environment migration
+
+### Backup Methods by Resource
+
+#### 1. Cloud SQL: Automated Backups + PITR (Priority #1)
+
+The database is the primary source of truth and gets the most backup investment.
+
+**Configuration:**
+```hcl
+# infrastructure/terraform/gcp/modules/database/main.tf
+settings {
+  tier = "db-f1-micro"
+  backup_configuration {
+    enabled            = true
+    start_time         = "03:00"  # UTC - quiet hours
+    retention_settings {
+      retained_backups = 7
+      retention_unit   = "COUNT"
+    }
+    point_in_time_recovery_enabled = true
+  }
+}
+```
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| Retention | 7 backups | Minimum needed; rarely need older than a week |
+| PITR | Enabled | Recover to any second; write-ahead logs are tiny for low traffic |
+| Start Time | 03:00 UTC | During lowest traffic period |
+
+**Cost:** ~$0.20/month for 1GB database
+
+#### 2. Phoenix Exports (Weekly SQL/MongoDB Dumps)
+
+Portable dumps for environment migration and disaster recovery beyond GCP.
+
+**Method:** Cloud Scheduler triggers weekly exports to GCS Coldline bucket.
+
+```bash
+# Weekly export job (Cloud Scheduler)
+gcloud sql export sql tamshai-db \
+  gs://tamshai-backups-coldline/sql/$(date +%Y%m%d).sql.gz \
+  --database=tamshai
+
+# MongoDB Atlas export (since M0 has no native backups)
+mongodump --uri="$MONGODB_ATLAS_URI" \
+  --archive | gsutil cp - gs://tamshai-backups-coldline/mongodb/$(date +%Y%m%d).archive
+```
+
+| Resource | Export Frequency | Storage Class | Retention |
+|----------|------------------|---------------|-----------|
+| PostgreSQL | Weekly | Coldline | 30 days |
+| MongoDB | Weekly | Coldline | 30 days |
+| Keycloak Realm | Weekly | Coldline | 30 days |
+
+**Cost:** ~$0.03/month total
+
+#### 3. Keycloak Realm Export
+
+Critical for disaster recovery - without realm export, users must be manually recreated.
+
+```bash
+# Weekly Keycloak realm export
+docker exec keycloak /opt/keycloak/bin/kc.sh export \
+  --dir /tmp/export --realm tamshai-corp
+
+gsutil cp /tmp/export/tamshai-corp-realm.json \
+  gs://tamshai-backups-coldline/keycloak/$(date +%Y%m%d)-realm.json
+```
+
+#### 4. Frontend Assets: GCS Object Versioning
+
+No separate backup needed - versioning provides instant rollback.
+
+**Configuration:**
+```bash
+gsutil versioning set on gs://tamshai-frontend
+```
+
+**Rollback procedure:**
+```bash
+# List versions
+gsutil ls -a gs://tamshai-frontend/index.html
+
+# Restore previous version
+gsutil cp gs://tamshai-frontend/index.html#1234567890 gs://tamshai-frontend/index.html
+```
+
+**Cost:** ~$0.05/month for 5-10 versions of ~50MB assets
+
+#### 5. Secret Manager: Version History
+
+Secrets are automatically versioned by GCP.
+
+**Strategy:**
+- Keep only 2 active versions per secret
+- Never hard-delete secret versions
+- Rollback by updating Terraform to reference previous version
+
+**Cost:** ~$0.06/month
+
+#### 6. Redis (Memorystore Basic): No Backup
+
+**Rationale:** Basic tier Redis does not support persistence. Upgrading to Standard tier triples cost.
+
+**Architecture Requirement:** Application must handle "Cold Redis":
+- Token revocation checks fall back gracefully
+- Session cache misses trigger re-authentication
+- No critical state stored only in Redis
+
+### Backup Cost Summary
+
+| Resource | Method | Est. Monthly Cost |
+|----------|--------|-------------------|
+| Cloud SQL | Auto-backup + PITR (7 backups) | ~$0.20 |
+| Cloud SQL | Weekly dump to Coldline | ~$0.01 |
+| MongoDB Atlas | Weekly mongodump to Coldline | ~$0.01 |
+| Keycloak | Weekly realm export to GCS | ~$0.01 |
+| Frontend | GCS Object Versioning | ~$0.05 |
+| Secrets | Version History (2 versions) | ~$0.06 |
+| **Total** | | **< $0.50/mo** |
+
+### Recovery Procedures
+
+#### Database Point-in-Time Recovery
+```bash
+# Restore to specific time
+gcloud sql instances clone tamshai-db tamshai-db-restored \
+  --point-in-time="2026-01-07T10:30:00Z"
+```
+
+#### Full Environment Rebuild (Phoenix)
+```bash
+# 1. Provision infrastructure
+./scripts/gcp/gcp-infra-deploy.sh --init
+
+# 2. Restore database from dump
+gsutil cp gs://tamshai-backups-coldline/sql/latest.sql.gz - | gunzip | \
+  gcloud sql import sql tamshai-db -
+
+# 3. Restore MongoDB
+gsutil cp gs://tamshai-backups-coldline/mongodb/latest.archive - | \
+  mongorestore --uri="$MONGODB_ATLAS_URI" --archive
+
+# 4. Import Keycloak realm
+# (Handled by sync-realm.sh or manual import)
+```
+
+### GCS Bucket Lifecycle Policy
+
+Automatically delete old backups to control costs:
+
+```json
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": {"type": "Delete"},
+        "condition": {
+          "age": 30,
+          "matchesStorageClass": ["COLDLINE"]
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
 ## Risks & Limitations
 
 | Risk | Impact | Mitigation |
