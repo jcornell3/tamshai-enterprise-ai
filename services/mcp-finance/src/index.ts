@@ -241,7 +241,7 @@ app.post('/tools/get_budget', async (req: Request, res: Response) => {
  */
 app.post('/tools/list_invoices', async (req: Request, res: Response) => {
   try {
-    const { userContext, status, department, limit, cursor } = req.body;
+    const { userContext, status, department, startDate, endDate, limit, cursor } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -263,7 +263,7 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await listInvoices({ status, department, limit, cursor }, userContext);
+    const result = await listInvoices({ status, department, startDate, endDate, limit, cursor }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('list_invoices error:', error);

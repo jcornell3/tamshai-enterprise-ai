@@ -89,9 +89,10 @@ export function DashboardPage() {
   const error = budgetsError;
 
   // Compute dashboard metrics from budget data
-  // Note: API returns budgeted_amount/actual_amount (not allocated_amount/spent_amount)
-  const totalBudget = budgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0);
-  const totalSpent = budgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0);
+  // Note: API returns budgeted_amount/actual_amount as strings (PostgreSQL DECIMAL → JSON)
+  // Must convert to Number to avoid NaN from string concatenation
+  const totalBudget = budgets.reduce((sum, b) => sum + (Number(b.budgeted_amount) || 0), 0);
+  const totalSpent = budgets.reduce((sum, b) => sum + (Number(b.actual_amount) || 0), 0);
 
   const metrics: DashboardMetrics | undefined = budgets.length > 0 ? {
     total_budget: totalBudget,
@@ -103,8 +104,8 @@ export function DashboardPage() {
     pending_expense_reports: 0, // Would need separate API call
     departments: [...new Set(budgets.map(b => b.department_code))].map(deptCode => {
       const deptBudgets = budgets.filter(b => b.department_code === deptCode);
-      const allocated = deptBudgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0);
-      const spent = deptBudgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0);
+      const allocated = deptBudgets.reduce((sum, b) => sum + (Number(b.budgeted_amount) || 0), 0);
+      const spent = deptBudgets.reduce((sum, b) => sum + (Number(b.actual_amount) || 0), 0);
       return {
         department: deptCode,  // Using department code for now (ENG, FIN, etc.)
         allocated,

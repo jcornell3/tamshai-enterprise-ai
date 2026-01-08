@@ -197,7 +197,7 @@ export function BudgetsPage() {
 
   // Calculate stats
   const stats = useMemo(() => {
-    const totalAllocated = filteredBudgets.reduce((sum, b) => sum + b.budgeted_amount, 0);
+    const totalAllocated = filteredBudgets.reduce((sum, b) => sum + (Number(b.budgeted_amount) || 0), 0);
     const pendingCount = filteredBudgets.filter((b) => b.status === 'PENDING_APPROVAL').length;
     return { totalCount: filteredBudgets.length, totalAllocated, pendingCount };
   }, [filteredBudgets]);
@@ -487,8 +487,10 @@ export function BudgetsPage() {
               </thead>
               <tbody className="bg-white divide-y divide-secondary-200">
                 {filteredBudgets.map((budget, index) => {
-                  const utilization = budget.budgeted_amount > 0
-                    ? Math.round((budget.actual_amount / budget.budgeted_amount) * 100)
+                  const budgeted = Number(budget.budgeted_amount) || 0;
+                  const actual = Number(budget.actual_amount) || 0;
+                  const utilization = budgeted > 0
+                    ? Math.round((actual / budgeted) * 100)
                     : 0;
                   const budgetKey = `${budget.department_code}-${budget.fiscal_year}-${budget.category_name}-${index}`;
 
@@ -506,10 +508,10 @@ export function BudgetsPage() {
                         FY{budget.fiscal_year}
                       </td>
                       <td className="table-cell" data-testid="allocated-amount">
-                        {formatCurrency(budget.budgeted_amount)}
+                        {formatCurrency(budgeted)}
                       </td>
-                      <td className="table-cell">{formatCurrency(budget.actual_amount)}</td>
-                      <td className="table-cell">{formatCurrency(budget.remaining_amount)}</td>
+                      <td className="table-cell">{formatCurrency(actual)}</td>
+                      <td className="table-cell">{formatCurrency(budgeted - actual)}</td>
                       <td className="table-cell">
                         <div className="flex items-center gap-2">
                           <div className="w-20 h-2 bg-secondary-200 rounded-full overflow-hidden" data-testid="utilization-bar">

@@ -230,7 +230,7 @@ export function InvoicesPage() {
     const totalCount = filteredInvoices.length;
     const pendingAmount = filteredInvoices
       .filter((i) => i.status === 'PENDING')
-      .reduce((sum, i) => sum + i.amount, 0);
+      .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
     const overdueCount = filteredInvoices.filter((i) => isOverdue(i)).length;
     return { totalCount, pendingAmount, overdueCount };
   }, [filteredInvoices]);
