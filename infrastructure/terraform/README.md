@@ -19,7 +19,7 @@ Tamshai uses **different deployment strategies** for each environment:
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  Staging (VPS)                                                  │
-│  ├─ Platform: DigitalOcean/Hetzner VPS                          │
+│  ├─ Platform: Hetzner Cloud VPS                                 │
 │  ├─ Location: infrastructure/terraform/vps/                     │
 │  ├─ Configuration: terraform.tfvars                             │
 │  ├─ Cost: ~$40-60/month (single VPS)                            │
@@ -52,6 +52,14 @@ infrastructure/terraform/
 ├── main.tf                      # Root orchestration (GCP production)
 ├── variables.tf                 # Global variables
 ├── outputs.tf                   # Aggregated outputs
+├── dev/                         # Terraform-managed Docker Compose (local dev)
+│   ├── main.tf                  # Docker provider + local-exec
+│   ├── dev.tfvars               # Development configuration
+│   └── README.md                # Dev environment setup guide
+├── vps/                         # VPS staging deployment
+│   ├── main.tf                  # VPS provisioning (Hetzner Cloud)
+│   ├── cloud-init.yaml          # Automated setup script
+│   └── terraform.tfvars         # Staging configuration
 ├── environments/
 │   └── production.tfvars        # GCP production configuration
 └── modules/                     # Reusable GCP modules
@@ -129,10 +137,10 @@ infrastructure/terraform/vps/
 
 ### VPS Features
 
-- **Supported Providers**: DigitalOcean, Hetzner Cloud
+- **Provider**: Hetzner Cloud (DigitalOcean also supported)
 - **All-in-one**: Single VPS runs all services via Docker Compose
 - **Automated Setup**: Cloud-init handles installation and deployment
-- **Let's Encrypt**: Automatic SSL certificate provisioning
+- **Cloudflare SSL**: SSL termination via Cloudflare proxy
 - **Cost-Effective**: ~$40-60/month for staging environment
 
 ### VPS Usage
@@ -194,10 +202,10 @@ See **[CLAUDE.md](../../CLAUDE.md)** Section: "Development Environment" for full
 | Feature | Development | Staging (VPS) | Production (GCP) |
 |---------|-------------|---------------|------------------|
 | **Platform** | Docker Compose | Single VPS | GCP Multi-service |
-| **Location** | Localhost | DigitalOcean/Hetzner | Google Cloud |
-| **Terraform** | No | Yes (vps/) | Yes (root) |
+| **Location** | Localhost | Hetzner Cloud | Google Cloud |
+| **Terraform** | Yes (dev/) | Yes (vps/) | Yes (root) |
 | **Cost** | Free | ~$40-60/month | ~$150-200/month |
-| **SSL** | No | Let's Encrypt | Cloud Load Balancer |
+| **SSL** | Self-signed | Cloudflare | Cloud Load Balancer |
 | **HA** | No | No | Yes (Cloud SQL) |
 | **Backups** | Manual | Optional | Automated |
 | **Scalability** | N/A | Vertical only | Horizontal + Vertical |
@@ -285,6 +293,6 @@ terraform apply -var-file=environments/production.tfvars
 
 ---
 
-*Last Updated: December 29, 2025*
+*Last Updated: January 8, 2026*
 *Architecture Version: 1.4*
-*Document Version: 1.0*
+*Document Version: 1.1 (Updated deployment architecture, added dev/ directory)*
