@@ -35,8 +35,8 @@ export function BudgetsPage() {
   const canWrite = canModifyFinance(userContext);
 
   // Filters
-  const [yearFilter, setYearFilter] = useState<string>('2025'); // Default to current fiscal year
-  const [quarterFilter, setQuarterFilter] = useState<string>('');
+  const [yearFilter, setYearFilter] = useState<number | null>(2025); // Default to current fiscal year
+  const [categoryFilter, setCategoryFilter] = useState<string>(''); // Changed from quarterFilter since we now have categories
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || '');
   const [departmentFilter, setDepartmentFilter] = useState<string>('');
 
@@ -108,11 +108,11 @@ export function BudgetsPage() {
     },
     onSuccess: (data, budgetId) => {
       if (data.status === 'pending_confirmation') {
-        const budget = budgets.find((b) => b._id === budgetId);
+        const budget = budgets.find((b) => `${b.department_code}-${b.fiscal_year}-${b.category_name}` === budgetId);
         if (budget) {
           setPendingConfirmation({
             confirmationId: data.confirmationId!,
-            message: data.message || `Approve ${budget.department} ${budget.fiscal_quarter} ${budget.fiscal_year} budget for ${formatCurrency(budget.budgeted_amount)}?`,
+            message: data.message || `Approve ${budget.department_code} FY${budget.fiscal_year} ${budget.category_name} budget for ${formatCurrency(budget.budgeted_amount)}?`,
             budget,
             action: 'approve',
           });
@@ -188,12 +188,12 @@ export function BudgetsPage() {
   const filteredBudgets = useMemo(() => {
     return budgets.filter((budget) => {
       if (yearFilter && budget.fiscal_year !== yearFilter) return false;
-      if (quarterFilter && budget.fiscal_quarter !== quarterFilter) return false;
+      if (categoryFilter && !budget.category_name.toLowerCase().includes(categoryFilter.toLowerCase())) return false;
       if (statusFilter && budget.status !== statusFilter) return false;
-      if (departmentFilter && !budget.department.toLowerCase().includes(departmentFilter.toLowerCase())) return false;
+      if (departmentFilter && !budget.department_code.toLowerCase().includes(departmentFilter.toLowerCase())) return false;
       return true;
     });
-  }, [budgets, yearFilter, quarterFilter, statusFilter, departmentFilter]);
+  }, [budgets, yearFilter, categoryFilter, statusFilter, departmentFilter]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -210,8 +210,8 @@ export function BudgetsPage() {
 
   // Clear all filters
   const clearFilters = () => {
-    setYearFilter('');
-    setQuarterFilter('');
+    setYearFilter(null);
+    setCategoryFilter('');
     setStatusFilter('');
     setDepartmentFilter('');
   };
@@ -315,9 +315,9 @@ export function BudgetsPage() {
             message={pendingConfirmation.message}
             confirmationData={{
               action: pendingConfirmation.action,
-              department: pendingConfirmation.budget.department,
+              department: pendingConfirmation.budget.department_code,
               amount: formatCurrency(pendingConfirmation.budget.budgeted_amount),
-              fiscalPeriod: `${pendingConfirmation.budget.fiscal_year} ${pendingConfirmation.budget.fiscal_quarter}`,
+              fiscalPeriod: `FY${pendingConfirmation.budget.fiscal_year} - ${pendingConfirmation.budget.category_name}`,
             }}
             onComplete={handleConfirmationComplete}
           />
@@ -341,7 +341,7 @@ export function BudgetsPage() {
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Reject Budget</h3>
             <p className="text-secondary-600 mb-4">
-              Reject {showRejectDialog.department} {showRejectDialog.fiscal_quarter} {showRejectDialog.fiscal_year} budget?
+              Reject {showRejectDialog.department_code} FY{showRejectDialog.fiscal_year} {showRejectDialog.category_name} budget?
             </p>
             <textarea
               value={rejectionReason}
@@ -366,7 +366,7 @@ export function BudgetsPage() {
                 onClick={() => {
                   if (rejectionReason.trim()) {
                     rejectMutation.mutate({
-                      budgetId: showRejectDialog._id,
+                      budgetId: `${showRejectDialog.department_code}-${showRejectDialog.fiscal_year}-${showRejectDialog.category_name}`,
                       reason: rejectionReason,
                     });
                   }
@@ -403,8 +403,8 @@ export function BudgetsPage() {
           <div>
             <label className="block text-sm font-medium text-secondary-700 mb-1">Fiscal Year</label>
             <select
-              value={yearFilter}
-              onChange={(e) => setYearFilter(e.target.value)}
+              value={yearFilter || ''}
+              onChange={(e) => setYearFilter(e.target.value ? parseInt(e.target.value) : null)}
               className="input"
               data-testid="year-filter"
             >
@@ -415,19 +415,15 @@ export function BudgetsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-secondary-700 mb-1">Quarter</label>
-            <select
-              value={quarterFilter}
-              onChange={(e) => setQuarterFilter(e.target.value)}
+            <label className="block text-sm font-medium text-secondary-700 mb-1">Category</label>
+            <input
+              type="text"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              placeholder="Filter by category"
               className="input"
-              data-testid="quarter-filter"
-            >
-              <option value="">All Quarters</option>
-              <option value="Q1">Q1</option>
-              <option value="Q2">Q2</option>
-              <option value="Q3">Q3</option>
-              <option value="Q4">Q4</option>
-            </select>
+              data-testid="category-filter"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-secondary-700 mb-1">Status</label>
@@ -479,7 +475,8 @@ export function BudgetsPage() {
               <thead>
                 <tr>
                   <th className="table-header">Department</th>
-                  <th className="table-header">Fiscal Period</th>
+                  <th className="table-header">Category</th>
+                  <th className="table-header">Fiscal Year</th>
                   <th className="table-header">Allocated</th>
                   <th className="table-header">Spent</th>
                   <th className="table-header">Remaining</th>
@@ -489,20 +486,24 @@ export function BudgetsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-secondary-200">
-                {filteredBudgets.map((budget) => {
+                {filteredBudgets.map((budget, index) => {
                   const utilization = budget.budgeted_amount > 0
                     ? Math.round((budget.actual_amount / budget.budgeted_amount) * 100)
                     : 0;
+                  const budgetKey = `${budget.department_code}-${budget.fiscal_year}-${budget.category_name}-${index}`;
 
                   return (
-                    <tr key={budget._id} className="table-row" data-testid="budget-row">
+                    <tr key={budgetKey} className="table-row" data-testid="budget-row">
                       <td className="table-cell">
                         <button className="text-primary-600 hover:underline font-medium" data-testid="department-link">
-                          {budget.department}
+                          {budget.department_code}
                         </button>
                       </td>
-                      <td className="table-cell" data-testid="fiscal-period">
-                        {budget.fiscal_year} {budget.fiscal_quarter}
+                      <td className="table-cell" data-testid="category">
+                        {budget.category_name}
+                      </td>
+                      <td className="table-cell" data-testid="fiscal-year">
+                        FY{budget.fiscal_year}
                       </td>
                       <td className="table-cell" data-testid="allocated-amount">
                         {formatCurrency(budget.budgeted_amount)}
@@ -531,7 +532,7 @@ export function BudgetsPage() {
                             {budget.status === 'PENDING_APPROVAL' && (
                               <>
                                 <button
-                                  onClick={() => approveMutation.mutate(budget._id)}
+                                  onClick={() => approveMutation.mutate(budgetKey)}
                                   disabled={approveMutation.isPending}
                                   className="text-success-600 hover:text-success-700 text-sm font-medium"
                                   data-testid="approve-button"
@@ -549,7 +550,7 @@ export function BudgetsPage() {
                             )}
                             {budget.status === 'DRAFT' && (
                               <button
-                                onClick={() => deleteMutation.mutate(budget._id)}
+                                onClick={() => deleteMutation.mutate(budgetKey)}
                                 disabled={deleteMutation.isPending}
                                 className="text-danger-600 hover:text-danger-700 text-sm font-medium"
                                 data-testid="delete-button"

@@ -105,7 +105,7 @@ export function InvoicesPage() {
     },
     onSuccess: (data, invoiceId) => {
       if (data.status === 'pending_confirmation') {
-        const invoice = invoices.find((i) => i._id === invoiceId);
+        const invoice = invoices.find((i) => i.id === invoiceId);
         if (invoice) {
           setPendingConfirmation({
             confirmationId: data.confirmationId!,
@@ -145,7 +145,7 @@ export function InvoicesPage() {
     },
     onSuccess: (data, invoiceId) => {
       if (data.status === 'pending_confirmation') {
-        const invoice = invoices.find((i) => i._id === invoiceId);
+        const invoice = invoices.find((i) => i.id === invoiceId);
         if (invoice) {
           setPendingConfirmation({
             confirmationId: data.confirmationId!,
@@ -185,7 +185,7 @@ export function InvoicesPage() {
     },
     onSuccess: (data, invoiceId) => {
       if (data.status === 'pending_confirmation') {
-        const invoice = invoices.find((i) => i._id === invoiceId);
+        const invoice = invoices.find((i) => i.id === invoiceId);
         if (invoice) {
           setPendingConfirmation({
             confirmationId: data.confirmationId!,
@@ -217,7 +217,7 @@ export function InvoicesPage() {
     return invoices.filter((invoice) => {
       if (statusFilter && invoice.status !== statusFilter) return false;
       if (vendorFilter && !invoice.vendor_name.toLowerCase().includes(vendorFilter.toLowerCase())) return false;
-      if (departmentFilter && invoice.department !== departmentFilter) return false;
+      if (departmentFilter && invoice.department_code !== departmentFilter) return false;
       if (startDate && new Date(invoice.due_date) < new Date(startDate)) return false;
       if (endDate && new Date(invoice.due_date) > new Date(endDate)) return false;
       if (showOverdueOnly && !isOverdue(invoice)) return false;
@@ -237,7 +237,7 @@ export function InvoicesPage() {
 
   // Get unique departments for filter
   const departments = useMemo(() => {
-    const uniqueDepts = [...new Set(invoices.map((i) => i.department))];
+    const uniqueDepts = [...new Set(invoices.map((i) => i.department_code).filter((d): d is string => d !== null))];
     return uniqueDepts.sort();
   }, [invoices]);
 
@@ -418,7 +418,6 @@ export function InvoicesPage() {
             <div className="mb-4 p-4 bg-secondary-50 rounded-lg" data-testid="vendor-info">
               <h4 className="font-medium text-secondary-900 mb-2">Vendor Information</h4>
               <p className="text-secondary-700">{selectedInvoice.vendor_name}</p>
-              <p className="text-sm text-secondary-600">ID: {selectedInvoice.vendor_id}</p>
             </div>
 
             {/* Invoice Details */}
@@ -431,11 +430,11 @@ export function InvoicesPage() {
               </div>
               <div>
                 <p className="text-sm text-secondary-600">Department</p>
-                <p className="font-medium">{selectedInvoice.department}</p>
+                <p className="font-medium">{selectedInvoice.department_code || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-sm text-secondary-600">Issue Date</p>
-                <p className="font-medium">{formatDate(selectedInvoice.issue_date)}</p>
+                <p className="text-sm text-secondary-600">Invoice Date</p>
+                <p className="font-medium">{formatDate(selectedInvoice.invoice_date)}</p>
               </div>
               <div>
                 <p className="text-sm text-secondary-600">Due Date</p>
@@ -446,51 +445,16 @@ export function InvoicesPage() {
               </div>
             </div>
 
-            {/* Line Items */}
-            {selectedInvoice.line_items && selectedInvoice.line_items.length > 0 ? (
-              <div className="mb-4">
-                <h4 className="font-medium text-secondary-900 mb-2">Line Items</h4>
-                <table className="w-full text-sm" data-testid="line-items-table">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Description</th>
-                      <th className="text-right py-2">Qty</th>
-                      <th className="text-right py-2">Unit Price</th>
-                      <th className="text-right py-2">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedInvoice.line_items.map((item, index) => (
-                      <tr key={index} className="border-b" data-testid="line-item">
-                        <td className="py-2">
-                          <p>{item.description}</p>
-                          <p className="text-xs text-secondary-500">{item.category}</p>
-                        </td>
-                        <td className="text-right py-2">{item.quantity}</td>
-                        <td className="text-right py-2">{formatCurrency(item.unit_price)}</td>
-                        <td className="text-right py-2">{formatCurrency(item.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="font-semibold">
-                      <td colSpan={3} className="text-right py-2">Total:</td>
-                      <td className="text-right py-2">{formatCurrency(selectedInvoice.amount)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            ) : (
-              <div className="mb-4">
-                <h4 className="font-medium text-secondary-900 mb-2">Invoice Summary</h4>
-                <div className="p-4 bg-secondary-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="text-secondary-700">{selectedInvoice.description || 'Invoice Total'}</span>
-                    <span className="text-xl font-semibold">{formatCurrency(selectedInvoice.amount)}</span>
-                  </div>
+            {/* Invoice Summary */}
+            <div className="mb-4">
+              <h4 className="font-medium text-secondary-900 mb-2">Invoice Summary</h4>
+              <div className="p-4 bg-secondary-50 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-secondary-700">{selectedInvoice.description || 'Invoice Total'}</span>
+                  <span className="text-xl font-semibold">{formatCurrency(selectedInvoice.amount)}</span>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Actions */}
             <div className="flex gap-3 justify-end">
@@ -632,7 +596,7 @@ export function InvoicesPage() {
 
                   return (
                     <tr
-                      key={invoice._id}
+                      key={invoice.id}
                       className={`table-row ${overdue ? 'bg-danger-50' : ''}`}
                       data-testid="invoice-row"
                       data-overdue={overdue}
@@ -654,7 +618,7 @@ export function InvoicesPage() {
                         {formatDate(invoice.due_date)}
                         {overdue && <span className="ml-1 text-xs">(Overdue)</span>}
                       </td>
-                      <td className="table-cell">{invoice.department}</td>
+                      <td className="table-cell">{invoice.department_code || 'N/A'}</td>
                       <td className="table-cell">
                         <span className={getStatusBadgeClass(invoice.status)} data-testid="status-badge">
                           {invoice.status}
@@ -665,7 +629,7 @@ export function InvoicesPage() {
                           <div className="flex gap-2">
                             {invoice.status === 'PENDING' && (
                               <button
-                                onClick={() => approveMutation.mutate(invoice._id)}
+                                onClick={() => approveMutation.mutate(invoice.id)}
                                 disabled={approveMutation.isPending}
                                 className="text-success-600 hover:text-success-700 text-sm font-medium"
                                 data-testid="approve-button"
@@ -675,7 +639,7 @@ export function InvoicesPage() {
                             )}
                             {invoice.status === 'APPROVED' && (
                               <button
-                                onClick={() => payMutation.mutate(invoice._id)}
+                                onClick={() => payMutation.mutate(invoice.id)}
                                 disabled={payMutation.isPending}
                                 className="text-primary-600 hover:text-primary-700 text-sm font-medium"
                                 data-testid="pay-button"
@@ -685,7 +649,7 @@ export function InvoicesPage() {
                             )}
                             {invoice.status === 'DRAFT' && (
                               <button
-                                onClick={() => deleteMutation.mutate(invoice._id)}
+                                onClick={() => deleteMutation.mutate(invoice.id)}
                                 disabled={deleteMutation.isPending}
                                 className="text-danger-600 hover:text-danger-700 text-sm font-medium"
                                 data-testid="delete-button"

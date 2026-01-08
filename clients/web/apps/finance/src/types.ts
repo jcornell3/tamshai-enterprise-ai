@@ -3,40 +3,34 @@
  */
 
 export interface Budget {
-  _id: string;
-  department: string;
-  fiscal_year: string;
-  fiscal_quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
-  budgeted_amount: number;  // Note: API returns budgeted_amount (not allocated_amount)
-  actual_amount: number;    // Note: API returns actual_amount (not spent_amount)
+  department_code: string;  // Backend returns department_code (ENG, FIN, etc.)
+  department?: string;      // Optional full name for display
+  fiscal_year: number;      // Backend returns number, not string
+  category_name: string;    // Budget category (Salaries, Technology, etc.)
+  category_type: string;    // REVENUE, EXPENSE, CAPITAL
+  budgeted_amount: number;
+  actual_amount: number;
+  forecast_amount: number | null;
+  utilization_pct: number;
   remaining_amount: number;
-  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CLOSED';
-  owner_id: string;
-  owner_name: string;
-  created_at: string;
-  updated_at: string;
-  approved_by?: string;
-  approved_at?: string;
+  status: string;           // 'DRAFT', 'APPROVED', etc. - from backend
 }
 
 export interface Invoice {
-  _id: string;
+  id: string;                  // Backend returns id (not _id)
   invoice_number: string;
   vendor_name: string;
-  vendor_id: string;
   amount: number;
   currency: string;
-  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'PAID' | 'REJECTED' | 'CANCELLED';
+  invoice_date: string;        // Backend returns invoice_date (not issue_date)
   due_date: string;
-  issue_date: string;
-  budget_id?: string;
-  department: string;
-  description?: string;
-  line_items?: InvoiceLineItem[];
+  paid_date: string | null;    // Backend returns paid_date (not paid_at)
+  status: string;              // Backend returns string status
+  department_code: string | null;  // Backend returns department_code (not department)
+  description: string | null;
+  approved_by: string | null;
+  approved_at: string | null;  // Backend returns approved_at (timestamp)
   created_at: string;
-  updated_at: string;
-  approved_by?: string;
-  paid_at?: string;
 }
 
 export interface InvoiceLineItem {

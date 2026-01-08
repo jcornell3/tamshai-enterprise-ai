@@ -101,12 +101,12 @@ export function DashboardPage() {
     pending_approvals: budgets.filter(b => b.status === 'PENDING_APPROVAL').length,
     pending_invoices: invoices.filter(i => i.status === 'PENDING').length,
     pending_expense_reports: 0, // Would need separate API call
-    departments: [...new Set(budgets.map(b => b.department))].map(dept => {
-      const deptBudgets = budgets.filter(b => b.department === dept);
+    departments: [...new Set(budgets.map(b => b.department_code))].map(deptCode => {
+      const deptBudgets = budgets.filter(b => b.department_code === deptCode);
       const allocated = deptBudgets.reduce((sum, b) => sum + (b.budgeted_amount || 0), 0);
       const spent = deptBudgets.reduce((sum, b) => sum + (b.actual_amount || 0), 0);
       return {
-        department: dept,
+        department: deptCode,  // Using department code for now (ENG, FIN, etc.)
         allocated,
         spent,
         remaining: allocated - spent,
@@ -359,9 +359,9 @@ export function DashboardPage() {
           {recentInvoices.length > 0 ? (
             <ul className="space-y-3" data-testid="recent-invoices">
               {recentInvoices.map((invoice) => (
-                <li key={invoice._id}>
+                <li key={invoice.id}>
                   <button
-                    onClick={() => handleActivityClick('invoice', invoice._id)}
+                    onClick={() => handleActivityClick('invoice', invoice.id)}
                     className="w-full text-left p-3 rounded-lg hover:bg-secondary-50 transition-colors"
                     data-testid="activity-item"
                   >
@@ -390,18 +390,17 @@ export function DashboardPage() {
           <h3 className="text-lg font-semibold text-secondary-900 mb-4">Recent Budget Changes</h3>
           {recentBudgets.length > 0 ? (
             <ul className="space-y-3" data-testid="recent-budgets">
-              {recentBudgets.map((budget) => (
-                <li key={budget._id}>
-                  <button
-                    onClick={() => handleActivityClick('budget', budget._id)}
+              {recentBudgets.map((budget, index) => (
+                <li key={`${budget.department_code}-${budget.fiscal_year}-${budget.category_name}-${index}`}>
+                  <div
                     className="w-full text-left p-3 rounded-lg hover:bg-secondary-50 transition-colors"
                     data-testid="activity-item"
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium text-secondary-900">{budget.department}</p>
+                        <p className="font-medium text-secondary-900">{budget.department_code}</p>
                         <p className="text-sm text-secondary-600">
-                          {budget.fiscal_year} {budget.fiscal_quarter}
+                          FY{budget.fiscal_year} - {budget.category_name}
                         </p>
                       </div>
                       <span
@@ -410,7 +409,7 @@ export function DashboardPage() {
                         {budget.status}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
