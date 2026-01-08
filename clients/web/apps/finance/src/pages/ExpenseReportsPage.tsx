@@ -82,7 +82,17 @@ export function ExpenseReportsPage() {
       if (!response.ok) {
         throw new Error('Failed to fetch expense reports');
       }
-      return response.json() as Promise<APIResponse<ExpenseReport[]>>;
+      const data = await response.json() as APIResponse<ExpenseReport[]>;
+
+      // If the response is an error with NOT_IMPLEMENTED code, throw it with the code
+      if (data.status === 'error' && (data as any).code === 'NOT_IMPLEMENTED') {
+        const error = new Error((data as any).message || 'Feature not implemented') as any;
+        error.code = 'NOT_IMPLEMENTED';
+        error.details = (data as any).details;
+        throw error;
+      }
+
+      return data;
     },
   });
 
@@ -373,17 +383,40 @@ export function ExpenseReportsPage() {
     );
   }
 
-  // Error state
+  // Error state - check if it's NOT_IMPLEMENTED
   if (error) {
+    const isNotImplemented = (error as any)?.code === 'NOT_IMPLEMENTED';
+
     return (
       <div className="page-container">
-        <div className="alert-danger" data-testid="error-state">
-          <h3 className="font-semibold mb-2">Error Loading Expense Reports</h3>
-          <p className="text-sm mb-4">{String(error)}</p>
-          <button onClick={() => refetch()} className="btn-primary" data-testid="retry-button">
-            Retry
-          </button>
+        <div className="page-header">
+          <h2 className="page-title">Expense Reports</h2>
+          <p className="page-subtitle">Review and process employee expense reports</p>
         </div>
+        {isNotImplemented ? (
+          <div className="card text-center py-12" data-testid="not-implemented-state">
+            <div className="mb-4">
+              <svg className="w-16 h-16 mx-auto text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-secondary-900 mb-2">Expense Reports Coming Soon</h3>
+            <p className="text-secondary-600 mb-4 max-w-md mx-auto">
+              Employee expense report tracking is planned for v1.5. Currently, this feature is not available in the Finance module.
+            </p>
+            <p className="text-sm text-secondary-500">
+              For vendor payments, please use the <a href="/invoices" className="text-primary-600 hover:underline">Invoices</a> page.
+            </p>
+          </div>
+        ) : (
+          <div className="alert-danger" data-testid="error-state">
+            <h3 className="font-semibold mb-2">Error Loading Expense Reports</h3>
+            <p className="text-sm mb-4">{String(error)}</p>
+            <button onClick={() => refetch()} className="btn-primary" data-testid="retry-button">
+              Retry
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -18,6 +18,7 @@ import { getBudget, GetBudgetInputSchema } from './tools/get-budget';
 import { listBudgets, ListBudgetsInputSchema } from './tools/list-budgets';
 import { listInvoices, ListInvoicesInputSchema } from './tools/list-invoices';
 import { getExpenseReport, GetExpenseReportInputSchema } from './tools/get-expense-report';
+import { listExpenseReports, ListExpenseReportsInputSchema } from './tools/list-expense-reports';
 import {
   deleteInvoice,
   executeDeleteInvoice,
@@ -348,6 +349,45 @@ app.post('/tools/get_expense_report', async (req: Request, res: Response) => {
       status: 'error',
       code: 'INTERNAL_ERROR',
       message: 'Failed to get expense report',
+    });
+  }
+});
+
+/**
+ * List Expense Reports Tool
+ */
+app.post('/tools/list_expense_reports', async (req: Request, res: Response) => {
+  try {
+    const { userContext, status, employeeId, startDate, endDate, limit, cursor } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have Finance access
+    if (!hasFinanceAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires Finance access (finance-read, finance-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
+      });
+      return;
+    }
+
+    const result = await listExpenseReports({ status, employeeId, startDate, endDate, limit, cursor }, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('list_expense_reports error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to list expense reports',
     });
   }
 });
