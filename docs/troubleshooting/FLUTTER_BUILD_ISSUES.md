@@ -1,8 +1,8 @@
 # Flutter Build Issues - Troubleshooting Guide
 
-**Document Version**: 1.0
+**Document Version**: 1.1
 **Created**: January 5, 2026
-**Last Updated**: January 5, 2026
+**Last Updated**: January 8, 2026
 
 This document summarizes the Flutter build issues encountered, dependency mismatches resolved, and the current working configuration.
 
@@ -514,7 +514,38 @@ distributionUrl=https\://services.gradle.org/distributions/gradle-8.14-all.zip
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.1-all.zip
 ```
 
-**Status**: ✅ Fixed - Using stable Gradle 8.10.1
+**Status**: ⚠️ Partially Fixed - Gradle 8.10.1 stable but AGP requires 8.13+
+
+---
+
+### 16. Android Gradle Plugin Requires Gradle 8.13+
+
+**Commit**: `<pending>` - fix(flutter): Upgrade Gradle to 8.13 for AGP compatibility
+
+**Error**:
+```
+Minimum supported Gradle version is 8.13. Current version is 8.10.1.
+Try updating the 'distributionUrl' property in gradle-wrapper.properties to 'gradle-8.13-bin.zip'.
+```
+
+**Root Cause**:
+Issue #15 downgraded Gradle from 8.14 to 8.10.1 to avoid 504 timeout errors. However, a recent Android Gradle Plugin (AGP) update now requires Gradle 8.13 as the minimum version.
+
+**Fix** (gradle-wrapper.properties):
+```properties
+# BEFORE - Gradle 8.10.1 (stable but too old for AGP)
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.1-all.zip
+
+# AFTER - Gradle 8.13 (minimum version for AGP)
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.13-all.zip
+```
+
+**Note**: Gradle 8.13 is the minimum required version for the current Android Gradle Plugin. If 504 timeout errors return, consider:
+1. Using GitHub Actions cache for Gradle distributions
+2. Retrying failed builds automatically
+3. Monitoring Gradle release CDN status
+
+**Status**: ✅ Fixed - Using Gradle 8.13 (meets AGP requirement)
 
 ---
 
