@@ -122,23 +122,61 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
     }
 
     // v1.4: LIMIT+1 pattern to detect if more records exist
+    // Use aggregation pipeline to join customer data
     const queryLimit = limit + 1;
-    const opportunities = await collection
-      .find(filter)
-      .sort({ _id: -1 }) // Sort by _id descending for consistent pagination
-      .limit(queryLimit)
-      .toArray();
+    const pipeline = [
+      { $match: filter },
+      { $sort: { _id: -1 } },
+      { $limit: queryLimit },
+      // Lookup customer data to get company_name
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customer_id',
+          foreignField: '_id',
+          as: 'customer'
+        }
+      },
+      // Unwind customer array (will be single doc or empty)
+      { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+      // Project final structure
+      {
+        $project: {
+          _id: 1,
+          deal_name: 1,
+          customer_id: 1,
+          customer_name: '$customer.company_name',  // Add customer name from lookup
+          stage: 1,
+          value: 1,
+          currency: 1,
+          probability: 1,
+          expected_close_date: 1,
+          actual_close_date: 1,
+          deal_type: 1,
+          products: 1,
+          notes: 1,
+          owner: 1,
+          created_at: 1,
+          updated_at: 1,
+          activities: 1
+        }
+      }
+    ];
+
+    const opportunities = await collection.aggregate(pipeline).toArray();
 
     const hasMore = opportunities.length > limit;
     const rawResults = hasMore ? opportunities.slice(0, limit) : opportunities;
 
-    // Normalize results: convert ObjectId to string, keep stage in original case (uppercase)
+    // Normalize results: convert ObjectId to string, map deal_name to title, keep stage in uppercase
     const results = rawResults.map((opp: any) => ({
       ...opp,
       _id: opp._id.toString(),
       id: opp._id.toString(),
+      title: opp.deal_name,  // Map deal_name to title for frontend compatibility
       stage: opp.stage,  // Keep original case (UPPERCASE from database)
       customer_id: opp.customer_id?.toString(),
+      customer_name: opp.customer_name || null,  // Add customer name from lookup
     }));
 
     // Build pagination metadata
