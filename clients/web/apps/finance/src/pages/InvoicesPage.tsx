@@ -447,38 +447,50 @@ export function InvoicesPage() {
             </div>
 
             {/* Line Items */}
-            <div className="mb-4">
-              <h4 className="font-medium text-secondary-900 mb-2">Line Items</h4>
-              <table className="w-full text-sm" data-testid="line-items-table">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2">Description</th>
-                    <th className="text-right py-2">Qty</th>
-                    <th className="text-right py-2">Unit Price</th>
-                    <th className="text-right py-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedInvoice.line_items.map((item, index) => (
-                    <tr key={index} className="border-b" data-testid="line-item">
-                      <td className="py-2">
-                        <p>{item.description}</p>
-                        <p className="text-xs text-secondary-500">{item.category}</p>
-                      </td>
-                      <td className="text-right py-2">{item.quantity}</td>
-                      <td className="text-right py-2">{formatCurrency(item.unit_price)}</td>
-                      <td className="text-right py-2">{formatCurrency(item.total)}</td>
+            {selectedInvoice.line_items && selectedInvoice.line_items.length > 0 ? (
+              <div className="mb-4">
+                <h4 className="font-medium text-secondary-900 mb-2">Line Items</h4>
+                <table className="w-full text-sm" data-testid="line-items-table">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2">Description</th>
+                      <th className="text-right py-2">Qty</th>
+                      <th className="text-right py-2">Unit Price</th>
+                      <th className="text-right py-2">Total</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="font-semibold">
-                    <td colSpan={3} className="text-right py-2">Total:</td>
-                    <td className="text-right py-2">{formatCurrency(selectedInvoice.amount)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {selectedInvoice.line_items.map((item, index) => (
+                      <tr key={index} className="border-b" data-testid="line-item">
+                        <td className="py-2">
+                          <p>{item.description}</p>
+                          <p className="text-xs text-secondary-500">{item.category}</p>
+                        </td>
+                        <td className="text-right py-2">{item.quantity}</td>
+                        <td className="text-right py-2">{formatCurrency(item.unit_price)}</td>
+                        <td className="text-right py-2">{formatCurrency(item.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-semibold">
+                      <td colSpan={3} className="text-right py-2">Total:</td>
+                      <td className="text-right py-2">{formatCurrency(selectedInvoice.amount)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div className="mb-4">
+                <h4 className="font-medium text-secondary-900 mb-2">Invoice Summary</h4>
+                <div className="p-4 bg-secondary-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-secondary-700">{selectedInvoice.description || 'Invoice Total'}</span>
+                    <span className="text-xl font-semibold">{formatCurrency(selectedInvoice.amount)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3 justify-end">

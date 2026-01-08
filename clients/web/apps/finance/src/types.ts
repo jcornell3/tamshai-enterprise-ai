@@ -31,7 +31,8 @@ export interface Invoice {
   issue_date: string;
   budget_id?: string;
   department: string;
-  line_items: InvoiceLineItem[];
+  description?: string;
+  line_items?: InvoiceLineItem[];
   created_at: string;
   updated_at: string;
   approved_by?: string;
