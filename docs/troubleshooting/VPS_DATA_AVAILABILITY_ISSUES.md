@@ -384,6 +384,53 @@ Verification output will correctly show budget counts by fiscal year instead of 
 
 ---
 
+### Issue 10: Invalid UUID Format in Expense Records Causing Database Errors ✅ FIXED
+
+**Commit**: (pending - to be deployed)
+
+**Symptoms**:
+- Finance dashboard showing "Error: Failed to fetch budgets" after data reseed
+- Database reload showing: `ERROR: invalid input syntax for type uuid: 'exp00001-0000-0000-0000-000000000001'`
+- Finance database potentially in inconsistent state
+
+**Root Cause**:
+Expense records in `sample-data/finance-data.sql` used test-friendly IDs with **invalid UUID format**. The prefix `exp00001` contains the letter 'p' which is not a valid hexadecimal character (UUIDs must only contain 0-9, a-f).
+
+**Investigation**:
+```sql
+-- INVALID (contains 'p' which is not hex)
+INSERT INTO finance.expenses (id, ...) VALUES
+    ('exp00001-0000-0000-0000-000000000001', ...),  -- ❌ ERROR
+    ('exp00001-0000-0000-0000-000000000002', ...),  -- ❌ ERROR
+    ...
+
+-- PostgreSQL UUID type requires valid hex: [0-9a-f]
+-- 'exp00001' violates this constraint
+```
+
+**Fix Applied**:
+Changed all 25 expense record IDs from `exp00001-...` to `e0000001-...` (valid hex):
+```sql
+-- BEFORE (invalid):
+('exp00001-0000-0000-0000-000000000001', ...)
+
+-- AFTER (valid):
+('e0000001-0000-0000-0000-000000000001', ...)
+```
+
+**Files Changed**:
+- `sample-data/finance-data.sql` - Lines 497-532: Fixed 25 expense record UUIDs
+
+**Impact**:
+- Database reload errors eliminated
+- Finance dashboard loads correctly
+- All expense records use valid UUIDs while maintaining sequential pattern
+
+**Result**:
+Finance database reloads cleanly without UUID format errors. Dashboard can successfully query budgets and expenses.
+
+---
+
 ### Manual VPS Data Reload (Session Work)
 
 **Status**: Successfully reloaded all 3 databases on VPS manually
