@@ -1,8 +1,8 @@
 # Phase 1: Cost-Optimized Production (Pilot)
 
-**Document Version**: 1.1
+**Document Version**: 1.2
 **Created**: January 2026
-**Updated**: January 7, 2026
+**Updated**: January 8, 2026
 **Status**: Prerequisites Complete (8/8) - Ready for Implementation
 
 ## Executive Summary
@@ -84,11 +84,16 @@ Once prerequisites are provided, Claude will execute these tasks:
 | **CI/CD** | | | |
 | 5.1 | Create `.github/workflows/deploy-to-gcp.yml` workflow | 30 min | ⬜ |
 | 5.2 | Test workflow with manual trigger | 15 min | ⬜ |
+| **Flutter Native Clients** | | | |
+| 6.1 | Build production Flutter clients (all platforms) | 15 min | ⬜ |
+| 6.2 | Create GitHub release `v1.0.0` with production artifacts | 10 min | ⬜ |
+| 6.3 | Update DownloadsPage to support prod release URL | 15 min | ⬜ |
+| 6.4 | Configure Keycloak `tamshai-flutter-client` for prod redirect URIs | 10 min | ⬜ |
 | **Documentation** | | | |
-| 6.1 | Update CLAUDE.md with GCP deployment instructions | 15 min | ⬜ |
-| 6.2 | Create runbook for common operations | 30 min | ⬜ |
+| 7.1 | Update CLAUDE.md with GCP deployment instructions | 15 min | ⬜ |
+| 7.2 | Create runbook for common operations | 30 min | ⬜ |
 
-**Total Estimated Implementation Time:** ~4-5 hours (spread across sessions)
+**Total Estimated Implementation Time:** ~5-6 hours (spread across sessions)
 
 ### 🟡 Shared Actions (Collaboration Required)
 
@@ -251,10 +256,23 @@ terraform apply \
 VPS_DOMAIN=tamshai.com ./keycloak/scripts/sync-realm.sh prod
 ```
 
-**Required Redirect URIs:**
+**Required Redirect URIs (Web Clients):**
 - `https://prod.tamshai.com/*`
 - `https://app.tamshai.com/*`
 - `https://api.tamshai.com/*`
+
+**Required Redirect URIs (Flutter Native Clients):**
+- `com.tamshai.ai://callback` (production OAuth callback)
+- `com.tamshai.ai://logout` (production logout)
+- `http://127.0.0.1/*` (desktop loopback)
+
+**Keycloak Clients to Configure:**
+
+| Client ID | Type | Purpose |
+|-----------|------|---------|
+| `tamshai-web-portal` | Public | Web portal (app.tamshai.com) |
+| `tamshai-flutter-client` | Public | Flutter native apps |
+| `mcp-gateway` | Confidential | Backend service authentication |
 
 ---
 
@@ -294,12 +312,30 @@ on:
 
 ### Required GitHub Secrets
 
-| Secret | Purpose | Source |
-|--------|---------|--------|
-| `GCP_PROJECT_ID` | Target GCP project | GCP Console |
-| `GCP_SA_KEY_PROD` | Service account JSON key | `claude-deployer` SA |
-| `CLAUDE_API_KEY_PROD` | Anthropic API key | Anthropic Console |
-| `MONGODB_ATLAS_URI_PROD` | MongoDB connection string | MongoDB Atlas |
+**Infrastructure Secrets:**
+
+| Secret | Purpose | Source | Status |
+|--------|---------|--------|--------|
+| `GCP_PROJECT_ID` | Target GCP project | GCP Console | ⬜ Needed |
+| `GCP_SA_KEY_PROD` | Service account JSON key | `claude-deployer` SA | ✅ Created |
+| `GCP_REGION` | Deployment region (us-central1) | Static value | ⬜ Needed |
+
+**Application Secrets:**
+
+| Secret | Purpose | Source | Status |
+|--------|---------|--------|--------|
+| `CLAUDE_API_KEY_PROD` | Anthropic API key | Anthropic Console | ⬜ Needed |
+| `MONGODB_ATLAS_URI_PROD` | MongoDB connection string | MongoDB Atlas | ⬜ Needed |
+| `KEYCLOAK_ADMIN_PASSWORD_PROD` | Keycloak admin password | Generated | ⬜ Needed |
+| `POSTGRES_PASSWORD_PROD` | Cloud SQL database password | Generated | ⬜ Needed |
+
+**Build Configuration (Environment Variables):**
+
+| Variable | Purpose | Stage Value | Prod Value |
+|----------|---------|-------------|------------|
+| `VITE_RELEASE_TAG` | Flutter release for downloads page | `v1.0.0-stage` | `v1.0.0` |
+| `VITE_API_URL` | API endpoint | `https://vps.tamshai.com/api` | `https://api.tamshai.com` |
+| `VITE_AUTH_URL` | Keycloak endpoint | `https://vps.tamshai.com/auth` | `https://auth.tamshai.com` |
 
 ### Workflow Implementation
 
@@ -552,6 +588,120 @@ gh run watch
 # View Cloud Run service status
 gcloud run services list --region=us-central1
 ```
+
+---
+
+## Flutter Native Client Deployment
+
+This section outlines the deployment process for Flutter native clients (Windows, macOS, iOS, Android) for production.
+
+### Current State (as of January 8, 2026)
+
+| Environment | GitHub Release | Downloads Page URL | Status |
+|-------------|----------------|---------------------|--------|
+| Stage | `v1.0.0-stage` | Hardcoded in DownloadsPage.tsx | ✅ Deployed |
+| Production | `v1.0.0` (planned) | Needs environment-aware logic | ⬜ Pending |
+
+**Note:** The DownloadsPage currently points to `v1.0.0-stage` release. For production, we need either:
+1. A separate production downloads page, OR
+2. Environment-aware logic to serve the correct release based on deployment target
+
+### Build Process
+
+The existing workflow (`.github/workflows/build-flutter-native.yml`) already supports production builds:
+
+```bash
+# Trigger production build manually
+gh workflow run build-flutter-native.yml -f environment=prod -f platforms=all
+
+# Or via release tag
+git tag v1.0.0
+git push origin v1.0.0
+# This triggers build-flutter-native.yml via release event
+```
+
+### Production Artifact Names
+
+| Platform | Installer | Portable/Store |
+|----------|-----------|----------------|
+| Windows | `tamshai-prod-windows.msix` | `tamshai-prod-windows-portable.zip` |
+| macOS | `tamshai-prod-macos.dmg` | `tamshai-prod-macos-portable.zip` |
+| Android | `tamshai-prod.apk` | `tamshai-prod.aab` (Play Store) |
+| iOS | `tamshai-prod.ipa` (signed) | `tamshai-prod-ios-unsigned.zip` |
+
+### Production Release Creation
+
+```bash
+# 1. Trigger production build
+gh workflow run build-flutter-native.yml -f environment=prod -f platforms=all
+
+# 2. Wait for build completion
+gh run watch
+
+# 3. Download artifacts
+gh run download <run-id> --dir ./prod-artifacts
+
+# 4. Create production release
+gh release create v1.0.0 \
+  --title "Tamshai Enterprise AI v1.0.0" \
+  --notes "Production release for GCP deployment" \
+  ./prod-artifacts/**/*
+```
+
+### Downloads Page Update Strategy
+
+**Option A: Environment Variable (Recommended)**
+
+Update `DownloadsPage.tsx` to use an environment variable:
+
+```typescript
+// Determine release tag based on environment
+const releaseTag = import.meta.env.VITE_RELEASE_TAG || 'v1.0.0-stage';
+const githubReleasesBase = `https://github.com/jcornell3/tamshai-enterprise-ai/releases/download/${releaseTag}`;
+```
+
+Then configure per-environment:
+- Stage: `VITE_RELEASE_TAG=v1.0.0-stage`
+- Production: `VITE_RELEASE_TAG=v1.0.0`
+
+**Option B: Separate URLs**
+
+Maintain parallel release URLs:
+- Stage downloads: `releases/download/v1.0.0-stage/`
+- Production downloads: `releases/download/v1.0.0/`
+
+### Keycloak Configuration for Production Flutter
+
+Add production redirect URIs to `tamshai-flutter-client`:
+
+```json
+{
+  "clientId": "tamshai-flutter-client",
+  "redirectUris": [
+    "http://127.0.0.1/*",
+    "com.tamshai.stage://callback",
+    "com.tamshai.stage://logout",
+    "com.tamshai.ai://callback",
+    "com.tamshai.ai://logout"
+  ],
+  "webOrigins": [
+    "http://127.0.0.1",
+    "com.tamshai.stage",
+    "com.tamshai.ai"
+  ]
+}
+```
+
+### iOS App Store Signing (Future)
+
+For iOS App Store distribution, configure these GitHub secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `APPLE_CERTIFICATE_P12` | Distribution certificate (base64) |
+| `APPLE_CERTIFICATE_PASSWORD` | Certificate password |
+| `APPLE_PROVISIONING_PROFILE` | App Store provisioning profile (base64) |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
 
 ---
 
@@ -971,6 +1121,42 @@ gcloud projects describe your-project-id
 2. **Delete key after deployment** - If using Option A for one-time setup
 3. **Use Workload Identity** - For production CI/CD (Phase 2+)
 4. **Audit access** - Check IAM audit logs periodically
+
+---
+
+## Document Changelog
+
+### Version 1.2 (January 8, 2026)
+
+**Additions:**
+- Added "Flutter Native Client Deployment" section with:
+  - Current state (stage vs production)
+  - Production build process
+  - Artifact naming conventions
+  - Release creation workflow
+  - Downloads page update strategy
+  - iOS App Store signing secrets (future)
+- Added tasks 6.1-6.4 for Flutter production deployment
+- Enhanced "Required GitHub Secrets" section with:
+  - Infrastructure vs Application secrets separation
+  - Build configuration environment variables
+  - Status tracking for each secret
+- Updated "Keycloak Sync" section with:
+  - Flutter native client redirect URIs (`com.tamshai.ai://`)
+  - Desktop loopback URIs
+  - Keycloak clients table
+
+**Context:**
+These additions were identified after deploying stage Flutter builds (v1.0.0-stage) and recognizing the need for production-specific configuration.
+
+### Version 1.1 (January 7, 2026)
+
+- Initial complete plan with all prerequisites marked complete
+- Added deployment scripts and workflow definitions
+
+### Version 1.0 (January 2026)
+
+- Initial document creation
 
 ---
 
