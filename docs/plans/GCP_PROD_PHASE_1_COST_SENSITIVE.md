@@ -33,9 +33,10 @@ These items require your input or action before deployment can proceed:
 | | | • Compute Engine API | |
 | | | • Artifact Registry API | |
 | 3 | **Provide Domain Decision** | Domain configuration confirmed | ✅ |
-| | | • API: `api.tamshai.com` | |
-| | | • Auth: `auth.tamshai.com` | |
-| | | • App: `app.tamshai.com` | |
+| | | • Web: `prod.tamshai.com` (main production website) | |
+| | | • API: `api.tamshai.com` (MCP Gateway) | |
+| | | • Auth: `auth.tamshai.com` (Keycloak) | |
+| | | • App: `app.tamshai.com` (Portal/Dashboard) | |
 | | | • DNS Provider: Cloudflare | |
 | 4 | **Provide Claude API Key** | Key provided *(stored in secrets)* | ✅ |
 | | | • Will be stored in GCP Secret Manager | |
@@ -67,11 +68,13 @@ Once prerequisites are provided, Claude will execute these tasks:
 | 2.2 | Deploy Cloud SQL PostgreSQL instance | 10-15 min | ⬜ |
 | 2.3 | Deploy Utility VM (Redis + Bastion) | 5 min | ⬜ |
 | 2.4 | Configure Secret Manager with credentials | 10 min | ⬜ |
+| 2.5 | Create GCS bucket for static website (`prod.tamshai.com`) | 10 min | ⬜ |
 | **Services** | | | |
 | 3.1 | Build and push container images to Artifact Registry | 20 min | ⬜ |
 | 3.2 | Deploy MCP Gateway to Cloud Run | 5 min | ⬜ |
 | 3.3 | Deploy MCP Suite (HR, Finance, Sales, Support) to Cloud Run | 10 min | ⬜ |
 | 3.4 | Deploy Keycloak to Cloud Run | 10 min | ⬜ |
+| 3.5 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ⬜ |
 | **Configuration** | | | |
 | 4.1 | Configure Cloud Run domain mappings | 10 min | ⬜ |
 | 4.2 | Provide DNS records for you to add | 5 min | ⬜ |
@@ -228,18 +231,27 @@ terraform apply \
 
 ### 3. DNS Configuration
 
-| Record | Type | Value |
-|--------|------|-------|
-| api.tamshai.com | CNAME | Cloud Run URL |
-| auth.tamshai.com | CNAME | Cloud Run URL (Keycloak) |
-| app.tamshai.com | CNAME | Cloud Run URL (Portal) |
+| Record | Type | Value | Purpose |
+|--------|------|-------|---------|
+| prod.tamshai.com | CNAME | c.storage.googleapis.com | Main production website (static) |
+| api.tamshai.com | CNAME | Cloud Run URL | MCP Gateway API |
+| auth.tamshai.com | CNAME | Cloud Run URL | Keycloak authentication |
+| app.tamshai.com | CNAME | Cloud Run URL | Portal/Dashboard app |
+
+> **Note:** For `prod.tamshai.com`, the GCS bucket must be named exactly `prod.tamshai.com` for CNAME-based hosting to work. Alternatively, use Cloud Load Balancer with Cloud CDN for more flexibility.
 
 ### 4. Keycloak Sync
 
 ```bash
-# Update Keycloak redirect URIs for production domain
+# Update Keycloak redirect URIs for production domains
+# Includes: prod.tamshai.com, app.tamshai.com, api.tamshai.com
 VPS_DOMAIN=tamshai.com ./keycloak/scripts/sync-realm.sh prod
 ```
+
+**Required Redirect URIs:**
+- `https://prod.tamshai.com/*`
+- `https://app.tamshai.com/*`
+- `https://api.tamshai.com/*`
 
 ---
 
