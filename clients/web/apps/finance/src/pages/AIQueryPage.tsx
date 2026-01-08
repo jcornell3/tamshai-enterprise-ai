@@ -139,11 +139,11 @@ export function AIQueryPage() {
     // Create EventSource for SSE
     try {
       const params = new URLSearchParams({
-        query: queryText,
+        q: queryText,  // Gateway streaming endpoint expects 'q' parameter
         sessionId,
       });
 
-      const eventSource = new EventSource(`/api/finance/ai-query?${params}`);
+      const eventSource = new EventSource(`/api/query?${params}`);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
