@@ -1,31 +1,272 @@
 # VPS Data Availability Issues - Troubleshooting Guide
 
-**Document Version**: 1.4
+**Document Version**: 1.5
 **Created**: January 5, 2026
-**Last Updated**: January 8, 2026
+**Last Updated**: January 8, 2026 (Evening Session)
 
 This document summarizes the issues encountered with data not being available on the VPS staging environment, the bugs fixed, and diagnostic commands for future troubleshooting.
 
 ---
 
-## Current Status (as of January 8, 2026)
+## Latest Fixes (January 8, 2026 - Evening Session)
+
+### Issue 1: Finance Invoice Modal Crashing App ✅ FIXED
+
+**Commit**: `549c3d9` - fix(finance): Handle missing line_items in invoice modal gracefully
+
+**Symptoms**:
+- Clicking any individual invoice caused app to become unresponsive
+- After clicking invoice, dashboard showed "Error: Failed to fetch budgets"
+- React Query cache corrupted after modal crash
+
+**Root Cause**:
+Invoice database schema doesn't include `line_items` table/column. Modal code tried to call `.map()` on undefined `line_items` array, causing JavaScript runtime error that crashed React and corrupted the query cache.
+
+**Fix Applied**:
+```typescript
+// Made line_items and description optional in Invoice type
+export interface Invoice {
+  // ... existing fields
+  description?: string;
+  line_items?: InvoiceLineItem[];
+}
+
+// Added conditional rendering in InvoicesPage.tsx
+{selectedInvoice.line_items && selectedInvoice.line_items.length > 0 ? (
+  <table>...</table>
+) : (
+  <div>Show invoice summary with description and total</div>
+)}
+```
+
+**Files Changed**:
+- `clients/web/apps/finance/src/types.ts` - Made `line_items` optional
+- `clients/web/apps/finance/src/pages/InvoicesPage.tsx` - Added safety checks
+
+---
+
+### Issue 2: Sales Customer Detail Modal Crash Risk ✅ FIXED
+
+**Commit**: `2bf0f84` - fix(sales): Add safety check for customer address in detail modal
+
+**Symptoms**:
+- Potential crash when viewing customer with partial/missing address data
+- Similar pattern to Finance invoice modal issue
+
+**Root Cause**:
+`CustomerDetail.tsx` accessed `customer.address.city` without verifying that `address.city` exists (address is optional, and even if address exists, city/state/country might not be populated).
+
+**Fix Applied**:
+```typescript
+// BEFORE (unsafe)
+{customer.address && (
+  <p>{customer.address.city}, {customer.address.state}</p>
+)}
+
+// AFTER (safe)
+{customer.address && customer.address.city && (
+  <p>{customer.address.city}, {customer.address.state}</p>
+)}
+```
+
+**Files Changed**:
+- `clients/web/apps/sales/src/components/CustomerDetail.tsx` - Added `customer.address.city` check
+
+---
+
+### Issue 3: VPS Data Not Updated Despite CI/CD Deploys ✅ FIXED
+
+**Commit**: `df503ca` - fix(ci): Update deploy-vps workflow to drop databases before reloading data
+
+**Symptoms**:
+- Finance dashboard showing $NaN despite deploying FY2025 data
+- Sales dashboard showing 0's despite deploying Q1 2026 data
+- Data "fixed" in local, but still broken on VPS after deployment
+
+**Root Cause**:
+GitHub Actions workflow used `docker exec psql < data.sql` without dropping databases first. SQL files have `ON CONFLICT DO NOTHING` clauses, so old FY2024 data persisted and new FY2025 data was ignored.
+
+**Fix Applied** (`.github/workflows/deploy-vps.yml`):
+```bash
+# NEW: Drop and recreate databases before loading
+echo "  [2/4] Reloading Finance data (PostgreSQL)..."
+docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;"
+docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;"
+docker exec -i tamshai-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql
+
+# NEW: Delete Elasticsearch indexes before bulk load
+echo "  [4/4] Reloading Support data (Elasticsearch)..."
+docker exec tamshai-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base"
+cat sample-data/support-data.ndjson | docker exec -i tamshai-elasticsearch curl -X POST "http://localhost:9200/_bulk"
+```
+
+**Files Changed**:
+- `.github/workflows/deploy-vps.yml` - Added DROP DATABASE steps, delete ES indexes
+
+**Usage**:
+```bash
+# Manual trigger with data reload
+gh workflow run deploy-vps.yml --ref main --field reseed_data=true --field environment=staging
+```
+
+---
+
+### Issue 4: AI Query Date Context Missing ✅ FIXED
+
+**Commit**: `fbfb951` - fix(ai): Add current date context to system prompt and update HR hire dates
+
+**Symptoms**:
+- AI query "Show employees hired in last 6 months" returned employees from 2024
+- Claude didn't know what "today" is, so "last 6 months" meant nothing
+
+**Root Cause**:
+MCP Gateway system prompt lacked current date context. Claude training cutoff is January 2025, so without explicit date, it guessed based on sample data dates.
+
+**Fix Applied**:
+```typescript
+// services/mcp-gateway/src/routes/streaming.routes.ts
+function buildSystemPrompt(...) {
+  const currentDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC'
+  });
+
+  return `You are an AI assistant for Tamshai Corp...
+Current date: ${currentDate}
+...`;
+}
+```
+
+**Sample Data Updated**:
+- Updated 5 employees with hire dates in last 6 months (Aug 2025 - Jan 2026)
+  - David Park: 2025-12-01 (1 month ago)
+  - Maria Santos: 2025-11-01 (2 months ago)
+  - Amanda Wright: 2025-10-01 (3 months ago)
+  - Timothy Murphy: 2025-09-15 (4 months ago)
+  - Frank Davis: 2025-08-01 (5 months ago)
+
+**Files Changed**:
+- `services/mcp-gateway/src/routes/streaming.routes.ts` - Added current date to system prompt
+- `sample-data/hr-data.sql` - Updated 5 employee hire dates
+
+---
+
+### Issue 5: Support Knowledgebase Empty ✅ FIXED
+
+**Commit**: `80f006f` - feat(data): Add Q1 2026 sales data and expand Support knowledgebase
+
+**Symptoms**:
+- Support dashboard had no knowledgebase articles
+- Knowledge Base tab showed empty state
+
+**Root Cause**:
+Original `support-data.ndjson` only had 5 KB articles. Needed more comprehensive coverage of Finance, Sales, Support workflows, and troubleshooting.
+
+**Fix Applied**:
+Added 7 new knowledge base articles (KB-006 to KB-012):
+- KB-006: Finance Dashboard and Budget Queries
+- KB-007: Sales CRM: Managing Opportunities and Pipeline
+- KB-008: Creating and Managing Support Tickets
+- KB-009: Troubleshooting Login and Authentication Issues
+- KB-010: Data Export and Reporting
+- KB-011: Understanding $NaN in Finance Dashboard (troubleshooting)
+- KB-012: Sales Pipeline Best Practices
+
+**Files Changed**:
+- `sample-data/support-data.ndjson` - Added 7 new articles (now 12 total)
+
+---
+
+### Issue 6: Sales Q1 2026 Data Missing ✅ FIXED
+
+**Commit**: `80f006f` - feat(data): Add Q1 2026 sales data and expand Support knowledgebase
+
+**Symptoms**:
+- Sales dashboard showing 0's for Q1 2026
+- Only had Q4 2025 deal data
+
+**Root Cause**:
+Sample data only had 6 deals (all Q4 2025). Dashboard queries for Q1 2026 found no data.
+
+**Fix Applied**:
+Added 4 new Q1 2026 closed deals:
+- TechStart Platform Upgrade: $125k (CLOSED_WON, Jan 28 2026)
+- GFP Security Compliance: $180k (CLOSED_WON, Jan 15 2026)
+- Manufacturing Co Migration: $65k (CLOSED_WON, Jan 22 2026)
+- RetailMax Data Warehouse: $250k (CLOSED_WON, Jan 30 2026)
+
+Updated Q1 2026 pipeline summary:
+- Closed Won: 4 deals, $850k (was $545k)
+- Attainment: 34% (was 22%)
+
+**Files Changed**:
+- `sample-data/sales-data.js` - Added 4 new deals, updated pipeline summary
+
+---
+
+### Manual VPS Data Reload (Session Work)
+
+**Status**: Successfully reloaded all 3 databases on VPS manually
+
+**Finance** (PostgreSQL):
+```bash
+ssh root@5.78.159.29
+docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;"
+docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;"
+docker exec -i tamshai-postgres psql -U tamshai -d tamshai_finance < /tmp/finance-data.sql
+```
+✅ Result: 7 FY2025 budgets, 8 2025 invoices, 6 FY2025 revenue records
+
+**Sales** (MongoDB):
+```bash
+MONGODB_PASSWORD=$(grep MONGODB_PASSWORD .env | cut -d= -f2)
+docker exec -i tamshai-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" \
+  --authenticationDatabase admin < /tmp/sales-data.js
+```
+✅ Result: 5 customers, 10 deals, 5 pipeline summaries
+
+**Support** (Elasticsearch):
+```bash
+docker exec tamshai-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base"
+cat /tmp/support-data.ndjson | docker exec -i tamshai-elasticsearch curl -X POST "http://localhost:9200/_bulk"
+```
+✅ Result: 10 tickets, 12 KB articles
+
+---
+
+### Reload Scripts Created (For Manual Use)
+
+Created three VPS reload scripts for manual data refresh:
+- `scripts/vps/reload-finance-data.sh` - Drop/reload Finance PostgreSQL DB
+- `scripts/vps/reload-sales-data.sh` - Reload Sales MongoDB data
+- `scripts/vps/reload-support-data.sh` - Delete/reload Support Elasticsearch indexes
+
+**Note**: These are for manual admin use only. CI/CD workflow now has integrated reload logic.
+
+---
+
+## Current Status (as of January 8, 2026 - Evening)
 
 **Test User**: eve.thompson (executive role, no data restrictions)
 
 | App | Component | Status | Symptoms | Root Cause | Fix Status |
 |-----|-----------|--------|----------|------------|------------|
 | **HR** | Dashboard | ✅ Working | Shows employees | N/A | N/A |
-| **HR** | AI Query | ✅ Working | Returns data | N/A | N/A |
+| **HR** | AI Query | ✅ Fixed | Returned 2024 data for "last 6 months" | No date context in system prompt | Date added to prompt |
 | **Support** | Dashboard | ✅ Working | Shows information | N/A | N/A |
 | **Support** | Tickets Tab | ✅ Fixed | "Error loading tickets" | NDJSON file deleted by mistake | File restored |
-| **Support** | Knowledge Base | ✅ Fixed | "Error searching KB" | NDJSON file deleted by mistake | File restored |
+| **Support** | Knowledge Base | ✅ Fixed | Empty state, no articles | Only 5 articles existed | Added 7 new articles (12 total) |
 | **Support** | AI Query | ✅ Fixed | "Connection lost" | Underlying data errors | File restored |
-| **Sales** | Dashboard | ✅ Fixed | All values show $0 | Missing pipeline summaries | Summaries added |
-| **Sales** | Opportunities | ✅ Working | Shows 6 opportunities | N/A | N/A |
-| **Sales** | Customers Tab | ✅ Fixed | "Error loading customers" | Data present, verified | Data verified |
+| **Sales** | Dashboard | ✅ Fixed | All values show $0 for Q1 2026 | Missing Q1 2026 data | Added 4 Q1 2026 deals |
+| **Sales** | Opportunities | ✅ Working | Shows 10 opportunities | N/A | N/A |
+| **Sales** | Customers Tab | ✅ Working | Shows customer list | N/A | N/A |
+| **Sales** | Customer Detail | ✅ Fixed | Crash risk with partial address | Unsafe nested access | Added safety check |
 | **Sales** | AI Query | ✅ Fixed | "List customers" failed | Underlying data errors | Data verified |
-| **Finance** | Dashboard | ✅ Fixed | Shows $NaN in totals | FY2024 data only | FY2025 added |
+| **Finance** | Dashboard | ✅ Fixed | Shows $NaN in totals | FY2024 data only, not dropped | Workflow drops DB first |
 | **Finance** | Invoices Tab | ✅ Working | Shows data | N/A | N/A |
+| **Finance** | Invoice Detail | ✅ Fixed | App crashes, corrupts query cache | line_items undefined | Made optional, added check |
 | **Finance** | Budgets Tab | ✅ Fixed | FY2024 outdated | FY2024 data only | FY2025 added |
 | **Finance** | Expense Reports | ✅ Fixed | "Failed to fetch" | Dates in 2024 | Updated to 2025 |
 | **Finance** | AI Query | ✅ Fixed | "Connection error" | Underlying data errors | Data updated |
