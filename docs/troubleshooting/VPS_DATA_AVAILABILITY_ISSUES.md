@@ -206,6 +206,80 @@ Updated Q1 2026 pipeline summary:
 
 ---
 
+### Issue 7: Finance Dashboard Mixing Fiscal Years Causing $NaN ✅ FIXED
+
+**Symptoms**:
+- Finance dashboard showing $NaN for Total Budget and Total Spent
+- Budget Utilization and Remaining Budget at 0%
+- Department Budget Breakdown showing $NaN allocations, spent, and remaining
+- Issue persisted even after VPS data reload
+
+**Root Cause**:
+VPS database contained BOTH FY2024 and FY2025 budget data (7 records each, 14 total). Dashboard queries `list_budgets` without `fiscalYear` parameter, so API returned ALL fiscal years. When frontend calculated totals, mixing 2024+2025 data caused arithmetic errors resulting in NaN values.
+
+**Investigation**:
+```bash
+# VPS database query revealed the issue
+ssh root@5.78.159.29
+docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c \
+  "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year;"
+
+# Result:
+#  fiscal_year | count
+# -------------+-------
+#  2024        |     7
+#  2025        |     7
+```
+
+**Fix Applied**:
+```typescript
+// clients/web/apps/finance/src/pages/DashboardPage.tsx
+const currentFiscalYear = 2025; // Default to current fiscal year
+
+const {
+  data: budgetsResponse,
+  // ...
+} = useQuery({
+  queryKey: ['dashboard-budgets', currentFiscalYear],
+  queryFn: async () => {
+    const url = apiConfig.mcpGatewayUrl
+      ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets?fiscalYear=${currentFiscalYear}`
+      : `/api/mcp/finance/list_budgets?fiscalYear=${currentFiscalYear}`;
+    // ...
+  },
+});
+
+// clients/web/apps/finance/src/pages/BudgetsPage.tsx
+const [yearFilter, setYearFilter] = useState<string>('2025'); // Default to current fiscal year
+
+const {
+  data: budgetsResponse,
+  // ...
+} = useQuery({
+  queryKey: ['budgets', yearFilter],
+  queryFn: async () => {
+    // Build URL with fiscal year filter
+    const params = new URLSearchParams();
+    if (yearFilter) params.append('fiscalYear', yearFilter);
+
+    const baseUrl = apiConfig.mcpGatewayUrl
+      ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets`
+      : '/api/mcp/finance/list_budgets';
+    const url = params.toString() ? `${baseUrl}?${params}` : baseUrl;
+    // ...
+  },
+});
+```
+
+**Files Changed**:
+- `clients/web/apps/finance/src/pages/DashboardPage.tsx` - Added fiscalYear=2025 filter to budget query
+- `clients/web/apps/finance/src/pages/BudgetsPage.tsx` - Default yearFilter to '2025', add dynamic URL building
+
+**Result**:
+Dashboard now queries only FY2025 data, eliminating $NaN calculation errors. Budgets page defaults to showing current fiscal year.
+
+---
+
 ### Manual VPS Data Reload (Session Work)
 
 **Status**: Successfully reloaded all 3 databases on VPS manually
