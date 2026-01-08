@@ -45,6 +45,11 @@ on:
         required: false
         type: boolean
         default: false
+      reseed_data:
+        description: 'Re-seed sample data (Finance, Sales, Support)'
+        required: false
+        type: boolean
+        default: false
       environment:
         description: 'Target environment'
         required: true
@@ -61,6 +66,7 @@ concurrency:
 env:
   DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
   BUILD_FLAG: ${{ github.event.inputs.build && '--build' || '' }}
+  RESEED_DATA: ${{ github.event.inputs.reseed_data || 'false' }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
 # Minimal permissions - deployment uses SSH keys
@@ -269,6 +275,32 @@ jobs:
             echo "[WARN] Identity sync failed - users may need manual provisioning"
             echo "Check logs: docker logs tamshai-identity-sync"
           }
+
+          # Re-seed sample data if requested
+          if [ "${{ env.RESEED_DATA }}" = "true" ]; then
+            echo "=== Re-seeding sample data ==="
+
+            echo "  [1/3] Seeding Finance data (PostgreSQL)..."
+            docker exec -i tamshai-postgres psql -U tamshai < sample-data/finance-data.sql && \
+              echo "  [OK] Finance data seeded" || \
+              echo "  [WARN] Finance data seed failed"
+
+            echo "  [2/3] Seeding Sales data (MongoDB)..."
+            docker exec -i tamshai-mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js && \
+              echo "  [OK] Sales data seeded" || \
+              echo "  [WARN] Sales data seed failed"
+
+            echo "  [3/3] Seeding Support data (MongoDB)..."
+            docker exec -i tamshai-mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" --authenticationDatabase admin < sample-data/support-data.js && \
+              echo "  [OK] Support data seeded" || \
+              echo "  [WARN] Support data seed failed"
+
+            echo "=== Restarting MCP services to pick up new data ==="
+            docker restart tamshai-mcp-gateway tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support || true
+            sleep 10
+          else
+            echo "=== Skipping sample data re-seed (use reseed_data=true to enable) ==="
+          fi
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
