@@ -191,8 +191,8 @@ curl -X POST http://localhost:8180/realms/tamshai-corp/protocol/openid-connect/t
 ### Stage Environment (VPS)
 
 **Prerequisites**:
-1. VPS running at 5.78.159.29
-2. Keycloak accessible at https://5.78.159.29/auth
+1. VPS running (get IP from: `terraform output -raw vps_ip`)
+2. Keycloak accessible at https://<vps-ip>/auth
 3. Admin credentials stored securely
 
 **Deployment**:

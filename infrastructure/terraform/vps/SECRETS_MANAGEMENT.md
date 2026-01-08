@@ -38,7 +38,7 @@ There are **two workflows** for VPS deployment, each with different purposes:
 **When to Use**: Regular deployments, updates, and maintenance.
 
 **Required GitHub Secrets**:
-- `VPS_HOST` - VPS IP address (e.g., `5.78.159.29`)
+- `VPS_HOST` - VPS IP address (e.g., `203.0.113.100`)
 - `VPS_SSH_KEY` - Private SSH key (contents of `.keys/deploy_key`)
 - `VPS_SSH_USER` - SSH user (optional, defaults to `root`)
 - `VPS_DOMAIN` - Domain name (optional, e.g., `tamshai.com`)
@@ -64,7 +64,7 @@ There are **two workflows** for VPS deployment, each with different purposes:
 
 | GitHub Secret | Purpose | Example Value |
 |---------------|---------|---------------|
-| `VPS_HOST` | VPS IP address | `5.78.159.29` |
+| `VPS_HOST` | VPS IP address | `203.0.113.100` |
 | `VPS_USER` | SSH user | `root` |
 | `VPS_SSH_KEY` | Private SSH key (PEM format) | Contents of `.keys/deploy_key` |
 | `CLAUDE_API_KEY` | Anthropic API key | `sk-ant-api03-...` |
