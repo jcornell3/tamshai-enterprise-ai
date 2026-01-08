@@ -365,8 +365,8 @@ describe('MCP Finance Server - Read Tools', () => {
 
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('success');
-      // All invoices should have status 'paid'
-      expect(response.data.data.every((inv: any) => inv.status === 'paid')).toBe(true);
+      // All invoices should have status 'PAID' (uppercase, as fixed in a54157e)
+      expect(response.data.data.every((inv: any) => inv.status === 'PAID')).toBe(true);
     });
   });
 });
