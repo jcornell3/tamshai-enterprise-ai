@@ -19,16 +19,48 @@ This includes:
 | Secret | Purpose | Where Used |
 |--------|---------|------------|
 | `TF_VAR_hcloud_token` | Hetzner Cloud API access | Terraform (creates VPS) |
-| `TF_VAR_claude_api_key_stage_stage` | Claude AI API access for **Stage** | cloud-init → .env file |
+| `TF_VAR_claude_api_key_stage` | Claude AI API access for **Stage** | cloud-init → .env file |
+| `TF_VAR_root_password` | VPS console password (optional) | Terraform VPS provisioning |
 
 **IMPORTANT**: Use a **SEPARATE** Claude API key for stage vs dev!
 - Create keys at: https://console.anthropic.com/settings/keys
 - Name them "Tamshai Dev" and "Tamshai Stage" to track usage separately
+- **Note**: Terraform auto-generates all database passwords and injects them via cloud-init
 
-### Method 2: GitHub Actions `bootstrap-vps` Workflow (Recommended)
+### Method 2: GitHub Actions Workflows
 
-The `bootstrap-vps.yml` workflow is the **recommended** method for deploying the VPS.
-It creates the `.env` file from GitHub Secrets and uses the root `docker-compose.yml`.
+There are **two workflows** for VPS deployment, each with different purposes:
+
+#### A. `deploy-vps.yml` - Full Deployment (Primary)
+
+**Purpose**: Complete deployment pipeline with git pull, service updates, and configuration sync.
+
+**When to Use**: Regular deployments, updates, and maintenance.
+
+**Required GitHub Secrets**:
+- `VPS_HOST` - VPS IP address (e.g., `5.78.159.29`)
+- `VPS_SSH_KEY` - Private SSH key (contents of `.keys/deploy_key`)
+- `VPS_SSH_USER` - SSH user (optional, defaults to `root`)
+- `VPS_DOMAIN` - Domain name (optional, e.g., `tamshai.com`)
+- `SLACK_WEBHOOK_URL` - Slack notifications (optional)
+
+**How It Works**:
+1. Connects to existing VPS via SSH
+2. Pulls latest code from GitHub
+3. Runs `docker compose up -d --build`
+4. Syncs Keycloak realm configuration
+5. Provisions HR users via identity-sync
+6. Optionally re-seeds sample data
+
+**Note**: Uses Terraform-generated `.env` file already on the VPS (no password secrets needed in GitHub).
+
+#### B. `bootstrap-vps.yml` - Environment Bootstrap (Emergency)
+
+**Purpose**: Recreates `.env` file from scratch if the VPS lost configuration.
+
+**When to Use**: Disaster recovery, manual VPS setup without Terraform.
+
+**Required GitHub Secrets** (more extensive):
 
 | GitHub Secret | Purpose | Example Value |
 |---------------|---------|---------------|
@@ -546,5 +578,6 @@ $env:TF_VAR_hcloud_token=$env:HCLOUD_TOKEN; $env:TF_VAR_claude_api_key_stage=$en
 
 ---
 
-*Last Updated: December 29, 2025*
+*Last Updated: January 8, 2026*
 *Security Review: Required every 90 days*
+*Changes: Fixed typo, clarified workflow differences (deploy-vps vs bootstrap-vps)*
