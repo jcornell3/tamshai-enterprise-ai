@@ -317,14 +317,14 @@ CREATE TABLE IF NOT EXISTS finance.invoices (
 );
 
 INSERT INTO finance.invoices (invoice_id, invoice_number, vendor_name, vendor_id, description, amount, invoice_date, due_date, paid_date, status, department_code) VALUES
-    ('INV-001', 'INV-001', 'Test Vendor Inc', 'TV-001', 'Test invoice for integration testing', 5000.00, '2024-11-01', '2024-12-01', NULL, 'PENDING', 'ENG'),
-    ('INV-2024-001', 'INV-2024-001', 'Amazon Web Services', 'AWS-001', 'Cloud infrastructure - October 2024', 45000.00, '2024-10-01', '2024-10-31', '2024-10-28', 'PAID', 'IT'),
-    ('INV-2024-002', 'INV-2024-002', 'Salesforce', 'SF-001', 'CRM licenses - Q4 2024', 28500.00, '2024-10-01', '2024-10-15', '2024-10-12', 'PAID', 'SALES'),
-    ('INV-2024-003', 'INV-2024-003', 'WeWork', 'WW-001', 'Office space - November 2024', 35000.00, '2024-11-01', '2024-11-15', NULL, 'APPROVED', 'OPS'),
-    ('INV-2024-004', 'INV-2024-004', 'Google Cloud', 'GCP-001', 'Cloud services - October 2024', 22000.00, '2024-10-05', '2024-11-05', NULL, 'PENDING', 'ENG'),
-    ('INV-2024-005', 'INV-2024-005', 'HubSpot', 'HS-001', 'Marketing automation - Q4', 15000.00, '2024-10-10', '2024-11-10', NULL, 'APPROVED', 'MKT'),
-    ('INV-2024-006', 'INV-2024-006', 'Workday', 'WD-001', 'HR platform - Annual', 85000.00, '2024-09-01', '2024-09-30', '2024-09-25', 'PAID', 'HR'),
-    ('INV-2024-007', 'INV-2024-007', 'Legal Associates LLP', 'LA-001', 'Contract review services', 12500.00, '2024-10-15', '2024-11-15', NULL, 'PENDING', 'LEGAL')
+    ('INV-001', 'INV-001', 'Test Vendor Inc', 'TV-001', 'Test invoice for integration testing', 5000.00, '2025-11-01', '2025-12-01', NULL, 'PENDING', 'ENG'),
+    ('INV-2025-001', 'INV-2025-001', 'Amazon Web Services', 'AWS-001', 'Cloud infrastructure - October 2025', 45000.00, '2025-10-01', '2025-10-31', '2025-10-28', 'PAID', 'IT'),
+    ('INV-2025-002', 'INV-2025-002', 'Salesforce', 'SF-001', 'CRM licenses - Q4 2025', 28500.00, '2025-10-01', '2025-10-15', '2025-10-12', 'PAID', 'SALES'),
+    ('INV-2025-003', 'INV-2025-003', 'WeWork', 'WW-001', 'Office space - November 2025', 35000.00, '2025-11-01', '2025-11-15', NULL, 'APPROVED', 'OPS'),
+    ('INV-2025-004', 'INV-2025-004', 'Google Cloud', 'GCP-001', 'Cloud services - October 2025', 22000.00, '2025-10-05', '2025-11-05', NULL, 'PENDING', 'ENG'),
+    ('INV-2025-005', 'INV-2025-005', 'HubSpot', 'HS-001', 'Marketing automation - Q4', 15000.00, '2025-10-10', '2025-11-10', NULL, 'APPROVED', 'MKT'),
+    ('INV-2025-006', 'INV-2025-006', 'Workday', 'WD-001', 'HR platform - Annual', 85000.00, '2025-09-01', '2025-09-30', '2025-09-25', 'PAID', 'HR'),
+    ('INV-2025-007', 'INV-2025-007', 'Legal Associates LLP', 'LA-001', 'Contract review services', 12500.00, '2025-10-15', '2025-11-15', NULL, 'PENDING', 'LEGAL')
 ON CONFLICT DO NOTHING;
 
 -- =============================================================================
@@ -342,27 +342,27 @@ CREATE TABLE IF NOT EXISTS finance.revenue_summary (
 );
 
 INSERT INTO finance.revenue_summary (fiscal_year, quarter, category_id, amount, growth_percentage, notes)
-SELECT 2024, 'Q1', id, 2500000, 12.5, 'Strong product sales' FROM finance.budget_categories WHERE code = 'REV-PROD'
+SELECT 2025, 'Q1', id, 2500000, 12.5, 'Strong product sales' FROM finance.budget_categories WHERE code = 'REV-PROD'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO finance.revenue_summary (fiscal_year, quarter, category_id, amount, growth_percentage, notes)
-SELECT 2024, 'Q1', id, 1800000, 18.2, 'New enterprise contracts' FROM finance.budget_categories WHERE code = 'REV-SUB'
+SELECT 2025, 'Q1', id, 1800000, 18.2, 'New enterprise contracts' FROM finance.budget_categories WHERE code = 'REV-SUB'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO finance.revenue_summary (fiscal_year, quarter, category_id, amount, growth_percentage, notes)
-SELECT 2024, 'Q2', id, 2750000, 10.0, 'Continued growth' FROM finance.budget_categories WHERE code = 'REV-PROD'
+SELECT 2025, 'Q2', id, 2750000, 10.0, 'Continued growth' FROM finance.budget_categories WHERE code = 'REV-PROD'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO finance.revenue_summary (fiscal_year, quarter, category_id, amount, growth_percentage, notes)
-SELECT 2024, 'Q2', id, 2100000, 16.7, 'Low churn rate' FROM finance.budget_categories WHERE code = 'REV-SUB'
+SELECT 2025, 'Q2', id, 2100000, 16.7, 'Low churn rate' FROM finance.budget_categories WHERE code = 'REV-SUB'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO finance.revenue_summary (fiscal_year, quarter, category_id, amount, growth_percentage, notes)
-SELECT 2024, 'Q3', id, 2900000, 5.5, 'Seasonal slowdown' FROM finance.budget_categories WHERE code = 'REV-PROD'
+SELECT 2025, 'Q3', id, 2900000, 5.5, 'Seasonal slowdown' FROM finance.budget_categories WHERE code = 'REV-PROD'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO finance.revenue_summary (fiscal_year, quarter, category_id, amount, growth_percentage, notes)
-SELECT 2024, 'Q3', id, 2400000, 14.3, 'Strong retention' FROM finance.budget_categories WHERE code = 'REV-SUB'
+SELECT 2025, 'Q3', id, 2400000, 14.3, 'Strong retention' FROM finance.budget_categories WHERE code = 'REV-SUB'
 ON CONFLICT DO NOTHING;
 
 -- =============================================================================
