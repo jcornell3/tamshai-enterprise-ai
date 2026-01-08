@@ -280,6 +280,110 @@ Dashboard now queries only FY2025 data, eliminating $NaN calculation errors. Bud
 
 ---
 
+### Issue 8: Automated Data Reseed Never Executing in CI/CD Workflow ✅ FIXED
+
+**Commits**:
+- `51da47d` - fix(ci): Enable data reseed on every VPS deployment
+- `30d9d3f` - fix(ci): Prevent identity-sync from consuming heredoc stdin
+- `366b197` - fix(ci): Move data reseed before Keycloak sync to prevent early termination
+
+**Symptoms**:
+- Data reseed section in deploy-vps.yml workflow never executed
+- SSH heredoc terminated immediately after identity-sync step
+- Finance, Sales, and Support databases retained old data despite deployments
+- Workflow logs showed only script echoes, not actual command execution
+
+**Root Cause Analysis**:
+
+**Attempt 1** (`51da47d`): GitHub Actions variable interpolation issue
+- Initial condition: `if [ "${{ env.RESEED_DATA }}" = "true" ]`
+- Problem: Heredoc uses single quotes (`<< 'DEPLOY_SCRIPT'`) preventing variable expansion
+- Variables sent as literal `${{ env.RESEED_DATA }}` text to VPS
+- Fix: Changed to `if [ "true" = "true" ]` (always run)
+- Result: ❌ Data reseed still didn't execute
+
+**Attempt 2** (`30d9d3f`): TTY stdin consumption issue
+- Hypothesis: `docker compose run` consuming heredoc stdin
+- Problem: Without `-T` flag, Docker Compose allocates pseudo-TTY
+- TTY allocation can consume stdin, terminating heredoc prematurely
+- Fix: Added `-T` flag to `docker compose run -T --rm --build identity-sync`
+- Result: ❌ Data reseed still didn't execute
+
+**Attempt 3** (`366b197`): Execution order issue (**SUCCESS**)
+- Root cause: SSH heredoc terminating after identity-sync despite error handlers
+- Even with `|| { ... }` error handlers and `-T` flag, script exits early
+- Suspect `set -e` + `docker compose run` exit code interaction with heredoc
+- Solution: **Reordered deployment steps** - data reseed runs BEFORE Keycloak/identity sync
+- Result: ✅ Data reseed executes successfully, databases reload correctly
+
+**Fix Applied**:
+Restructured deployment workflow order:
+```bash
+# OLD ORDER (Failed):
+1. Docker compose up
+2. Health checks
+3. Keycloak sync
+4. Identity sync  ← Heredoc terminates here
+5. Data reseed    ← Never reached
+
+# NEW ORDER (Works):
+1. Docker compose up
+2. Health checks
+3. Data reseed    ← Executes reliably
+4. Keycloak sync
+5. Identity sync  ← Can fail safely now
+```
+
+**Files Changed**:
+- `.github/workflows/deploy-vps.yml` - Moved data reseed section from line 280 to line 256
+- `scripts/vps/manual-reload-finance.sh` - Created manual fallback script
+
+**Result**:
+- Data reseed now executes on every VPS deployment
+- Finance database drops and reloads with FY2025 data only
+- Sales and Support data refreshed with latest sample data
+- Deployment resilient to Keycloak sync / identity-sync failures
+
+**Verification** (from workflow logs):
+```
+=== Re-seeding sample data (clean reload) ===
+  [1/4] Stopping MCP services...
+  [OK] Finance database dropped and reloaded
+  [OK] Sales data reloaded (MongoDB script handles drop/recreate)
+  [OK] Support indexes deleted and reloaded
+```
+
+---
+
+### Issue 9: Workflow Verification Query Using Wrong Table Name ✅ FIXED
+
+**Commit**: (pending - included in next deploy)
+
+**Symptoms**:
+- Verification step shows: `ERROR: relation "finance.budgets" does not exist`
+- Misleading error suggests database reload failed
+- Actual table name is `finance.department_budgets`
+
+**Root Cause**:
+Verification query in deploy-vps.yml used incorrect table name from old schema.
+
+**Fix Applied**:
+```bash
+# BEFORE (wrong table name):
+SELECT fiscal_year, COUNT(*) FROM finance.budgets GROUP BY fiscal_year;
+
+# AFTER (correct table name):
+SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year;
+```
+
+**Files Changed**:
+- `.github/workflows/deploy-vps.yml` - Line 295: Fixed table name in verification query
+
+**Result**:
+Verification output will correctly show budget counts by fiscal year instead of error.
+
+---
+
 ### Manual VPS Data Reload (Session Work)
 
 **Status**: Successfully reloaded all 3 databases on VPS manually

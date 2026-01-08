@@ -292,7 +292,7 @@ jobs:
 
             echo "=== Verifying data counts ==="
             echo "  Finance budgets (FY2025):"
-            docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.budgets GROUP BY fiscal_year ORDER BY fiscal_year;" || true
+            docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" || true
             echo "  Sales deals:"
             docker exec tamshai-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin tamshai_sales --quiet --eval "db.deals.countDocuments()" || true
             echo "  Support tickets:"
