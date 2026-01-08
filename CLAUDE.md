@@ -171,7 +171,7 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 
 **Environment Variables for Stage Scripts:**
 ```bash
-export VPS_HOST="5.78.159.29"            # VPS IP address
+export VPS_HOST="<your-vps-ip>"          # VPS IP address (get from Terraform output)
 export VPS_SSH_USER="root"               # SSH user
 export KEYCLOAK_ADMIN_PASSWORD="xxx"     # For Keycloak admin commands
 ```
@@ -182,7 +182,7 @@ export KEYCLOAK_ADMIN_PASSWORD="xxx"     # For Keycloak admin commands
 >
 > | Variable | Purpose | Value | Why |
 > |----------|---------|-------|-----|
-> | `VPS_HOST` | SSH connections (port 22) | IP address (e.g., `5.78.159.29`) | Cloudflare cannot proxy SSH traffic |
+> | `VPS_HOST` | SSH connections (port 22) | Raw IP address (e.g., `203.0.113.100`) | Cloudflare cannot proxy SSH traffic |
 > | `VPS_DOMAIN` | OAuth redirect URIs | Domain (e.g., `vps.tamshai.com`) | HTTPS traffic routes through Cloudflare |
 > | `VITE_STAGE_HOST` | Browser hostname detection | IP address | Matches URL bar when accessing via IP |
 >

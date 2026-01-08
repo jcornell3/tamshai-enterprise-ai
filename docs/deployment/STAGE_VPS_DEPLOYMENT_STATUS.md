@@ -202,7 +202,7 @@ curl https://www.tamshai.com/api/health
 api_url = "https://vps.tamshai.com/api"
 app_url = "https://vps.tamshai.com"
 keycloak_url = "https://vps.tamshai.com/auth"
-vps_ip = "5.78.159.29"
+vps_ip = "<redacted>"
 emergency_ssh = "SSH disabled - use cloud console"
 root_password = <sensitive> (retrieve with: terraform output -raw root_password)
 keycloak_admin_password = <sensitive> (retrieve with: terraform output -raw keycloak_admin_password)
@@ -210,13 +210,13 @@ keycloak_admin_password = <sensitive> (retrieve with: terraform output -raw keyc
 
 ### DNS Configuration
 
-**Status**: ✅ Already configured (pointing to 5.78.159.29)
+**Status**: ✅ Already configured (pointing to VPS IP - see Terraform output)
 
 **Cloudflare DNS Record**:
 ```
 Type: A
 Name: vps.tamshai.com
-Value: 5.78.159.29
+Value: <redacted>
 TTL: Auto
 Proxy: Enabled (Orange cloud)
 SSL/TLS Mode: Flexible
@@ -362,7 +362,7 @@ curl -H "Authorization: Bearer $TOKEN" https://vps.tamshai.com/api/health
 | Time | Event | Status |
 |------|-------|--------|
 | 22:50 | Terraform apply started | ✅ Complete |
-| 22:51 | VPS created (IP: 5.78.159.29) | ✅ Complete |
+| 22:51 | VPS created (IP: <redacted>) | ✅ Complete |
 | 22:51 | Cloud-init started | 🔄 In Progress |
 | ~22:56-23:01 | Docker installed | ⏳ Expected |
 | ~22:58-23:03 | Repository cloned | ⏳ Expected |

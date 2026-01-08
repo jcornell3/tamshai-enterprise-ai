@@ -16,7 +16,7 @@
 #
 # Environment Configuration:
 #   - dev: Points to localhost Docker (for local testing)
-#   - stage: Points to VPS (5.78.159.29)
+#   - stage: Points to VPS (IP from Terraform output)
 #   - prod: Points to production GCP (api.tamshai.com)
 #
 # References:

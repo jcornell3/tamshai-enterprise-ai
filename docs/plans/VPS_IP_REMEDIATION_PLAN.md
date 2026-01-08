@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document outlines the plan to replace hardcoded VPS IP address references (`5.78.159.29`) with environment variables across the codebase. This change improves:
+This document outlines the plan to replace hardcoded VPS IP address references with environment variables across the codebase. This change improves:
 
 1. **Security**: Reduces exposure of infrastructure details in public repositories
 2. **Flexibility**: Enables easy IP changes without code modifications
@@ -56,7 +56,7 @@ This document outlines the plan to replace hardcoded VPS IP address references (
 
 **Current** (line 39):
 ```typescript
-if (hostname.includes('tamshai.com') || hostname.includes('5.78.159.29')) {
+if (hostname.includes('tamshai.com') || hostname.includes('203.0.113.100')) {
 ```
 
 **Proposed**:
@@ -74,7 +74,7 @@ if (STAGE_HOSTS.some(h => hostname.includes(h)) ||
 
 **Current** (line 42):
 ```typescript
-hostname.includes('tamshai.com') || hostname.includes('5.78.159.29')) {
+hostname.includes('tamshai.com') || hostname.includes('203.0.113.100')) {
 ```
 
 **Proposed**: Same pattern as config.ts - use environment variable
@@ -90,7 +90,7 @@ hostname.includes('tamshai.com') || hostname.includes('5.78.159.29')) {
 
 Many scripts already use the correct pattern:
 ```bash
-local vps_host="${VPS_HOST:-5.78.159.29}"
+local vps_host="${VPS_HOST:-203.0.113.100}"
 ```
 
 ### Scripts Requiring Updates
@@ -99,18 +99,18 @@ These scripts need the default fallback removed or documented:
 
 | Script | Current Pattern | Action |
 |--------|-----------------|--------|
-| `scripts/infra/deploy.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/infra/status.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/infra/keycloak.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/infra/rollback.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/infra/rebuild.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/db/backup.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/db/restore.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/mcp/restart.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/mcp/health-check.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/vault/vault.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern, document requirement |
-| `scripts/test/e2e-login-with-totp-backup.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern |
-| `scripts/test/user-validation.sh` | `${VPS_HOST:-5.78.159.29}` | Keep pattern |
+| `scripts/infra/deploy.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/infra/status.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/infra/keycloak.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/infra/rollback.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/infra/rebuild.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/db/backup.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/db/restore.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/mcp/restart.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/mcp/health-check.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/vault/vault.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern, document requirement |
+| `scripts/test/e2e-login-with-totp-backup.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern |
+| `scripts/test/user-validation.sh` | `${VPS_HOST:-203.0.113.100}` | Keep pattern |
 
 ### Scripts Requiring Full Update
 
@@ -125,7 +125,7 @@ These scripts need the default fallback removed or documented:
 Add to all stage scripts:
 ```bash
 # Required environment variables for stage:
-#   VPS_HOST - VPS IP address or hostname (e.g., 5.78.159.29)
+#   VPS_HOST - VPS IP address or hostname (e.g., 203.0.113.100)
 #   VPS_SSH_USER - SSH username (default: root)
 ```
 
@@ -148,7 +148,7 @@ Add to all stage scripts:
 **Current `redirectUris`**:
 ```json
 "redirectUris": [
-  "https://5.78.159.29/*",
+  "https://203.0.113.100/*",
   "https://tamshai.com/*"
 ]
 ```
@@ -171,7 +171,7 @@ Add to all stage scripts:
 
 **Current**:
 ```bash
-"https://5.78.159.29/*",
+"https://203.0.113.100/*",
 ```
 
 **Proposed**:
@@ -200,7 +200,7 @@ Documentation updates are lower priority but should be addressed for consistency
 | `CLAUDE.md` | Replace with `${VPS_HOST}` examples |
 | `SCRIPTS_INDEX.md` | Already documents `VPS_HOST` variable |
 | `docs/deployment/*.md` | Use placeholders like `<VPS_IP>` or `$VPS_HOST` |
-| `docs/troubleshooting/*.md` | Add note: "Replace 5.78.159.29 with current VPS IP" |
+| `docs/troubleshooting/*.md` | Add note: "Replace 203.0.113.100 with current VPS IP" |
 | `docs/testing/*.md` | Use environment variable syntax |
 | `docs/operations/*.md` | Use environment variable syntax |
 

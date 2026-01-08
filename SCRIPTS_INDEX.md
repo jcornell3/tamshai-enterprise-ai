@@ -263,7 +263,7 @@ Scripts commonly expect these environment variables:
 
 | Variable | Used By | Purpose |
 |----------|---------|---------|
-| `VPS_HOST` | stage scripts | VPS IP address (default: 5.78.159.29) |
+| `VPS_HOST` | stage scripts | VPS IP address (get from Terraform output: `terraform output -raw vps_ip`) |
 | `VPS_SSH_USER` | stage scripts | SSH user (default: root) |
 | `KEYCLOAK_ADMIN_PASSWORD` | keycloak scripts | Keycloak admin password |
 | `VAULT_TOKEN` | vault scripts | Vault authentication token |
@@ -272,7 +272,7 @@ Scripts commonly expect these environment variables:
 ### Hardcoded Values
 
 The following values are hardcoded across multiple scripts:
-- VPS IP: `5.78.159.29`
+- VPS IP: Get from Terraform: `cd infrastructure/terraform/vps && terraform output -raw vps_ip`
 - Default ports: 3100 (MCP Gateway), 8180 (Keycloak), 8100 (Kong)
 - Container names: `tamshai-postgres`, `tamshai-mongodb`, `tamshai-keycloak`, etc.
 
