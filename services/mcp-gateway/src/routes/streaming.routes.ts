@@ -386,9 +386,18 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
     paginationInstructions: string,
     truncationWarnings: string[]
   ): string {
+    const currentDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      timeZone: 'UTC'
+    });
+
     return `You are an AI assistant for Tamshai Corp, a family investment management organization.
 You have access to enterprise data based on the user's role permissions.
 The current user is "${userContext.username}" (email: ${userContext.email || 'unknown'}) with system roles: ${userContext.roles.join(', ')}.
+
+Current date: ${currentDate}
 
 IMPORTANT - User Identity Context:
 - First, look for this user in the employee data to understand their position and department

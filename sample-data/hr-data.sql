@@ -219,14 +219,14 @@ ON CONFLICT (employee_number) DO NOTHING;
 
 -- HR ICs - Reports to Jennifer Lee
 INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
-    ('e1000000-0000-0000-0000-000000000012', 'EMP012', 'David', 'Park', 'david.p@tamshai.com', 'david.p@tamshai.com', '+1-555-200-0003', 'd1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000011', 'Recruiter', 'L3', '2021-06-01', 72000.00, 10, 'Seattle, WA', false),
-    ('e1000000-0000-0000-0000-000000000013', 'EMP013', 'Maria', 'Santos', 'maria.s@tamshai.com', 'maria.s@tamshai.com', '+1-555-200-0004', 'd1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000011', 'HR Coordinator', 'L2', '2022-03-01', 58000.00, 5, 'Seattle, WA', false)
+    ('e1000000-0000-0000-0000-000000000012', 'EMP012', 'David', 'Park', 'david.p@tamshai.com', 'david.p@tamshai.com', '+1-555-200-0003', 'd1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000011', 'Recruiter', 'L3', '2025-12-01', 72000.00, 10, 'Seattle, WA', false),
+    ('e1000000-0000-0000-0000-000000000013', 'EMP013', 'Maria', 'Santos', 'maria.s@tamshai.com', 'maria.s@tamshai.com', '+1-555-200-0004', 'd1000000-0000-0000-0000-000000000002', 'e1000000-0000-0000-0000-000000000011', 'HR Coordinator', 'L2', '2025-11-01', 58000.00, 5, 'Seattle, WA', false)
 ON CONFLICT (employee_number) DO NOTHING;
 
 -- Finance ICs - Reports to Bob Martinez (via Lisa for some)
 INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
     ('e1000000-0000-0000-0000-000000000022', 'EMP022', 'Kevin', 'Brown', 'kevin.b@tamshai.com', 'kevin.b@tamshai.com', '+1-555-300-0003', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Financial Analyst', 'L3', '2021-08-01', 78000.00, 10, 'Remote', false),
-    ('e1000000-0000-0000-0000-000000000023', 'EMP023', 'Amanda', 'Wright', 'amanda.wr@tamshai.com', 'amanda.wr@tamshai.com', '+1-555-300-0004', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Junior Accountant', 'L2', '2023-01-15', 62000.00, 5, 'Seattle, WA', false)
+    ('e1000000-0000-0000-0000-000000000023', 'EMP023', 'Amanda', 'Wright', 'amanda.wr@tamshai.com', 'amanda.wr@tamshai.com', '+1-555-300-0004', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Junior Accountant', 'L2', '2025-10-01', 62000.00, 5, 'Seattle, WA', false)
 ON CONFLICT (employee_number) DO NOTHING;
 
 -- Sales ICs - Reports to Ryan Garcia
@@ -251,7 +251,7 @@ ON CONFLICT (employee_number) DO NOTHING;
 
 -- IT ICs - Reports to Brian Adams (including the intern Frank)
 INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
-    ('b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'EMP061', 'Frank', 'Davis', 'frank@tamshai.com', 'frank@tamshai.com', '+1-555-700-0002', 'd1000000-0000-0000-0000-000000000010', 'e1000000-0000-0000-0000-000000000060', 'IT Intern', 'L1', '2024-06-01', 45000.00, 0, 'Seattle, WA', false),
+    ('b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'EMP061', 'Frank', 'Davis', 'frank@tamshai.com', 'frank@tamshai.com', '+1-555-700-0002', 'd1000000-0000-0000-0000-000000000010', 'e1000000-0000-0000-0000-000000000060', 'IT Intern', 'L1', '2025-08-01', 45000.00, 0, 'Seattle, WA', false),
     ('e1000000-0000-0000-0000-000000000062', 'EMP062', 'Tony', 'Nguyen', 'tony.n@tamshai.com', 'tony.n@tamshai.com', '+1-555-700-0003', 'd1000000-0000-0000-0000-000000000010', 'e1000000-0000-0000-0000-000000000060', 'Systems Administrator', 'L3', '2021-04-01', 85000.00, 10, 'Seattle, WA', false)
 ON CONFLICT (employee_number) DO NOTHING;
 
@@ -326,7 +326,7 @@ ON CONFLICT (employee_number) DO NOTHING;
 -- Additional Finance ICs - Reports to Bob Martinez
 INSERT INTO hr.employees (id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager) VALUES
     ('e1000000-0000-0000-0000-000000000024', 'EMP024', 'Nicole', 'Bailey', 'nicole.b@tamshai.com', 'nicole.b@tamshai.com', '+1-555-300-0005', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Accounts Payable Specialist', 'L3', '2021-10-01', 72000.00, 10, 'Seattle, WA', false),
-    ('e1000000-0000-0000-0000-000000000025', 'EMP025', 'Timothy', 'Murphy', 'timothy.m@tamshai.com', 'timothy.m@tamshai.com', '+1-555-300-0006', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Finance Intern', 'L1', '2024-06-01', 45000.00, 0, 'Seattle, WA', false)
+    ('e1000000-0000-0000-0000-000000000025', 'EMP025', 'Timothy', 'Murphy', 'timothy.m@tamshai.com', 'timothy.m@tamshai.com', '+1-555-300-0006', 'd1000000-0000-0000-0000-000000000003', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Finance Intern', 'L1', '2025-09-15', 45000.00, 0, 'Seattle, WA', false)
 ON CONFLICT (employee_number) DO NOTHING;
 
 -- =============================================================================
