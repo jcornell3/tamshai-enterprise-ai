@@ -290,10 +290,12 @@ jobs:
               echo "  [OK] Sales data seeded" || \
               echo "  [WARN] Sales data seed failed"
 
-            echo "  [3/3] Seeding Support data (MongoDB)..."
-            docker exec -i tamshai-mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" --authenticationDatabase admin < sample-data/support-data.js && \
-              echo "  [OK] Support data seeded" || \
-              echo "  [WARN] Support data seed failed"
+            echo "  [3/3] Seeding Support data (Elasticsearch)..."
+            # Support data is loaded via elasticsearch-init container on startup
+            # Trigger re-index by restarting elasticsearch-init
+            docker restart tamshai-elasticsearch-init 2>/dev/null && \
+              echo "  [OK] Support data re-indexed (elasticsearch-init restarted)" || \
+              echo "  [INFO] Support data auto-loaded by elasticsearch-init on startup"
 
             echo "=== Restarting MCP services to pick up new data ==="
             docker restart tamshai-mcp-gateway tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support || true

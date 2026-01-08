@@ -17,9 +17,9 @@ This document summarizes the issues encountered with data not being available on
 | **HR** | Dashboard | ✅ Working | Shows employees | N/A | N/A |
 | **HR** | AI Query | ✅ Working | Returns data | N/A | N/A |
 | **Support** | Dashboard | ✅ Working | Shows information | N/A | N/A |
-| **Support** | Tickets Tab | ✅ Fixed | "Error loading tickets" | Wrong data format (ES→MongoDB) | Data converted |
-| **Support** | Knowledge Base | ✅ Fixed | "Error searching KB" | Wrong data format (ES→MongoDB) | Data converted |
-| **Support** | AI Query | ✅ Fixed | "Connection lost" | Underlying data errors | Data converted |
+| **Support** | Tickets Tab | ✅ Fixed | "Error loading tickets" | NDJSON file deleted by mistake | File restored |
+| **Support** | Knowledge Base | ✅ Fixed | "Error searching KB" | NDJSON file deleted by mistake | File restored |
+| **Support** | AI Query | ✅ Fixed | "Connection lost" | Underlying data errors | File restored |
 | **Sales** | Dashboard | ✅ Fixed | All values show $0 | Missing pipeline summaries | Summaries added |
 | **Sales** | Opportunities | ✅ Working | Shows 6 opportunities | N/A | N/A |
 | **Sales** | Customers Tab | ✅ Fixed | "Error loading customers" | Data present, verified | Data verified |
@@ -36,15 +36,11 @@ This document summarizes the issues encountered with data not being available on
 
 ### Issue 1: Support App - Tickets and Knowledge Base Failing
 
-**Root Cause**: The `support-data.ndjson` file was in **Elasticsearch bulk import format**, but the MCP-Support server uses **MongoDB**. The data was never properly loaded.
+**Root Cause**: The `support-data.ndjson` file was accidentally deleted during initial troubleshooting. MCP-Support uses **Elasticsearch** (not MongoDB), and the NDJSON format was correct.
 
-**Evidence**: The NDJSON file contained Elasticsearch index headers:
-```json
-{"index":{"_index":"support_tickets"}}
-{"ticket_id":"TICK-001",...}
-```
+**Evidence**: The docker-compose.yml elasticsearch-init container mounts and loads `support-data.ndjson` into Elasticsearch on startup.
 
-**Fix Applied**: Converted `support-data.ndjson` to `support-data.js` (MongoDB JavaScript format) using `insertMany()` syntax.
+**Fix Applied**: Restored `support-data.ndjson` file with correct Elasticsearch bulk import format.
 
 ### Issue 2: Sales Dashboard Shows $0
 
@@ -84,18 +80,28 @@ This document summarizes the issues encountered with data not being available on
 - **Pipeline Summaries**: Added Q4 2025, Q3 2025, Q2 2025, and FY2025 annual summaries
 - **Verified**: Customer data, deals, and activities already have correct 2025-2026 dates
 
-### 3. Support Data (`sample-data/support-data.js`) - NEW FILE
+### 3. Support Data (`sample-data/support-data.ndjson`) - RESTORED
 
-- **Converted**: From Elasticsearch NDJSON to MongoDB JavaScript format
-- **Collections Created**: `support_tickets` and `knowledge_base`
+- **Restored**: Elasticsearch NDJSON bulk import format (was accidentally deleted)
+- **Indexes**: `support_tickets` and `knowledge_base`
 - **Data**: 10 tickets and 5 knowledge base articles
-- **Old File**: `support-data.ndjson` removed (obsolete)
+- **Note**: MCP-Support uses Elasticsearch, not MongoDB
 
 ---
 
 ## Deployment Instructions
 
-After pulling these changes, re-seed the VPS databases:
+### Option 1: GitHub Actions (Recommended)
+
+Trigger the deployment workflow with the reseed option:
+
+```bash
+gh workflow run deploy-vps.yml --ref main -f reseed_data=true
+```
+
+### Option 2: Manual Re-seed
+
+SSH to VPS and run seed scripts manually:
 
 ```bash
 # SSH to VPS
@@ -108,19 +114,17 @@ cd /opt/tamshai
 git pull
 
 # Re-seed PostgreSQL (Finance data)
-docker exec -i postgres psql -U tamshai < sample-data/finance-data.sql
+docker exec -i tamshai-postgres psql -U tamshai < sample-data/finance-data.sql
 
 # Re-seed MongoDB (Sales data)
-docker exec -i mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" < sample-data/sales-data.js
+docker exec -i tamshai-mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js
 
-# Re-seed MongoDB (Support data)
-docker exec -i mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" < sample-data/support-data.js
+# Re-seed Elasticsearch (Support data) - restart elasticsearch-init container
+docker restart tamshai-elasticsearch-init
 
 # Restart MCP services to pick up any cached data
-docker restart mcp-gateway mcp-finance mcp-sales mcp-support
+docker restart tamshai-mcp-gateway tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support
 ```
-
-Alternatively, trigger the GitHub Actions deployment which handles seeding automatically.
 
 ---
 
