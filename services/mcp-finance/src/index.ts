@@ -279,7 +279,7 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
  */
 app.post('/tools/list_budgets', async (req: Request, res: Response) => {
   try {
-    const { userContext, limit, cursor } = req.body;
+    const { userContext, fiscalYear, department, limit, cursor } = req.body;
 
     if (!userContext?.userId) {
       res.status(400).json({
@@ -301,7 +301,7 @@ app.post('/tools/list_budgets', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await listBudgets({ limit, cursor }, userContext);
+    const result = await listBudgets({ fiscalYear, department, limit, cursor }, userContext);
     res.json(result);
   } catch (error) {
     logger.error('list_budgets error:', error);

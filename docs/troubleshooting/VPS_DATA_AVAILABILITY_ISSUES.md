@@ -386,7 +386,7 @@ Verification output will correctly show budget counts by fiscal year instead of 
 
 ### Issue 10: Invalid UUID Format in Expense Records Causing Database Errors ✅ FIXED
 
-**Commit**: (pending - to be deployed)
+**Commit**: `0fd3f4c` - fix(data): Fix invalid UUID format in Finance expense records
 
 **Symptoms**:
 - Finance dashboard showing "Error: Failed to fetch budgets" after data reseed
@@ -428,6 +428,62 @@ Changed all 25 expense record IDs from `exp00001-...` to `e0000001-...` (valid h
 
 **Result**:
 Finance database reloads cleanly without UUID format errors. Dashboard can successfully query budgets and expenses.
+
+---
+
+### Issue 11: MCP Finance Server Missing fiscalYear Parameter in list_budgets Endpoint ✅ FIXED
+
+**Commit**: (pending - to be deployed)
+
+**Symptoms**:
+- Finance dashboard showing "Error: Failed to fetch budgets" even after UUID fix
+- Dashboard requesting `?fiscalYear=2025` but server returning ALL fiscal years
+- Frontend still calculating $NaN totals from mixed FY2024/FY2025 data
+
+**Root Cause**:
+The `/tools/list_budgets` endpoint in MCP Finance server (services/mcp-finance/src/index.ts:280-314) was not extracting the `fiscalYear` and `department` parameters from the request body, despite the `listBudgets` tool function supporting these parameters.
+
+**Investigation**:
+```typescript
+// BEFORE (broken):
+app.post('/tools/list_budgets', async (req: Request, res: Response) => {
+  const { userContext, limit, cursor } = req.body;  // ❌ Missing fiscalYear, department
+  const result = await listBudgets({ limit, cursor }, userContext);  // ❌ Missing params
+```
+
+When dashboard sends:
+```
+GET /api/mcp/finance/list_budgets?fiscalYear=2025
+```
+
+MCP Gateway converts to POST:
+```json
+{
+  "fiscalYear": 2025,
+  "userContext": { ... }
+}
+```
+
+But MCP Finance server ignored `fiscalYear` and returned all fiscal years, causing $NaN calculations on frontend.
+
+**Fix Applied**:
+```typescript
+// AFTER (fixed):
+app.post('/tools/list_budgets', async (req: Request, res: Response) => {
+  const { userContext, fiscalYear, department, limit, cursor } = req.body;  // ✅ Include all params
+  const result = await listBudgets({ fiscalYear, department, limit, cursor }, userContext);  // ✅ Pass through
+```
+
+**Files Changed**:
+- `services/mcp-finance/src/index.ts` - Lines 282, 304: Added fiscalYear and department parameter extraction
+
+**Impact**:
+- Dashboard now receives ONLY FY2025 budgets as requested
+- Finance totals calculate correctly without $NaN
+- Department filtering also now works when specified
+
+**Result**:
+Finance dashboard loads with correct FY2025 data, displaying accurate budget totals and metrics.
 
 ---
 
