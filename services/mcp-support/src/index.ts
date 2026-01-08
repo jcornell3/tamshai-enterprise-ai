@@ -138,7 +138,7 @@ async function searchTickets(input: any, userContext: UserContext): Promise<MCPT
     const searchBody: any = {
       query: {
         bool: {
-          must: must.length > 0 ? must : { match_all: {} },
+          must: must.length > 0 ? must : [{ match_all: {} }],
           filter: roleFilter,
         },
       },
