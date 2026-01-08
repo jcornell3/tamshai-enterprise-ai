@@ -18,10 +18,10 @@ zone   = "us-central1-a"
 subnet_cidr        = "10.2.0.0/24"
 allowed_http_ports = ["443", "8080"] # HTTPS only, no dev ports
 http_source_ranges = ["0.0.0.0/0"]   # SECURITY: Restrict to known IPs or use Cloud Armor in production
-                                      # Examples:
-                                      # - Office IP: ["203.0.113.0/24"]
-                                      # - Cloudflare: Use cloudflare IP ranges
-                                      # - VPN: Restrict to VPN gateway IPs
+# Examples:
+# - Office IP: ["203.0.113.0/24"]
+# - Cloudflare: Use cloudflare IP ranges
+# - VPN: Restrict to VPN gateway IPs
 
 # Database - Production-grade configuration
 database_version = "POSTGRES_16"
