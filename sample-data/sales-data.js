@@ -317,6 +317,96 @@ db.deals.insertMany([
       { type: "CALL", date: new Date("2025-11-15"), summary: "Renewal discussion" },
       { type: "CONTRACT", date: new Date("2025-12-15"), summary: "Signed renewal" }
     ]
+  },
+  // Q1 2026 Deals
+  {
+    _id: ObjectId("670000000000000000000007"),
+    deal_name: "TechStart Platform Upgrade",
+    customer_id: ObjectId("650000000000000000000002"),
+    stage: "CLOSED_WON",
+    value: 125000,
+    currency: "USD",
+    probability: 100,
+    expected_close_date: new Date("2026-01-31"),
+    actual_close_date: new Date("2026-01-28"),
+    deal_type: "EXPANSION",
+    products: ["Enterprise Platform", "Integration Services"],
+    notes: "Upgrading from Growth to Enterprise tier",
+    owner: "ryan.garcia",
+    created_at: new Date("2025-12-10"),
+    updated_at: new Date("2026-01-28"),
+    activities: [
+      { type: "CALL", date: new Date("2025-12-15"), summary: "Discussed upgrade path" },
+      { type: "DEMO", date: new Date("2026-01-10"), summary: "Enterprise features demo" },
+      { type: "PROPOSAL", date: new Date("2026-01-15"), summary: "Upgrade proposal sent" },
+      { type: "CONTRACT", date: new Date("2026-01-28"), summary: "Contract signed" }
+    ]
+  },
+  {
+    _id: ObjectId("670000000000000000000008"),
+    deal_name: "GFP Security Add-on",
+    customer_id: ObjectId("650000000000000000000003"),
+    stage: "CLOSED_WON",
+    value: 180000,
+    currency: "USD",
+    probability: 100,
+    expected_close_date: new Date("2026-01-31"),
+    actual_close_date: new Date("2026-01-25"),
+    deal_type: "EXPANSION",
+    products: ["Security Add-on", "Compliance Module"],
+    notes: "Added security features for regulatory compliance",
+    owner: "amanda.white",
+    created_at: new Date("2025-12-01"),
+    updated_at: new Date("2026-01-25"),
+    activities: [
+      { type: "MEETING", date: new Date("2025-12-05"), summary: "Security requirements review" },
+      { type: "DEMO", date: new Date("2025-12-20"), summary: "Security features demo" },
+      { type: "PROPOSAL", date: new Date("2026-01-05"), summary: "Proposal submitted" },
+      { type: "CONTRACT", date: new Date("2026-01-25"), summary: "Deal closed" }
+    ]
+  },
+  {
+    _id: ObjectId("670000000000000000000009"),
+    deal_name: "Manufacturing Co Starter Package",
+    customer_id: ObjectId("650000000000000000000001"),
+    stage: "PROPOSAL",
+    value: 65000,
+    currency: "USD",
+    probability: 70,
+    expected_close_date: new Date("2026-02-15"),
+    actual_close_date: null,
+    deal_type: "NEW_BUSINESS",
+    products: ["Starter Platform", "Basic Support"],
+    notes: "Manufacturing company referred by Acme Corp",
+    owner: "ryan.garcia",
+    created_at: new Date("2026-01-05"),
+    updated_at: new Date("2026-01-08"),
+    activities: [
+      { type: "CALL", date: new Date("2026-01-05"), summary: "Initial discovery call" },
+      { type: "DEMO", date: new Date("2026-01-08"), summary: "Platform walkthrough" }
+    ]
+  },
+  {
+    _id: ObjectId("670000000000000000000010"),
+    deal_name: "RetailMax Integration Services",
+    customer_id: ObjectId("650000000000000000000005"),
+    stage: "NEGOTIATION",
+    value: 250000,
+    currency: "USD",
+    probability: 65,
+    expected_close_date: new Date("2026-02-28"),
+    actual_close_date: null,
+    deal_type: "NEW_BUSINESS",
+    products: ["Enterprise Platform", "Retail Module", "Integration Services", "Premium Support"],
+    notes: "Large retail chain, complex integration requirements",
+    owner: "carol.johnson",
+    created_at: new Date("2025-12-15"),
+    updated_at: new Date("2026-01-08"),
+    activities: [
+      { type: "MEETING", date: new Date("2025-12-20"), summary: "Initial stakeholder meeting" },
+      { type: "DEMO", date: new Date("2026-01-05"), summary: "Retail-specific features demo" },
+      { type: "PROPOSAL", date: new Date("2026-01-08"), summary: "Comprehensive proposal submitted" }
+    ]
   }
 ]);
 
@@ -335,16 +425,16 @@ db.pipeline_summary.insertMany([
     stages: {
       qualification: { count: 1, value: 1200000 },
       discovery: { count: 1, value: 125000 },
-      proposal: { count: 1, value: 85000 },
-      negotiation: { count: 1, value: 750000 },
-      closed_won: { count: 2, value: 545000 },
+      proposal: { count: 2, value: 150000 },  // Added Manufacturing Co $65k
+      negotiation: { count: 2, value: 1000000 },  // Added RetailMax $250k
+      closed_won: { count: 4, value: 850000 },  // Added TechStart $125k + GFP $180k
       closed_lost: { count: 0, value: 0 }
     },
-    total_pipeline: 2160000,
-    weighted_pipeline: 645000,
-    closed_won_ytd: 545000,
+    total_pipeline: 3325000,  // Increased from 2160000
+    weighted_pipeline: 910000,  // Recalculated based on probabilities
+    closed_won_ytd: 850000,  // Updated from 545000
     target: 2500000,
-    attainment_pct: 22
+    attainment_pct: 34  // 850k / 2500k = 34%
   },
   // Q4 2025 (Previous Quarter)
   {
