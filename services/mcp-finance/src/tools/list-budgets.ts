@@ -80,7 +80,7 @@ export async function listBudgets(
         ? `WHERE ${whereClauses.join(' AND ')}`
         : '';
 
-      // Query with RLS enforcement - calculate remaining and status
+      // Query with RLS enforcement - calculate remaining and return approval status
       const result = await queryWithRLS<BudgetSummary>(
         userContext,
         `
@@ -94,12 +94,7 @@ export async function listBudgets(
           db.forecast_amount,
           ROUND((db.actual_amount / NULLIF(db.budgeted_amount, 0)) * 100, 1) as utilization_pct,
           (db.budgeted_amount - db.actual_amount) as remaining_amount,
-          CASE
-            WHEN db.actual_amount > db.budgeted_amount THEN 'OVER_BUDGET'
-            WHEN db.actual_amount >= db.budgeted_amount * 0.9 THEN 'NEAR_LIMIT'
-            WHEN db.actual_amount >= db.budgeted_amount * 0.75 THEN 'ON_TRACK'
-            ELSE 'UNDER_UTILIZED'
-          END as status
+          db.status::text as status
         FROM finance.department_budgets db
         JOIN finance.budget_categories bc ON db.category_id = bc.id
         ${whereClause}
