@@ -60,6 +60,8 @@ export const ListInvoicesInputSchema = z.object({
   vendor: z.string().optional(),
   status: z.enum(['pending', 'approved', 'paid', 'cancelled']).optional(),
   department: z.string().optional(),
+  startDate: z.string().optional(),  // ISO 8601 date string (YYYY-MM-DD)
+  endDate: z.string().optional(),    // ISO 8601 date string (YYYY-MM-DD)
   minAmount: z.number().optional(),
   maxAmount: z.number().optional(),
   limit: z.number().int().min(1).max(100).default(50),
@@ -106,7 +108,7 @@ export async function listInvoices(
   return withErrorHandling('list_invoices', async () => {
     // Validate input
     const validated = ListInvoicesInputSchema.parse(input);
-    const { vendor, status, department, minAmount, maxAmount, limit, cursor } = validated;
+    const { vendor, status, department, startDate, endDate, minAmount, maxAmount, limit, cursor } = validated;
 
     // Decode cursor if provided
     const cursorData = cursor ? decodeCursor(cursor) : null;
@@ -131,6 +133,16 @@ export async function listInvoices(
       // Actual column: department_code (not department)
       whereClauses.push(`i.department_code = $${paramIndex++}`);
       values.push(department);
+    }
+
+    if (startDate) {
+      whereClauses.push(`i.invoice_date >= $${paramIndex++}`);
+      values.push(startDate);
+    }
+
+    if (endDate) {
+      whereClauses.push(`i.invoice_date <= $${paramIndex++}`);
+      values.push(endDate);
     }
 
     if (minAmount !== undefined) {
