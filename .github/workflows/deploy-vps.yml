@@ -65,7 +65,7 @@ concurrency:
 
 env:
   DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
-  BUILD_FLAG: ${{ github.event.inputs.build && '--build' || '' }}
+  BUILD_FLAG: ${{ github.event.inputs.build && '--build --no-cache' || '--build' }}
   RESEED_DATA: ${{ github.event.inputs.reseed_data || 'false' }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
@@ -229,9 +229,10 @@ jobs:
           export $(cat .env | grep -v '^#' | xargs)
 
           echo "=== Building and deploying services ==="
-          # Always build images on VPS (no container registry configured yet)
+          # Build images on VPS (no container registry configured yet)
           # Uses root docker-compose.yml with VPS environment variables
-          docker compose up -d --build
+          # BUILD_FLAG contains --build (normal) or --build --no-cache (force rebuild)
+          docker compose up -d ${{ env.BUILD_FLAG }}
 
           echo "=== Cleaning up ==="
           docker image prune -f
