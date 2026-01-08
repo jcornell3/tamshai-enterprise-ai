@@ -1,14 +1,134 @@
 # VPS Data Availability Issues - Troubleshooting Guide
 
-**Document Version**: 1.2
+**Document Version**: 1.4
 **Created**: January 5, 2026
-**Last Updated**: January 6, 2026
+**Last Updated**: January 8, 2026
 
 This document summarizes the issues encountered with data not being available on the VPS staging environment, the bugs fixed, and diagnostic commands for future troubleshooting.
 
 ---
 
-## Current Status (as of January 6, 2026)
+## Current Status (as of January 8, 2026)
+
+**Test User**: eve.thompson (executive role, no data restrictions)
+
+| App | Component | Status | Symptoms | Root Cause | Fix Status |
+|-----|-----------|--------|----------|------------|------------|
+| **HR** | Dashboard | ✅ Working | Shows employees | N/A | N/A |
+| **HR** | AI Query | ✅ Working | Returns data | N/A | N/A |
+| **Support** | Dashboard | ✅ Working | Shows information | N/A | N/A |
+| **Support** | Tickets Tab | ✅ Fixed | "Error loading tickets" | Wrong data format (ES→MongoDB) | Data converted |
+| **Support** | Knowledge Base | ✅ Fixed | "Error searching KB" | Wrong data format (ES→MongoDB) | Data converted |
+| **Support** | AI Query | ✅ Fixed | "Connection lost" | Underlying data errors | Data converted |
+| **Sales** | Dashboard | ✅ Fixed | All values show $0 | Missing pipeline summaries | Summaries added |
+| **Sales** | Opportunities | ✅ Working | Shows 6 opportunities | N/A | N/A |
+| **Sales** | Customers Tab | ✅ Fixed | "Error loading customers" | Data present, verified | Data verified |
+| **Sales** | AI Query | ✅ Fixed | "List customers" failed | Underlying data errors | Data verified |
+| **Finance** | Dashboard | ✅ Fixed | Shows $NaN in totals | FY2024 data only | FY2025 added |
+| **Finance** | Invoices Tab | ✅ Working | Shows data | N/A | N/A |
+| **Finance** | Budgets Tab | ✅ Fixed | FY2024 outdated | FY2024 data only | FY2025 added |
+| **Finance** | Expense Reports | ✅ Fixed | "Failed to fetch" | Dates in 2024 | Updated to 2025 |
+| **Finance** | AI Query | ✅ Fixed | "Connection error" | Underlying data errors | Data updated |
+
+---
+
+## Root Cause Analysis (January 8, 2026)
+
+### Issue 1: Support App - Tickets and Knowledge Base Failing
+
+**Root Cause**: The `support-data.ndjson` file was in **Elasticsearch bulk import format**, but the MCP-Support server uses **MongoDB**. The data was never properly loaded.
+
+**Evidence**: The NDJSON file contained Elasticsearch index headers:
+```json
+{"index":{"_index":"support_tickets"}}
+{"ticket_id":"TICK-001",...}
+```
+
+**Fix Applied**: Converted `support-data.ndjson` to `support-data.js` (MongoDB JavaScript format) using `insertMany()` syntax.
+
+### Issue 2: Sales Dashboard Shows $0
+
+**Root Cause**: Only one `pipeline_summary` document existed (Q1 2026). The dashboard queries for multiple time periods or calculates metrics that require historical data.
+
+**Fix Applied**: Added historical pipeline summaries for Q4 2025, Q3 2025, Q2 2025, and FY2025 annual to `sales-data.js`.
+
+### Issue 3: Finance Dashboard Shows $NaN
+
+**Root Cause**: All budget data was for **fiscal year 2024**. The dashboard calculates totals for the current fiscal year (2025/2026). When no 2025 budgets exist, the calculation returns NaN.
+
+**Evidence**: Budget INSERT statements all had `fiscal_year: 2024`.
+
+**Fix Applied**:
+1. Updated fiscal years table to mark 2025 as 'OPEN' (current year)
+2. Added complete FY2025 budget data with realistic amounts
+3. Kept FY2024 data for historical reference
+
+### Issue 4: Finance Expense Reports Failing
+
+**Root Cause**: All expense dates were in 2024. The Expense Reports page filters for recent expenses, finding no data.
+
+**Fix Applied**: Updated expense dates to late 2025 (October-December 2025).
+
+---
+
+## Fixes Applied (January 8, 2026)
+
+### 1. Finance Data (`sample-data/finance-data.sql`)
+
+- **Fiscal Years**: Updated 2025 status from 'PLANNED' to 'OPEN', added 2026 as 'PLANNED'
+- **FY2025 Budgets**: Added complete budget data for all 7 departments
+- **Expense Dates**: Updated all expense dates from 2024 to late 2025
+
+### 2. Sales Data (`sample-data/sales-data.js`)
+
+- **Pipeline Summaries**: Added Q4 2025, Q3 2025, Q2 2025, and FY2025 annual summaries
+- **Verified**: Customer data, deals, and activities already have correct 2025-2026 dates
+
+### 3. Support Data (`sample-data/support-data.js`) - NEW FILE
+
+- **Converted**: From Elasticsearch NDJSON to MongoDB JavaScript format
+- **Collections Created**: `support_tickets` and `knowledge_base`
+- **Data**: 10 tickets and 5 knowledge base articles
+- **Old File**: `support-data.ndjson` removed (obsolete)
+
+---
+
+## Deployment Instructions
+
+After pulling these changes, re-seed the VPS databases:
+
+```bash
+# SSH to VPS
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@$VPS_HOST
+
+# Navigate to project directory
+cd /opt/tamshai
+
+# Pull latest changes
+git pull
+
+# Re-seed PostgreSQL (Finance data)
+docker exec -i postgres psql -U tamshai < sample-data/finance-data.sql
+
+# Re-seed MongoDB (Sales data)
+docker exec -i mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" < sample-data/sales-data.js
+
+# Re-seed MongoDB (Support data)
+docker exec -i mongodb mongosh -u root -p "$MONGODB_ROOT_PASSWORD" < sample-data/support-data.js
+
+# Restart MCP services to pick up any cached data
+docker restart mcp-gateway mcp-finance mcp-sales mcp-support
+```
+
+Alternatively, trigger the GitHub Actions deployment which handles seeding automatically.
+
+---
+
+## Previous Issues (January 7, 2026)
+
+---
+
+## Previous Status (January 6, 2026)
 
 | Dashboard | Status | Root Cause | Fix Status |
 |-----------|--------|------------|------------|

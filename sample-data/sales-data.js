@@ -322,9 +322,11 @@ db.deals.insertMany([
 
 // =============================================================================
 // PIPELINE SUMMARY (for read-only access)
+// Historical data for dashboard and reporting
 // =============================================================================
 db.pipeline_summary.drop();
 db.pipeline_summary.insertMany([
+  // Q1 2026 (Current Quarter)
   {
     _id: "2026-Q1",
     quarter: "Q1",
@@ -343,6 +345,86 @@ db.pipeline_summary.insertMany([
     closed_won_ytd: 545000,
     target: 2500000,
     attainment_pct: 22
+  },
+  // Q4 2025 (Previous Quarter)
+  {
+    _id: "2025-Q4",
+    quarter: "Q4",
+    fiscal_year: 2025,
+    updated_at: new Date("2025-12-31"),
+    stages: {
+      qualification: { count: 2, value: 850000 },
+      discovery: { count: 3, value: 425000 },
+      proposal: { count: 2, value: 320000 },
+      negotiation: { count: 2, value: 680000 },
+      closed_won: { count: 8, value: 2150000 },
+      closed_lost: { count: 2, value: 175000 }
+    },
+    total_pipeline: 4425000,
+    weighted_pipeline: 1850000,
+    closed_won_ytd: 2150000,
+    target: 2200000,
+    attainment_pct: 98
+  },
+  // Q3 2025
+  {
+    _id: "2025-Q3",
+    quarter: "Q3",
+    fiscal_year: 2025,
+    updated_at: new Date("2025-09-30"),
+    stages: {
+      qualification: { count: 4, value: 1100000 },
+      discovery: { count: 2, value: 380000 },
+      proposal: { count: 3, value: 450000 },
+      negotiation: { count: 1, value: 520000 },
+      closed_won: { count: 6, value: 1680000 },
+      closed_lost: { count: 1, value: 120000 }
+    },
+    total_pipeline: 4130000,
+    weighted_pipeline: 1420000,
+    closed_won_ytd: 1680000,
+    target: 2000000,
+    attainment_pct: 84
+  },
+  // Q2 2025
+  {
+    _id: "2025-Q2",
+    quarter: "Q2",
+    fiscal_year: 2025,
+    updated_at: new Date("2025-06-30"),
+    stages: {
+      qualification: { count: 3, value: 720000 },
+      discovery: { count: 4, value: 560000 },
+      proposal: { count: 2, value: 280000 },
+      negotiation: { count: 2, value: 410000 },
+      closed_won: { count: 5, value: 1450000 },
+      closed_lost: { count: 2, value: 180000 }
+    },
+    total_pipeline: 3420000,
+    weighted_pipeline: 1250000,
+    closed_won_ytd: 1450000,
+    target: 1800000,
+    attainment_pct: 81
+  },
+  // FY2025 Annual Summary
+  {
+    _id: "2025-ANNUAL",
+    quarter: "ANNUAL",
+    fiscal_year: 2025,
+    updated_at: new Date("2025-12-31"),
+    stages: {
+      qualification: { count: 0, value: 0 },
+      discovery: { count: 0, value: 0 },
+      proposal: { count: 0, value: 0 },
+      negotiation: { count: 0, value: 0 },
+      closed_won: { count: 24, value: 7280000 },
+      closed_lost: { count: 6, value: 575000 }
+    },
+    total_pipeline: 0,
+    weighted_pipeline: 0,
+    closed_won_ytd: 7280000,
+    target: 8000000,
+    attainment_pct: 91
   }
 ]);
 
