@@ -81,9 +81,12 @@ Once prerequisites are provided, Claude will execute these tasks:
 | 4.3 | Run database migrations | 10 min | ⬜ |
 | 4.4 | Sync Keycloak realm configuration | 10 min | ⬜ |
 | 4.5 | Run smoke tests and verify deployment | 15 min | ⬜ |
+| **CI/CD** | | | |
+| 5.1 | Create `.github/workflows/deploy-to-gcp.yml` workflow | 30 min | ⬜ |
+| 5.2 | Test workflow with manual trigger | 15 min | ⬜ |
 | **Documentation** | | | |
-| 5.1 | Update CLAUDE.md with GCP deployment instructions | 15 min | ⬜ |
-| 5.2 | Create runbook for common operations | 30 min | ⬜ |
+| 6.1 | Update CLAUDE.md with GCP deployment instructions | 15 min | ⬜ |
+| 6.2 | Create runbook for common operations | 30 min | ⬜ |
 
 **Total Estimated Implementation Time:** ~4-5 hours (spread across sessions)
 
@@ -252,6 +255,303 @@ VPS_DOMAIN=tamshai.com ./keycloak/scripts/sync-realm.sh prod
 - `https://prod.tamshai.com/*`
 - `https://app.tamshai.com/*`
 - `https://api.tamshai.com/*`
+
+---
+
+## GitHub CD Workflow: deploy-to-gcp
+
+This section describes the Continuous Deployment workflow for automated deployments to GCP.
+
+### Scope
+
+The `deploy-to-gcp.yml` workflow handles automated deployment of all application components to the GCP production environment.
+
+| Component | Deployment Method | Trigger |
+|-----------|-------------------|---------|
+| MCP Gateway | Cloud Run | Push to `main` |
+| MCP Suite (HR, Finance, Sales, Support) | Cloud Run | Push to `main` |
+| Keycloak | Cloud Run | Push to `main` |
+| Static Website (`prod.tamshai.com`) | GCS Bucket | Push to `main` |
+| Portal App (`app.tamshai.com`) | Cloud Run | Push to `main` |
+
+### Workflow Triggers
+
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'clients/web/**'
+      - 'keycloak/**'
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      service:
+        description: 'Service to deploy (all, gateway, hr, finance, sales, support, keycloak, web)'
+        required: false
+        default: 'all'
+```
+
+### Required GitHub Secrets
+
+| Secret | Purpose | Source |
+|--------|---------|--------|
+| `GCP_PROJECT_ID` | Target GCP project | GCP Console |
+| `GCP_SA_KEY_PROD` | Service account JSON key | `claude-deployer` SA |
+| `CLAUDE_API_KEY_PROD` | Anthropic API key | Anthropic Console |
+| `MONGODB_ATLAS_URI_PROD` | MongoDB connection string | MongoDB Atlas |
+
+### Workflow Implementation
+
+**File:** `.github/workflows/deploy-to-gcp.yml`
+
+```yaml
+name: Deploy to GCP Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'clients/web/**'
+      - 'keycloak/**'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        required: false
+        default: 'all'
+
+env:
+  GCP_REGION: us-central1
+  AR_REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.changes.outputs.gateway }}
+      mcp-suite: ${{ steps.changes.outputs.mcp-suite }}
+      keycloak: ${{ steps.changes.outputs.keycloak }}
+      web: ${{ steps.changes.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            gateway:
+              - 'services/mcp-gateway/**'
+            mcp-suite:
+              - 'services/mcp-hr/**'
+              - 'services/mcp-finance/**'
+              - 'services/mcp-sales/**'
+              - 'services/mcp-support/**'
+            keycloak:
+              - 'keycloak/**'
+            web:
+              - 'clients/web/**'
+
+  deploy-gateway:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.gateway == 'true' || github.event.inputs.service == 'all' || github.event.inputs.service == 'gateway'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Image
+        run: |
+          docker build -t ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
+                       -t ${{ env.AR_REPO }}/mcp-gateway:latest \
+                       services/mcp-gateway
+          docker push ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-gateway:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy mcp-gateway \
+            --image=${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=1Gi \
+            --timeout=300 \
+            --set-secrets=CLAUDE_API_KEY=claude-api-key:latest \
+            --set-secrets=MONGODB_URI=mongodb-atlas-uri:latest
+
+  deploy-mcp-suite:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.mcp-suite == 'true' || github.event.inputs.service == 'all'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [mcp-hr, mcp-finance, mcp-sales, mcp-support]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push
+        run: |
+          docker build -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+                       -t ${{ env.AR_REPO }}/${{ matrix.service }}:latest \
+                       services/${{ matrix.service }}
+          docker push ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/${{ matrix.service }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ matrix.service }} \
+            --image=${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=512Mi \
+            --timeout=300
+
+  deploy-static-website:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.web == 'true' || github.event.inputs.service == 'all' || github.event.inputs.service == 'web'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install and Build
+        working-directory: clients/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Deploy to GCS
+        run: |
+          gsutil -m rsync -r -d clients/web/dist gs://prod.tamshai.com
+          gsutil web set -m index.html -e 404.html gs://prod.tamshai.com
+
+  notify:
+    needs: [deploy-gateway, deploy-mcp-suite, deploy-static-website]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gateway | ${{ needs.deploy-gateway.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP Suite | ${{ needs.deploy-mcp-suite.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Website | ${{ needs.deploy-static-website.result }} |" >> $GITHUB_STEP_SUMMARY
+```
+
+### Deployment Flow
+
+```
+┌─────────────────┐
+│  Push to main   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Detect Changes  │──── paths-filter determines which services changed
+└────────┬────────┘
+         │
+    ┌────┴────┬──────────┬──────────┐
+    ▼         ▼          ▼          ▼
+┌───────┐ ┌───────┐ ┌─────────┐ ┌───────┐
+│Gateway│ │MCP HR │ │Keycloak │ │Static │
+│       │ │Finance│ │         │ │Website│
+│       │ │Sales  │ │         │ │       │
+│       │ │Support│ │         │ │       │
+└───┬───┘ └───┬───┘ └────┬────┘ └───┬───┘
+    │         │          │          │
+    ▼         ▼          ▼          ▼
+┌─────────────────────────────────────────┐
+│           Artifact Registry             │
+│  (Container images tagged with SHA)     │
+└─────────────────────────────────────────┘
+    │         │          │          │
+    ▼         ▼          ▼          ▼
+┌─────────────────────────────────────────┐
+│              Cloud Run                  │
+│  (Zero-downtime rolling deployment)     │
+└─────────────────────────────────────────┘
+```
+
+### Rollback Procedure
+
+```bash
+# List recent revisions
+gcloud run revisions list --service=mcp-gateway --region=us-central1
+
+# Rollback to previous revision
+gcloud run services update-traffic mcp-gateway \
+  --region=us-central1 \
+  --to-revisions=mcp-gateway-00005-abc=100
+
+# Or redeploy specific commit
+gh workflow run deploy-to-gcp.yml \
+  -f service=gateway \
+  --ref <previous-commit-sha>
+```
+
+### Manual Deployment
+
+```bash
+# Deploy all services manually
+gh workflow run deploy-to-gcp.yml -f service=all
+
+# Deploy specific service
+gh workflow run deploy-to-gcp.yml -f service=gateway
+gh workflow run deploy-to-gcp.yml -f service=web
+```
+
+### Monitoring Deployments
+
+```bash
+# View workflow runs
+gh run list --workflow=deploy-to-gcp.yml
+
+# Watch current deployment
+gh run watch
+
+# View Cloud Run service status
+gcloud run services list --region=us-central1
+```
 
 ---
 
