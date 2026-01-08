@@ -272,7 +272,7 @@ export default function CustomerDetail({
                     </a>
                   </p>
                 )}
-                {customer.address && (
+                {customer.address && customer.address.city && (
                   <p className="text-secondary-700">
                     <span className="text-secondary-600">Address: </span>
                     {customer.address.city}, {customer.address.state},{' '}
