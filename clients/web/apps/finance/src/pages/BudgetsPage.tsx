@@ -35,7 +35,7 @@ export function BudgetsPage() {
   const canWrite = canModifyFinance(userContext);
 
   // Filters
-  const [yearFilter, setYearFilter] = useState<string>('');
+  const [yearFilter, setYearFilter] = useState<string>('2025'); // Default to current fiscal year
   const [quarterFilter, setQuarterFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || '');
   const [departmentFilter, setDepartmentFilter] = useState<string>('');
@@ -59,14 +59,19 @@ export function BudgetsPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['budgets'],
+    queryKey: ['budgets', yearFilter],
     queryFn: async () => {
       const token = getAccessToken();
       if (!token) throw new Error('Not authenticated');
 
-      const url = apiConfig.mcpGatewayUrl
+      // Build URL with fiscal year filter
+      const params = new URLSearchParams();
+      if (yearFilter) params.append('fiscalYear', yearFilter);
+
+      const baseUrl = apiConfig.mcpGatewayUrl
         ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets`
         : '/api/mcp/finance/list_budgets';
+      const url = params.toString() ? `${baseUrl}?${params}` : baseUrl;
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },

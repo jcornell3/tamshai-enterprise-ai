@@ -34,20 +34,22 @@ export function DashboardPage() {
   const { getAccessToken } = useAuth();
 
   // Fetch budgets for metrics computation
+  const currentFiscalYear = 2025; // TODO: Get from fiscal year table or config
+
   const {
     data: budgetsResponse,
     isLoading: budgetsLoading,
     error: budgetsError,
     refetch: refetchBudgets,
   } = useQuery({
-    queryKey: ['dashboard-budgets'],
+    queryKey: ['dashboard-budgets', currentFiscalYear],
     queryFn: async () => {
       const token = getAccessToken();
       if (!token) throw new Error('Not authenticated');
 
       const url = apiConfig.mcpGatewayUrl
-        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets`
-        : '/api/mcp/finance/list_budgets';
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/list_budgets?fiscalYear=${currentFiscalYear}`
+        : `/api/mcp/finance/list_budgets?fiscalYear=${currentFiscalYear}`;
 
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
