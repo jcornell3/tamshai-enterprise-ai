@@ -44,7 +44,7 @@ db.customers.insertMany([
     ],
     tags: ["enterprise", "manufacturing", "high-value"],
     status: "ACTIVE",
-    created_at: new Date("2024-03-15"),
+    created_at: new Date("2025-03-15"),
     updated_at: new Date("2026-01-03"),
     account_owner: "carol.johnson"
   },
@@ -145,7 +145,7 @@ db.customers.insertMany([
     ],
     tags: ["healthcare", "hipaa", "compliance-sensitive"],
     status: "ACTIVE",
-    created_at: new Date("2024-11-05"),
+    created_at: new Date("2025-11-05"),
     updated_at: new Date("2026-01-05"),
     account_owner: "chris.taylor"
   },
