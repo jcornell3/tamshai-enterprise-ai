@@ -204,6 +204,85 @@ async function listOpportunities(input: any, userContext: UserContext): Promise<
 }
 
 // =============================================================================
+// TOOL: list_customers (v1.4 with cursor-based pagination)
+// =============================================================================
+
+const ListCustomersInputSchema = z.object({
+  industry: z.string().optional(),
+  status: z.string().optional(),  // ACTIVE, PROSPECT, INACTIVE
+  minRevenue: z.number().optional(),
+  maxRevenue: z.number().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+});
+
+async function listCustomers(input: any, userContext: UserContext): Promise<MCPToolResponse<any[]>> {
+  return withErrorHandling('list_customers', async () => {
+    const { industry, status, minRevenue, maxRevenue, limit, cursor } = ListCustomersInputSchema.parse(input);
+
+    // Decode cursor if provided
+    const cursorData = cursor ? decodeCursor(cursor) : null;
+
+    const collection = await getCollection('customers');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const filter: any = { ...roleFilter };
+    if (industry) filter.industry = industry;
+    if (status) filter.status = status.toUpperCase();
+    if (minRevenue !== undefined) filter.annual_revenue = { ...filter.annual_revenue, $gte: minRevenue };
+    if (maxRevenue !== undefined) filter.annual_revenue = { ...filter.annual_revenue, $lte: maxRevenue };
+
+    // Cursor-based pagination
+    if (cursorData) {
+      filter._id = { $lt: new ObjectId(cursorData._id) };
+    }
+
+    // v1.4: LIMIT+1 pattern
+    const queryLimit = limit + 1;
+    const customers = await collection
+      .find(filter)
+      .sort({ _id: -1 })
+      .limit(queryLimit)
+      .toArray();
+
+    const hasMore = customers.length > limit;
+    const rawResults = hasMore ? customers.slice(0, limit) : customers;
+
+    // Normalize results
+    const results = rawResults.map((customer: any) => ({
+      ...customer,
+      _id: customer._id.toString(),
+      id: customer._id.toString(),
+      contacts: customer.contacts?.map((contact: any) => ({
+        ...contact,
+        _id: contact._id?.toString(),
+      })) || [],
+    }));
+
+    // Build pagination metadata
+    let metadata: PaginationMetadata | undefined;
+
+    if (hasMore || cursorData) {
+      const lastCustomer = rawResults[rawResults.length - 1];
+
+      metadata = {
+        hasMore,
+        returnedCount: results.length,
+        ...(hasMore && lastCustomer && {
+          nextCursor: encodeCursor({
+            _id: lastCustomer._id.toString(),
+          }),
+          totalEstimate: `${limit}+`,
+          hint: `To see more customers, say "show next page" or "load more customers". You can also filter by industry or status.`,
+        }),
+      };
+    }
+
+    return createSuccessResponse(results, metadata);
+  }) as Promise<MCPToolResponse<any[]>>;
+}
+
+// =============================================================================
 // TOOL: get_customer
 // =============================================================================
 
@@ -579,7 +658,7 @@ app.post('/query', async (req: Request, res: Response) => {
     return;
   }
 
-  res.json({ status: 'success', message: 'MCP Sales Server ready', availableTools: ['list_opportunities', 'get_customer', 'delete_opportunity'], userRoles: userContext.roles });
+  res.json({ status: 'success', message: 'MCP Sales Server ready', availableTools: ['list_opportunities', 'list_customers', 'get_customer', 'delete_opportunity'], userRoles: userContext.roles });
 });
 
 app.post('/tools/list_opportunities', async (req: Request, res: Response) => {
@@ -601,6 +680,28 @@ app.post('/tools/list_opportunities', async (req: Request, res: Response) => {
   }
 
   const result = await listOpportunities({ stage, status, limit, cursor }, userContext);
+  res.json(result);
+});
+
+app.post('/tools/list_customers', async (req: Request, res: Response) => {
+  const { userContext, industry, status, minRevenue, maxRevenue, limit, cursor } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
+  const result = await listCustomers({ industry, status, minRevenue, maxRevenue, limit, cursor }, userContext);
   res.json(result);
 });
 
