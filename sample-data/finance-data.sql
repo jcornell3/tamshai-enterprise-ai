@@ -53,9 +53,10 @@ CREATE TABLE IF NOT EXISTS finance.fiscal_years (
 
 INSERT INTO finance.fiscal_years (year, start_date, end_date, status) VALUES
     (2023, '2023-01-01', '2023-12-31', 'CLOSED'),
-    (2024, '2024-01-01', '2024-12-31', 'OPEN'),
-    (2025, '2025-01-01', '2025-12-31', 'PLANNED')
-ON CONFLICT (year) DO NOTHING;
+    (2024, '2024-01-01', '2024-12-31', 'CLOSED'),
+    (2025, '2025-01-01', '2025-12-31', 'OPEN'),
+    (2026, '2026-01-01', '2026-12-31', 'PLANNED')
+ON CONFLICT (year) DO UPDATE SET status = EXCLUDED.status;
 
 -- =============================================================================
 -- BUDGET CATEGORIES
@@ -213,6 +214,37 @@ ON CONFLICT DO NOTHING;
 UPDATE finance.department_budgets
 SET status = 'DRAFT', version = 1
 WHERE status IS NULL OR version IS NULL;
+
+-- =============================================================================
+-- 2025 BUDGETS (Current Fiscal Year)
+-- =============================================================================
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-EXEC-2025-SAL', 'EXEC', 'Executive', 2025, id, 525000, 525000, 475000, 520000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-SAL'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-HR-2025-SAL', 'HR', 'Human Resources', 2025, id, 800000, 800000, 720000, 790000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-SAL'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-FIN-2025-SAL', 'FIN', 'Finance', 2025, id, 480000, 480000, 435000, 475000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-SAL'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-SALES-2025-SAL', 'SALES', 'Sales', 2025, id, 1350000, 1350000, 1200000, 1340000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-SAL'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-ENG-2025-SAL', 'ENG', 'Engineering', 2025, id, 2800000, 2800000, 2550000, 2780000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-SAL'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-MKT-2025-MKT', 'MKT', 'Marketing', 2025, id, 900000, 900000, 820000, 890000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-MKT'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO finance.department_budgets (budget_id, department_code, department, fiscal_year, category_id, budgeted_amount, amount, actual_amount, forecast_amount, status)
+SELECT 'BUD-IT-2025-TECH', 'IT', 'IT', 2025, id, 680000, 680000, 610000, 670000, 'APPROVED' FROM finance.budget_categories WHERE code = 'EXP-TECH'
+ON CONFLICT DO NOTHING;
 
 -- =============================================================================
 -- BUDGET APPROVAL HISTORY (v1.5 - Issue #78)
@@ -462,42 +494,42 @@ CREATE INDEX IF NOT EXISTS idx_expenses_created ON finance.expenses(created_at);
 -- IT: d1000000-0000-0000-0000-000000000010
 
 INSERT INTO finance.expenses (id, employee_id, department_id, expense_date, category, description, amount, status, approved_by, approved_at, receipt_path) VALUES
-    -- TRAVEL expenses (diverse statuses)
-    ('exp00001-0000-0000-0000-000000000001', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-10-15', 'TRAVEL', 'Client visit flight to New York - Acme Corp deal', 850.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-20 10:30:00', '/receipts/2024/10/flight-nyc-001.pdf'),
-    ('exp00001-0000-0000-0000-000000000002', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-10-16', 'TRAVEL', 'NYC hotel - 2 nights for client meetings', 420.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-20 10:35:00', '/receipts/2024/10/hotel-nyc-001.pdf'),
-    ('exp00001-0000-0000-0000-000000000003', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'd1000000-0000-0000-0000-000000000001', '2024-11-01', 'TRAVEL', 'Board meeting travel - San Francisco', 1250.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-11-05 09:00:00', '/receipts/2024/11/travel-sf-ceo.pdf'),
-    ('exp00001-0000-0000-0000-000000000004', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-11-10', 'TRAVEL', 'Tech conference travel - AWS re:Invent', 2100.00, 'PENDING', NULL, NULL, '/receipts/2024/11/reinvent-travel.pdf'),
+    -- TRAVEL expenses (diverse statuses) - Updated to late 2025
+    ('exp00001-0000-0000-0000-000000000001', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2025-10-15', 'TRAVEL', 'Client visit flight to New York - Acme Corp deal', 850.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-20 10:30:00', '/receipts/2025/10/flight-nyc-001.pdf'),
+    ('exp00001-0000-0000-0000-000000000002', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2025-10-16', 'TRAVEL', 'NYC hotel - 2 nights for client meetings', 420.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-20 10:35:00', '/receipts/2025/10/hotel-nyc-001.pdf'),
+    ('exp00001-0000-0000-0000-000000000003', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'd1000000-0000-0000-0000-000000000001', '2025-11-01', 'TRAVEL', 'Board meeting travel - San Francisco', 1250.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-11-05 09:00:00', '/receipts/2025/11/travel-sf-ceo.pdf'),
+    ('exp00001-0000-0000-0000-000000000004', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2025-12-10', 'TRAVEL', 'Tech conference travel - AWS re:Invent', 2100.00, 'PENDING', NULL, NULL, '/receipts/2025/12/reinvent-travel.pdf'),
 
-    -- MEALS expenses
-    ('exp00001-0000-0000-0000-000000000005', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-10-15', 'MEALS', 'Client dinner - Acme Corp negotiations', 285.50, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-20 10:40:00', '/receipts/2024/10/dinner-acme.pdf'),
-    ('exp00001-0000-0000-0000-000000000006', 'e1000000-0000-0000-0000-000000000031', 'd1000000-0000-0000-0000-000000000004', '2024-10-22', 'MEALS', 'Team lunch - Q4 kickoff meeting', 156.75, 'APPROVED', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', '2024-10-25 14:00:00', '/receipts/2024/10/team-lunch-q4.pdf'),
-    ('exp00001-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2024-11-05', 'MEALS', 'Working lunch during sprint planning', 32.50, 'PENDING', NULL, NULL, NULL),
-    ('exp00001-0000-0000-0000-000000000008', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2024-09-15', 'MEALS', 'Candidate interview lunch - Senior HR Manager role', 89.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-09-20 11:00:00', '/receipts/2024/09/interview-lunch.pdf'),
+    -- MEALS expenses - Updated to late 2025
+    ('exp00001-0000-0000-0000-000000000005', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2025-10-15', 'MEALS', 'Client dinner - Acme Corp negotiations', 285.50, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-20 10:40:00', '/receipts/2025/10/dinner-acme.pdf'),
+    ('exp00001-0000-0000-0000-000000000006', 'e1000000-0000-0000-0000-000000000031', 'd1000000-0000-0000-0000-000000000004', '2025-10-22', 'MEALS', 'Team lunch - Q4 kickoff meeting', 156.75, 'APPROVED', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', '2025-10-25 14:00:00', '/receipts/2025/10/team-lunch-q4.pdf'),
+    ('exp00001-0000-0000-0000-000000000007', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2025-12-05', 'MEALS', 'Working lunch during sprint planning', 32.50, 'PENDING', NULL, NULL, NULL),
+    ('exp00001-0000-0000-0000-000000000008', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2025-09-15', 'MEALS', 'Candidate interview lunch - Senior HR Manager role', 89.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-09-20 11:00:00', '/receipts/2025/09/interview-lunch.pdf'),
 
-    -- SUPPLIES expenses
-    ('exp00001-0000-0000-0000-000000000009', 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'd1000000-0000-0000-0000-000000000010', '2024-10-01', 'SUPPLIES', 'Office supplies - notebooks and pens', 45.99, 'APPROVED', 'e1000000-0000-0000-0000-000000000060', '2024-10-03 09:00:00', '/receipts/2024/10/office-supplies.pdf'),
-    ('exp00001-0000-0000-0000-000000000010', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'd1000000-0000-0000-0000-000000000005', '2024-10-10', 'SUPPLIES', 'Headset for remote support calls', 129.99, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-15 10:00:00', '/receipts/2024/10/headset.pdf'),
-    ('exp00001-0000-0000-0000-000000000011', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-11-01', 'SUPPLIES', 'Ergonomic keyboard for team member', 175.00, 'PENDING', NULL, NULL, '/receipts/2024/11/keyboard.pdf'),
-    ('exp00001-0000-0000-0000-000000000012', 'e1000000-0000-0000-0000-000000000021', 'd1000000-0000-0000-0000-000000000003', '2024-08-20', 'SUPPLIES', 'Printer paper and toner - bulk order', 289.50, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-08-25 09:30:00', '/receipts/2024/08/printer-supplies.pdf'),
+    -- SUPPLIES expenses - Updated to late 2025
+    ('exp00001-0000-0000-0000-000000000009', 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'd1000000-0000-0000-0000-000000000010', '2025-10-01', 'SUPPLIES', 'Office supplies - notebooks and pens', 45.99, 'APPROVED', 'e1000000-0000-0000-0000-000000000060', '2025-10-03 09:00:00', '/receipts/2025/10/office-supplies.pdf'),
+    ('exp00001-0000-0000-0000-000000000010', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'd1000000-0000-0000-0000-000000000005', '2025-10-10', 'SUPPLIES', 'Headset for remote support calls', 129.99, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-15 10:00:00', '/receipts/2025/10/headset.pdf'),
+    ('exp00001-0000-0000-0000-000000000011', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2025-11-01', 'SUPPLIES', 'Ergonomic keyboard for team member', 175.00, 'PENDING', NULL, NULL, '/receipts/2025/11/keyboard.pdf'),
+    ('exp00001-0000-0000-0000-000000000012', 'e1000000-0000-0000-0000-000000000021', 'd1000000-0000-0000-0000-000000000003', '2025-08-20', 'SUPPLIES', 'Printer paper and toner - bulk order', 289.50, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-08-25 09:30:00', '/receipts/2025/08/printer-supplies.pdf'),
 
-    -- SOFTWARE expenses
-    ('exp00001-0000-0000-0000-000000000013', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2024-10-01', 'SOFTWARE', 'JetBrains annual license renewal', 249.00, 'APPROVED', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', '2024-10-05 08:00:00', '/receipts/2024/10/jetbrains.pdf'),
-    ('exp00001-0000-0000-0000-000000000014', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-09-15', 'SOFTWARE', 'GitHub Copilot team subscription - 6 months', 570.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-09-20 14:00:00', '/receipts/2024/09/copilot.pdf'),
-    ('exp00001-0000-0000-0000-000000000015', 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'd1000000-0000-0000-0000-000000000010', '2024-11-08', 'SOFTWARE', 'Udemy course - Cloud Security Fundamentals', 79.99, 'PENDING', NULL, NULL, NULL),
-    ('exp00001-0000-0000-0000-000000000016', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'd1000000-0000-0000-0000-000000000003', '2024-07-01', 'SOFTWARE', 'QuickBooks advanced features addon', 350.00, 'REIMBURSED', 'e1000000-0000-0000-0000-000000000002', '2024-07-05 10:00:00', '/receipts/2024/07/quickbooks.pdf'),
+    -- SOFTWARE expenses - Updated to late 2025
+    ('exp00001-0000-0000-0000-000000000013', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2025-10-01', 'SOFTWARE', 'JetBrains annual license renewal', 249.00, 'APPROVED', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', '2025-10-05 08:00:00', '/receipts/2025/10/jetbrains.pdf'),
+    ('exp00001-0000-0000-0000-000000000014', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2025-09-15', 'SOFTWARE', 'GitHub Copilot team subscription - 6 months', 570.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-09-20 14:00:00', '/receipts/2025/09/copilot.pdf'),
+    ('exp00001-0000-0000-0000-000000000015', 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'd1000000-0000-0000-0000-000000000010', '2025-12-08', 'SOFTWARE', 'Udemy course - Cloud Security Fundamentals', 79.99, 'PENDING', NULL, NULL, NULL),
+    ('exp00001-0000-0000-0000-000000000016', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'd1000000-0000-0000-0000-000000000003', '2025-07-01', 'SOFTWARE', 'QuickBooks advanced features addon', 350.00, 'REIMBURSED', 'e1000000-0000-0000-0000-000000000002', '2025-07-05 10:00:00', '/receipts/2025/07/quickbooks.pdf'),
 
-    -- OTHER expenses
-    ('exp00001-0000-0000-0000-000000000017', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'd1000000-0000-0000-0000-000000000001', '2024-10-20', 'OTHER', 'Industry association membership renewal', 500.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-22 11:00:00', '/receipts/2024/10/association.pdf'),
-    ('exp00001-0000-0000-0000-000000000018', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2024-10-25', 'OTHER', 'HR certification exam fee - SHRM-SCP', 375.00, 'REJECTED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-28 15:00:00', NULL),
-    ('exp00001-0000-0000-0000-000000000019', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2024-11-12', 'OTHER', 'Trade show booth rental deposit', 1500.00, 'PENDING', NULL, NULL, '/receipts/2024/11/tradeshow.pdf'),
-    ('exp00001-0000-0000-0000-000000000020', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'd1000000-0000-0000-0000-000000000005', '2024-09-01', 'OTHER', 'Customer appreciation gifts - top 10 accounts', 450.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-09-10 09:00:00', '/receipts/2024/09/customer-gifts.pdf'),
+    -- OTHER expenses - Updated to late 2025
+    ('exp00001-0000-0000-0000-000000000017', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'd1000000-0000-0000-0000-000000000001', '2025-10-20', 'OTHER', 'Industry association membership renewal', 500.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-22 11:00:00', '/receipts/2025/10/association.pdf'),
+    ('exp00001-0000-0000-0000-000000000018', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2025-10-25', 'OTHER', 'HR certification exam fee - SHRM-SCP', 375.00, 'REJECTED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-28 15:00:00', NULL),
+    ('exp00001-0000-0000-0000-000000000019', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'd1000000-0000-0000-0000-000000000004', '2025-12-12', 'OTHER', 'Trade show booth rental deposit', 1500.00, 'PENDING', NULL, NULL, '/receipts/2025/12/tradeshow.pdf'),
+    ('exp00001-0000-0000-0000-000000000020', 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'd1000000-0000-0000-0000-000000000005', '2025-09-01', 'OTHER', 'Customer appreciation gifts - top 10 accounts', 450.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-09-10 09:00:00', '/receipts/2025/09/customer-gifts.pdf'),
 
-    -- Additional expenses to ensure good test coverage
-    ('exp00001-0000-0000-0000-000000000021', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2024-11-15', 'TRAVEL', 'Uber to client site for production issue', 45.00, 'PENDING', NULL, NULL, NULL),
-    ('exp00001-0000-0000-0000-000000000022', 'e1000000-0000-0000-0000-000000000031', 'd1000000-0000-0000-0000-000000000004', '2024-08-15', 'TRAVEL', 'Mileage reimbursement - customer visits', 156.80, 'REIMBURSED', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', '2024-08-20 10:00:00', '/receipts/2024/08/mileage.pdf'),
-    ('exp00001-0000-0000-0000-000000000023', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2024-11-01', 'MEALS', 'New hire onboarding lunch', 125.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-11-05 11:30:00', '/receipts/2024/11/onboarding-lunch.pdf'),
-    ('exp00001-0000-0000-0000-000000000024', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'd1000000-0000-0000-0000-000000000003', '2024-10-30', 'SUPPLIES', 'External monitor for WFH setup', 299.99, 'APPROVED', 'e1000000-0000-0000-0000-000000000002', '2024-11-02 14:00:00', '/receipts/2024/10/monitor.pdf'),
-    ('exp00001-0000-0000-0000-000000000025', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2024-10-20', 'OTHER', 'Team building activity - escape room', 320.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2024-10-25 16:00:00', '/receipts/2024/10/team-building.pdf')
+    -- Additional expenses - Updated to late 2025
+    ('exp00001-0000-0000-0000-000000000021', 'e1000000-0000-0000-0000-000000000052', 'd1000000-0000-0000-0000-000000000006', '2025-12-15', 'TRAVEL', 'Uber to client site for production issue', 45.00, 'PENDING', NULL, NULL, NULL),
+    ('exp00001-0000-0000-0000-000000000022', 'e1000000-0000-0000-0000-000000000031', 'd1000000-0000-0000-0000-000000000004', '2025-08-15', 'TRAVEL', 'Mileage reimbursement - customer visits', 156.80, 'REIMBURSED', 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', '2025-08-20 10:00:00', '/receipts/2025/08/mileage.pdf'),
+    ('exp00001-0000-0000-0000-000000000023', 'f104eddc-21ab-457c-a254-78051ad7ad67', 'd1000000-0000-0000-0000-000000000002', '2025-11-01', 'MEALS', 'New hire onboarding lunch', 125.00, 'APPROVED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-11-05 11:30:00', '/receipts/2025/11/onboarding-lunch.pdf'),
+    ('exp00001-0000-0000-0000-000000000024', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'd1000000-0000-0000-0000-000000000003', '2025-10-30', 'SUPPLIES', 'External monitor for WFH setup', 299.99, 'APPROVED', 'e1000000-0000-0000-0000-000000000002', '2025-11-02 14:00:00', '/receipts/2025/10/monitor.pdf'),
+    ('exp00001-0000-0000-0000-000000000025', 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', 'd1000000-0000-0000-0000-000000000006', '2025-10-20', 'OTHER', 'Team building activity - escape room', 320.00, 'REIMBURSED', '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', '2025-10-25 16:00:00', '/receipts/2025/10/team-building.pdf')
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================================
