@@ -33,11 +33,10 @@ interface DownloadCard {
 export default function DownloadsPage() {
   const { userContext, signOut } = useAuth();
 
-  // GitHub releases URL - points to latest release assets
-  // To create a release: Push a tag like v1.0.0-stage or run the create-release workflow
-  const githubReleasesBase = 'https://github.com/jcornell3/tamshai-enterprise-ai/releases/latest/download';
-
-  // Note: Downloads will 404 until the first release is created via GitHub Actions
+  // GitHub releases URL - points to v1.0.0-stage release assets
+  // Note: Using specific tag instead of /latest because GitHub's /latest endpoint
+  // only recognizes releases without pre-release suffixes (e.g., v1.0.0, not v1.0.0-stage)
+  const githubReleasesBase = 'https://github.com/jcornell3/tamshai-enterprise-ai/releases/download/v1.0.0-stage';
 
   const downloads: DownloadCard[] = [
     {
