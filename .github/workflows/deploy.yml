@@ -179,6 +179,7 @@ jobs:
         with:
           working_directory: ./infrastructure/terraform
           soft_fail: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Checkov Scan
         uses: bridgecrewio/checkov-action@master
