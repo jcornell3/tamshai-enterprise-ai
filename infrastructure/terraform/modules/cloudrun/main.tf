@@ -71,12 +71,17 @@ resource "google_cloud_run_service" "mcp_gateway" {
 
         env {
           name  = "REDIS_HOST"
-          value = var.redis_host
+          value = "127.0.0.1"
         }
 
         env {
           name  = "REDIS_PORT"
           value = "6379"
+        }
+
+        env {
+          name  = "TOKEN_REVOCATION_FAIL_OPEN"
+          value = "true"
         }
 
         env {
@@ -364,12 +369,22 @@ resource "google_cloud_run_service" "keycloak" {
           value = "true"
         }
 
+        startup_probe {
+          tcp_socket {
+            port = 8080
+          }
+          initial_delay_seconds = 120
+          timeout_seconds       = 10
+          period_seconds        = 30
+          failure_threshold     = 10
+        }
+
         liveness_probe {
           http_get {
             path = "/health/live"
             port = 8080
           }
-          initial_delay_seconds = 300
+          initial_delay_seconds = 60
           timeout_seconds       = 10
           period_seconds        = 60
           failure_threshold     = 3
@@ -377,7 +392,7 @@ resource "google_cloud_run_service" "keycloak" {
       }
 
       service_account_name = var.keycloak_service_account
-      timeout_seconds      = 300
+      timeout_seconds      = 600
     }
 
     metadata {
