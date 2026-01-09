@@ -96,7 +96,7 @@ jobs:
             --memory=1Gi \
             --cpu=1 \
             --timeout=300 \
-            --set-secrets=CLAUDE_API_KEY=claude-api-key:latest \
+            --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
             --set-env-vars=NODE_ENV=production
 
   deploy-mcp-suite:
@@ -155,7 +155,7 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --timeout=300 \
-            --set-env-vars=NODE_ENV=production,PORT=${{ matrix.port }}
+            --set-env-vars=NODE_ENV=production
 
   deploy-keycloak:
     needs: detect-changes
@@ -198,8 +198,8 @@ jobs:
             --memory=1Gi \
             --cpu=1 \
             --timeout=300 \
-            --set-secrets=KEYCLOAK_ADMIN=keycloak-admin-user:latest,KEYCLOAK_ADMIN_PASSWORD=keycloak-admin-password:latest \
-            --set-env-vars=KC_DB=postgres,KC_HTTP_ENABLED=true,KC_PROXY=edge,KC_HEALTH_ENABLED=true
+            --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest \
+            --set-env-vars=KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_HTTP_ENABLED=true,KC_PROXY=edge,KC_HEALTH_ENABLED=true
 
   deploy-static-website:
     needs: detect-changes
