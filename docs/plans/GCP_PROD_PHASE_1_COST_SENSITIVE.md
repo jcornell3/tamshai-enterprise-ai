@@ -982,7 +982,7 @@ If you choose **MongoDB Atlas M0 (Free Tier)** instead of self-hosting on the Ut
 
 **6. Provide to Claude**
 ```
-Connection String: mongodb+srv://tamshai_app:YOUR_PASSWORD@tamshai-prod.xxxxx.mongodb.net/tamshai
+Connection String: mongodb+srv://tamshai_app:<password>@tamshai-prod.<cluster-id>.mongodb.net/tamshai
 ```
 
 ### Self-Hosted Alternative (Recommended)
