@@ -37,7 +37,7 @@ resource "google_sql_database_instance" "postgres" {
       ipv4_enabled    = false # Use private IP only
       private_network = var.network_id
       #checkov:skip=CKV_GCP_6:SSL already enforced via ssl_mode=ENCRYPTED_ONLY
-      ssl_mode        = "ENCRYPTED_ONLY" # Security: Enforce SSL (replaces deprecated require_ssl)
+      ssl_mode = "ENCRYPTED_ONLY" # Security: Enforce SSL (replaces deprecated require_ssl)
     }
 
     backup_configuration {
