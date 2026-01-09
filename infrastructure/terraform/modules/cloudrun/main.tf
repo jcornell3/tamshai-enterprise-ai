@@ -113,10 +113,26 @@ resource "google_cloud_run_service" "mcp_gateway" {
           name  = "NODE_ENV"
           value = var.environment == "prod" ? "production" : "development"
         }
+
+        env {
+          name  = "KEYCLOAK_VALIDATION_RETRIES"
+          value = "10"
+        }
+
+        startup_probe {
+          http_get {
+            path = "/health"
+            port = 3100
+          }
+          initial_delay_seconds = 60
+          timeout_seconds       = 10
+          period_seconds        = 10
+          failure_threshold     = 30  # 60s + (10s × 30) = 360s (6 minutes total)
+        }
       }
 
       service_account_name = var.mcp_gateway_service_account
-      timeout_seconds      = 300
+      timeout_seconds      = 600  # Increased from 300s to allow for Keycloak startup + retries
     }
 
     metadata {

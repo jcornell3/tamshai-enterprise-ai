@@ -483,32 +483,61 @@ app.use('/api', authMiddleware, mcpProxyRouter);
 
 /**
  * Validates Keycloak connectivity by fetching the JWKS endpoint.
- * Fails fast in production if Keycloak is not reachable.
+ * Implements exponential backoff retry logic to handle Keycloak startup delays.
+ * Fails fast in production after all retries exhausted.
  */
 async function validateKeycloakConnectivity(): Promise<void> {
   const jwksUri = config.keycloak.jwksUri ||
     `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`;
 
-  try {
-    const response = await axios.get(jwksUri, { timeout: 5000 });
-    if (!response.data.keys?.length) {
-      throw new Error('No signing keys found in JWKS');
-    }
-    logger.info('Keycloak JWKS endpoint validated', {
-      keyCount: response.data.keys.length,
-      jwksUri,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger.error('Failed to validate Keycloak connectivity', {
-      error: errorMessage,
-      jwksUri,
-    });
-    if (process.env.NODE_ENV === 'production') {
-      logger.error('Exiting: Keycloak validation failed in production mode');
-      process.exit(1); // Fail-fast in production
-    } else {
-      logger.warn('Continuing without Keycloak validation (non-production mode)');
+  const maxRetries = parseInt(process.env.KEYCLOAK_VALIDATION_RETRIES || '10');
+  const maxBackoffMs = 30000; // Maximum 30 seconds between retries
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios.get(jwksUri, { timeout: 5000 });
+      if (!response.data.keys?.length) {
+        throw new Error('No signing keys found in JWKS');
+      }
+      logger.info('Keycloak JWKS endpoint validated', {
+        keyCount: response.data.keys.length,
+        jwksUri,
+        attempt,
+        totalRetries: maxRetries,
+      });
+      return; // Success - exit retry loop
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      if (attempt === maxRetries) {
+        // Final attempt failed - no more retries
+        logger.error('Failed to validate Keycloak connectivity after all retries', {
+          error: errorMessage,
+          jwksUri,
+          attempts: maxRetries,
+        });
+        if (process.env.NODE_ENV === 'production') {
+          logger.error('Exiting: Keycloak validation failed in production mode');
+          process.exit(1); // Fail-fast in production
+        } else {
+          logger.warn('Continuing without Keycloak validation (non-production mode)');
+        }
+      } else {
+        // Calculate exponential backoff with jitter
+        const baseBackoffMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s, 8s, 16s, 32s (capped)
+        const jitter = Math.random() * 1000; // Add 0-1s random jitter to avoid thundering herd
+        const backoffMs = Math.min(baseBackoffMs + jitter, maxBackoffMs);
+
+        logger.warn('Keycloak not ready, retrying with exponential backoff...', {
+          error: errorMessage,
+          attempt,
+          totalRetries: maxRetries,
+          nextRetryInMs: Math.round(backoffMs),
+          jwksUri,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
     }
   }
 }
