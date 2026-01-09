@@ -125,8 +125,10 @@ resource "google_secret_manager_secret" "anthropic_api_key" {
   depends_on = [google_project_service.secretmanager]
 }
 
-# NOTE: Anthropic API key must be added manually after terraform apply
-# gcloud secrets versions add tamshai-${var.environment}-anthropic-api-key --data-file=-
+resource "google_secret_manager_secret_version" "anthropic_api_key" {
+  secret      = google_secret_manager_secret.anthropic_api_key.id
+  secret_data = var.claude_api_key
+}
 
 resource "google_secret_manager_secret" "mcp_gateway_client_secret" {
   secret_id = "tamshai-${var.environment}-mcp-gateway-client-secret"

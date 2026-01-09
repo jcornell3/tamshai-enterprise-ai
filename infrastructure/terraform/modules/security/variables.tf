@@ -21,3 +21,9 @@ variable "enable_cloud_run_iam" {
   type        = bool
   default     = false
 }
+
+variable "claude_api_key" {
+  description = "Anthropic Claude API key"
+  type        = string
+  sensitive   = true
+}
