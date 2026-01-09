@@ -110,7 +110,7 @@ resource "google_compute_firewall" "allow_iap_ssh" {
 resource "google_vpc_access_connector" "serverless_connector" {
   count = var.enable_serverless_connector ? 1 : 0
 
-  name          = "tamshai-${var.environment}-vpc-connector"
+  name          = "tamshai-${var.environment}-connector"
   region        = var.region
   network       = google_compute_network.vpc.name
   ip_cidr_range = var.serverless_connector_cidr
