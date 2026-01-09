@@ -184,11 +184,11 @@ Once prerequisites are provided, Claude will execute these tasks:
 | 4.4 | Update Keycloak realm export for production URIs | 10 min | ✅ |
 | 4.4.1 | ⮑ Add https://www.tamshai.com/* to all web apps | | ✅ |
 | 4.4.2 | ⮑ Add https://prod.tamshai.com/* to all web apps | | ✅ |
-| **Phase B: Application Layer** | | | **⬜ PENDING** |
-| 6.1 | Verify Dockerfiles are Cloud Run compatible | 15 min | ⬜ |
-| 6.1.1 | ⮑ Ensure proper port exposure (3100-3104, 8080) | | ⬜ |
-| 6.1.2 | ⮑ Verify SIGTERM signal handling | | ⬜ |
-| 6.1.3 | ⮑ Test local builds with `docker build` | | ⬜ |
+| **Phase B: Application Layer** | | | **🟡 MOSTLY COMPLETE** |
+| 6.1 | Verify Dockerfiles are Cloud Run compatible | 15 min | ✅ |
+| 6.1.1 | ⮑ Ensure proper port exposure (3100-3104, 8080) | | ✅ |
+| 6.1.2 | ⮑ Verify SIGTERM signal handling | | ✅ |
+| 6.1.3 | ⮑ Test local builds with `docker build` | | ✅ |
 | 6.2 | Build production Flutter clients (all platforms) | 15 min | ⬜ |
 | 6.3 | Create GitHub release `v1.0.0` with production artifacts | 10 min | ⬜ |
 | 6.4 | Update DownloadsPage to support prod release URL | 15 min | ⬜ |
@@ -198,31 +198,31 @@ Once prerequisites are provided, Claude will execute these tasks:
 | 7.1.1 | ⮑ Add GCP deployment section | | ⬜ |
 | 7.1.2 | ⮑ Document service URLs and endpoints | | ⬜ |
 | 7.1.3 | ⮑ Add troubleshooting guide | | ⬜ |
-| **Phase C: Infrastructure Deployment** | | | **⬜ READY** |
-| 1.5 | Create `terraform.tfvars` with your inputs | 10 min | ⬜ |
-| A.1 | Set up MongoDB Atlas M0 (free tier) | 15 min | ⬜ |
-| A.1.1 | ⮑ Create Atlas account | | ⬜ |
-| A.1.2 | ⮑ Create M0 cluster (Iowa region) | | ⬜ |
-| A.1.3 | ⮑ Create database user (tamshai_app) | | ⬜ |
-| A.1.4 | ⮑ Configure network access (0.0.0.0/0 initially) | | ⬜ |
-| A.1.5 | ⮑ Get connection URI | | ⬜ |
-| 2.1 | Deploy VPC and networking (Serverless VPC Connector) | 15 min | ⬜ |
-| 2.2 | Deploy Cloud SQL PostgreSQL instance | 10-15 min | ⬜ |
-| 2.3 | Deploy Utility VM (Redis + Bastion) | 5 min | ⬜ |
-| 2.4 | Configure Secret Manager with credentials | 10 min | ⬜ |
-| 2.4.1 | ⮑ Create claude-api-key secret (manual) | | ⬜ |
-| 2.4.2 | ⮑ Auto-generated: keycloak-admin-password | | ⬜ |
-| 2.4.3 | ⮑ Auto-generated: keycloak-db-password | | ⬜ |
-| 2.4.4 | ⮑ Auto-generated: tamshai-db-password | | ⬜ |
-| 2.5 | Create GCS bucket for static website (`prod.tamshai.com`) | 10 min | ⬜ |
-| **Phase D: Service Deployment** | | | **⬜ READY** |
-| 3.1 | Build and push container images to Artifact Registry (manual) | 20 min | ⬜ |
-| 3.2 | Deploy all 6 Cloud Run services via `terraform apply` | 10 min | ⬜ |
+| **Phase C: Infrastructure Deployment** | | | **✅ COMPLETE** |
+| 1.5 | Create `terraform.tfvars` with your inputs | 10 min | ✅ |
+| A.1 | Set up MongoDB Atlas M0 (free tier) | 15 min | ✅ |
+| A.1.1 | ⮑ Create Atlas account | | ✅ |
+| A.1.2 | ⮑ Create M0 cluster (Iowa region) | | ✅ |
+| A.1.3 | ⮑ Create database user (tamshai_app) | | ✅ |
+| A.1.4 | ⮑ Configure network access (0.0.0.0/0 initially) | | ✅ |
+| A.1.5 | ⮑ Get connection URI | | ✅ |
+| 2.1 | Deploy VPC and networking (Serverless VPC Connector) | 15 min | ✅ |
+| 2.2 | Deploy Cloud SQL PostgreSQL instance | 10-15 min | ✅ |
+| 2.3 | Deploy Utility VM (Redis + Bastion) | 5 min | ✅ |
+| 2.4 | Configure Secret Manager with credentials | 10 min | ✅ |
+| 2.4.1 | ⮑ Create claude-api-key secret (manual) | | ✅ |
+| 2.4.2 | ⮑ Auto-generated: keycloak-admin-password | | ✅ |
+| 2.4.3 | ⮑ Auto-generated: keycloak-db-password | | ✅ |
+| 2.4.4 | ⮑ Auto-generated: tamshai-db-password | | ✅ |
+| 2.5 | Create GCS bucket for static website (`prod.tamshai.com`) | 10 min | ✅ |
+| **Phase D: Service Deployment** | | | **🟡 MOSTLY COMPLETE** |
+| 3.1 | Build and push container images to Artifact Registry (manual) | 20 min | ✅ |
+| 3.2 | Deploy all 6 Cloud Run services via `terraform apply` | 10 min | ✅ |
 | 3.3 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ⬜ |
 | 4.1 | Configure Cloud Run domain mappings | 10 min | ⬜ |
-| 4.2 | Provide DNS records for you to add | 5 min | ⬜ |
+| 4.2 | Provide DNS records for you to add | 5 min | ✅ |
 | 4.3 | Run database migrations | 10 min | ⬜ |
-| 4.5 | Run smoke tests and verify deployment | 15 min | ⬜ |
+| 4.5 | Run smoke tests and verify deployment | 15 min | ✅ |
 | 5.2 | Test workflow with manual trigger | 15 min | ⬜ |
 | **Phase E: Post-Deployment** | | | **⬜ PENDING** |
 | 7.2 | Create runbook for common operations | 30 min | ⬜ |
@@ -1446,14 +1446,25 @@ gsutil ls -b gs://prod.tamshai.com
 
 ---
 
-## 📋 Phase D: Service Deployment (Ready)
+## 📋 Phase D: Service Deployment (Mostly Complete - January 9, 2026)
 
 Phase D deploys application services to the provisioned infrastructure.
 
-**Deployment Strategy (Updated January 9, 2026)**:
-- ✅ **Step 1**: Build Docker images and push to Artifact Registry (manual)
-- ✅ **Step 2**: Deploy Cloud Run services via `terraform apply` (automated)
+**Deployment Status (Updated January 9, 2026)**:
+- ✅ **Step 1**: Build Docker images and push to Artifact Registry (manual) - COMPLETE
+- ✅ **Step 2**: Deploy Cloud Run services via `terraform apply` (automated) - COMPLETE
+- ✅ **Keycloak PostgreSQL Migration**: Successfully migrated from H2 to Cloud SQL via TCP/VPC Connector (Option B)
+- ⬜ **Step 3**: Deploy static website content to GCS - PENDING
+- ⬜ **Step 4**: Configure DNS records in Cloudflare - PENDING (records provided below)
 - ⚠️ **GitHub Actions Workflow**: Incomplete - missing VPC connector, database config. See `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md` for details.
+
+**6/6 Cloud Run Services Running (100%)**:
+- MCP Gateway: ✅ Running (v1.0.3)
+- MCP HR: ✅ Running (latest)
+- MCP Finance: ✅ Running (latest)
+- MCP Sales: ✅ Running (latest)
+- MCP Support: ✅ Running (latest)
+- Keycloak: ✅ Running with PostgreSQL (v2.0.0-postgres, TCP via VPC Connector)
 
 ### ✅ Recommended: Terraform-Based Deployment
 
@@ -1557,21 +1568,46 @@ DATABASE_URL="postgresql://tamshai_app:PASSWORD@/tamshai?host=/cloudsql/PROJECT:
   npm run migrate --workspace=@tamshai/migrations
 ```
 
+### DNS Records to Configure in Cloudflare (January 9, 2026)
+
+**Status**: ⬜ PENDING - Add these CNAME records in your Cloudflare dashboard
+
+| Hostname | Type | Target/Value | Purpose |
+|----------|------|--------------|---------|
+| `api.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | MCP Gateway API |
+| `auth.tamshai.com` | CNAME | `keycloak-fn44nd7wba-uc.a.run.app` | Keycloak Authentication |
+| `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | Static Website (GCS) |
+| `app.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | Portal/Dashboard (future) |
+
+**Notes**:
+- ✅ Cloud Run services are deployed and accessible via direct URLs
+- ⬜ CNAMEs need to be added in Cloudflare for custom domains
+- ⚠️ `app.tamshai.com` currently points to MCP Gateway (placeholder, will be separate service in Phase 2)
+- ℹ️ Cloudflare proxy: Enable "Proxied" (orange cloud) for DDoS protection and CDN
+
+**Verification After DNS Propagation** (allow 5-10 minutes):
+```bash
+# Test via custom domains
+curl https://api.tamshai.com/health
+curl https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs
+curl https://prod.tamshai.com/  # After static website deployed
+```
+
 ### Smoke Tests
 
 ```bash
-# Health checks
-curl https://api.tamshai.com/health
-curl https://auth.tamshai.com/health/ready
+# Health checks (via direct Cloud Run URLs)
+curl https://mcp-gateway-fn44nd7wba-uc.a.run.app/health
+curl https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/protocol/openid-connect/certs
 
-# Test authentication flow (manual browser test)
+# Test authentication flow (manual browser test, after DNS configured)
 open https://prod.tamshai.com
 
 # Check service logs
 gcloud run services logs read mcp-gateway --region=us-central1 --limit=20
 ```
 
-**Estimated Time**: 20-30 minutes
+**Estimated Time**: 20-30 minutes (excluding DNS propagation time)
 
 ---
 
