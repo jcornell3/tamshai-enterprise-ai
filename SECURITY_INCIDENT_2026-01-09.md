@@ -41,7 +41,9 @@ terraform plan -out=tfplan
 
 ✅ **Step 1**: Added `*.tfplan`, `tfplan`, `*.tfplan.json` to `.gitignore`
 ✅ **Step 2**: Removed `tfplan` file from repository
-✅ **Step 3**: Committed changes (NOT pushed yet - see Step 4)
+✅ **Step 3**: Committed changes
+✅ **Step 4**: Purged Git history using filter-branch (986 commits rewritten)
+✅ **Step 5**: Force pushed cleaned history to GitHub (commit d8482fd)
 
 ---
 
@@ -277,13 +279,14 @@ chmod +x .git/hooks/pre-commit
 - [x] Incident identified
 - [x] File removed from repository
 - [x] .gitignore updated
-- [ ] **Git history purged (USER ACTION REQUIRED)**
+- [x] **Git history purged (Option B: filter-branch)**
+- [x] **Force pushed cleaned history to GitHub**
 - [ ] **New API key obtained (USER ACTION REQUIRED)**
-- [ ] **Secret Manager updated (USER ACTION REQUIRED)**
+- [ ] **Secret Manager updated (awaiting new key)**
 - [ ] Services redeployed
 - [ ] Pre-commit hooks installed
 - [ ] Documentation updated
-- [ ] Incident report filed
+- [x] Incident report filed
 
 ---
 
