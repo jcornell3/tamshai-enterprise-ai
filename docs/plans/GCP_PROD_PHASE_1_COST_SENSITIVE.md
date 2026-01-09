@@ -218,10 +218,10 @@ Once prerequisites are provided, Claude will execute these tasks:
 | **Phase D: Service Deployment** | | | **🟡 MOSTLY COMPLETE** |
 | 3.1 | Build and push container images to Artifact Registry (manual) | 20 min | ✅ |
 | 3.2 | Deploy all 6 Cloud Run services via `terraform apply` | 10 min | ✅ |
-| 3.3 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ⬜ |
+| 3.3 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ✅ |
 | 4.1 | Configure Cloud Run domain mappings | 10 min | ⬜ |
 | 4.2 | Provide DNS records for you to add | 5 min | ✅ |
-| 4.3 | Run database migrations | 10 min | ⬜ |
+| 4.3 | Run database migrations | 10 min | ✅ |
 | 4.5 | Run smoke tests and verify deployment | 15 min | ✅ |
 | 5.2 | Test workflow with manual trigger | 15 min | ⬜ |
 | **Phase E: Post-Deployment** | | | **⬜ PENDING** |
@@ -1454,8 +1454,10 @@ Phase D deploys application services to the provisioned infrastructure.
 - ✅ **Step 1**: Build Docker images and push to Artifact Registry (manual) - COMPLETE
 - ✅ **Step 2**: Deploy Cloud Run services via `terraform apply` (automated) - COMPLETE
 - ✅ **Keycloak PostgreSQL Migration**: Successfully migrated from H2 to Cloud SQL via TCP/VPC Connector (Option B)
-- ⬜ **Step 3**: Deploy static website content to GCS - PENDING
-- ⬜ **Step 4**: Configure DNS records in Cloudflare - PENDING (records provided below)
+- ✅ **Step 3**: Deploy static website content to GCS - COMPLETE (prod.tamshai.com accessible)
+- ✅ **Step 4**: Database Migrations - COMPLETE (hr-data.sql and finance-data.sql imported via gcloud sql import)
+- ✅ **Step 5**: DNS Records Configured in Cloudflare - COMPLETE (CNAMEs added, proxied through Cloudflare)
+- ⚠️ **Custom Domain Mapping**: Cloud Run services accessible via direct URLs only. Custom domains (api.tamshai.com, auth.tamshai.com) require Load Balancer or domain mapping configuration.
 - ⚠️ **GitHub Actions Workflow**: Incomplete - missing VPC connector, database config. See `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md` for details.
 
 **6/6 Cloud Run Services Running (100%)**:
@@ -1568,29 +1570,56 @@ DATABASE_URL="postgresql://tamshai_app:PASSWORD@/tamshai?host=/cloudsql/PROJECT:
   npm run migrate --workspace=@tamshai/migrations
 ```
 
-### DNS Records to Configure in Cloudflare (January 9, 2026)
+### DNS Configuration and Custom Domain Strategy (January 9, 2026)
 
-**Status**: ⬜ PENDING - Add these CNAME records in your Cloudflare dashboard
+**Status**: ✅ COMPLETE - Using direct Cloud Run URLs (Phase 1 approach)
 
-| Hostname | Type | Target/Value | Purpose |
-|----------|------|--------------|---------|
-| `api.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | MCP Gateway API |
-| `auth.tamshai.com` | CNAME | `keycloak-fn44nd7wba-uc.a.run.app` | Keycloak Authentication |
-| `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | Static Website (GCS) |
-| `app.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | Portal/Dashboard (future) |
+#### Decision: Direct Cloud Run URLs vs Custom Domains
 
-**Notes**:
-- ✅ Cloud Run services are deployed and accessible via direct URLs
-- ⬜ CNAMEs need to be added in Cloudflare for custom domains
-- ⚠️ `app.tamshai.com` currently points to MCP Gateway (placeholder, will be separate service in Phase 2)
-- ℹ️ Cloudflare proxy: Enable "Proxied" (orange cloud) for DDoS protection and CDN
+**Phase 1 Approach**: Use direct Cloud Run URLs
+- ✅ No additional GCP configuration required
+- ✅ No Load Balancer costs (~$18/month saved)
+- ✅ Immediate deployment readiness
+- ⚠️ URLs are longer and less user-friendly
+- ⚠️ URL changes if service is recreated
 
-**Verification After DNS Propagation** (allow 5-10 minutes):
+**Phase 2 Option**: Custom domains with GCP Load Balancer
+- Requires HTTPS Load Balancer + domain mappings
+- Adds ~$18/month cost
+- More complex setup (30+ minutes)
+- Professional-looking URLs
+
+#### Current Production URLs (Phase 1)
+
+| Service | Direct Cloud Run URL | Purpose |
+|---------|----------------------|---------|
+| **MCP Gateway** | `https://mcp-gateway-fn44nd7wba-uc.a.run.app` | API endpoint for AI queries |
+| **Keycloak** | `https://keycloak-fn44nd7wba-uc.a.run.app` | Authentication/SSO |
+| **Static Website** | `https://prod.tamshai.com` | Portal app (GCS bucket) |
+
+#### DNS Records Configured in Cloudflare
+
+| Hostname | Type | Target/Value | Status |
+|----------|------|--------------|--------|
+| `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | ✅ Working (GCS static site) |
+| `api.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
+| `auth.tamshai.com` | CNAME | `keycloak-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
+
+**Note**: CNAMEs for api/auth are configured but return 404 because Cloud Run requires Load Balancer for custom domains through Cloudflare proxy. Services work perfectly via direct URLs.
+
+#### Configuration Files Updated
+
+- `clients/web/apps/portal/.env.production`: Updated to use direct Cloud Run URLs
+- Portal app redeployed to prod.tamshai.com with new configuration
+
+**Verification**:
 ```bash
-# Test via custom domains
-curl https://api.tamshai.com/health
-curl https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs
-curl https://prod.tamshai.com/  # After static website deployed
+# Test direct Cloud Run URLs (these work)
+curl https://mcp-gateway-fn44nd7wba-uc.a.run.app/  # Returns auth error (expected)
+curl https://keycloak-fn44nd7wba-uc.a.run.app/  # Redirects to /auth (expected)
+
+# Test static website (works via custom domain)
+curl https://prod.tamshai.com/  # Returns 200 OK
 ```
 
 ### Smoke Tests
@@ -1608,6 +1637,56 @@ gcloud run services logs read mcp-gateway --region=us-central1 --limit=20
 ```
 
 **Estimated Time**: 20-30 minutes (excluding DNS propagation time)
+
+---
+
+### Optional: Migrating to Custom Domains (Phase 2)
+
+If you decide to use custom domains (api.tamshai.com, auth.tamshai.com) instead of direct Cloud Run URLs, follow these steps:
+
+**Prerequisites**:
+- CNAMEs already configured in Cloudflare (✅ Done)
+- Additional cost: ~$18/month for HTTPS Load Balancer
+
+**Steps**:
+
+1. **Create HTTPS Load Balancer**:
+```bash
+cd infrastructure/terraform/gcp
+
+# Add to main.tf:
+# - google_compute_global_address (static IP)
+# - google_compute_managed_ssl_certificate (api.tamshai.com, auth.tamshai.com)
+# - google_compute_backend_service (for each Cloud Run service)
+# - google_compute_url_map (routing rules)
+# - google_compute_target_https_proxy
+# - google_compute_global_forwarding_rule
+
+terraform apply
+```
+
+2. **Update Cloudflare DNS**:
+- Change api.tamshai.com and auth.tamshai.com from CNAME to A record
+- Point to Load Balancer static IP (from Terraform output)
+- Keep Cloudflare proxy enabled (orange cloud)
+
+3. **Update Application Configuration**:
+```bash
+# Update clients/web/apps/portal/.env.production
+VITE_KEYCLOAK_URL=https://auth.tamshai.com/realms/tamshai-corp
+VITE_API_GATEWAY_URL=https://api.tamshai.com
+
+# Rebuild and redeploy
+cd clients/web/apps/portal
+NODE_ENV=production npm run build
+gcloud storage rsync -r --delete-unmatched-destination-objects dist/ gs://prod.tamshai.com/
+```
+
+4. **Update Keycloak Redirect URIs**:
+- Add https://prod.tamshai.com/* to tamshai-web-portal client
+- Update issuer URL in MCP Gateway environment variables
+
+**Reference**: [Cloud Run Custom Domains with Load Balancer](https://cloud.google.com/run/docs/mapping-custom-domains#https-load-balancer)
 
 ---
 
