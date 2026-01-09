@@ -1,9 +1,10 @@
 # GCP Phase 1 Deployment Status
 
-**Last Updated**: January 9, 2026 17:30 UTC
-**Status**: PARTIAL DEPLOYMENT - 52/60 resources deployed
+**Last Updated**: January 9, 2026 18:45 UTC
+**Status**: DEBUGGING - 52/60 resources deployed, container startup issues identified
 **Working**: 4 MCP Suite services deployed and running
 **Failing**: 2 services (mcp-gateway, keycloak) - container startup failures
+**Progress**: Terraform configuration fixes applied, awaiting log investigation
 
 ---
 
@@ -439,5 +440,162 @@ terraform destroy -auto-approve
 
 ---
 
+## 🔍 January 9 Debugging Session (18:00-18:45 UTC)
+
+### Issues Diagnosed
+
+**mcp-gateway (revision: mcp-gateway-00001-q8z)**:
+- ❌ Container fails to listen on PORT=3100 within timeout
+- Root causes identified:
+  1. **MCP Service URLs**: Were using placeholder "xxxxx" hash
+  2. **Redis dependency**: Expects Redis at 10.0.0.3 (utility VM)
+  3. **Keycloak dependency**: Points to https://auth.tamshai.com (not yet in DNS)
+  4. **MongoDB URI**: Was missing from environment variables
+
+**keycloak (revision: keycloak-00001-qmm)**:
+- ❌ Container fails to listen on PORT=8080 within timeout
+- Root causes identified:
+  1. **Startup timeout too short**: Keycloak schema initialization takes 2-3 minutes on db-f1-micro
+  2. **Database connection**: May be failing or slow via VPC connector
+  3. **Realm import**: `--import-realm` adds additional startup time
+
+### Configuration Fixes Applied
+
+**File**: `infrastructure/terraform/modules/cloudrun/main.tf`
+
+1. **Dynamic MCP Service URLs** (lines 88-104):
+   ```hcl
+   # Before: Hardcoded with placeholder hash
+   value = "https://mcp-hr-${var.cloud_run_hash}.${var.region}.run.app"
+
+   # After: Dynamic reference to actual deployed services
+   value = google_cloud_run_service.mcp_suite["hr"].status[0].url
+   ```
+
+   **Actual URLs discovered**:
+   - mcp-hr: https://mcp-hr-fn44nd7wba-uc.a.run.app
+   - mcp-finance: https://mcp-finance-fn44nd7wba-uc.a.run.app
+   - mcp-sales: https://mcp-sales-fn44nd7wba-uc.a.run.app
+   - mcp-support: https://mcp-support-fn44nd7wba-uc.a.run.app
+
+2. **Added MongoDB URI** (lines 82-85):
+   ```hcl
+   env {
+     name  = "MONGODB_URI"
+     value = var.mongodb_uri
+   }
+   ```
+
+3. **Increased Keycloak Timeout** (lines 367-376):
+   ```hcl
+   # Before: 100s total (30s initial + 10 periods × 10s)
+   startup_probe {
+     initial_delay_seconds = 30
+     period_seconds        = 10
+     failure_threshold     = 10
+   }
+
+   # After: 5-minute initial delay, removed startup probe
+   liveness_probe {
+     initial_delay_seconds = 300  # 5 minutes
+     period_seconds        = 60
+     failure_threshold     = 3
+   }
+   ```
+
+### Terraform Apply Attempt
+
+**Command**: `terraform apply` (after fixes)
+**Result**: Both services still failed with same errors
+
+**Reasons for Failure**:
+1. **Cannot access logs**: Service account lacks logging.viewer role
+2. **Cannot SSH to utility VM**: Connection timeout (firewall or VM not responding)
+3. **Unknown Redis status**: Cannot verify if Redis is running on utility VM at 10.0.0.3
+
+### 🎯 REQUIRED NEXT ACTIONS
+
+**Priority 1: Check Cloud Run Logs**
+
+You need to manually access the logs to see why containers are failing:
+
+1. **Keycloak logs**: https://console.cloud.google.com/logs/viewer?project=gen-lang-client-0553641830&resource=cloud_run_revision/service_name/keycloak/revision_name/keycloak-00001-qmm
+
+2. **mcp-gateway logs**: https://console.cloud.google.com/logs/viewer?project=gen-lang-client-0553641830&resource=cloud_run_revision/service_name/mcp-gateway/revision_name/mcp-gateway-00001-q8z
+
+**Look for**:
+- Database connection errors (Keycloak)
+- Redis connection errors (mcp-gateway)
+- Network connectivity issues
+- VPC connector problems
+- Application startup exceptions
+
+**Priority 2: Verify Utility VM Status**
+
+Check if Redis is actually running on the utility VM:
+
+```bash
+# Option 1: Check from GCP Console
+# Go to: Compute Engine > VM Instances > tamshai-prod-mcp-gateway
+# Click "SSH" button in browser
+
+# Then run:
+docker ps
+docker logs redis  # if Redis container exists
+netstat -tulpn | grep 6379  # Check if Redis port is open
+
+# Option 2: Fix SSH firewall rule
+# Add your local IP to firewall:
+gcloud compute firewall-rules update tamshai-prod-allow-iap-ssh \
+  --project=gen-lang-client-0553641830 \
+  --source-ranges=YOUR_IP_ADDRESS/32
+```
+
+**Priority 3: Consider Redis Alternatives**
+
+If utility VM Redis is not working:
+
+**Option A**: Deploy Cloud Memorystore Redis (Serverless tier)
+- Cost: ~$3-5/month for minimal usage
+- Fully managed, integrates with VPC connector
+- Update `redis_host` in terraform.tfvars
+
+**Option B**: Use MongoDB for token storage (temporary)
+- Modify mcp-gateway to use MongoDB instead of Redis
+- Less performant but works with existing infrastructure
+
+**Option C**: Deploy Redis in Cloud Run (sidecar)
+- Not recommended for production
+- Could work for testing/development
+
+### Current State Summary
+
+| Component | Status | URL | Notes |
+|-----------|--------|-----|-------|
+| mcp-hr | ✅ Running | https://mcp-hr-fn44nd7wba-uc.a.run.app | Working |
+| mcp-finance | ✅ Running | https://mcp-finance-fn44nd7wba-uc.a.run.app | Working |
+| mcp-sales | ✅ Running | https://mcp-sales-fn44nd7wba-uc.a.run.app | Working |
+| mcp-support | ✅ Running | https://mcp-support-fn44nd7wba-uc.a.run.app | Working |
+| mcp-gateway | ❌ Failed | (not available) | Revision: mcp-gateway-00001-q8z |
+| keycloak | ❌ Failed | (not available) | Revision: keycloak-00001-qmm |
+| Utility VM (gateway) | ❓ Unknown | Internal: 10.0.0.3 | SSH timeout, cannot verify Redis |
+| Utility VM (keycloak) | ❓ Unknown | Internal: 10.0.0.2 | SSH timeout |
+
+### Files Modified in This Session
+
+1. `infrastructure/terraform/modules/cloudrun/main.tf`
+   - Lines 88-104: Dynamic MCP service URLs
+   - Lines 82-85: Added MONGODB_URI
+   - Lines 367-376: Increased Keycloak liveness probe delay
+
+2. `infrastructure/terraform/gcp/main.tf`
+   - Line 177: Updated cloud_run_hash comment (deprecated)
+
+3. `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md`
+   - This file: Added debugging session documentation
+
+---
+
 *Infrastructure deployment completed - January 9, 2026*
-*Cloud Run services pending Docker image build*
+*Cloud Run services: 4 working, 2 pending debugging*
+*Next step: Investigate container logs manually*

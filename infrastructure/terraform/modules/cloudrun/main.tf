@@ -80,23 +80,28 @@ resource "google_cloud_run_service" "mcp_gateway" {
         }
 
         env {
+          name  = "MONGODB_URI"
+          value = var.mongodb_uri
+        }
+
+        env {
           name  = "MCP_HR_URL"
-          value = "https://mcp-hr-${var.cloud_run_hash}.${var.region}.run.app"
+          value = google_cloud_run_service.mcp_suite["hr"].status[0].url
         }
 
         env {
           name  = "MCP_FINANCE_URL"
-          value = "https://mcp-finance-${var.cloud_run_hash}.${var.region}.run.app"
+          value = google_cloud_run_service.mcp_suite["finance"].status[0].url
         }
 
         env {
           name  = "MCP_SALES_URL"
-          value = "https://mcp-sales-${var.cloud_run_hash}.${var.region}.run.app"
+          value = google_cloud_run_service.mcp_suite["sales"].status[0].url
         }
 
         env {
           name  = "MCP_SUPPORT_URL"
-          value = "https://mcp-support-${var.cloud_run_hash}.${var.region}.run.app"
+          value = google_cloud_run_service.mcp_suite["support"].status[0].url
         }
 
         env {
@@ -359,24 +364,15 @@ resource "google_cloud_run_service" "keycloak" {
           value = "true"
         }
 
-        startup_probe {
-          tcp_socket {
-            port = 8080
-          }
-          initial_delay_seconds = 30
-          timeout_seconds       = 5
-          period_seconds        = 10
-          failure_threshold     = 10
-        }
-
         liveness_probe {
           http_get {
             path = "/health/live"
             port = 8080
           }
-          initial_delay_seconds = 60
-          timeout_seconds       = 5
-          period_seconds        = 30
+          initial_delay_seconds = 300
+          timeout_seconds       = 10
+          period_seconds        = 60
+          failure_threshold     = 3
         }
       }
 
