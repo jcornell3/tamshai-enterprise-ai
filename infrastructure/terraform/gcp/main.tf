@@ -82,6 +82,7 @@ module "security" {
   region               = var.region
   environment          = local.environment
   enable_cloud_run_iam = false # Service-specific IAM is handled in cloudrun module
+  claude_api_key       = var.claude_api_key
 }
 
 # =============================================================================

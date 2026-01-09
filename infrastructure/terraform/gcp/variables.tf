@@ -53,6 +53,12 @@ variable "mongodb_atlas_uri" {
   sensitive   = true
 }
 
+variable "claude_api_key" {
+  description = "Anthropic Claude API key"
+  type        = string
+  sensitive   = true
+}
+
 # =============================================================================
 # COMPUTE
 # =============================================================================
