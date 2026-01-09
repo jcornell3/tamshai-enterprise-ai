@@ -175,45 +175,45 @@ export function AIQueryPage() {
         }
 
         try {
-          const data = JSON.parse(event.data) as AIQueryResponse;
+          const chunk = JSON.parse(event.data);
 
-          // Handle different response types
-          if (data.status === 'error') {
-            setError(data.error || 'An error occurred');
+          // Handle different chunk types from gateway
+          if (chunk.type === 'text' && chunk.text) {
+            // Standard text chunk from streaming.routes.ts line 347
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: msg.content + chunk.text }
+                  : msg
+              )
+            );
+          } else if (chunk.type === 'error') {
+            // Error chunk
+            setError(chunk.message || 'An error occurred');
             eventSource.close();
             eventSourceRef.current = null;
             setIsStreaming(false);
             return;
-          }
-
-          // Handle truncation warnings
-          if (data.metadata?.truncated) {
-            setTruncationWarning({
-              message: data.metadata.warning || 'Results truncated',
-              count: '50+',
-            });
-          }
-
-          // Handle confirmation requests
-          if ((data as any).status === 'pending_confirmation') {
-            const confirmData = data as any;
+          } else if (chunk.type === 'pagination') {
+            // Pagination metadata - could display to user
+            console.log('Pagination available:', chunk);
+          } else if (chunk.type === 'service_unavailable') {
+            // Service unavailability warning
+            console.warn('Some services unavailable:', chunk);
+          } else if (chunk.status === 'pending_confirmation') {
+            // Handle confirmation requests (v1.4)
             setPendingConfirmation({
-              confirmationId: confirmData.confirmationId,
-              message: confirmData.message,
-              action: confirmData.action || 'perform action',
+              confirmationId: chunk.confirmationId,
+              message: chunk.message,
+              action: chunk.action || 'perform action',
               expiresAt: Date.now() + 5 * 60 * 1000, // 5 minute timeout
             });
-          }
-
-          // Append content chunk
-          if (data.content) {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, content: msg.content + data.content }
-                  : msg
-              )
-            );
+          } else if (chunk.metadata?.truncated) {
+            // Handle truncation warnings (v1.4)
+            setTruncationWarning({
+              message: chunk.metadata.warning || 'Results truncated',
+              count: '50+',
+            });
           }
         } catch (parseError) {
           // If not JSON, treat as plain text chunk
@@ -362,6 +362,16 @@ export function AIQueryPage() {
         </div>
       </div>
 
+      {/* Info Banner */}
+      <div className="alert-info mb-4">
+        <h4 className="font-semibold mb-1">Architecture v1.4: SSE Streaming</h4>
+        <p className="text-sm">
+          This page uses Server-Sent Events (SSE) to stream AI responses in
+          real-time, preventing timeouts during Claude's 30-60 second reasoning
+          process.
+        </p>
+      </div>
+
       {/* Truncation Warning */}
       {truncationWarning && (
         <div className="mb-4" data-testid="truncation-warning">
@@ -388,7 +398,54 @@ export function AIQueryPage() {
         </div>
       )}
 
-      {/* Messages Area */}
+      {/* Input Area - MOVED TO TOP for consistent UX */}
+      <div className="bg-white rounded-lg border border-secondary-200 p-4 mb-4">
+        <form onSubmit={handleSubmit} className="flex gap-3">
+          <textarea
+            ref={textareaRef}
+            value={query}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about budgets, invoices, expense reports..."
+            className="input flex-1 resize-none min-h-[44px] max-h-[200px]"
+            rows={1}
+            disabled={isStreaming}
+            aria-label="Enter your finance query"
+            data-testid="query-input"
+          />
+          {isStreaming ? (
+            <button
+              type="button"
+              onClick={cancelStreaming}
+              className="btn-danger"
+              data-testid="cancel-button"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!query.trim()}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="send-button"
+            >
+              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+              Send
+            </button>
+          )}
+        </form>
+        <p className="text-xs text-secondary-500 mt-2">
+          Press Enter to send, Shift+Enter for new line. Results based on your{' '}
+          {userContext?.roles?.includes('finance-write') ? 'finance-write' : 'finance-read'} role.
+        </p>
+      </div>
+
+      {/* Messages Area - MOVED BELOW INPUT */}
       <div
         className="flex-1 overflow-y-auto bg-white rounded-lg border border-secondary-200 mb-4 p-4"
         data-testid="messages-area"
@@ -481,74 +538,6 @@ export function AIQueryPage() {
           </button>
         </div>
       )}
-
-      {/* Input Area */}
-      <div className="bg-white rounded-lg border border-secondary-200 p-4">
-        <form onSubmit={handleSubmit} className="flex gap-3">
-          <textarea
-            ref={textareaRef}
-            value={query}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about budgets, invoices, expense reports..."
-            className="input flex-1 resize-none min-h-[44px] max-h-[200px]"
-            rows={1}
-            disabled={isStreaming}
-            aria-label="Enter your finance query"
-            data-testid="query-input"
-          />
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={cancelStreaming}
-              className="btn-danger"
-              data-testid="cancel-button"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Cancel
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!query.trim()}
-              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              data-testid="send-button"
-            >
-              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              Send
-            </button>
-          )}
-        </form>
-        <p className="text-xs text-secondary-500 mt-2">
-          Press Enter to send, Shift+Enter for new line. Results based on your{' '}
-          {userContext?.roles?.includes('finance-write') ? 'finance-write' : 'finance-read'} role.
-        </p>
-      </div>
-
-      {/* Info Banner */}
-      <div className="mt-4 p-4 bg-secondary-50 rounded-lg">
-        <h4 className="text-sm font-semibold text-secondary-700 mb-2">
-          Architecture v1.4: SSE Streaming
-        </h4>
-        <ul className="text-xs text-secondary-600 space-y-1">
-          <li>
-            <strong>Real-time streaming:</strong> Responses appear as Claude generates them
-          </li>
-          <li>
-            <strong>50-record limit:</strong> Truncation warnings shown when data exceeds limit
-          </li>
-          <li>
-            <strong>Human-in-the-loop:</strong> Write operations require confirmation
-          </li>
-          <li>
-            <strong>RBAC enforced:</strong> Query results respect your access level
-          </li>
-        </ul>
-      </div>
     </div>
   );
 }
