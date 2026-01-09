@@ -27,7 +27,7 @@ interface PendingConfirmation {
 }
 
 export function AIQueryPage() {
-  const { userContext } = useAuth();
+  const { userContext, getAccessToken } = useAuth();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<AIQueryMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -138,9 +138,17 @@ export function AIQueryPage() {
 
     // Create EventSource for SSE
     try {
+      const token = getAccessToken();
+      if (!token) {
+        setError('Authentication required. Please log in again.');
+        setIsStreaming(false);
+        return;
+      }
+
       const params = new URLSearchParams({
         q: queryText,  // Gateway streaming endpoint expects 'q' parameter
         sessionId,
+        token,  // DEPRECATED: Token in URL for EventSource compatibility (can't send custom headers)
       });
 
       const eventSource = new EventSource(`/api/query?${params}`);
