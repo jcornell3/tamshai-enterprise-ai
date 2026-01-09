@@ -24,14 +24,11 @@ terraform {
     }
   }
 
-  # Terraform Cloud backend for encrypted state storage
-  cloud {
-    organization = "tamshai"
-
-    workspaces {
-      # Workspace: tamshai-gcp-prod
-      tags = ["tamshai", "gcp", "phase1", "production"]
-    }
+  # GCS backend for encrypted state storage
+  # State bucket will be created automatically on first terraform init
+  backend "gcs" {
+    bucket = "tamshai-terraform-state-prod"
+    prefix = "gcp/phase1"
   }
 }
 
