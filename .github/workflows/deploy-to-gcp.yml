@@ -227,8 +227,10 @@ jobs:
         working-directory: clients/web
         env:
           VITE_RELEASE_TAG: v1.0.0
-          VITE_API_URL: https://api.tamshai.com
-          VITE_AUTH_URL: https://auth.tamshai.com
+          VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/realms/tamshai-corp
+          VITE_KEYCLOAK_CLIENT_ID: tamshai-web-portal
+          VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
+          VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
         run: |
           rm -rf node_modules package-lock.json
           npm install
@@ -241,8 +243,9 @@ jobs:
 
       - name: Deploy to GCS
         run: |
-          gsutil -m rsync -r -d clients/web/dist gs://prod.tamshai.com
+          gsutil -m rsync -r -d clients/web/apps/portal/dist gs://prod.tamshai.com
           gsutil web set -m index.html -e 404.html gs://prod.tamshai.com
+          gsutil -m setmeta -h "Cache-Control:no-cache,must-revalidate" gs://prod.tamshai.com/index.html
 
   notify:
     needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website]
