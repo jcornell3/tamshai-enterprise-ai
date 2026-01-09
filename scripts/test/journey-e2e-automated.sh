@@ -74,7 +74,7 @@ configure_environment() {
         prod)
             BASE_URL="https://prod.tamshai.com"
             # GCP production uses direct Cloud Run URLs
-            KEYCLOAK_URL="https://keycloak-fn44nd7wba-uc.a.run.app"
+            KEYCLOAK_URL="https://keycloak-fn44nd7wba-uc.a.run.app/auth"
             CLIENT_ID="tamshai-web-portal"
             INSECURE=""
             ;;
@@ -136,7 +136,7 @@ test_health_endpoints() {
     fi
 
     # Test Keycloak OIDC discovery
-    response=$(curl $INSECURE -sf -o /dev/null -w "%{http_code}" "$KEYCLOAK_URL/realms/tamshai-corp/.well-known/openid-connect/certs" 2>/dev/null) || response="000"
+    response=$(curl $INSECURE -sf -o /dev/null -w "%{http_code}" "$KEYCLOAK_URL/realms/tamshai-corp/protocol/openid-connect/certs" 2>/dev/null) || response="000"
 
     if [ "$response" = "200" ]; then
         test_step "Keycloak OIDC discovery" 0
