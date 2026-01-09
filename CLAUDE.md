@@ -645,8 +645,30 @@ See `tests/performance/README.md` for complete documentation.
 - Node.js 20+ and npm 10+
 - GitHub CLI 2.40+ (for CI/CD debugging, PR management)
 - Terraform 1.5+ (for VPS deployment)
+- Google Cloud SDK (gcloud) - for GCP production deployments
 - 8GB RAM minimum (16GB recommended)
 - 20GB free disk space
+
+**IMPORTANT: Google Cloud SDK (gcloud) PATH Configuration**
+
+On Windows, gcloud is installed but not automatically added to PATH. You must set the PATH in each new shell session:
+
+```bash
+# Windows (Git Bash / WSL)
+export PATH="$PATH:/c/Users/jcorn/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin"
+
+# Verify gcloud is accessible
+gcloud --version
+# Should output: Google Cloud SDK 551.0.0
+
+# Authenticate with service account (for GCP deployments)
+gcloud auth activate-service-account --key-file=infrastructure/terraform/gcp/gcp-sa-key.json
+
+# Configure Docker for Artifact Registry
+gcloud auth configure-docker us-central1-docker.pkg.dev
+```
+
+**Location**: `C:\Users\jcorn\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`
 
 **IMPORTANT: Elasticsearch Kernel Parameter**
 
