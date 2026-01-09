@@ -46,13 +46,12 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
 
 # Set environment
 ENV NODE_ENV=production
-ENV PORT=3100
 
 # Switch to non-root user
 USER nodejs
 
-# Expose port
-EXPOSE 3100
+# Expose port (Cloud Run will set PORT env var dynamically)
+EXPOSE 8080
 
 # Health check (uses PORT env var via shell)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
