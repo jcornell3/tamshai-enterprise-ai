@@ -36,10 +36,10 @@ resource "google_cloud_run_service" "mcp_gateway" {
   template {
     spec {
       containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-gateway:latest"
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-gateway:v1.0.3"
 
         ports {
-          container_port = 3100
+          container_port = 8080
         }
 
         resources {
@@ -61,12 +61,12 @@ resource "google_cloud_run_service" "mcp_gateway" {
 
         env {
           name  = "KEYCLOAK_ISSUER"
-          value = "${google_cloud_run_service.keycloak.status[0].url}/realms/tamshai"
+          value = "${google_cloud_run_service.keycloak.status[0].url}/auth/realms/tamshai-corp"
         }
 
         env {
           name  = "JWKS_URI"
-          value = "${google_cloud_run_service.keycloak.status[0].url}/realms/tamshai/protocol/openid-connect/certs"
+          value = "${google_cloud_run_service.keycloak.status[0].url}/auth/realms/tamshai-corp/protocol/openid-connect/certs"
         }
 
         env {
@@ -122,12 +122,12 @@ resource "google_cloud_run_service" "mcp_gateway" {
         startup_probe {
           http_get {
             path = "/health"
-            port = 3100
+            port = 8080
           }
-          initial_delay_seconds = 60
-          timeout_seconds       = 10
-          period_seconds        = 10
-          failure_threshold     = 30  # 60s + (10s × 30) = 360s (6 minutes total)
+          initial_delay_seconds = 10
+          timeout_seconds       = 5
+          period_seconds        = 5
+          failure_threshold     = 12  # 10s + (5s × 12) = 70s (~1 minute total)
         }
       }
 
@@ -307,7 +307,7 @@ resource "google_cloud_run_service" "keycloak" {
   template {
     spec {
       containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/keycloak:latest"
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/keycloak:v2.0.0-postgres"
 
         ports {
           container_port = 8080
@@ -335,9 +335,14 @@ resource "google_cloud_run_service" "keycloak" {
           }
         }
 
+        # KC_DB is a build-time option, set in Dockerfile during kc.sh build
+        # Do not override at runtime or Keycloak will reject it
+
         env {
-          name  = "KC_DB"
-          value = "dev-file"
+          name  = "KC_DB_URL"
+          # Uses Cloud SQL JDBC Socket Factory for Unix socket connection
+          # socketFactory parameter routes connection through /cloudsql/${connection_name}
+          value = "jdbc:postgresql:///keycloak?socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlInstance=${var.postgres_connection_name}"
         }
 
         env {
@@ -380,31 +385,18 @@ resource "google_cloud_run_service" "keycloak" {
           value = "edge"
         }
 
-        env {
-          name  = "KC_HEALTH_ENABLED"
-          value = "true"
-        }
+        # KC_HEALTH_ENABLED is a build-time option, set in Dockerfile during kc.sh build
+        # Do not override at runtime
 
+        # Use TCP probe instead of HTTP - Cloud Run will check if port 8080 is listening
         startup_probe {
-          http_get {
-            path = "/auth/health/ready"
+          tcp_socket {
             port = 8080
           }
-          initial_delay_seconds = 180
-          timeout_seconds       = 10
-          period_seconds        = 60
-          failure_threshold     = 15
-        }
-
-        liveness_probe {
-          http_get {
-            path = "/auth/health/live"
-            port = 8080
-          }
-          initial_delay_seconds = 60
-          timeout_seconds       = 10
-          period_seconds        = 60
-          failure_threshold     = 3
+          initial_delay_seconds = 30
+          timeout_seconds       = 5
+          period_seconds        = 10
+          failure_threshold     = 27  # 30s + (27 × 10s) = 300s total (5 minutes) - extra time for PostgreSQL schema creation with Socket Factory
         }
       }
 
