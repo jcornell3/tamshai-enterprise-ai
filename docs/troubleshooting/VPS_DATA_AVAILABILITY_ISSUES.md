@@ -487,6 +487,185 @@ Finance dashboard loads with correct FY2025 data, displaying accurate budget tot
 
 ---
 
+### Issue 12: 429 Rate Limit Errors Due to Incorrect Express Middleware Ordering ✅ FIXED
+
+**Commits**:
+- `172e765` - fix(mcp-gateway,web): Fix rate limiting and AI Query SSE authentication
+- `d076f41` - test(mcp-gateway): Add rateLimiter mock to route tests
+- `ed4fc88` - test(mcp-gateway): Fix rateLimiter mock to use arrow functions
+
+**Symptoms**:
+- 429 "Too Many Requests" errors after navigating Finance dashboard and Expense Reports 2 times
+- 429 errors in Sales app after switching between tabs multiple times
+- Finance AI Query showing "Connection Error" (401 Unauthorized)
+- Normal page navigation triggering rate limits within seconds
+
+**Root Cause Analysis**:
+
+**Issue #1: Express Middleware Ordering** (Primary cause of 429 errors)
+
+Express applies middleware in the order they're mounted. When middleware is applied like:
+```typescript
+app.use('/api', authMiddleware, aiQueryLimiter, aiQueryRouter);
+app.use('/api', authMiddleware, aiQueryLimiter, streamingRouter);
+app.use('/api', authMiddleware, aiQueryLimiter, mcpProxyRouter);
+```
+
+Express processes EVERY request to `/api/*` through ALL three middleware chains. A request to `/api/mcp/finance/list_budgets`:
+1. Hits `aiQueryRouter` (no match) → `aiQueryLimiter` increments counter
+2. Hits `streamingRouter` (no match) → `aiQueryLimiter` increments counter AGAIN
+3. Hits `mcpProxyRouter` (match) → `aiQueryLimiter` increments counter a THIRD time
+
+Result: MCP proxy tool calls (which should have 500 req/min limit) were getting the strict AI query limit (10 req/min), and each request counted 3x.
+
+**Issue #2: EventSource API Authentication** (Connection Error)
+
+EventSource API (used for SSE streaming) cannot send custom headers like `Authorization: Bearer <token>`. The Finance AI Query page used:
+```typescript
+const eventSource = new EventSource('/api/query?q=...');
+```
+Without authentication, MCP Gateway returned 401 Unauthorized.
+
+**Investigation via SSH**:
+```bash
+# SSH into VPS to verify deployment
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29
+
+# Checked actual deployed code
+grep -A5 'const eventSource = new EventSource' clients/web/apps/finance/src/pages/AIQueryPage.tsx
+# Result: ✓ Endpoint was correct ('/api/query')
+
+# Checked React Query config
+grep -A5 'const queryClient = new QueryClient' clients/web/apps/finance/src/main.tsx
+# Result: ✓ retry: false was set
+
+# Checked Kong logs for 429 errors
+docker logs --tail 100 tamshai-kong 2>&1 | grep -E '(query|error|429)'
+# Result: Multiple 429 errors on /api/mcp/* endpoints (not just /api/query)
+
+# Analyzed request patterns
+docker logs tamshai-kong | grep '/api/mcp'
+# Result:
+# "GET /api/mcp/finance/list_budgets?fiscalYear=2025 HTTP/1.1" 429 55
+# "GET /api/mcp/finance/list_invoices HTTP/1.1" 304 0
+# Regular MCP tool calls hitting 429 limit
+```
+
+**Fix Applied**:
+
+**Part 1: Scoped Rate Limiting via Dependency Injection**
+
+Changed from global middleware application to route-level application:
+
+```typescript
+// services/mcp-gateway/src/index.ts (Lines 336-350)
+// Limiters defined but NOT applied globally
+const generalLimiter = rateLimit({ max: 500, windowMs: 60000 });
+const aiQueryLimiter = rateLimit({ max: 10, windowMs: 60000 });
+
+app.use('/api/', generalLimiter);  // Only general limiter globally
+
+// Pass aiQueryLimiter as dependency (Lines 405-452)
+const aiQueryRouter = createAIQueryRoutes({
+  ...deps,
+  rateLimiter: aiQueryLimiter,  // ✅ Inject into factory
+});
+
+const streamingRouter = createStreamingRoutes({
+  ...deps,
+  rateLimiter: aiQueryLimiter,  // ✅ Inject into factory
+});
+
+// Mount WITHOUT strict limiter in middleware chain
+app.use('/api', authMiddleware, aiQueryRouter);       // ✅ No aiQueryLimiter here
+app.use('/api', authMiddleware, streamingRouter);     // ✅ No aiQueryLimiter here
+app.use('/api', authMiddleware, mcpProxyRouter);      // ✅ No strict limiter
+```
+
+```typescript
+// services/mcp-gateway/src/routes/ai-query.routes.ts (Line 82)
+export function createAIQueryRoutes(deps: AIQueryRoutesDependencies) {
+  const { rateLimiter, ...otherDeps } = deps;
+
+  // Apply limiter INSIDE route handler
+  router.post('/ai/query', rateLimiter, async (req, res) => {
+    // Handler logic...
+  });
+}
+```
+
+```typescript
+// services/mcp-gateway/src/routes/streaming.routes.ts (Lines 436, 456)
+export function createStreamingRoutes(deps: StreamingRoutesDependencies) {
+  const { rateLimiter, ...otherDeps } = deps;
+
+  // Apply limiter INSIDE route handlers
+  router.get('/query', rateLimiter, async (req, res) => { ... });
+  router.post('/query', rateLimiter, async (req, res) => { ... });
+}
+```
+
+**Part 2: EventSource Authentication**
+
+Added JWT token as query parameter for EventSource compatibility:
+
+```typescript
+// clients/web/apps/finance/src/pages/AIQueryPage.tsx (Lines 141-153)
+const token = getAccessToken();
+if (!token) {
+  setError('Authentication required. Please log in again.');
+  return;
+}
+
+const params = new URLSearchParams({
+  q: queryText,
+  sessionId,
+  token,  // ✅ DEPRECATED: Token in URL for EventSource compatibility
+});
+
+const eventSource = new EventSource(`/api/query?${params}`);
+```
+
+Auth middleware already supported this:
+```typescript
+// services/mcp-gateway/src/middleware/auth.middleware.ts (Lines 59-72)
+const tokenFromQuery = req.query.token as string | undefined;
+
+if (authHeader && authHeader.startsWith('Bearer ')) {
+  token = authHeader.substring(7);
+} else if (tokenFromQuery) {
+  // DEPRECATED: Token in URL (for EventSource clients)
+  token = tokenFromQuery;
+  logger.warn('Token passed via query parameter (deprecated)', { ... });
+}
+```
+
+**Files Changed**:
+- `services/mcp-gateway/src/index.ts` - Inject rateLimiter into route factories instead of global middleware
+- `services/mcp-gateway/src/routes/ai-query.routes.ts` - Add rateLimiter parameter, apply to /ai/query endpoint
+- `services/mcp-gateway/src/routes/streaming.routes.ts` - Add rateLimiter parameter, apply to /query endpoints
+- `clients/web/apps/finance/src/pages/AIQueryPage.tsx` - Add token to EventSource URL
+- `services/mcp-gateway/src/routes/ai-query.routes.test.ts` - Add rateLimiter mock
+- `services/mcp-gateway/src/routes/streaming.routes.test.ts` - Add rateLimiter mock
+
+**Result**:
+
+| Route | General Limit | AI Limit | Effective Limit |
+|-------|---------------|----------|-----------------|
+| `/api/ai/query` (POST) | 500/min | 10/min | **10/min** ✅ |
+| `/api/query` (GET/POST SSE) | 500/min | 10/min | **10/min** ✅ |
+| `/api/mcp/*` (MCP tool calls) | 500/min | None | **500/min** ✅ (50x improvement) |
+| `/api/confirm/*` | 500/min | None | **500/min** ✅ |
+| `/health` | None | None | **Unlimited** ✅ |
+
+**Verification**:
+After deployment, dashboard navigation works smoothly without 429 errors. MCP tool calls (list_budgets, list_invoices, etc.) no longer count against the strict AI query limit. AI Query page authenticates successfully via token parameter.
+
+**Security Note**:
+Passing JWT tokens via query parameters is **deprecated** due to URL logging risks. This is a temporary solution for EventSource compatibility. Future implementation should use `fetch()` with streaming response and proper Authorization headers.
+
+---
+
 ### Manual VPS Data Reload (Session Work)
 
 **Status**: Successfully reloaded all 3 databases on VPS manually
