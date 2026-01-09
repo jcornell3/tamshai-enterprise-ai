@@ -325,8 +325,13 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         env {
-          name  = "KC_DB_URL"
-          value = "jdbc:postgresql:///${var.keycloak_db_name}?cloudSqlInstance=${var.postgres_connection_name}&socketFactory=com.google.cloud.sql.postgres.SocketFactory"
+          name  = "KC_DB_URL_HOST"
+          value = "/cloudsql/${var.postgres_connection_name}"
+        }
+
+        env {
+          name  = "KC_DB_URL_DATABASE"
+          value = var.keycloak_db_name
         }
 
         env {
@@ -360,6 +365,11 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         env {
+          name  = "KC_HTTP_PORT"
+          value = "8080"
+        }
+
+        env {
           name  = "KC_PROXY"
           value = "edge"
         }
@@ -373,10 +383,10 @@ resource "google_cloud_run_service" "keycloak" {
           tcp_socket {
             port = 8080
           }
-          initial_delay_seconds = 120
+          initial_delay_seconds = 180
           timeout_seconds       = 10
-          period_seconds        = 30
-          failure_threshold     = 10
+          period_seconds        = 60
+          failure_threshold     = 15
         }
 
         liveness_probe {
