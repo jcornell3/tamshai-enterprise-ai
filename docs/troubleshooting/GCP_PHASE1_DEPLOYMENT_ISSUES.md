@@ -658,12 +658,20 @@ resource "google_cloud_run_service" "mcp_gateway" {
 1. ⏳ Implement Cloud SQL Proxy sidecar solution
 2. ⏳ Test PostgreSQL connection with sidecar
 3. ⏳ Deploy to staging with persistent database
-4. ⏳ Implement IAP tunneling for VM access (per user guidance)
+4. ✅ **Implement IAP tunneling for VM access** (infrastructure already configured)
+   - Firewall rule: `allow-ssh-from-iap` (35.235.240.0/20)
+   - VM tags: `ssh-enabled` on keycloak and mcp-gateway instances
+   - IAM: `roles/iap.tunnelResourceAccessor` granted to claude-deployer
+   - Usage: `gcloud compute ssh <instance> --tunnel-through-iap --command="..."`
 5. ⏳ Configure Cloudflare DNS for external domains
 
 ### Long-Term (Next Sprint)
 
-1. ⏳ Add retry logic to mcp-gateway Keycloak validation
+1. ✅ **Add retry logic to mcp-gateway Keycloak validation** (commit 40c1f44)
+   - Exponential backoff with jitter (1s → 30s max)
+   - Configurable retries via KEYCLOAK_VALIDATION_RETRIES (default: 10)
+   - Enhanced startup probe: 6 minute timeout
+   - Pending: Rebuild and deploy container
 2. ⏳ Implement comprehensive health check dashboard
 3. ⏳ Create deployment runbook with troubleshooting steps
 4. ⏳ Set up monitoring and alerting (Cloud Logging, Error Reporting)
@@ -671,6 +679,6 @@ resource "google_cloud_run_service" "mcp_gateway" {
 
 ---
 
-*Last Updated: January 9, 2026 18:15 UTC*
+*Last Updated: January 9, 2026 19:30 UTC*
 *Document Maintainer: Claude-Dev*
 *Related Incident: SECURITY-2026-01-09-001*
