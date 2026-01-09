@@ -60,13 +60,13 @@ resource "google_cloud_run_service" "mcp_gateway" {
         }
 
         env {
-          name = "KEYCLOAK_ISSUER"
-          value = "https://${var.keycloak_domain}/realms/tamshai"
+          name  = "KEYCLOAK_ISSUER"
+          value = "${google_cloud_run_service.keycloak.status[0].url}/realms/tamshai"
         }
 
         env {
-          name = "JWKS_URI"
-          value = "https://${var.keycloak_domain}/realms/tamshai/protocol/openid-connect/certs"
+          name  = "JWKS_URI"
+          value = "${google_cloud_run_service.keycloak.status[0].url}/realms/tamshai/protocol/openid-connect/certs"
         }
 
         env {
@@ -380,7 +380,8 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         startup_probe {
-          tcp_socket {
+          http_get {
+            path = "/auth/health/ready"
             port = 8080
           }
           initial_delay_seconds = 180
@@ -391,7 +392,7 @@ resource "google_cloud_run_service" "keycloak" {
 
         liveness_probe {
           http_get {
-            path = "/health/live"
+            path = "/auth/health/live"
             port = 8080
           }
           initial_delay_seconds = 60
