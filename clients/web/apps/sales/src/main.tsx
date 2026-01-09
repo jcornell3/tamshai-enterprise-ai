@@ -9,7 +9,7 @@ import App from './App';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: false, // Disable retries globally - prevents 429 rate limit errors
       refetchOnWindowFocus: false,
     },
   },

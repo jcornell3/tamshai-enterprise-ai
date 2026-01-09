@@ -232,10 +232,19 @@ jobs:
           # Build images on VPS (no container registry configured yet)
           # Uses root docker-compose.yml with VPS environment variables
           if [ "${{ github.event.inputs.build }}" = "true" ]; then
-            echo "Building images with --no-cache..."
+            echo "Force rebuilding with --no-cache..."
+            # Stop containers to prevent cache reuse
+            docker compose down
+            # Remove web app images to force complete rebuild
+            docker rmi -f web-finance:latest web-sales:latest web-portal:latest 2>/dev/null || true
+            # Build without cache
             docker compose build --no-cache
+            # Start containers
+            docker compose up -d
+          else
+            # Normal deployment with build
+            docker compose up -d --build
           fi
-          docker compose up -d --build
 
           echo "=== Cleaning up ==="
           docker image prune -f

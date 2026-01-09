@@ -68,7 +68,6 @@ export function ExpenseReportsPage() {
     refetch,
   } = useQuery({
     queryKey: ['expense-reports'],
-    retry: false, // Disable retries - NOT_IMPLEMENTED errors won't succeed on retry
     queryFn: async () => {
       const token = getAccessToken();
       if (!token) throw new Error('Not authenticated');
