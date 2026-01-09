@@ -12,8 +12,8 @@ ENV KC_METRICS_ENABLED=true
 ENV KC_HTTP_ENABLED=true
 ENV KC_HTTP_RELATIVE_PATH=/auth
 
-# Build optimized Keycloak with PostgreSQL support
-RUN /opt/keycloak/bin/kc.sh build --db=postgres
+# Build optimized Keycloak (database selected at runtime)
+RUN /opt/keycloak/bin/kc.sh build
 
 # Start Keycloak in production mode
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
