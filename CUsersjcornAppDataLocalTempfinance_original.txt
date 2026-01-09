@@ -1,0 +1,250 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useAuth } from '@tamshai/auth';
+import { TruncationWarning, ApprovalCard } from '@tamshai/ui';
+import type { AIQueryMessage, AIQueryResponse } from '../types';
+
+/**
+ * AI Query Page for Finance
+ *
+ * Natural language queries to finance data using SSE streaming (Architecture v1.4)
+ *
+ * Features:
+ * - Server-Sent Events (SSE) for streaming responses
+ * - Real-time chunk-by-chunk rendering
+ * - Prevents 30-60 second timeout during Claude reasoning
+ * - Truncation warnings for large datasets
+ * - v1.4 Human-in-the-loop confirmations for write operations
+ * - Message history within session
+ * - Markdown rendering for AI responses
+ * - Suggested queries
+ */
+
+interface PendingConfirmation {
+  confirmationId: string;
+  message: string;
+  action: string;
+  expiresAt: number;
+}
+
+export function AIQueryPage() {
+  const { userContext } = useAuth();
+  const [query, setQuery] = useState('');
+  const [messages, setMessages] = useState<AIQueryMessage[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [truncationWarning, setTruncationWarning] = useState<{ message: string; count: string } | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const currentMessageIdRef = useRef<string | null>(null);
+
+  // Suggested queries for finance
+  const suggestedQueries = [
+    'Show Q1 budget summary by department',
+    'List pending invoices over $10,000',
+    'What is our current budget utilization?',
+    'Show expense reports awaiting approval',
+    'Compare spending vs budget for Engineering',
+    'List all overdue invoices',
+  ];
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Cleanup EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  // Auto-resize textarea
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setQuery(e.target.value);
+    // Auto-resize
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  };
+
+  // Cancel streaming
+  const cancelStreaming = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setIsStreaming(false);
+
+    // Mark current message as cancelled
+    if (currentMessageIdRef.current) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === currentMessageIdRef.current
+            ? { ...msg, content: msg.content + '\n\n[Response cancelled]', isStreaming: false }
+            : msg
+        )
+      );
+      currentMessageIdRef.current = null;
+    }
+  }, []);
+
+  // Submit query
+  const handleSubmit = async (e?: React.FormEvent, queryOverride?: string) => {
+    if (e) e.preventDefault();
+
+    const queryText = queryOverride || query;
+    if (!queryText.trim() || isStreaming) return;
+
+    // Clear previous error/warning
+    setError(null);
+    setTruncationWarning(null);
+
+    // Add user message
+    const userMessageId = `user-${Date.now()}`;
+    const userMessage: AIQueryMessage = {
+      id: userMessageId,
+      role: 'user',
+      content: queryText,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    // Clear input
+    setQuery('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
+    // Add placeholder for assistant message
+    const assistantMessageId = `assistant-${Date.now()}`;
+    currentMessageIdRef.current = assistantMessageId;
+    const assistantMessage: AIQueryMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      isStreaming: true,
+    };
+    setMessages((prev) => [...prev, assistantMessage]);
+    setIsStreaming(true);
+
+    // Create EventSource for SSE
+    try {
+      const params = new URLSearchParams({
+        query: queryText,
+        sessionId,
+      });
+
+      const eventSource = new EventSource(`/api/finance/ai-query?${params}`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log('SSE connection opened');
+      };
+
+      eventSource.onmessage = (event) => {
+        if (event.data === '[DONE]') {
+          eventSource.close();
+          eventSourceRef.current = null;
+          setIsStreaming(false);
+
+          // Mark message as complete
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId ? { ...msg, isStreaming: false } : msg
+            )
+          );
+          currentMessageIdRef.current = null;
+          return;
+        }
+
+        try {
+          const data = JSON.parse(event.data) as AIQueryResponse;
+
+          // Handle different response types
+          if (data.status === 'error') {
+            setError(data.error || 'An error occurred');
+            eventSource.close();
+            eventSourceRef.current = null;
+            setIsStreaming(false);
+            return;
+          }
+
+          // Handle truncation warnings
+          if (data.metadata?.truncated) {
+            setTruncationWarning({
+              message: data.metadata.warning || 'Results truncated',
+              count: '50+',
+            });
+          }
+
+          // Handle confirmation requests
+          if ((data as any).status === 'pending_confirmation') {
+            const confirmData = data as any;
+            setPendingConfirmation({
+              confirmationId: confirmData.confirmationId,
+              message: confirmData.message,
+              action: confirmData.action || 'perform action',
+              expiresAt: Date.now() + 5 * 60 * 1000, // 5 minute timeout
+            });
+          }
+
+          // Append content chunk
+          if (data.content) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: msg.content + data.content }
+                  : msg
+              )
+            );
+          }
+        } catch (parseError) {
+          // If not JSON, treat as plain text chunk
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content + event.data }
+                : msg
+            )
+          );
+        }
+      };
+
+      eventSource.onerror = (event) => {
+        console.error('SSE error:', event);
+        eventSource.close();
+        eventSourceRef.current = null;
+        setIsStreaming(false);
+
+        // Preserve partial response if any
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: msg.content || 'Connection error. Please try again.',
+                  isStreaming: false,
+                }
+              : msg
+          )
+        );
+
+        setError('Connection error. Please try again.');
+        currentMessageIdRef.current = null;
+      };
+    } catch (err) {
+      setError(String(err));
+      setIsStreaming(false);
+    }
+  };
+
+  // Handle keyboard shortcuts

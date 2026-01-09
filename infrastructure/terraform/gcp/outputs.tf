@@ -146,14 +146,14 @@ output "deployment_summary" {
     Services:
     - MCP Gateway: ${module.cloudrun.mcp_gateway_url}
     - Keycloak:    ${module.cloudrun.keycloak_url}
-    - Website:     ${module.storage.static_website_url}
+    ${module.storage.static_website_url != null ? "- Website:     ${module.storage.static_website_url}" : "- Website:     Not configured (domain verification required)"}
 
     Next Steps:
     1. Configure DNS records (see 'dns_records' output)
     2. Push Docker images to: ${module.cloudrun.artifact_registry_url}
     3. Deploy services via GitHub Actions workflow
     4. Sync Keycloak realm configuration
-    5. Upload static website content to: ${module.storage.static_website_bucket_name}
+    ${module.storage.static_website_bucket_name != null ? "5. Upload static website content to: ${module.storage.static_website_bucket_name}" : "5. Verify domain ownership to enable static website bucket"}
 
     Estimated Monthly Cost: $50-80 USD
 

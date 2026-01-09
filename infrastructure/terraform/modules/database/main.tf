@@ -26,6 +26,8 @@ resource "google_sql_database_instance" "postgres" {
 
   settings {
     tier = var.database_tier
+    # Use ENTERPRISE edition (not ENTERPRISE_PLUS) to support db-f1-micro tier
+    edition = "ENTERPRISE"
 
     disk_size       = var.disk_size_gb
     disk_type       = "PD_SSD"
@@ -83,7 +85,7 @@ resource "google_sql_database_instance" "postgres" {
     #checkov:skip=CKV_GCP_109:PostgreSQL log levels already configured for security
     database_flags {
       name  = "log_min_messages"
-      value = "ERROR"
+      value = "error" # Lowercase for PostgreSQL
     }
 
     database_flags {
@@ -99,7 +101,7 @@ resource "google_sql_database_instance" "postgres" {
 
     database_flags {
       name  = "pgaudit.log"
-      value = "ddl, write" # Log DDL and write operations (less verbose than "all")
+      value = "ddl,write" # Log DDL and write operations (less verbose than "all") - no spaces
     }
   }
 
