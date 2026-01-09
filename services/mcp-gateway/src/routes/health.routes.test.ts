@@ -51,7 +51,7 @@ describe('Health Routes', () => {
       expect(response.body.components.tokenRevocationCache).toHaveProperty('consecutiveFailures', 0);
     });
 
-    test('returns 503 when system is degraded', async () => {
+    test('returns 200 even when Redis is degraded (fail-open Phase 1)', async () => {
       mockGetTokenRevocationStats.mockReturnValue({
         isHealthy: false,
         cacheSize: 50,
@@ -61,8 +61,10 @@ describe('Health Routes', () => {
 
       const response = await request(app).get('/health');
 
-      expect(response.status).toBe(503);
-      expect(response.body).toHaveProperty('status', 'degraded');
+      // Phase 1: Always return 200 (fail-open behavior)
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('status', 'healthy');
+      // Cache still reports degraded status internally
       expect(response.body.components.tokenRevocationCache).toHaveProperty('status', 'degraded');
       expect(response.body.components.tokenRevocationCache).toHaveProperty('consecutiveFailures', 3);
     });
@@ -237,7 +239,8 @@ describe('Health Routes', () => {
 
       const response = await request(app).get('/health');
 
-      expect(response.status).toBe(503);
+      // Phase 1: Always return 200 (fail-open behavior)
+      expect(response.status).toBe(200);
       const lastSyncMs = response.body.components.tokenRevocationCache.lastSyncMs;
       expect(lastSyncMs).toBeGreaterThanOrEqual(60 * 60 * 1000);
     });
