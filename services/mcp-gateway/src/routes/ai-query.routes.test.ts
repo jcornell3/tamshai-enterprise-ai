@@ -55,7 +55,7 @@ describe('AI Query Routes', () => {
       getDeniedServers: mockGetDeniedServers,
       queryMCPServer: mockQueryMCPServer,
       sendToClaudeWithContext: mockSendToClaudeWithContext,
-      rateLimiter: (req: any, res: any, next: any) => next(),
+      rateLimiter: (req: Request, res: Response, next: NextFunction) => next(),
     };
   });
 

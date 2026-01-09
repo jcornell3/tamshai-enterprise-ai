@@ -114,7 +114,7 @@ describe('Streaming Routes', () => {
       config,
       getAccessibleServers: mockGetAccessibleServers,
       queryMCPServer: mockQueryMCPServer,
-      rateLimiter: (req: any, res: any, next: any) => next(),
+      rateLimiter: (req: Request, res: Response, next: NextFunction) => next(),
     };
   });
 
