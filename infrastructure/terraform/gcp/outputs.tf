@@ -137,7 +137,7 @@ output "dns_records" {
 
 output "deployment_summary" {
   description = "Deployment summary and next steps"
-  value = <<-EOT
+  value       = <<-EOT
 
     ========================================
     Tamshai Enterprise AI - Phase 1 Deployed
