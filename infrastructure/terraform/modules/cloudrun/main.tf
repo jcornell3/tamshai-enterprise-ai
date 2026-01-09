@@ -107,23 +107,20 @@ resource "google_cloud_run_service" "mcp_gateway" {
 
       service_account_name = var.mcp_gateway_service_account
       timeout_seconds      = 300
-
-      # VPC Connector for private Cloud SQL/Redis access
-      dynamic "vpc_access" {
-        for_each = var.vpc_connector_name != "" ? [1] : []
-        content {
-          connector = var.vpc_connector_name
-        }
-      }
     }
 
     metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale"        = var.cloud_run_min_instances
-        "autoscaling.knative.dev/maxScale"        = var.cloud_run_max_instances
-        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
-        "run.googleapis.com/execution-environment" = "gen2"
-      }
+      annotations = merge(
+        {
+          "autoscaling.knative.dev/minScale"         = var.cloud_run_min_instances
+          "autoscaling.knative.dev/maxScale"         = var.cloud_run_max_instances
+          "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
+          "run.googleapis.com/execution-environment" = "gen2"
+        },
+        var.vpc_connector_name != "" ? {
+          "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
+        } : {}
+      )
 
       labels = {
         environment = var.environment
@@ -226,24 +223,21 @@ resource "google_cloud_run_service" "mcp_suite" {
 
       service_account_name = var.mcp_suite_service_account
       timeout_seconds      = 300
-
-      # VPC Connector for Cloud SQL access
-      dynamic "vpc_access" {
-        for_each = var.vpc_connector_name != "" ? [1] : []
-        content {
-          connector = var.vpc_connector_name
-        }
-      }
     }
 
     metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale"         = var.cloud_run_min_instances
-        "autoscaling.knative.dev/maxScale"         = var.cloud_run_max_instances
-        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
-        "run.googleapis.com/execution-environment" = "gen2"
-        "run.googleapis.com/cloudsql-instances"    = each.value.database
-      }
+      annotations = merge(
+        {
+          "autoscaling.knative.dev/minScale"         = var.cloud_run_min_instances
+          "autoscaling.knative.dev/maxScale"         = var.cloud_run_max_instances
+          "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
+          "run.googleapis.com/execution-environment" = "gen2"
+          "run.googleapis.com/cloudsql-instances"    = each.value.database
+        },
+        var.vpc_connector_name != "" ? {
+          "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
+        } : {}
+      )
 
       labels = {
         environment = var.environment
@@ -395,25 +389,22 @@ resource "google_cloud_run_service" "keycloak" {
 
       service_account_name = var.keycloak_service_account
       timeout_seconds      = 300
-
-      # VPC Connector for Cloud SQL access
-      dynamic "vpc_access" {
-        for_each = var.vpc_connector_name != "" ? [1] : []
-        content {
-          connector = var.vpc_connector_name
-        }
-      }
     }
 
     metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale"         = var.keycloak_min_instances
-        "autoscaling.knative.dev/maxScale"         = "4"
-        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
-        "run.googleapis.com/execution-environment" = "gen2"
-        "run.googleapis.com/cloudsql-instances"    = var.postgres_connection_name
-        "run.googleapis.com/startup-cpu-boost"     = "true"
-      }
+      annotations = merge(
+        {
+          "autoscaling.knative.dev/minScale"         = var.keycloak_min_instances
+          "autoscaling.knative.dev/maxScale"         = "4"
+          "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
+          "run.googleapis.com/execution-environment" = "gen2"
+          "run.googleapis.com/cloudsql-instances"    = var.postgres_connection_name
+          "run.googleapis.com/startup-cpu-boost"     = "true"
+        },
+        var.vpc_connector_name != "" ? {
+          "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
+        } : {}
+      )
 
       labels = {
         environment = var.environment

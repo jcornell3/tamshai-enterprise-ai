@@ -15,6 +15,7 @@ crash.*.log
 # Sensitive credentials
 credentials.json
 service-account*.json
+gcp-sa-key.json
 
 # Override files
 override.tf
