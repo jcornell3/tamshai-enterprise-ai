@@ -114,6 +114,7 @@ describe('Streaming Routes', () => {
       config,
       getAccessibleServers: mockGetAccessibleServers,
       queryMCPServer: mockQueryMCPServer,
+      rateLimiter: jest.fn((req, res, next) => next()),
     };
   });
 
