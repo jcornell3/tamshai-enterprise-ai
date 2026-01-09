@@ -86,7 +86,7 @@ variable "keycloak_domain" {
 }
 
 variable "static_website_domain" {
-  description = "Static website domain (must match GCS bucket name)"
+  description = "Static website domain (must match GCS bucket name) - Leave empty to skip domain bucket"
   type        = string
-  default     = "prod.tamshai.com"
+  default     = "" # Temporarily disabled - requires domain ownership verification
 }
