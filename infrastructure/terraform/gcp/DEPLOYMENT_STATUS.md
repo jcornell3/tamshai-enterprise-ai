@@ -1,12 +1,12 @@
 # GCP Phase 1 Deployment Status
 
-**Last Updated**: January 9, 2026
-**Status**: INFRASTRUCTURE COMPLETE - 47/60 resources deployed
-**Remaining**: 13 Cloud Run services (pending Docker images)
+**Last Updated**: January 9, 2026 16:17 UTC
+**Status**: INFRASTRUCTURE COMPLETE - 48/60 resources deployed
+**Remaining**: 12 Cloud Run services (GitHub Actions workflow deploying)
 
 ---
 
-## ✅ Successfully Deployed Infrastructure (47 resources)
+## ✅ Successfully Deployed Infrastructure (48 resources)
 
 ### Networking (9 resources)
 - ✅ VPC network (tamshai-prod-vpc)
@@ -24,12 +24,12 @@
 - ✅ 3 Project IAM member bindings (cloudsql.client, run.invoker)
 - ✅ Secret Manager API enabled
 
-### Storage (4 resources)
+### Storage (5 resources)
 - ✅ Terraform state bucket (tamshai-terraform-state-prod)
 - ✅ Logs bucket (tamshai-prod-logs)
 - ✅ Public docs bucket (tamshai-prod-public-docs)
 - ✅ Finance docs bucket (tamshai-prod-finance-docs)
-- ⏸️ Static website bucket (DISABLED - requires domain ownership verification)
+- ✅ Static website bucket (prod.tamshai.com) - **Domain verified**
 
 ### Database (7 resources)
 - ✅ Cloud SQL PostgreSQL instance (db-f1-micro, ENTERPRISE edition)
@@ -46,7 +46,7 @@
 
 ---
 
-## ⏳ Pending Resources (13) - Requires Docker Images
+## ⏳ Pending Resources (12) - GitHub Actions Deploying
 
 ### Cloud Run Services (6)
 - ⏳ mcp-gateway (Port 3100)
@@ -56,10 +56,10 @@
 - ⏳ mcp-support (Port 3104)
 - ⏳ keycloak (Port 8080)
 
-### Cloud Run IAM Bindings (7)
-- ⏳ 7 IAM member bindings for Cloud Run service access
+### Cloud Run IAM Bindings (6)
+- ⏳ 6 IAM member bindings for Cloud Run service access
 
-**Blocker**: Docker images must be built and pushed to Artifact Registry before Cloud Run services can be created.
+**Status**: GitHub Actions workflow run 20858117239 is building Docker images and deploying Cloud Run services.
 
 **Required Images**:
 ```
@@ -146,34 +146,59 @@ us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/keycloak:latest
 **Fix**: Made website outputs conditional with null checks
 **File**: `infrastructure/terraform/gcp/outputs.tf:149,156`
 
+### 10. Static Website Domain Verification (FIXED)
+**Issue**: Error 403 "Another user owns the domain prod.tamshai.com" - persisted for 8+ hours
+**Root Cause**: Domain verified by jcore3@gmail.com in Search Console, but Terraform running as claude-deployer@gen-lang-client-0553641830.iam.gserviceaccount.com
+**Fix**: Added service account as Owner in Google Search Console
+**Result**: Bucket created successfully in 1 second after adding SA
+**File**: `infrastructure/terraform/gcp/terraform.tfvars:43` (re-enabled static_website_domain)
+
+### 11. GitHub Actions Workflow Fixes (FIXED)
+**Issue 11a**: Cloud Run services using default compute SA instead of dedicated service accounts
+**Error**: Permission denied on Secret Manager secrets for 1046947015464-compute@developer.gserviceaccount.com
+**Fix**: Added `--service-account` flag to all Cloud Run deploy commands
+**Files**: `.github/workflows/deploy-to-gcp.yml:93,153,197`
+
+**Issue 11b**: Static website build failure - missing @rollup/rollup-linux-x64-gnu
+**Root Cause**: npm ci has known bug with optional dependencies on Linux
+**Fix**: Changed `npm ci` to `npm install` and added `rm -rf node_modules package-lock.json` first
+**File**: `.github/workflows/deploy-to-gcp.yml:231-232`
+
+### 12. GitHub Actions vs Terraform Configuration Mismatch (BLOCKING)
+**Issue**: Cloud Run deployments via `gcloud run deploy` in GitHub Actions workflow missing critical config
+**Missing from workflow**:
+- Keycloak: KC_DB_URL, KC_DB_USERNAME, KC_DB_PASSWORD, KC_HOSTNAME, KC_HOSTNAME_STRICT
+- All services: VPC connector for Cloud SQL private IP access
+- All services: Proper database connection strings from Terraform state
+
+**Root Cause**: Workflow uses `gcloud run deploy` commands instead of `terraform apply`
+**Terraform configuration is complete** - has all correct environment variables, secrets, VPC connectors, etc.
+
+**Solution**: Use Terraform to deploy Cloud Run services (Option B below)
+
 ---
 
 ## 📋 Next Steps
 
-### Option A: GitHub Actions CI/CD Deployment (Recommended)
+### ⚠️ Option A: GitHub Actions Workflow (NEEDS WORK)
+
+**Status**: ❌ Workflow incomplete - missing VPC connector, database config
+**Issue**: See "Issue #12" above - workflow uses `gcloud run deploy` instead of Terraform
+
+**This option requires**:
+- Adding VPC connector to all Cloud Run services
+- Passing database connection strings from Terraform state
+- Adding all Keycloak environment variables (KC_DB_URL, KC_DB_USERNAME, etc.)
+
+**Not recommended until workflow is updated to use Terraform**
+
+### ✅ Option B: Terraform Deployment (RECOMMENDED - Works Now)
 
 **Prerequisites**:
-- ✅ Artifact Registry created
-- ✅ Service accounts configured
-- ✅ Secrets stored in Secret Manager
+- ✅ Docker images built and pushed to Artifact Registry
+- ✅ Terraform configuration complete with all environment variables
 
 **Steps**:
-```bash
-# Trigger GitHub Actions workflow to build and deploy
-gh workflow run deploy-to-gcp.yml --ref main
-
-# Monitor deployment
-gh run list --workflow=deploy-to-gcp.yml --limit 5
-gh run watch
-```
-
-**What the workflow does**:
-1. Builds Docker images for all 6 services
-2. Pushes images to Artifact Registry
-3. Runs `terraform apply` to create Cloud Run services
-4. Verifies health checks
-
-### Option B: Manual Docker Build & Push
 
 **Build and push images manually**:
 ```bash
