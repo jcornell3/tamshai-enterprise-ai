@@ -4,6 +4,11 @@
 .terraform/
 .terraform.lock.hcl
 
+# Terraform plan files (CONTAIN SENSITIVE DATA)
+*.tfplan
+tfplan
+*.tfplan.json
+
 # Sensitive variable files
 terraform.tfvars
 *.auto.tfvars
