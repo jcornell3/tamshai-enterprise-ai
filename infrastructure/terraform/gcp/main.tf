@@ -181,11 +181,11 @@ module "cloudrun" {
   mcp_suite_service_account   = module.security.mcp_gateway_service_account_email
   keycloak_service_account    = module.security.keycloak_service_account_email
 
-  # Secrets
-  claude_api_key_secret          = "claude-api-key"
-  keycloak_admin_user_secret     = "keycloak-admin-user"
-  keycloak_admin_password_secret = "keycloak-admin-password"
-  keycloak_db_password_secret    = "keycloak-db-password"
+  # Secrets (use actual Secret Manager names with tamshai-prod- prefix)
+  claude_api_key_secret          = "tamshai-prod-anthropic-api-key"
+  keycloak_admin_user_secret     = "keycloak-admin-user" # Not used - admin username is env var
+  keycloak_admin_password_secret = "tamshai-prod-keycloak-admin-password"
+  keycloak_db_password_secret    = "tamshai-prod-keycloak-db-password"
 
   # Database configuration
   postgres_connection_name = module.database.postgres_connection_name
