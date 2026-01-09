@@ -295,13 +295,8 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         env {
-          name = "KEYCLOAK_ADMIN"
-          value_from {
-            secret_key_ref {
-              name = var.keycloak_admin_user_secret
-              key  = "latest"
-            }
-          }
+          name  = "KEYCLOAK_ADMIN"
+          value = "admin"
         }
 
         env {
