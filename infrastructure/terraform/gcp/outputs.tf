@@ -97,13 +97,13 @@ output "serverless_connector_id" {
 
 output "utility_vm_ip" {
   description = "Utility VM private IP (Redis host)"
-  value       = var.enable_utility_vm ? module.utility_vm[0].keycloak_instance_private_ip : null
+  value       = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_internal_ip : null
   sensitive   = true
 }
 
 output "utility_vm_public_ip" {
   description = "Utility VM public IP (Bastion host)"
-  value       = var.enable_utility_vm ? module.utility_vm[0].keycloak_instance_public_ip : null
+  value       = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_external_ip : null
 }
 
 # =============================================================================
