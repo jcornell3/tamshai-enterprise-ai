@@ -28,9 +28,12 @@ COPY --from=deps /libs/jdbc-socket-factory-core.jar /opt/keycloak/providers/
 # Copy realm export for import
 COPY realm-export.json /opt/keycloak/data/import/realm-export.json
 
-# Set build-time configuration (only DB type and health)
+# Set build-time configuration
 ENV KC_DB=postgres
 ENV KC_HEALTH_ENABLED=true
+ENV KC_METRICS_ENABLED=true
+ENV KC_HTTP_ENABLED=true
+ENV KC_HTTP_RELATIVE_PATH=/auth
 
 # Build optimized Keycloak (generates runtime optimizations and caches)
 RUN /opt/keycloak/bin/kc.sh build --verbose
@@ -40,13 +43,8 @@ RUN /opt/keycloak/bin/kc.sh build --verbose
 # =============================================================================
 FROM quay.io/keycloak/keycloak:26.0.7
 
-# Copy optimized Keycloak from builder stage
+# Copy optimized Keycloak from builder stage (build-time config already baked in)
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
-
-# Set runtime configuration
-ENV KC_METRICS_ENABLED=true
-ENV KC_HTTP_ENABLED=true
-ENV KC_HTTP_RELATIVE_PATH=/auth
 
 # Start Keycloak in production mode with realm import
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]

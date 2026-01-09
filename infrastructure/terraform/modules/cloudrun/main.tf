@@ -335,14 +335,16 @@ resource "google_cloud_run_service" "keycloak" {
           }
         }
 
-        # KC_DB is a build-time option, set in Dockerfile during kc.sh build
-        # Do not override at runtime or Keycloak will reject it
+        env {
+          name  = "KC_DB"
+          value = "postgres"
+        }
 
         env {
           name  = "KC_DB_URL"
-          # Uses Cloud SQL JDBC Socket Factory for Unix socket connection
-          # socketFactory parameter routes connection through /cloudsql/${connection_name}
-          value = "jdbc:postgresql:///keycloak?socketFactory=com.google.cloud.sql.postgres.SocketFactory&cloudSqlInstance=${var.postgres_connection_name}"
+          # Standard TCP connection via VPC Connector to Cloud SQL private IP
+          # VPC Connector routes traffic through private network (10.180.0.3)
+          value = "jdbc:postgresql://10.180.0.3:5432/keycloak"
         }
 
         env {
@@ -370,10 +372,8 @@ resource "google_cloud_run_service" "keycloak" {
           value = "false"
         }
 
-        env {
-          name  = "KC_HTTP_ENABLED"
-          value = "true"
-        }
+        # KC_HTTP_ENABLED, KC_HTTP_RELATIVE_PATH, KC_METRICS_ENABLED are build-time options
+        # Already set in Docker image during kc.sh build - do not override at runtime
 
         env {
           name  = "KC_HTTP_PORT"
@@ -385,9 +385,6 @@ resource "google_cloud_run_service" "keycloak" {
           value = "edge"
         }
 
-        # KC_HEALTH_ENABLED is a build-time option, set in Dockerfile during kc.sh build
-        # Do not override at runtime
-
         # Use TCP probe instead of HTTP - Cloud Run will check if port 8080 is listening
         startup_probe {
           tcp_socket {
@@ -396,7 +393,7 @@ resource "google_cloud_run_service" "keycloak" {
           initial_delay_seconds = 30
           timeout_seconds       = 5
           period_seconds        = 10
-          failure_threshold     = 27  # 30s + (27 × 10s) = 300s total (5 minutes) - extra time for PostgreSQL schema creation with Socket Factory
+          failure_threshold     = 12  # 30s + (12 × 10s) = 150s total (2.5 minutes) - extra time for PostgreSQL schema creation
         }
       }
 
@@ -411,7 +408,6 @@ resource "google_cloud_run_service" "keycloak" {
           "autoscaling.knative.dev/maxScale"         = "4"
           "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
           "run.googleapis.com/execution-environment" = "gen2"
-          "run.googleapis.com/cloudsql-instances"    = var.postgres_connection_name
           "run.googleapis.com/startup-cpu-boost"     = "true"
         },
         var.vpc_connector_name != "" ? {
