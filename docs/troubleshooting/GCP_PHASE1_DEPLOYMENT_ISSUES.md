@@ -677,8 +677,44 @@ resource "google_cloud_run_service" "mcp_gateway" {
 4. ⏳ Set up monitoring and alerting (Cloud Logging, Error Reporting)
 5. ⏳ Performance testing with k6 for production load
 
+##Issue #6: Keycloak Health Probe Configuration (January 9, 2026 19:15 UTC)
+
+**Symptom**: Keycloak Cloud Run service fails to become healthy. Container starts successfully in ~22-32 seconds but startup probes timeout with 404 errors.
+
+**Root Cause Analysis**:
+- Keycloak 26.0.7 runs on Quarkus 3.15.1 with two ports:
+  - Port 8080: Main HTTP interface for authentication
+  - Port 9000: Management interface for metrics/monitoring
+- Health endpoint paths attempted:
+  - `/auth/health/ready` (404 - path doesn't exist)
+  - `/health/ready` on port 9000 (404 - management port doesn't serve health)
+  - `/q/health/ready` on port 9000 (404 - Quarkus prefix not used)
+  - `/health` on port 8080 (testing - most likely to work)
+
+**Evidence**:
+```
+2026-01-09 19:11:08,958 INFO [io.quarkus] Keycloak 26.0.7 on JVM started in 23.784s.
+Listening on: http://0.0.0.0:8080. Management interface listening on http://0.0.0.0:9000.
+
+STARTUP HTTP probe failed 9 times consecutively for container "keycloak-1" on port 9000 path "/q/health/ready".
+HTTP request returned status 404 Not Found.
+```
+
+**Solution In Progress**:
+- Testing `/health` endpoint on port 8080 (main HTTP port)
+- Reduced timeout to 2 minutes (30s initial delay + 9 failures × 10s) for fast feedback
+- Keycloak has `KC_HEALTH_ENABLED=true` and `smallrye-health` feature installed
+
+**Key Lessons**:
+1. Management interface (port 9000) ≠ Health endpoints
+2. Keycloak health endpoints likely on main HTTP port (8080)
+3. Fast-fail strategy (2min timeout) > long timeouts (18min) for debugging
+4. Always check application logs for actual port/path configuration
+
+**Status**: ⏳ Testing (revision keycloak-00001-xxx deploying)
+
 ---
 
-*Last Updated: January 9, 2026 19:30 UTC*
+*Last Updated: January 9, 2026 19:15 UTC*
 *Document Maintainer: Claude-Dev*
 *Related Incident: SECURITY-2026-01-09-001*
