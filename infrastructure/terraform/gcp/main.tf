@@ -115,14 +115,14 @@ module "database" {
 module "storage" {
   source = "../modules/storage"
 
-  project_id             = var.project_id
-  region                 = var.region
-  environment            = local.environment
-  force_destroy          = false # Production: prevent accidental deletion
-  enable_versioning      = true
-  lifecycle_age_days     = 365
-  enable_static_website  = var.static_website_domain != "" # Only enable if domain is set
-  static_website_domain  = var.static_website_domain
+  project_id            = var.project_id
+  region                = var.region
+  environment           = local.environment
+  force_destroy         = false # Production: prevent accidental deletion
+  enable_versioning     = true
+  lifecycle_age_days    = 365
+  enable_static_website = var.static_website_domain != "" # Only enable if domain is set
+  static_website_domain = var.static_website_domain
 }
 
 # =============================================================================
@@ -163,8 +163,8 @@ module "utility_vm" {
 module "cloudrun" {
   source = "../modules/cloudrun"
 
-  project_id = var.project_id
-  region     = var.region
+  project_id  = var.project_id
+  region      = var.region
   environment = local.environment
 
   # Scaling configuration (Phase 1: scale to zero for cost savings)

@@ -127,12 +127,12 @@ resource "google_cloud_run_service" "mcp_gateway" {
           initial_delay_seconds = 10
           timeout_seconds       = 5
           period_seconds        = 5
-          failure_threshold     = 12  # 10s + (5s × 12) = 70s (~1 minute total)
+          failure_threshold     = 12 # 10s + (5s × 12) = 70s (~1 minute total)
         }
       }
 
       service_account_name = var.mcp_gateway_service_account
-      timeout_seconds      = 600  # Increased from 300s to allow for Keycloak startup + retries
+      timeout_seconds      = 600 # Increased from 300s to allow for Keycloak startup + retries
     }
 
     metadata {
@@ -341,7 +341,7 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         env {
-          name  = "KC_DB_URL"
+          name = "KC_DB_URL"
           # Standard TCP connection via VPC Connector to Cloud SQL private IP
           # VPC Connector routes traffic through private network (10.180.0.3)
           value = "jdbc:postgresql://10.180.0.3:5432/keycloak"
@@ -393,7 +393,7 @@ resource "google_cloud_run_service" "keycloak" {
           initial_delay_seconds = 30
           timeout_seconds       = 5
           period_seconds        = 10
-          failure_threshold     = 12  # 30s + (12 × 10s) = 150s total (2.5 minutes) - extra time for PostgreSQL schema creation
+          failure_threshold     = 12 # 30s + (12 × 10s) = 150s total (2.5 minutes) - extra time for PostgreSQL schema creation
         }
       }
 
