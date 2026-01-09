@@ -1,8 +1,9 @@
 # GCP Phase 1 Deployment Status
 
-**Last Updated**: January 9, 2026 16:17 UTC
-**Status**: INFRASTRUCTURE COMPLETE - 48/60 resources deployed
-**Remaining**: 12 Cloud Run services (GitHub Actions workflow deploying)
+**Last Updated**: January 9, 2026 17:30 UTC
+**Status**: PARTIAL DEPLOYMENT - 52/60 resources deployed
+**Working**: 4 MCP Suite services deployed and running
+**Failing**: 2 services (mcp-gateway, keycloak) - container startup failures
 
 ---
 
@@ -46,20 +47,76 @@
 
 ---
 
-## ⏳ Pending Resources (12) - GitHub Actions Deploying
+## ✅ Successfully Deployed Cloud Run Services (4 resources)
 
-### Cloud Run Services (6)
-- ⏳ mcp-gateway (Port 3100)
-- ⏳ mcp-hr (Port 3101)
-- ⏳ mcp-finance (Port 3102)
-- ⏳ mcp-sales (Port 3103)
-- ⏳ mcp-support (Port 3104)
-- ⏳ keycloak (Port 8080)
+### MCP Suite Services (All Working)
+- ✅ **mcp-hr** (Port 3101) - Deployed and running
+  - Image: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-hr:latest`
+  - Digest: sha256:03515af77d9183530deabbb5c0d9de78a2d3a4bbe07027ec00b504e8e95ccc77
+  - Service account: tamshai-prod-mcp-servers@
 
-### Cloud Run IAM Bindings (6)
-- ⏳ 6 IAM member bindings for Cloud Run service access
+- ✅ **mcp-finance** (Port 3102) - Deployed and running
+  - Image: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-finance:latest`
+  - Digest: sha256:07a44c6f458f568043f4959dcac85b0d6355160156b490d6b1dcbe05a30e4c70
+  - Service account: tamshai-prod-mcp-servers@
 
-**Status**: GitHub Actions workflow run 20858117239 is building Docker images and deploying Cloud Run services.
+- ✅ **mcp-sales** (Port 3103) - Deployed and running
+  - Image: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-sales:latest`
+  - Digest: sha256:2eb29c6402221cf9f2582c8a615a0f9678130a8d6837887aa78d3dd5545e2e06
+  - Service account: tamshai-prod-mcp-servers@
+
+- ✅ **mcp-support** (Port 3104) - Deployed and running
+  - Image: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-support:latest`
+  - Digest: sha256:14f2a83144f9a6ffe653fb56e87fdae71c20403fe9eb635010ee954789b3dd18
+  - Service account: tamshai-prod-mcp-servers@
+
+### Cloud Run IAM Bindings (4)
+- ✅ 4 IAM member bindings for MCP Suite services (run.invoker role)
+
+## ❌ Failing Cloud Run Services (2 resources) - Container Startup Failures
+
+### mcp-gateway (FAILED - Container won't start)
+**Error**: `The user-provided container failed to start and listen on the port defined provided by the PORT=3100 environment variable`
+
+**Docker Image**: Built and pushed successfully
+- Image: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-gateway:latest`
+- Digest: sha256:90989b2f1cac69bf4d9cc6756e741a4a17290d27d152a18c04663e65863ba9f5
+- Service account: tamshai-prod-mcp-gateway@
+
+**Likely Causes**:
+1. Missing or incorrect environment variables (Redis, MongoDB, Keycloak URLs)
+2. VPC connector not properly attached (can't reach Cloud SQL/Redis)
+3. Container crashing during startup before listening on port
+
+**Logs URL**: https://console.cloud.google.com/logs/viewer?project=gen-lang-client-0553641830&resource=cloud_run_revision/service_name/mcp-gateway
+
+### keycloak (FAILED - Container won't start)
+**Error**: `The user-provided container failed to start and listen on the port defined provided by the PORT=8080 environment variable`
+
+**Docker Image**: Built and pushed successfully
+- Image: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/keycloak:latest`
+- Digest: sha256:5fab244400e2304e005d0fca677ee646462e64f2f3cc3a4fcea49d2543f048fa
+- Service account: tamshai-prod-keycloak@
+
+**Likely Causes**:
+1. Database connection failure (can't connect to Cloud SQL PostgreSQL)
+2. VPC connector not properly configured
+3. Missing KC_DB_URL_JDBC or incorrect database credentials
+4. Keycloak requires successful DB connection before starting HTTP server
+
+**Logs URL**: https://console.cloud.google.com/logs/viewer?project=gen-lang-client-0553641830&resource=cloud_run_revision/service_name/keycloak
+
+## ⏳ Pending Resources (8) - Blocked by Service Failures
+
+### Cloud Run Services (2)
+- ❌ mcp-gateway - Needs debugging
+- ❌ keycloak - Needs debugging
+
+### Cloud Run IAM Bindings (2)
+- ⏳ mcp-gateway public access (allUsers run.invoker)
+- ⏳ keycloak public access (allUsers run.invoker)
+
+**Blocker**: Cannot create IAM bindings until services successfully deploy.
 
 **Required Images**:
 ```
@@ -164,7 +221,7 @@ us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/keycloak:latest
 **Fix**: Changed `npm ci` to `npm install` and added `rm -rf node_modules package-lock.json` first
 **File**: `.github/workflows/deploy-to-gcp.yml:231-232`
 
-### 12. GitHub Actions vs Terraform Configuration Mismatch (BLOCKING)
+### 12. GitHub Actions vs Terraform Configuration Mismatch (DOCUMENTED)
 **Issue**: Cloud Run deployments via `gcloud run deploy` in GitHub Actions workflow missing critical config
 **Missing from workflow**:
 - Keycloak: KC_DB_URL, KC_DB_USERNAME, KC_DB_PASSWORD, KC_HOSTNAME, KC_HOSTNAME_STRICT
@@ -174,7 +231,81 @@ us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/keycloak:latest
 **Root Cause**: Workflow uses `gcloud run deploy` commands instead of `terraform apply`
 **Terraform configuration is complete** - has all correct environment variables, secrets, VPC connectors, etc.
 
-**Solution**: Use Terraform to deploy Cloud Run services (Option B below)
+**Solution**: Use Terraform to deploy Cloud Run services
+
+### 13. Secret Manager Secret Name Mismatches (FIXED)
+**Issue**: Terraform referencing wrong secret names, not matching actual Secret Manager secrets
+**Errors**:
+- `claude-api-key` secret not found (actual: `tamshai-prod-anthropic-api-key`)
+- `keycloak-admin-user` secret not found (not needed - using env var)
+- `keycloak-admin-password` secret not found (actual: `tamshai-prod-keycloak-admin-password`)
+- `keycloak-db-password` secret not found (actual: `tamshai-prod-keycloak-db-password`)
+
+**Fix**: Updated infrastructure/terraform/gcp/main.tf to use correct secret names
+**Fix**: Changed KEYCLOAK_ADMIN from secret reference to environment variable
+**Files**: `infrastructure/terraform/gcp/main.tf:185-188`, `infrastructure/terraform/modules/cloudrun/main.tf:297-300`
+
+### 14. Docker Image Builds (COMPLETED)
+**All 6 images built and pushed successfully** (January 9, 2026 17:15 UTC)
+
+- ✅ mcp-gateway: sha256:90989b2f1cac69bf4d9cc6756e741a4a17290d27d152a18c04663e65863ba9f5
+- ✅ mcp-hr: sha256:03515af77d9183530deabbb5c0d9de78a2d3a4bbe07027ec00b504e8e95ccc77
+- ✅ mcp-finance: sha256:07a44c6f458f568043f4959dcac85b0d6355160156b490d6b1dcbe05a30e4c70
+- ✅ mcp-sales: sha256:2eb29c6402221cf9f2582c8a615a0f9678130a8d6837887aa78d3dd5545e2e06
+- ✅ mcp-support: sha256:14f2a83144f9a6ffe653fb56e87fdae71c20403fe9eb635010ee954789b3dd18
+- ✅ keycloak: sha256:5fab244400e2304e005d0fca677ee646462e64f2f3cc3a4fcea49d2543f048fa
+
+**Build Method**: Manual Docker builds via gcloud SDK
+**Total Build Time**: ~10 minutes (parallel builds)
+**Registry**: `us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai`
+
+### 15. Cloud Run Service Deployment (PARTIAL - 4 of 6 successful)
+**Successful Deployments** (4 MCP Suite services):
+- ✅ mcp-hr, mcp-finance, mcp-sales, mcp-support
+- All deployed via `terraform apply`
+- Using correct service accounts, secrets, VPC connectors
+- Services are running and healthy
+
+**Failed Deployments** (2 services):
+- ❌ **mcp-gateway**: Container startup failure - not listening on PORT=3100
+- ❌ **keycloak**: Container startup failure - not listening on PORT=8080
+
+**Deployment Method**: Terraform (infrastructure/terraform/gcp)
+**Deployment Time**: ~2 minutes for 4 successful services
+
+### 16. Container Startup Failures - mcp-gateway and keycloak (CURRENT BLOCKER)
+**Issue**: Containers fail to start and listen on their configured ports within Cloud Run's startup timeout
+
+**Error Messages**:
+```
+mcp-gateway: The user-provided container failed to start and listen on the port
+defined provided by the PORT=3100 environment variable within the allocated timeout.
+
+keycloak: The user-provided container failed to start and listen on the port
+defined provided by the PORT=8080 environment variable within the allocated timeout.
+```
+
+**This typically indicates**:
+1. Container crashing during startup (before HTTP server starts)
+2. Missing required configuration/environment variables
+3. Unable to connect to required services (database, Redis, etc.)
+
+**Next Debugging Steps**:
+1. **Check Cloud Run logs** for both services (links provided above)
+2. **Verify VPC connector** is properly attached and functional
+3. **Check environment variables** are complete and correct
+4. **Test locally** using `docker run` with same env vars to reproduce
+
+**For keycloak specifically**:
+- Likely failing to connect to Cloud SQL PostgreSQL database
+- Keycloak requires successful DB connection before starting HTTP server
+- Check KC_DB_URL format: `jdbc:postgresql:///keycloak?cloudSqlInstance=...`
+- Verify keycloak DB user has proper permissions
+
+**For mcp-gateway specifically**:
+- May be missing Redis, MongoDB, or Keycloak connection details
+- Check all environment variables: REDIS_HOST, MONGODB_URI, KEYCLOAK_ISSUER
+- Verify MCP Suite service URLs are reachable
 
 ---
 
