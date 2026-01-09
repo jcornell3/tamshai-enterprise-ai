@@ -29,6 +29,14 @@ resource "google_service_account" "mcp_servers" {
   project      = var.project_id
 }
 
+# Service account for CI/CD (GitHub Actions)
+resource "google_service_account" "cicd" {
+  account_id   = "tamshai-${var.environment}-cicd"
+  display_name = "Tamshai CI/CD Service Account"
+  description  = "Service account for GitHub Actions CI/CD pipeline"
+  project      = var.project_id
+}
+
 # =============================================================================
 # SECRET MANAGER
 # =============================================================================
@@ -263,6 +271,38 @@ resource "google_project_iam_member" "mcp_servers_cloudsql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.mcp_servers.email}"
+}
+
+# =============================================================================
+# IAM ROLES FOR CI/CD (GitHub Actions)
+# =============================================================================
+
+# Grant CI/CD service account Cloud Run Admin role (to deploy services)
+resource "google_project_iam_member" "cicd_run_admin" {
+  project = var.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${google_service_account.cicd.email}"
+}
+
+# Grant CI/CD service account Artifact Registry Writer role (to push images)
+resource "google_project_iam_member" "cicd_artifact_registry_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.cicd.email}"
+}
+
+# Grant CI/CD service account Service Account User role (to deploy as other service accounts)
+resource "google_project_iam_member" "cicd_service_account_user" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.cicd.email}"
+}
+
+# Grant CI/CD service account Secret Manager Accessor role (to access secrets during deployment)
+resource "google_project_iam_member" "cicd_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 
 # =============================================================================

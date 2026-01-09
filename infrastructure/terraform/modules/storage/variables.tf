@@ -44,3 +44,9 @@ variable "static_website_domain" {
   type        = string
   default     = "prod.tamshai.com"
 }
+
+variable "cicd_service_account_email" {
+  description = "Email of CI/CD service account for deployment permissions"
+  type        = string
+  default     = ""
+}

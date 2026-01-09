@@ -107,6 +107,15 @@ output "utility_vm_public_ip" {
 }
 
 # =============================================================================
+# SERVICE ACCOUNTS
+# =============================================================================
+
+output "cicd_service_account_email" {
+  description = "CI/CD service account email for GitHub Actions"
+  value       = module.security.cicd_service_account_email
+}
+
+# =============================================================================
 # DNS CONFIGURATION
 # =============================================================================
 

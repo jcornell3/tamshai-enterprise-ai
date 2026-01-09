@@ -31,3 +31,4 @@ override.tf.json
 # CLI configuration files
 .terraformrc
 terraform.rc
+cicd-sa-key.json
