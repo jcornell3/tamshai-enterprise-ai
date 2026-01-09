@@ -55,6 +55,7 @@ describe('AI Query Routes', () => {
       getDeniedServers: mockGetDeniedServers,
       queryMCPServer: mockQueryMCPServer,
       sendToClaudeWithContext: mockSendToClaudeWithContext,
+      rateLimiter: jest.fn((req, res, next) => next()),
     };
   });
 
