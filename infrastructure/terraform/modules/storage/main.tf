@@ -145,3 +145,12 @@ resource "google_storage_bucket_iam_member" "static_website_public" {
   role   = "roles/storage.objectViewer"
   member = "allUsers"
 }
+
+# Grant CI/CD service account write access to website bucket
+resource "google_storage_bucket_iam_member" "static_website_cicd" {
+  count = var.enable_static_website && var.cicd_service_account_email != "" ? 1 : 0
+
+  bucket = google_storage_bucket.static_website[0].name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.cicd_service_account_email}"
+}

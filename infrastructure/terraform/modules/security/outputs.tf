@@ -16,6 +16,11 @@ output "mcp_servers_service_account_email" {
   value       = google_service_account.mcp_servers.email
 }
 
+output "cicd_service_account_email" {
+  description = "Email of the CI/CD service account"
+  value       = google_service_account.cicd.email
+}
+
 # Generated Passwords (sensitive)
 output "keycloak_db_password" {
   description = "Generated password for Keycloak database user"
