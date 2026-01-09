@@ -90,6 +90,7 @@ jobs:
             --image=${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
+            --service-account=tamshai-prod-mcp-gateway@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
@@ -149,6 +150,7 @@ jobs:
             --image=${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
+            --service-account=tamshai-prod-mcp-servers@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
@@ -192,6 +194,7 @@ jobs:
             --image=${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
+            --service-account=tamshai-prod-keycloak@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances=0 \
             --max-instances=4 \
@@ -225,7 +228,7 @@ jobs:
           VITE_API_URL: https://api.tamshai.com
           VITE_AUTH_URL: https://auth.tamshai.com
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: Authenticate to GCP
