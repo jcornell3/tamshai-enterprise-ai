@@ -1,9 +1,9 @@
 # Phase 1: Cost-Optimized Production (Pilot)
 
-**Document Version**: 1.2
+**Document Version**: 1.3
 **Created**: January 2026
-**Updated**: January 8, 2026
-**Status**: Prerequisites Complete (8/8) - Ready for Implementation
+**Updated**: January 9, 2026
+**Status**: Deployment In Progress - 52/60 Resources Deployed (87%)
 
 ## Executive Summary
 
@@ -38,6 +38,17 @@ These items require your input or action before deployment can proceed:
 | | | • Auth: `auth.tamshai.com` (Keycloak) | |
 | | | • App: `app.tamshai.com` (Portal/Dashboard) | |
 | | | • DNS Provider: Cloudflare | |
+| 3a | **Verify Domain in Google Search Console** | Required for GCS static website bucket | ✅ |
+| | | **Steps performed**: | |
+| | | 1. Visit [Google Search Console](https://search.google.com/search-console) | |
+| | | 2. Add property: `prod.tamshai.com` (URL prefix method) | |
+| | | 3. Verify ownership via DNS TXT record in Cloudflare | |
+| | | 4. Add service account as Owner: | |
+| | | &nbsp;&nbsp;&nbsp;• Get SA email from Terraform output: `terraform output -raw claude_deployer_email` | |
+| | | &nbsp;&nbsp;&nbsp;• In Search Console: Settings → Users and permissions → Add user | |
+| | | &nbsp;&nbsp;&nbsp;• Paste SA email: `claude-deployer@{project-id}.iam.gserviceaccount.com` | |
+| | | &nbsp;&nbsp;&nbsp;• Grant **Owner** permission | |
+| | | **Why**: GCS bucket creation requires domain ownership verification to prevent domain hijacking | |
 | 4 | **Provide Claude API Key** | Key provided *(stored in secrets)* | ✅ |
 | | | • Will be stored in GCP Secret Manager | |
 | 5 | **MongoDB Atlas Decision** | See [Appendix A](#appendix-a-mongodb-atlas-m0-setup) | ✅ |
@@ -46,8 +57,9 @@ These items require your input or action before deployment can proceed:
 | 6 | **Choose GCP Region** | `us-central1` | ✅ |
 | 7 | **Confirm Budget** | Approved (~$50-80/mo) | ✅ |
 | 8 | **Service Account Permissions** | Service account created with all roles | ✅ |
-| | | • ✅ `claude-deployer` SA with 8 roles granted | |
+| | | • ✅ `claude-deployer` SA with 13 roles granted (see Appendix B) | |
 | | | • ✅ Key stored in `GCP_SA_KEY_PROD` GitHub secret | |
+| | | **Note**: `logging.viewer` role added during deployment for debugging | |
 
 > **Note:** GCP Project credentials and Claude API key are stored securely and not committed to the repository.
 
@@ -1605,7 +1617,8 @@ gcloud iam service-accounts create claude-deployer \
 # The service account email
 SA_EMAIL="claude-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# Grant required roles (least privilege for this deployment)
+# Grant required roles (13 total - verified during January 2026 deployment)
+# Core Cloud Run & Services
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/run.admin"
@@ -1614,29 +1627,54 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/cloudsql.admin"
 
+# Compute & Networking
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/compute.instanceAdmin.v1"
 
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/secretmanager.admin"
+  --role="roles/compute.networkAdmin"
 
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/artifactregistry.admin"
+  --role="roles/compute.securityAdmin"
 
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/vpcaccess.admin"
+
+# Security & Secrets
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/secretmanager.admin"
+
+# IAM Management
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/iam.serviceAccountUser"
 
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/vpcaccess.admin"
+  --role="roles/iam.serviceAccountAdmin"
 
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/resourcemanager.projectIamAdmin"
+
+# Storage & Registry
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/storage.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/artifactregistry.admin"
+
+# Logging (for debugging Cloud Run issues)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/logging.viewer"
 ```
 
 **Step 3: Create and Download Key**
