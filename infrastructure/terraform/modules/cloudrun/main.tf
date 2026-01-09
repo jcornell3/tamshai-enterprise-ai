@@ -210,10 +210,8 @@ resource "google_cloud_run_service" "mcp_suite" {
           value = var.mongodb_uri
         }
 
-        env {
-          name  = "PORT"
-          value = tostring(each.value.port)
-        }
+        # PORT is automatically set by Cloud Run (cannot be overridden)
+        # Cloud Run always listens on $PORT environment variable (default: 8080)
 
         env {
           name  = "NODE_ENV"

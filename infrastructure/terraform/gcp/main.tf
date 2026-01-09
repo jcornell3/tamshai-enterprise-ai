@@ -121,7 +121,7 @@ module "storage" {
   force_destroy          = false # Production: prevent accidental deletion
   enable_versioning      = true
   lifecycle_age_days     = 365
-  enable_static_website  = true
+  enable_static_website  = var.static_website_domain != "" # Only enable if domain is set
   static_website_domain  = var.static_website_domain
 }
 
