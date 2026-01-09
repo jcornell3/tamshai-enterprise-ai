@@ -234,23 +234,33 @@ main() {
     echo "========================================"
     echo "Environment: $ENV"
     echo "Test User: $TEST_USERNAME"
-    echo "Base URL: $BASE_URL"
-    echo "Keycloak: $KEYCLOAK_URL"
     echo ""
 
     configure_environment
 
-    # Check dependencies
+    echo "Base URL: $BASE_URL"
+    echo "Keycloak: $KEYCLOAK_URL"
+    echo ""
+
+    # Check dependencies (optional for basic tests)
+    local has_oathtool=true
     if ! command -v oathtool &> /dev/null; then
-        log_error "Required tool 'oathtool' not installed"
+        has_oathtool=false
+        log_warn "Tool 'oathtool' not installed - TOTP tests will be skipped"
         log_info "Install with: sudo apt-get install oathtool (Ubuntu/Debian)"
         log_info "            or: brew install oath-toolkit (macOS)"
-        exit 1
+        echo ""
     fi
 
     test_health_endpoints
     test_oauth_flow
-    test_automated_login
+
+    if [ "$has_oathtool" = true ]; then
+        test_automated_login
+    else
+        log_warn "Skipping automated login test (requires oathtool)"
+    fi
+
     test_no_data_access
 
     echo ""
