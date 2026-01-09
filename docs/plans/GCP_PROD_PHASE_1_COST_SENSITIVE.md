@@ -109,11 +109,9 @@ Once prerequisites are provided, Claude will execute these tasks:
 | 2.4.4 | ⮑ Auto-generated: tamshai-db-password | | ⬜ |
 | 2.5 | Create GCS bucket for static website (`prod.tamshai.com`) | 10 min | ⬜ |
 | **Phase D: Service Deployment** | | | **⬜ READY** |
-| 3.1 | Build and push container images to Artifact Registry | 20 min | ⬜ |
-| 3.2 | Deploy MCP Gateway to Cloud Run | 5 min | ⬜ |
-| 3.3 | Deploy MCP Suite (HR, Finance, Sales, Support) to Cloud Run | 10 min | ⬜ |
-| 3.4 | Deploy Keycloak to Cloud Run | 10 min | ⬜ |
-| 3.5 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ⬜ |
+| 3.1 | Build and push container images to Artifact Registry (manual) | 20 min | ⬜ |
+| 3.2 | Deploy all 6 Cloud Run services via `terraform apply` | 10 min | ⬜ |
+| 3.3 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ⬜ |
 | 4.1 | Configure Cloud Run domain mappings | 10 min | ⬜ |
 | 4.2 | Provide DNS records for you to add | 5 min | ⬜ |
 | 4.3 | Run database migrations | 10 min | ⬜ |
@@ -1343,66 +1341,103 @@ gsutil ls -b gs://prod.tamshai.com
 
 ## 📋 Phase D: Service Deployment (Ready)
 
-Phase D deploys application services to the provisioned infrastructure. This is handled by the GitHub Actions workflow.
+Phase D deploys application services to the provisioned infrastructure.
 
-### Automated Deployment via GitHub Actions
+**Deployment Strategy (Updated January 9, 2026)**:
+- ✅ **Step 1**: Build Docker images and push to Artifact Registry (manual)
+- ✅ **Step 2**: Deploy Cloud Run services via `terraform apply` (automated)
+- ⚠️ **GitHub Actions Workflow**: Incomplete - missing VPC connector, database config. See `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md` for details.
 
-**Trigger Workflow**:
+### ✅ Recommended: Terraform-Based Deployment
+
+This approach uses Terraform for all Cloud Run deployments, ensuring complete configuration (VPC connector, database URLs, secrets, etc.).
+
+#### Step 1: Build and Push Docker Images
+
 ```bash
-gh workflow run deploy-to-gcp.yml --ref main
-```
+# Navigate to infrastructure directory
+cd infrastructure/terraform/gcp
 
-Or push changes to main branch:
-```bash
-git push origin main
-```
+# Set variables
+export PROJECT_ID="gen-lang-client-0553641830"
+export REGION="us-central1"
+export REPO="tamshai"
 
-**Workflow Steps**:
-1. Detect changed paths (gateway, mcp-suite, keycloak, web)
-2. Build Docker images for changed services
-3. Push to Artifact Registry (`us-central1-docker.pkg.dev`)
-4. Deploy to Cloud Run with secrets and environment variables
-5. Deploy static website to GCS
-6. Output deployment summary
-
-**Monitor Deployment**:
-```bash
-gh run watch
-```
-
-### Manual Deployment (Alternative)
-
-If you prefer to deploy manually:
-
-**Build and Push Images**:
-```bash
-# Get Artifact Registry URL
-AR_URL=$(terraform output -raw artifact_registry_url)
-
-# Authenticate Docker
+# Authenticate with Artifact Registry
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
-# Build and push MCP Gateway
-docker build -t $AR_URL/mcp-gateway:latest services/mcp-gateway
-docker push $AR_URL/mcp-gateway:latest
+# Return to project root
+cd ../../..
 
-# Deploy to Cloud Run
-gcloud run deploy mcp-gateway \
-  --image=$AR_URL/mcp-gateway:latest \
-  --region=us-central1 \
-  --allow-unauthenticated \
-  --set-secrets=CLAUDE_API_KEY=claude-api-key:latest
+# Build and push all 6 services
+docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-gateway:latest services/mcp-gateway
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-gateway:latest
+
+docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-hr:latest services/mcp-hr
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-hr:latest
+
+docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-finance:latest services/mcp-finance
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-finance:latest
+
+docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-sales:latest services/mcp-sales
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-sales:latest
+
+docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-support:latest services/mcp-support
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/mcp-support:latest
+
+docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/keycloak:latest keycloak
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/keycloak:latest
 ```
 
-Repeat for other services (mcp-hr, mcp-finance, mcp-sales, mcp-support, keycloak).
+#### Step 2: Deploy Cloud Run Services via Terraform
 
-**Deploy Static Website**:
+```bash
+cd infrastructure/terraform/gcp
+
+# Verify authentication
+export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/gcp-sa-key.json"
+
+# Deploy Cloud Run services (12 resources)
+terraform apply -auto-approve
+
+# Verify deployment
+terraform output deployment_summary
+```
+
+**What Terraform deploys**:
+- 6 Cloud Run services (mcp-gateway, mcp-hr, mcp-finance, mcp-sales, mcp-support, keycloak)
+- 6 Cloud Run IAM bindings (public access for gateway/keycloak, private for MCP suite)
+- Complete environment variables (database URLs, Redis, Keycloak config)
+- VPC connector for Cloud SQL private IP access
+- Secret Manager integration
+- Service account assignments
+
+#### Step 3: Deploy Static Website
+
 ```bash
 cd clients/web
-npm ci
+npm install
 npm run build
 gsutil -m rsync -r -d dist gs://prod.tamshai.com
+gsutil web set -m index.html -e 404.html gs://prod.tamshai.com
 ```
+
+### ⚠️ Alternative: GitHub Actions Workflow (Needs Work)
+
+**Status**: Workflow exists but incomplete (`.github/workflows/deploy-to-gcp.yml`)
+
+**Known Issues**:
+- Missing VPC connector configuration for all Cloud Run services
+- Missing Keycloak database configuration (KC_DB_URL, KC_DB_USERNAME, KC_DB_PASSWORD, KC_HOSTNAME)
+- Missing Cloud SQL connection strings from Terraform state
+- Uses `gcloud run deploy` instead of `terraform apply`
+
+**To use this approach**, the workflow needs to be updated to:
+1. Build Docker images (this part works)
+2. Push to Artifact Registry (this part works)
+3. Run `terraform apply` instead of `gcloud run deploy` commands
+
+**Current recommendation**: Use Terraform-based deployment until workflow is refactored.
 
 ### Database Migrations
 
