@@ -14,7 +14,7 @@
  * - Graceful shutdown with connection draining (Phase 4)
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import { Logger } from 'winston';
 import Anthropic from '@anthropic-ai/sdk';
 import {
@@ -104,6 +104,8 @@ export interface StreamingRoutesDependencies {
     userContext: UserContext,
     cursor?: string
   ) => Promise<MCPQueryResult>;
+  /** Rate limiter middleware for AI query endpoints */
+  rateLimiter: RequestHandler;
 }
 
 /**
@@ -120,6 +122,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
     config,
     getAccessibleServers,
     queryMCPServer,
+    rateLimiter,
   } = deps;
 
   const HEARTBEAT_INTERVAL = config.heartbeatIntervalMs ?? 15000;
@@ -430,7 +433,7 @@ ${dataContext || 'No relevant data available for this query.'}`;
    *
    * Kept for backwards compatibility with EventSource clients.
    */
-  router.get('/query', async (req: Request, res: Response) => {
+  router.get('/query', rateLimiter, async (req: Request, res: Response) => {
     const query = req.query.q as string;
     const cursor = req.query.cursor as string | undefined;
 
@@ -450,7 +453,7 @@ ${dataContext || 'No relevant data available for this query.'}`;
    * - Proper Authorization header (not exposed in logs)
    * - JSON body for complex queries
    */
-  router.post('/query', async (req: Request, res: Response) => {
+  router.post('/query', rateLimiter, async (req: Request, res: Response) => {
     const { query, cursor } = req.body;
 
     if (!query || typeof query !== 'string') {

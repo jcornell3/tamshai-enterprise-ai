@@ -408,10 +408,11 @@ const aiQueryRouter = createAIQueryRoutes({
   getDeniedServers: getDeniedMCPServersForUser,
   queryMCPServer,
   sendToClaudeWithContext,
+  rateLimiter: aiQueryLimiter,
 });
 
-// Mount AI query routes at /api with auth and rate limiting
-app.use('/api', authMiddleware, aiQueryLimiter, aiQueryRouter);
+// Mount AI query routes at /api with auth (rate limiting applied inside router)
+app.use('/api', authMiddleware, aiQueryRouter);
 
 // Internal audit endpoint (for Kong HTTP log plugin)
 app.post('/internal/audit', express.json(), (req: Request, res: Response) => {
@@ -444,10 +445,11 @@ const streamingRouter = createStreamingRoutes({
   },
   getAccessibleServers: getAccessibleMCPServersForUser,
   queryMCPServer,
+  rateLimiter: aiQueryLimiter,
 });
 
-// Mount streaming routes at /api with auth and rate limiting
-app.use('/api', authMiddleware, aiQueryLimiter, streamingRouter);
+// Mount streaming routes at /api with auth (rate limiting applied inside router)
+app.use('/api', authMiddleware, streamingRouter);
 
 // =============================================================================
 // CONFIRMATION ROUTES (Extracted for testability - Phase 7 Refactoring)

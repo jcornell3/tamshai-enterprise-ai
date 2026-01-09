@@ -12,7 +12,7 @@
  * Extracted from index.ts for testability (Phase 7 Refactoring)
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { Logger } from 'winston';
 import { scrubPII } from '../utils/pii-scrubber';
@@ -58,6 +58,7 @@ export interface AIQueryRoutesDependencies {
     mcpData: Array<{ server: string; data: unknown }>,
     userContext: UserContext
   ) => Promise<string>;
+  rateLimiter: RequestHandler;
 }
 
 /**
@@ -71,13 +72,14 @@ export function createAIQueryRoutes(deps: AIQueryRoutesDependencies): Router {
     getDeniedServers,
     queryMCPServer,
     sendToClaudeWithContext,
+    rateLimiter,
   } = deps;
 
   /**
    * POST /ai/query
    * Main AI query endpoint for non-streaming requests
    */
-  router.post('/ai/query', async (req: Request, res: Response) => {
+  router.post('/ai/query', rateLimiter, async (req: Request, res: Response) => {
     const startTime = Date.now();
     const requestId = req.headers['x-request-id'] as string;
     const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
