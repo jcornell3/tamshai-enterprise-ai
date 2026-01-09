@@ -32,3 +32,15 @@ variable "http_source_ranges" {
   type        = list(string)
   default     = ["0.0.0.0/0"] # Restrict in production
 }
+
+variable "enable_serverless_connector" {
+  description = "Enable Serverless VPC Connector for Cloud Run"
+  type        = bool
+  default     = false
+}
+
+variable "serverless_connector_cidr" {
+  description = "CIDR range for Serverless VPC Connector (must be /28)"
+  type        = string
+  default     = "10.8.0.0/28"
+}

@@ -1,0 +1,254 @@
+name: Deploy to GCP Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'clients/web/**'
+      - 'keycloak/**'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - gateway
+          - hr
+          - finance
+          - sales
+          - support
+          - keycloak
+          - web
+
+env:
+  GCP_REGION: us-central1
+  AR_REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.changes.outputs.gateway }}
+      mcp-suite: ${{ steps.changes.outputs.mcp-suite }}
+      keycloak: ${{ steps.changes.outputs.keycloak }}
+      web: ${{ steps.changes.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            gateway:
+              - 'services/mcp-gateway/**'
+            mcp-suite:
+              - 'services/mcp-hr/**'
+              - 'services/mcp-finance/**'
+              - 'services/mcp-sales/**'
+              - 'services/mcp-support/**'
+            keycloak:
+              - 'keycloak/**'
+            web:
+              - 'clients/web/**'
+
+  deploy-gateway:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.gateway == 'true' ||
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'gateway'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Image
+        run: |
+          docker build -t ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
+                       -t ${{ env.AR_REPO }}/mcp-gateway:latest \
+                       services/mcp-gateway
+          docker push ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-gateway:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy mcp-gateway \
+            --image=${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=1Gi \
+            --cpu=1 \
+            --timeout=300 \
+            --set-secrets=CLAUDE_API_KEY=claude-api-key:latest \
+            --set-env-vars=NODE_ENV=production
+
+  deploy-mcp-suite:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.mcp-suite == 'true' ||
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'hr' ||
+      github.event.inputs.service == 'finance' ||
+      github.event.inputs.service == 'sales' ||
+      github.event.inputs.service == 'support'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [mcp-hr, mcp-finance, mcp-sales, mcp-support]
+        include:
+          - service: mcp-hr
+            port: 3101
+          - service: mcp-finance
+            port: 3102
+          - service: mcp-sales
+            port: 3103
+          - service: mcp-support
+            port: 3104
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push
+        run: |
+          docker build -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+                       -t ${{ env.AR_REPO }}/${{ matrix.service }}:latest \
+                       services/${{ matrix.service }}
+          docker push ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/${{ matrix.service }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ matrix.service }} \
+            --image=${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=512Mi \
+            --cpu=1 \
+            --timeout=300 \
+            --set-env-vars=NODE_ENV=production,PORT=${{ matrix.port }}
+
+  deploy-keycloak:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.keycloak == 'true' ||
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'keycloak'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push
+        run: |
+          docker build -t ${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
+                       -t ${{ env.AR_REPO }}/keycloak:latest \
+                       keycloak
+          docker push ${{ env.AR_REPO }}/keycloak:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/keycloak:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy keycloak \
+            --image=${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=4 \
+            --memory=1Gi \
+            --cpu=1 \
+            --timeout=300 \
+            --set-secrets=KEYCLOAK_ADMIN=keycloak-admin-user:latest,KEYCLOAK_ADMIN_PASSWORD=keycloak-admin-password:latest \
+            --set-env-vars=KC_DB=postgres,KC_HTTP_ENABLED=true,KC_PROXY=edge,KC_HEALTH_ENABLED=true
+
+  deploy-static-website:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.web == 'true' ||
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'web'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install and Build
+        working-directory: clients/web
+        env:
+          VITE_RELEASE_TAG: v1.0.0
+          VITE_API_URL: https://api.tamshai.com
+          VITE_AUTH_URL: https://auth.tamshai.com
+        run: |
+          npm ci
+          npm run build
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Deploy to GCS
+        run: |
+          gsutil -m rsync -r -d clients/web/dist gs://prod.tamshai.com
+          gsutil web set -m index.html -e 404.html gs://prod.tamshai.com
+
+  notify:
+    needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gateway | ${{ needs.deploy-gateway.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP Suite | ${{ needs.deploy-mcp-suite.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Keycloak | ${{ needs.deploy-keycloak.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Website | ${{ needs.deploy-static-website.result }} |" >> $GITHUB_STEP_SUMMARY

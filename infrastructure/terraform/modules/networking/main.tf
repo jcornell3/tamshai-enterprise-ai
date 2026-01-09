@@ -100,3 +100,46 @@ resource "google_compute_firewall" "allow_iap_ssh" {
   source_ranges = ["35.235.240.0/20"]
   target_tags   = ["ssh-enabled"]
 }
+
+# =============================================================================
+# SERVERLESS VPC CONNECTOR (for Cloud Run to access private resources)
+# =============================================================================
+
+# Serverless VPC Access Connector for Cloud Run
+# Enables Cloud Run services to access Cloud SQL and Redis on private IPs
+resource "google_vpc_access_connector" "serverless_connector" {
+  count = var.enable_serverless_connector ? 1 : 0
+
+  name          = "tamshai-${var.environment}-vpc-connector"
+  region        = var.region
+  network       = google_compute_network.vpc.name
+  ip_cidr_range = var.serverless_connector_cidr
+  min_instances = 2
+  max_instances = 3
+
+  # Use gen2 for better performance and lower cost
+  machine_type = "e2-micro"
+}
+
+# Firewall rule to allow Serverless VPC Connector traffic
+resource "google_compute_firewall" "allow_serverless_connector" {
+  count = var.enable_serverless_connector ? 1 : 0
+
+  name    = "tamshai-${var.environment}-allow-serverless-connector"
+  network = google_compute_network.vpc.name
+
+  allow {
+    protocol = "tcp"
+  }
+
+  allow {
+    protocol = "udp"
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+
+  # Serverless VPC Connector IP range
+  source_ranges = [var.serverless_connector_cidr]
+}

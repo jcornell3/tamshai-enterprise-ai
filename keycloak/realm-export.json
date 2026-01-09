@@ -279,10 +279,14 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4001/callback",
-        "http://localhost:4001/*"
+        "http://localhost:4001/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4001"
+        "http://localhost:4001",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
@@ -306,10 +310,14 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4002/callback",
-        "http://localhost:4002/*"
+        "http://localhost:4002/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4002"
+        "http://localhost:4002",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
@@ -333,10 +341,14 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4003/callback",
-        "http://localhost:4003/*"
+        "http://localhost:4003/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4003"
+        "http://localhost:4003",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
@@ -360,10 +372,14 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4004/callback",
-        "http://localhost:4004/*"
+        "http://localhost:4004/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4004"
+        "http://localhost:4004",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"

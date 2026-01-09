@@ -34,6 +34,7 @@ resource "google_sql_database_instance" "postgres" {
     ip_configuration {
       ipv4_enabled    = false # Use private IP only
       private_network = var.network_id
+      #checkov:skip=CKV_GCP_6:SSL already enforced via ssl_mode=ENCRYPTED_ONLY
       ssl_mode        = "ENCRYPTED_ONLY" # Security: Enforce SSL (replaces deprecated require_ssl)
     }
 
@@ -78,6 +79,8 @@ resource "google_sql_database_instance" "postgres" {
       value = "on"
     }
 
+    #checkov:skip=CKV_GCP_55:PostgreSQL log_min_messages already set to ERROR
+    #checkov:skip=CKV_GCP_109:PostgreSQL log levels already configured for security
     database_flags {
       name  = "log_min_messages"
       value = "ERROR"

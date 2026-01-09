@@ -32,3 +32,15 @@ variable "lifecycle_age_days" {
   type        = number
   default     = 365
 }
+
+variable "enable_static_website" {
+  description = "Enable static website bucket for prod.tamshai.com"
+  type        = bool
+  default     = false
+}
+
+variable "static_website_domain" {
+  description = "Domain name for static website bucket (must match bucket name)"
+  type        = string
+  default     = "prod.tamshai.com"
+}

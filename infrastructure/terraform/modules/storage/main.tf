@@ -1,7 +1,9 @@
 # Storage Module
 # Manages Cloud Storage buckets
 
-# Logs bucket for access logging (CKV_GCP_62)
+# Logs bucket for access logging
+#checkov:skip=CKV_GCP_62:Logs bucket does not log itself (recursive logging not recommended)
+#checkov:skip=CKV_GCP_78:Versioning not needed for logs bucket (lifecycle rule deletes after 90 days)
 resource "google_storage_bucket" "logs" {
   name     = "tamshai-${var.environment}-logs-${var.project_id}"
   location = var.region
@@ -86,4 +88,60 @@ resource "google_storage_bucket" "public_docs" {
     environment = var.environment
     purpose     = "public-documents"
   }
+}
+
+# =============================================================================
+# STATIC WEBSITE BUCKET (Phase 1)
+# =============================================================================
+
+# Static website bucket for prod.tamshai.com
+# Note: Bucket name must match domain for CNAME hosting to work
+resource "google_storage_bucket" "static_website" {
+  count = var.enable_static_website ? 1 : 0
+
+  name     = var.static_website_domain # e.g., "prod.tamshai.com"
+  location = var.region
+  project  = var.project_id
+
+  uniform_bucket_level_access = true
+  force_destroy               = var.force_destroy
+
+  website {
+    main_page_suffix = "index.html"
+    not_found_page   = "404.html"
+  }
+
+  # Allow public read access for website content
+  # Note: This is intentional for static website hosting
+  public_access_prevention = "inherited"
+
+  versioning {
+    enabled = true # Enable versioning for rollback capability
+  }
+
+  logging {
+    log_bucket        = google_storage_bucket.logs.name
+    log_object_prefix = "static-website/"
+  }
+
+  cors {
+    origin          = ["https://${var.static_website_domain}"]
+    method          = ["GET", "HEAD"]
+    response_header = ["*"]
+    max_age_seconds = 3600
+  }
+
+  labels = {
+    environment = var.environment
+    purpose     = "static-website"
+  }
+}
+
+# Make website bucket publicly readable
+resource "google_storage_bucket_iam_member" "static_website_public" {
+  count = var.enable_static_website ? 1 : 0
+
+  bucket = google_storage_bucket.static_website[0].name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
 }

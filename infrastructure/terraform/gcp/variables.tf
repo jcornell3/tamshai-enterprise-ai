@@ -1,0 +1,86 @@
+# GCP Phase 1 Variables
+
+# =============================================================================
+# PROJECT CONFIGURATION
+# =============================================================================
+
+variable "project_id" {
+  description = "GCP Project ID for production deployment"
+  type        = string
+}
+
+variable "region" {
+  description = "GCP Region (e.g., us-central1)"
+  type        = string
+  default     = "us-central1"
+}
+
+variable "zone" {
+  description = "GCP Zone for zonal resources (e.g., us-central1-a)"
+  type        = string
+  default     = "us-central1-a"
+}
+
+# =============================================================================
+# NETWORKING
+# =============================================================================
+
+variable "subnet_cidr" {
+  description = "CIDR range for VPC subnet"
+  type        = string
+  default     = "10.0.0.0/24"
+}
+
+variable "serverless_connector_cidr" {
+  description = "CIDR range for Serverless VPC Connector (must be /28)"
+  type        = string
+  default     = "10.8.0.0/28"
+}
+
+# =============================================================================
+# DATABASE
+# =============================================================================
+
+variable "database_tier" {
+  description = "Cloud SQL tier (db-f1-micro for Phase 1)"
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "mongodb_atlas_uri" {
+  description = "MongoDB Atlas connection URI (M0 free tier)"
+  type        = string
+  sensitive   = true
+}
+
+# =============================================================================
+# COMPUTE
+# =============================================================================
+
+variable "enable_utility_vm" {
+  description = "Enable Utility VM for Redis and Bastion (Phase 1 only)"
+  type        = bool
+  default     = true
+}
+
+variable "keycloak_min_instances" {
+  description = "Minimum Keycloak instances (0 = cold start, 1 = always warm)"
+  type        = string
+  default     = "0"
+}
+
+# =============================================================================
+# DOMAIN CONFIGURATION
+# =============================================================================
+
+variable "keycloak_domain" {
+  description = "Keycloak domain (e.g., auth.tamshai.com)"
+  type        = string
+  default     = "auth.tamshai.com"
+}
+
+variable "static_website_domain" {
+  description = "Static website domain (must match GCS bucket name)"
+  type        = string
+  default     = "prod.tamshai.com"
+}

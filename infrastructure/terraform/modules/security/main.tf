@@ -222,6 +222,48 @@ resource "google_secret_manager_secret_iam_member" "mcp_servers_db_access" {
 }
 
 # =============================================================================
+# IAM ROLES FOR CLOUD RUN
+# =============================================================================
+
+# Grant Keycloak service account Cloud SQL Client role
+resource "google_project_iam_member" "keycloak_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.keycloak.email}"
+}
+
+# Grant Keycloak service account Cloud Run Invoker role (for internal service-to-service calls)
+resource "google_cloud_run_service_iam_member" "keycloak_invoker" {
+  count = var.enable_cloud_run_iam ? 1 : 0
+
+  service  = "keycloak"
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.keycloak.email}"
+}
+
+# Grant MCP Gateway service account Cloud SQL Client role
+resource "google_project_iam_member" "mcp_gateway_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.mcp_gateway.email}"
+}
+
+# Grant MCP Gateway permission to invoke MCP Suite services
+resource "google_project_iam_member" "mcp_gateway_run_invoker" {
+  project = var.project_id
+  role    = "roles/run.invoker"
+  member  = "serviceAccount:${google_service_account.mcp_gateway.email}"
+}
+
+# Grant MCP Servers service account Cloud SQL Client role
+resource "google_project_iam_member" "mcp_servers_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.mcp_servers.email}"
+}
+
+# =============================================================================
 # RANDOM PASSWORD GENERATION
 # =============================================================================
 

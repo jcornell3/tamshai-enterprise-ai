@@ -29,3 +29,13 @@ output "subnet_cidr" {
   description = "The CIDR range of the subnet"
   value       = google_compute_subnetwork.subnet.ip_cidr_range
 }
+
+output "serverless_connector_id" {
+  description = "The ID of the Serverless VPC Connector"
+  value       = try(google_vpc_access_connector.serverless_connector[0].id, null)
+}
+
+output "serverless_connector_name" {
+  description = "The fully qualified name of the Serverless VPC Connector"
+  value       = try(google_vpc_access_connector.serverless_connector[0].id, "")
+}

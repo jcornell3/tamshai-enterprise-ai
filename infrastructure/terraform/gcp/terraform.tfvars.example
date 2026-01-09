@@ -1,0 +1,65 @@
+# GCP Phase 1 Production - Terraform Variables
+#
+# INSTRUCTIONS:
+# 1. Copy this file to terraform.tfvars
+# 2. Fill in your actual values
+# 3. NEVER commit terraform.tfvars to git (it's gitignored)
+#
+# See: docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md
+
+# =============================================================================
+# PROJECT CONFIGURATION
+# =============================================================================
+
+# Your GCP project ID (get from GCP Console)
+project_id = "your-project-id"
+
+# GCP region (us-central1 recommended for low cost)
+region = "us-central1"
+
+# GCP zone for zonal resources
+zone = "us-central1-a"
+
+# =============================================================================
+# NETWORKING
+# =============================================================================
+
+# VPC subnet CIDR (default is usually fine)
+subnet_cidr = "10.0.0.0/24"
+
+# Serverless VPC Connector CIDR (must be /28, must not overlap with subnet_cidr)
+serverless_connector_cidr = "10.8.0.0/28"
+
+# =============================================================================
+# DATABASE
+# =============================================================================
+
+# Cloud SQL tier (db-f1-micro for Phase 1 cost savings)
+database_tier = "db-f1-micro"
+
+# MongoDB Atlas connection URI (M0 free tier)
+# Format: mongodb+srv://tamshai_app:<password>@<cluster>.mongodb.net/tamshai
+# Get from: https://cloud.mongodb.com (see Appendix A in Phase 1 plan)
+mongodb_atlas_uri = "mongodb+srv://tamshai_app:YOUR_PASSWORD@cluster0.xxxxx.mongodb.net/tamshai"
+
+# =============================================================================
+# COMPUTE
+# =============================================================================
+
+# Enable Utility VM for Redis/Bastion (true for Phase 1)
+enable_utility_vm = true
+
+# Minimum Keycloak instances
+# - "0" = scale to zero (cold starts ~30s, saves ~$25/month)
+# - "1" = always warm (better UX, costs ~$25/month)
+keycloak_min_instances = "0"
+
+# =============================================================================
+# DOMAIN CONFIGURATION
+# =============================================================================
+
+# Keycloak domain (configure DNS CNAME after deployment)
+keycloak_domain = "auth.tamshai.com"
+
+# Static website domain (must match GCS bucket name)
+static_website_domain = "prod.tamshai.com"
