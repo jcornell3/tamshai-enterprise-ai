@@ -192,7 +192,8 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      // stack[0] is rateLimiter, stack[1] is the actual handler
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -298,7 +299,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -383,7 +384,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -444,7 +445,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -533,7 +534,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -587,7 +588,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -627,7 +628,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -715,7 +716,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
 
       mockGetAccessibleServers.mockReturnValue([mockHRServer]);
@@ -756,7 +757,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
@@ -841,7 +842,7 @@ describe('Streaming Routes', () => {
       const postRoute = router.stack.find(
         (layer: RouteLayer) => layer.route?.path === '/query' && layer.route?.methods?.post
       );
-      const handler = postRoute?.route?.stack[0]?.handle;
+      const handler = postRoute?.route?.stack[1]?.handle;
       if (!handler) throw new Error('POST handler not found');
       return handler;
     }
