@@ -231,8 +231,11 @@ jobs:
           echo "=== Building and deploying services ==="
           # Build images on VPS (no container registry configured yet)
           # Uses root docker-compose.yml with VPS environment variables
-          # BUILD_FLAG contains --build (normal) or --build --no-cache (force rebuild)
-          docker compose up -d ${{ env.BUILD_FLAG }}
+          if [ "${{ github.event.inputs.build }}" = "true" ]; then
+            echo "Building images with --no-cache..."
+            docker compose build --no-cache
+          fi
+          docker compose up -d --build
 
           echo "=== Cleaning up ==="
           docker image prune -f
