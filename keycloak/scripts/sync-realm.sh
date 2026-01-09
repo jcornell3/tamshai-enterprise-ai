@@ -215,38 +215,40 @@ assign_client_scopes() {
 sync_website_client() {
     log_info "Syncing tamshai-website client..."
 
-    local client_json='{
-        "clientId": "tamshai-website",
-        "name": "Tamshai Corporate Website",
-        "description": "Corporate website SSO login for employee services",
-        "enabled": true,
-        "publicClient": true,
-        "standardFlowEnabled": true,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
-        "protocol": "openid-connect",
-        "redirectUris": [
-            "http://localhost:8080/*",
-            "https://tamshai.local/*",
-            "https://www.tamshai.local/*",
-            "https://${VPS_DOMAIN:-vps.tamshai.com}/*",
-            "https://tamshai.com/*",
-            "https://www.tamshai.com/*"
+    local vps_domain="${VPS_DOMAIN:-vps.tamshai.com}"
+
+    local client_json="{
+        \"clientId\": \"tamshai-website\",
+        \"name\": \"Tamshai Corporate Website\",
+        \"description\": \"Corporate website SSO login for employee services\",
+        \"enabled\": true,
+        \"publicClient\": true,
+        \"standardFlowEnabled\": true,
+        \"directAccessGrantsEnabled\": false,
+        \"serviceAccountsEnabled\": false,
+        \"protocol\": \"openid-connect\",
+        \"redirectUris\": [
+            \"http://localhost:8080/*\",
+            \"https://tamshai.local/*\",
+            \"https://www.tamshai.local/*\",
+            \"https://$vps_domain/*\",
+            \"https://tamshai.com/*\",
+            \"https://www.tamshai.com/*\"
         ],
-        "webOrigins": [
-            "http://localhost:8080",
-            "https://tamshai.local",
-            "https://www.tamshai.local",
-            "https://${VPS_DOMAIN:-vps.tamshai.com}",
-            "https://tamshai.com",
-            "https://www.tamshai.com"
+        \"webOrigins\": [
+            \"http://localhost:8080\",
+            \"https://tamshai.local\",
+            \"https://www.tamshai.local\",
+            \"https://$vps_domain\",
+            \"https://tamshai.com\",
+            \"https://www.tamshai.com\"
         ],
-        "attributes": {
-            "pkce.code.challenge.method": "S256",
-            "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://${VPS_DOMAIN:-vps.tamshai.com}/*##https://tamshai.com/*##https://www.tamshai.com/*"
+        \"attributes\": {
+            \"pkce.code.challenge.method\": \"S256\",
+            \"post.logout.redirect.uris\": \"http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://$vps_domain/*##https://tamshai.com/*##https://www.tamshai.com/*\"
         },
-        "defaultClientScopes": ["openid", "profile", "email", "roles"]
-    }'
+        \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
+    }"
 
     create_or_update_client "tamshai-website" "$client_json"
 }
