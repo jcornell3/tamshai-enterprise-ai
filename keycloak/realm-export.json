@@ -168,7 +168,7 @@
   "users": [
     {
       "username": "test-user.journey",
-      "email": "test-user@tamshai.local",
+      "email": "test-user@tamshai.com",
       "firstName": "Test",
       "lastName": "User",
       "enabled": true,
