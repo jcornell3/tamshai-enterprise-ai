@@ -25,7 +25,6 @@ terraform {
   }
 
   # GCS backend for encrypted state storage
-  # State bucket will be created automatically on first terraform init
   backend "gcs" {
     bucket = "tamshai-terraform-state-prod"
     prefix = "gcp/phase1"
@@ -199,7 +198,7 @@ module "cloudrun" {
   mongodb_uri = var.mongodb_atlas_uri
 
   # Redis (Utility VM internal IP)
-  redis_host = var.enable_utility_vm ? module.utility_vm[0].keycloak_instance_private_ip : "10.0.0.10"
+  redis_host = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_internal_ip : "10.0.0.10"
 
   # Domain configuration
   keycloak_domain = var.keycloak_domain
