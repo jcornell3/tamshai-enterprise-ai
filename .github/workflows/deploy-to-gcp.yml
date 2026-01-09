@@ -228,6 +228,7 @@ jobs:
           VITE_API_URL: https://api.tamshai.com
           VITE_AUTH_URL: https://auth.tamshai.com
         run: |
+          rm -rf node_modules package-lock.json
           npm install
           npm run build
 
