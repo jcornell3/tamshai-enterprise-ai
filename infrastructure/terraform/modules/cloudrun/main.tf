@@ -325,8 +325,18 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         env {
-          name  = "KC_DB_URL"
-          value = "jdbc:postgresql:///${var.keycloak_db_name}?host=/cloudsql/${var.postgres_connection_name}"
+          name  = "KC_DB_URL_HOST"
+          value = "/cloudsql/${var.postgres_connection_name}"
+        }
+
+        env {
+          name  = "KC_DB_URL_DATABASE"
+          value = var.keycloak_db_name
+        }
+
+        env {
+          name  = "KC_DB_URL_PROPERTIES"
+          value = "?port=5432"
         }
 
         env {
