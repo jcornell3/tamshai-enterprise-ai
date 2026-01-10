@@ -81,7 +81,7 @@
       "!src/schema/**"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!(uuid)/)"
+      "node_modules/(?!(uuid|@keycloak)/)"
     ],
     "coverageThreshold": {
       "global": {

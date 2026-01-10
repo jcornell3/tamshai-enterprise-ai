@@ -39,6 +39,7 @@ import {
   MCPServerConfig,
 } from './utils/gateway-utils';
 import gdprRoutes from './routes/gdpr';
+import adminRoutes from './routes/admin.routes';
 import healthRoutes from './routes/health.routes';
 import userRoutes from './routes/user.routes';
 import { JWTValidator } from './auth/jwt-validator';
@@ -394,6 +395,14 @@ app.use(healthRoutes);
 // =============================================================================
 // HR-only endpoints for GDPR data subject rights
 app.use('/api/admin/gdpr', authMiddleware, gdprRoutes);
+
+// =============================================================================
+// ADMIN PORTAL ROUTES (Phase 1)
+// =============================================================================
+// Admin/executive-only endpoints for user/role management
+// Authorization: Requires 'admin' or 'executive' role
+// Audit: All actions logged to admin.user_management_audit table
+app.use('/api/admin', authMiddleware, adminRoutes);
 
 // User info and MCP tools routes - extracted to routes/user.routes.ts
 app.use(authMiddleware, userRoutes);
