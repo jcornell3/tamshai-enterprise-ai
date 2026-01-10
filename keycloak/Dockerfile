@@ -30,6 +30,7 @@ COPY realm-export.json /opt/keycloak/data/import/realm-export.json
 
 # Copy realm sync scripts for Cloud Run job execution
 COPY scripts/ /opt/keycloak/scripts/
+RUN chmod +x /opt/keycloak/scripts/*.sh
 
 # Set build-time configuration
 ENV KC_DB=postgres
