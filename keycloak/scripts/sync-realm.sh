@@ -233,7 +233,8 @@ sync_website_client() {
             \"https://www.tamshai.local/*\",
             \"https://$vps_domain/*\",
             \"https://tamshai.com/*\",
-            \"https://www.tamshai.com/*\"
+            \"https://www.tamshai.com/*\",
+            \"https://prod.tamshai.com/*\"
         ],
         \"webOrigins\": [
             \"http://localhost:8080\",
@@ -241,11 +242,12 @@ sync_website_client() {
             \"https://www.tamshai.local\",
             \"https://$vps_domain\",
             \"https://tamshai.com\",
-            \"https://www.tamshai.com\"
+            \"https://www.tamshai.com\",
+            \"https://prod.tamshai.com\"
         ],
         \"attributes\": {
             \"pkce.code.challenge.method\": \"S256\",
-            \"post.logout.redirect.uris\": \"http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://$vps_domain/*##https://tamshai.com/*##https://www.tamshai.com/*\"
+            \"post.logout.redirect.uris\": \"http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://$vps_domain/*##https://tamshai.com/*##https://www.tamshai.com/*##https://prod.tamshai.com/*\"
         },
         \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
     }"
