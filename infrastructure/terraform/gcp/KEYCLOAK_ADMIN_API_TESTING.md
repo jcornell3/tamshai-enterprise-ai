@@ -73,7 +73,7 @@ Keycloak 26.0.7 startup logs show:
 ### Timeline of Events
 
 1. **Jan 9, 06:35 UTC**: GCP Secret Manager secret `tamshai-prod-keycloak-admin-password` created by Terraform
-   - Value: `nZ7Ng6&2fU7uIVwqHrk5&mn@`
+   - Value: `[REDACTED]`
 
 2. **Jan 9, ~19:42 UTC**: First Keycloak deployment (revision keycloak-00001-qmm)
    - Container started with `KEYCLOAK_ADMIN_PASSWORD` env var
