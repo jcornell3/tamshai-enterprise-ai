@@ -72,7 +72,7 @@ check_prerequisites() {
     log_info "Checking prerequisites..."
 
     # Check for curl (required for Keycloak API calls)
-    if ! command -v curl &> /dev/null; then
+    if ! command -v /opt/keycloak/curl-static &> /dev/null; then
         log_error "curl not found. Please install it first."
         exit 1
     fi
@@ -136,7 +136,7 @@ authenticate() {
     log_info "Authenticating to Keycloak Admin API..."
 
     # Get access token
-    TOKEN_RESPONSE=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+    TOKEN_RESPONSE=$(/opt/keycloak/curl-static -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=${ADMIN_USER}" \
         -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
@@ -158,7 +158,7 @@ authenticate() {
 check_realm_exists() {
     log_info "Checking if realm '$REALM' exists..."
 
-    REALM_CHECK=$(curl -s -X GET "${KEYCLOAK_URL}/admin/realms/${REALM}" \
+    REALM_CHECK=$(/opt/keycloak/curl-static -s -X GET "${KEYCLOAK_URL}/admin/realms/${REALM}" \
         -H "Authorization: Bearer ${ACCESS_TOKEN}" \
         -w "\n%{http_code}" | tail -1)
 
@@ -178,7 +178,7 @@ check_realm_exists() {
 delete_realm() {
     log_info "Deleting realm '$REALM'..."
 
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}" \
+    HTTP_CODE=$(/opt/keycloak/curl-static -s -o /dev/null -w "%{http_code}" -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}" \
         -H "Authorization: Bearer ${ACCESS_TOKEN}")
 
     if [[ "$HTTP_CODE" == "204" ]]; then
@@ -201,7 +201,7 @@ import_realm() {
     REALM_DATA=$(cat "$REALM_JSON")
 
     # Import via Admin API
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${KEYCLOAK_URL}/admin/realms" \
+    HTTP_CODE=$(/opt/keycloak/curl-static -s -o /dev/null -w "%{http_code}" -X POST "${KEYCLOAK_URL}/admin/realms" \
         -H "Authorization: Bearer ${ACCESS_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "$REALM_DATA")
@@ -224,7 +224,7 @@ verify_test_user() {
     log_info "Verifying test-user.journey exists..."
 
     # Search for user
-    USER_RESPONSE=$(curl -s -X GET "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=test-user.journey&exact=true" \
+    USER_RESPONSE=$(/opt/keycloak/curl-static -s -X GET "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=test-user.journey&exact=true" \
         -H "Authorization: Bearer ${ACCESS_TOKEN}")
 
     USER_COUNT=$(echo "$USER_RESPONSE" | jq '. | length')
@@ -249,7 +249,7 @@ verify_test_user() {
     # Check if user has TOTP configured
     log_info "Checking TOTP configuration..."
 
-    CREDENTIALS_RESPONSE=$(curl -s -X GET "${KEYCLOAK_URL}/admin/realms/${REALM}/users/${USER_ID}/credentials" \
+    CREDENTIALS_RESPONSE=$(/opt/keycloak/curl-static -s -X GET "${KEYCLOAK_URL}/admin/realms/${REALM}/users/${USER_ID}/credentials" \
         -H "Authorization: Bearer ${ACCESS_TOKEN}")
 
     TOTP_COUNT=$(echo "$CREDENTIALS_RESPONSE" | jq '[.[] | select(.type == "otp")] | length')
