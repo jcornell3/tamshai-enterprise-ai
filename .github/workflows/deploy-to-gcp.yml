@@ -280,6 +280,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Build Portal App
+        working-directory: clients/web
+        env:
+          VITE_RELEASE_TAG: v1.0.0
+          VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+          VITE_KEYCLOAK_CLIENT_ID: tamshai-website
+          VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
+          VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
+          npm run build
+
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
@@ -290,11 +310,15 @@ jobs:
 
       - name: Deploy to GCS
         run: |
-          # Deploy public marketing website (same as dev/stage)
-          gcloud storage rsync --recursive --delete-unmatched-destination-objects apps/tamshai-website/src gs://prod.tamshai.com
+          # Deploy public marketing website at root
+          gcloud storage rsync --recursive apps/tamshai-website/src gs://prod.tamshai.com --exclude="*.md"
 
-          # Set cache control for index.html
+          # Deploy React portal app at /app/
+          gcloud storage rsync --recursive clients/web/apps/portal/dist gs://prod.tamshai.com/app
+
+          # Set cache control for index.html files
           gcloud storage objects update gs://prod.tamshai.com/index.html --cache-control="no-cache,must-revalidate"
+          gcloud storage objects update gs://prod.tamshai.com/app/index.html --cache-control="no-cache,must-revalidate"
 
           # Note: Bucket website configuration is set via Terraform and doesn't need to be updated on every deployment
 
