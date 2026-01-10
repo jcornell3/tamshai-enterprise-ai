@@ -516,9 +516,10 @@ provision_test_user() {
             user_id=$($KCADM get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
 
             if [ -n "$user_id" ]; then
-                # Set password (non-temporary)
+                # Set password (non-temporary) using REST API (set-password doesn't work in non-interactive mode)
                 log_info "  Setting password..."
-                $KCADM set-password -r "$REALM" --userid "$user_id" --password "Test123!Journey"
+                local password_json='{"type":"password","value":"Test123!Journey","temporary":false}'
+                echo "$password_json" | $KCADM create "users/$user_id/reset-password" -r "$REALM" -f -
 
                 if [ $? -eq 0 ]; then
                     log_info "  Password set successfully"
