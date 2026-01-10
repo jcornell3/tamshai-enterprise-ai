@@ -518,7 +518,7 @@ provision_test_user() {
             if [ -n "$user_id" ]; then
                 # Set password (non-temporary)
                 log_info "  Setting password..."
-                $KCADM set-password -r "$REALM" --userid "$user_id" --password "Test123!Journey" -t false
+                $KCADM set-password -r "$REALM" --userid "$user_id" --password "Test123!Journey"
 
                 if [ $? -eq 0 ]; then
                     log_info "  Password set successfully"
