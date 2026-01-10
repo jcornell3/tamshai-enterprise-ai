@@ -58,8 +58,12 @@ FROM quay.io/keycloak/keycloak:26.0.7
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 
 # Copy static curl and jq binaries from deps stage for realm recreation script
-COPY --from=deps /usr/local/bin/curl /usr/bin/curl
+# Script expects curl at /opt/keycloak/curl-static (see recreate-realm-prod.sh)
+COPY --from=deps /usr/local/bin/curl /opt/keycloak/curl-static
 COPY --from=deps /usr/local/bin/jq /usr/local/bin/jq
+
+# Configure curl to use UBI's CA certificate bundle (static curl expects /etc/ssl/certs/ca-certificates.crt)
+ENV CURL_CA_BUNDLE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 
 # The realm recreation script needs curl and jq, both are now available as static binaries
 
