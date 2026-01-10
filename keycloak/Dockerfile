@@ -46,8 +46,15 @@ RUN /opt/keycloak/bin/kc.sh build --verbose
 # =============================================================================
 FROM quay.io/keycloak/keycloak:26.0.7
 
+# Install curl and jq for realm recreation script (run as root)
+USER root
+RUN microdnf install -y curl jq && microdnf clean all
+
 # Copy optimized Keycloak from builder stage (build-time config already baked in)
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
+
+# Switch back to keycloak user for runtime
+USER 1000
 
 # Start Keycloak in production mode with realm import
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
