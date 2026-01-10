@@ -41,11 +41,14 @@ if (root) {
 }
 
 try {
+  // Use /app for dev, / for production (matches vite.config.ts base setting)
+  const basename = import.meta.env.PROD ? '/' : '/app';
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary>
         <AuthProvider>
-          <BrowserRouter basename="/app">
+          <BrowserRouter basename={basename}>
             <App />
           </BrowserRouter>
         </AuthProvider>
