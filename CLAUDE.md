@@ -678,11 +678,19 @@ npm run test:report
 
 **Environment Variables**:
 ```bash
-# Required for authenticated tests
-export TEST_USERNAME="eve.thompson"
-export TEST_PASSWORD="password123"
-export TEST_TOTP_SECRET="[REDACTED-DEV-TOTP]"  # Base32-encoded TOTP secret
+# Dev environment (default values work)
+export TEST_USERNAME="eve.thompson"           # Default dev user
+export TEST_PASSWORD="password123"            # Default dev password
+export TEST_TOTP_SECRET="[REDACTED-DEV-TOTP]" # Default dev TOTP secret
+
+# Production environment (requires valid production credentials)
+# Dev credentials do NOT exist in production - test will skip if not provided
+export TEST_USERNAME="<production-username>"  # Must be valid production user
+export TEST_PASSWORD="<production-password>"  # Must be valid production password
+export TEST_TOTP_SECRET="<production-totp>"   # Production TOTP secret
 ```
+
+**Important**: Dev credentials (`eve.thompson`) only exist in the dev environment. When running E2E tests against production, you must provide valid production credentials via environment variables, or the login test will be skipped.
 
 **TOTP Code Generation**:
 ```bash
