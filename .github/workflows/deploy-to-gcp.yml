@@ -24,6 +24,12 @@ on:
           - keycloak
           - web
 
+# Prevent concurrent deployments to production
+# New deployments will wait in queue until current deployment completes
+concurrency:
+  group: deploy-to-gcp-production
+  cancel-in-progress: false
+
 env:
   GCP_REGION: us-central1
   AR_REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
