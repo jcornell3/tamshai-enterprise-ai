@@ -125,19 +125,13 @@ get_scope_id() {
     local scope_name="$1"
     # Get all scopes with id and name, then filter for exact match
     # kcadm -q parameter doesn't do exact matching, so we parse JSON manually
+    # Note: awk not available in container, using grep/sed only
     local output=$($KCADM get client-scopes -r "$REALM" --fields id,name 2>/dev/null)
 
     # Parse JSON to find scope with exact name match
     # Format: [ { "id" : "uuid", "name" : "scopename" }, ... ]
-    echo "$output" | awk -v name="$scope_name" '
-        /"id" : "/ { id = $0; sub(/.*"id" : "/, "", id); sub(/".*/, "", id) }
-        /"name" : "/ {
-            scope = $0;
-            sub(/.*"name" : "/, "", scope);
-            sub(/".*/, "", scope);
-            if (scope == name) { print id; exit }
-        }
-    '
+    # Strategy: Find line with exact name match, then get previous "id" line
+    echo "$output" | grep -B 1 "\"name\" : \"$scope_name\"" | grep "\"id\"" | head -1 | sed 's/.*"id" : "\([^"]*\)".*/\1/'
 }
 
 # Global scope ID cache (populated once at start)
