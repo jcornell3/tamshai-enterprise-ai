@@ -34,13 +34,13 @@ const BASE_URLS: Record<string, { app: string; keycloak: string }> = {
   },
 };
 
-// Test credentials - loaded from environment or defaults for dev
+// Test credentials - using test-user.journey service account (exists in all environments)
+// See docs/testing/TEST_USER_JOURNEY.md for details
 const TEST_USER = {
-  username: process.env.TEST_USERNAME || 'eve.thompson',
-  password: process.env.TEST_PASSWORD || 'password123',
-  // TOTP secret - only available for dev environment
-  // For stage/prod, this would need to be retrieved from a secrets manager
-  totpSecret: process.env.TEST_TOTP_SECRET || '',
+  username: process.env.TEST_USERNAME || 'test-user.journey',
+  password: process.env.TEST_PASSWORD || '***REDACTED_PASSWORD***',
+  // TOTP secret for test-user.journey (same across all environments)
+  totpSecret: process.env.TEST_TOTP_SECRET || 'JBSWY3DPEHPK3PXP',
 };
 
 /**
@@ -237,11 +237,6 @@ test.describe('Employee Login Journey', () => {
     // Skip if no credentials configured
     if (!TEST_USER.password) {
       test.skip(true, 'No test credentials configured');
-    }
-
-    // Skip if using dev credentials in production (they don't exist there)
-    if (ENV === 'prod' && TEST_USER.username === 'eve.thompson') {
-      test.skip(true, 'Dev credentials cannot be used in production - requires production TEST_USERNAME and TEST_PASSWORD environment variables');
     }
 
     // Start at employee login page

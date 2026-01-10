@@ -678,25 +678,25 @@ npm run test:report
 
 **Environment Variables**:
 ```bash
-# Dev environment (default values work)
-export TEST_USERNAME="eve.thompson"           # Default dev user
-export TEST_PASSWORD="password123"            # Default dev password
-export TEST_TOTP_SECRET="[REDACTED-DEV-TOTP]" # Default dev TOTP secret
+# Test user service account (exists in ALL environments: dev, stage, prod)
+# See docs/testing/TEST_USER_JOURNEY.md for details
+export TEST_USERNAME="test-user.journey"      # Default: test-user.journey
+export TEST_PASSWORD="***REDACTED_PASSWORD***"        # Default: ***REDACTED_PASSWORD***
+export TEST_TOTP_SECRET="JBSWY3DPEHPK3PXP"    # Default: JBSWY3DPEHPK3PXP
 
-# Production environment (requires valid production credentials)
-# Dev credentials do NOT exist in production - test will skip if not provided
-export TEST_USERNAME="<production-username>"  # Must be valid production user
-export TEST_PASSWORD="<production-password>"  # Must be valid production password
-export TEST_TOTP_SECRET="<production-totp>"   # Production TOTP secret
+# Optional: Override with custom credentials
+export TEST_USERNAME="<custom-username>"
+export TEST_PASSWORD="<custom-password>"
+export TEST_TOTP_SECRET="<custom-totp-secret>"
 ```
 
-**Important**: Dev credentials (`eve.thompson`) only exist in the dev environment. When running E2E tests against production, you must provide valid production credentials via environment variables, or the login test will be skipped.
+**Important**: The `test-user.journey` account is a dedicated service account for E2E testing that exists in all environments (dev, stage, prod). It has no data access privileges (safe for testing) and uses the same credentials across all environments.
 
 **TOTP Code Generation**:
 ```bash
-# Generate TOTP code manually for testing
-oathtool --totp --base32 "[REDACTED-DEV-TOTP]"
-# Output: 6-digit code (e.g., 123456)
+# Generate TOTP code manually for testing (test-user.journey)
+oathtool --totp --base32 "JBSWY3DPEHPK3PXP"
+# Output: 6-digit code (e.g., 123456) valid for 30 seconds
 ```
 
 **Test Coverage**:

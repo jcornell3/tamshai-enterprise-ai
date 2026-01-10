@@ -469,10 +469,30 @@ provision_test_user() {
                     log_warn "  Failed to set password"
                 fi
 
-                # Note: TOTP secret setup requires additional API calls
-                # For now, admins can set this manually or via full realm import
-                log_info "  Note: TOTP secret should be configured manually if needed"
-                log_info "  TOTP Secret: JBSWY3DPEHPK3PXP (Base32)"
+                # Configure TOTP for test user
+                log_info "  Configuring TOTP credentials..."
+
+                # Create TOTP credential via Admin API
+                # The secret must be Base32 encoded: JBSWY3DPEHPK3PXP
+                local totp_json='{
+                    "type": "otp",
+                    "value": "JBSWY3DPEHPK3PXP",
+                    "temporary": false,
+                    "algorithm": "HmacSHA256",
+                    "digits": 6,
+                    "period": 30,
+                    "counter": 0
+                }'
+
+                $KCADM create users/$user_id/credentials -r "$REALM" -b "$totp_json"
+
+                if [ $? -eq 0 ]; then
+                    log_info "  TOTP credential configured successfully"
+                    log_info "  TOTP Secret: JBSWY3DPEHPK3PXP (Base32)"
+                else
+                    log_warn "  Failed to configure TOTP credential"
+                    log_info "  Note: Admin can manually configure TOTP via Keycloak console"
+                fi
             else
                 log_warn "  Could not retrieve user ID after creation"
             fi
