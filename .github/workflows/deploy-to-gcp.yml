@@ -204,7 +204,7 @@ jobs:
             --vpc-connector=tamshai-prod-connector \
             --vpc-egress=private-ranges-only \
             --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
-            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=https://keycloak-fn44nd7wba-uc.a.run.app,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge"
+            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=https://keycloak-fn44nd7wba-uc.a.run.app/auth,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_HTTP_RELATIVE_PATH=/auth"
 
   deploy-static-website:
     needs: detect-changes
