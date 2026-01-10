@@ -478,6 +478,14 @@ sync_sample_app_clients() {
 # =============================================================================
 
 provision_test_user() {
+    # In production, test-user.journey is imported from realm-export.json during Keycloak startup
+    # This import includes TOTP credentials which cannot be set via Admin API
+    # Skip provisioning to avoid deleting and losing the TOTP configuration
+    if [ "$ENV" = "prod" ]; then
+        log_info "Skipping test-user.journey provisioning (user imported from realm-export.json with TOTP)"
+        return 0
+    fi
+
     log_info "Provisioning test-user.journey..."
 
     # Check if user already exists
