@@ -333,6 +333,59 @@ oathtool --totp --base32 JBSWY3DPEHPK3PXP
 # Try the generated code in the browser
 ```
 
+### Issue: "Mobile Authenticator Setup" page appears (TOTP not configured)
+
+**Cause**: Keycloak's `--import-realm` flag does **NOT** import TOTP credentials for existing users. TOTP credentials are only imported during initial realm creation.
+
+**Symptoms**:
+- E2E test fails at TOTP input step
+- Keycloak shows "Mobile Authenticator Setup" QR code page
+- User can login with password but TOTP is not configured
+
+**Root Cause Analysis** (January 10, 2026):
+
+1. **Keycloak Startup**: Container starts with `--import-realm` flag
+2. **Realm Check**: If realm `tamshai-corp` already exists, Keycloak updates clients/roles/settings
+3. **User Import**: If user `test-user.journey` exists, Keycloak updates basic attributes (email, name, enabled)
+4. **Credentials Import**: ⚠️ **TOTP credentials are SKIPPED** - Keycloak does not reimport OTP credentials for existing users
+5. **Result**: User exists with password but no TOTP configured
+
+**Why This Happens**:
+- Keycloak's realm import is designed for configuration updates, not credential management
+- TOTP credentials require special handling (QR codes, device registration) that can't be blindly imported
+- Security design: TOTP setup typically requires user interaction to ensure device possession
+
+**Fix**: Recreate the realm to trigger a fresh import with TOTP credentials
+
+```bash
+# Run the realm recreation script (production only)
+./scripts/keycloak/recreate-realm-prod.sh
+
+# This will:
+# 1. Delete the existing tamshai-corp realm
+# 2. Trigger a fresh import from realm-export.json
+# 3. TOTP credentials will be imported for test-user.journey
+# 4. All clients and settings will be recreated
+```
+
+**⚠️ IMPORTANT**: Only use this script when:
+- No corporate users exist in production (safe during initial setup/testing)
+- You have verified realm-export.json is up-to-date
+- You understand all client configurations will be recreated
+
+**Why This Is Safe in Current State**:
+- Only test-user.journey exists in production (no corporate users to lose)
+- All client configurations are versioned in realm-export.json
+- Identity sync hasn't run yet (no employee data in Keycloak)
+
+**Manual Alternative** (if automation fails):
+1. Login to Keycloak Admin Console: https://keycloak-fn44nd7wba-uc.a.run.app/auth/admin
+2. Select "tamshai-corp" realm
+3. Click "Action" → "Delete"
+4. Confirm deletion
+5. Restart Keycloak container (redeploy on Cloud Run)
+6. Keycloak will import fresh realm with TOTP on startup
+
 ### Issue: "Access denied to MCP endpoints"
 
 **Expected Behavior**: This test user **should** be denied access to MCP endpoints (HR, Finance, Sales, Support) because it has no data access roles. This validates that RBAC is working correctly.
