@@ -426,6 +426,71 @@ sync_sample_app_clients() {
 }
 
 # =============================================================================
+# Test User Provisioning
+# =============================================================================
+
+provision_test_user() {
+    log_info "Provisioning test-user.journey..."
+
+    # Check if user already exists
+    local user_id=$($KCADM get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+    if [ -z "$user_id" ]; then
+        log_info "  Creating test-user.journey user..."
+
+        # Create user
+        $KCADM create users -r "$REALM" \
+            -s username=test-user.journey \
+            -s email=test-user@tamshai.com \
+            -s firstName=Test \
+            -s lastName=User \
+            -s enabled=true \
+            -s emailVerified=true \
+            -s 'attributes.department=["Testing"]' \
+            -s 'attributes.employeeId=["TEST001"]' \
+            -s 'attributes.title=["Journey Test Account"]'
+
+        if [ $? -eq 0 ]; then
+            log_info "  User created successfully"
+
+            # Get the newly created user ID
+            user_id=$($KCADM get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+            if [ -n "$user_id" ]; then
+                # Set password (non-temporary)
+                log_info "  Setting password..."
+                $KCADM set-password -r "$REALM" --userid "$user_id" --password "***REDACTED_PASSWORD***" -t false
+
+                if [ $? -eq 0 ]; then
+                    log_info "  Password set successfully"
+                else
+                    log_warn "  Failed to set password"
+                fi
+
+                # Note: TOTP secret setup requires additional API calls
+                # For now, admins can set this manually or via full realm import
+                log_info "  Note: TOTP secret should be configured manually if needed"
+                log_info "  TOTP Secret: JBSWY3DPEHPK3PXP (Base32)"
+            else
+                log_warn "  Could not retrieve user ID after creation"
+            fi
+        else
+            log_error "  Failed to create user"
+        fi
+    else
+        log_info "  User test-user.journey already exists (ID: $user_id)"
+
+        # Optionally update email if it changed (for @tamshai.local -> @tamshai.com migration)
+        local current_email=$($KCADM get users/$user_id -r "$REALM" --fields email 2>/dev/null | grep -o '"email" : "[^"]*"' | cut -d'"' -f4)
+
+        if [ "$current_email" != "test-user@tamshai.com" ]; then
+            log_info "  Updating email from $current_email to test-user@tamshai.com"
+            $KCADM update users/$user_id -r "$REALM" -s email=test-user@tamshai.com
+        fi
+    fi
+}
+
+# =============================================================================
 # Main Execution
 # =============================================================================
 
@@ -445,6 +510,9 @@ main() {
     sync_flutter_client
     sync_mcp_hr_service_client
     sync_sample_app_clients
+
+    # Provision test user (for E2E testing)
+    provision_test_user
 
     log_info "=========================================="
     log_info "Keycloak Realm Sync - Complete"
