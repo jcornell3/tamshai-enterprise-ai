@@ -359,7 +359,7 @@ oathtool --totp --base32 JBSWY3DPEHPK3PXP
 
 ```bash
 # Run the realm recreation script (production only)
-./scripts/keycloak/recreate-realm-prod.sh
+./keycloak/scripts/recreate-realm-prod.sh
 
 # This will:
 # 1. Delete the existing tamshai-corp realm
