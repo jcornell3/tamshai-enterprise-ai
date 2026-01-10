@@ -41,8 +41,8 @@ if (root) {
 }
 
 try {
-  // Use /app for dev, / for production (matches vite.config.ts base setting)
-  const basename = import.meta.env.PROD ? '/' : '/app';
+  // Portal app is always served at /app/ path in all environments
+  const basename = '/app';
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
