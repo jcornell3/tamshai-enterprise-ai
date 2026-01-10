@@ -224,14 +224,20 @@ jobs:
       - name: Wait for Keycloak to be ready
         run: |
           echo "Waiting for Keycloak to be fully ready..."
-          for i in {1..30}; do
+          for i in {1..6}; do
             if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/health/ready" > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               break
             fi
-            echo "Attempt $i/30: Keycloak not ready yet, waiting 10s..."
+            echo "Attempt $i/6: Keycloak not ready yet, waiting 10s..."
             sleep 10
           done
+
+          # Final check
+          if ! curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/health/ready" > /dev/null 2>&1; then
+            echo "ERROR: Keycloak not ready after 60 seconds"
+            exit 1
+          fi
 
       - name: Sync Realm Configuration
         run: |
