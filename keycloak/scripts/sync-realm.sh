@@ -527,30 +527,12 @@ provision_test_user() {
                     log_warn "  Failed to set password"
                 fi
 
-                # Configure TOTP for test user
-                log_info "  Configuring TOTP credentials..."
-
-                # Create TOTP credential via Admin API
-                # The secret must be Base32 encoded: JBSWY3DPEHPK3PXP
-                local totp_json='{
-                    "type": "otp",
-                    "value": "JBSWY3DPEHPK3PXP",
-                    "temporary": false,
-                    "algorithm": "HmacSHA256",
-                    "digits": 6,
-                    "period": 30,
-                    "counter": 0
-                }'
-
-                $KCADM create users/$user_id/credentials -r "$REALM" -b "$totp_json"
-
-                if [ $? -eq 0 ]; then
-                    log_info "  TOTP credential configured successfully"
-                    log_info "  TOTP Secret: JBSWY3DPEHPK3PXP (Base32)"
-                else
-                    log_warn "  Failed to configure TOTP credential"
-                    log_info "  Note: Admin can manually configure TOTP via Keycloak console"
-                fi
+                # Note: TOTP credentials cannot be pre-configured via Admin API
+                # They can only be set during realm import or by the user themselves
+                # For E2E tests, the test account will need to have TOTP configured manually
+                # or use a different authentication method
+                log_info "  TOTP configuration skipped (not supported via Admin API)"
+                log_info "  Note: TOTP must be configured manually or via realm import"
             else
                 log_warn "  Could not retrieve user ID after creation"
             fi
