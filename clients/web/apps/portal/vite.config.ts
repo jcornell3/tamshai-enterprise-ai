@@ -4,8 +4,8 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // Base path: '/' for production (prod.tamshai.com), '/app/' for dev
-  base: process.env.NODE_ENV === 'production' ? '/' : '/app/',
+  // Portal app is always served at /app/ path in all environments
+  base: '/app/',
   server: {
     port: 4000,
     host: true,
