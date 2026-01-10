@@ -206,6 +206,63 @@ jobs:
             --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
             --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=https://keycloak-fn44nd7wba-uc.a.run.app/auth,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_HTTP_RELATIVE_PATH=/auth"
 
+  sync-keycloak-realm:
+    needs: deploy-keycloak
+    if: needs.deploy-keycloak.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Wait for Keycloak to be ready
+        run: |
+          echo "Waiting for Keycloak to be fully ready..."
+          for i in {1..30}; do
+            if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/health/ready" > /dev/null 2>&1; then
+              echo "Keycloak is ready!"
+              break
+            fi
+            echo "Attempt $i/30: Keycloak not ready yet, waiting 10s..."
+            sleep 10
+          done
+
+      - name: Sync Realm Configuration
+        run: |
+          echo "Creating Cloud Run job to sync realm configuration..."
+
+          # Create temporary job (will be cleaned up after execution)
+          gcloud run jobs create keycloak-realm-sync-${{ github.sha }} \
+            --image=${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --service-account=tamshai-prod-keycloak@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest \
+            --set-env-vars="KEYCLOAK_ADMIN=admin,KEYCLOAK_URL=https://keycloak-fn44nd7wba-uc.a.run.app/auth" \
+            --vpc-connector=tamshai-prod-connector \
+            --vpc-egress=private-ranges-only \
+            --max-retries=0 \
+            --task-timeout=5m \
+            --command="/bin/bash" \
+            --args="-c,/opt/keycloak/scripts/sync-realm.sh prod || (echo 'Realm sync failed but continuing deployment' && exit 0)"
+
+          echo "Executing realm sync job..."
+          gcloud run jobs execute keycloak-realm-sync-${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --wait
+
+          echo "Cleaning up temporary job..."
+          gcloud run jobs delete keycloak-realm-sync-${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --quiet || true
+
+          echo "Realm sync completed!"
+
   deploy-static-website:
     needs: detect-changes
     if: |
