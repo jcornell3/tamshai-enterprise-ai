@@ -635,6 +635,70 @@ npm run test:ci
 
 See `tests/performance/README.md` for complete documentation.
 
+### End-to-End Testing (Playwright)
+
+Browser-based E2E tests with full authentication flow including TOTP.
+
+**TOTP Integration**:
+- Uses `oathtool` command-line tool (now in PATH) to generate 6-digit TOTP codes
+- Replaces JavaScript `otplib` library for more reliable, system-native TOTP generation
+- Matches behavior of standard authenticator apps
+
+**Test Environments**:
+| Environment | App URL | Keycloak URL | TOTP Secret Source |
+|-------------|---------|--------------|-------------------|
+| dev | https://www.tamshai.local | https://www.tamshai.local/auth | Hardcoded (dev only) |
+| stage | https://www.tamshai.com | https://www.tamshai.com/auth | Environment variable |
+| prod | https://prod.tamshai.com | https://keycloak-fn44nd7wba-uc.a.run.app/auth | Secrets manager |
+
+**Commands**:
+```bash
+cd tests/e2e
+
+# Install Playwright browsers (first time only)
+npm run install:browsers
+
+# Run all E2E tests on dev
+npm run test:dev
+
+# Run login journey tests only
+npm run test:login:dev
+npm run test:login:stage
+npm run test:login:prod
+
+# Debug mode (step through tests)
+npm run test:debug
+
+# Interactive UI mode
+npm run test:ui
+
+# View test report
+npm run test:report
+```
+
+**Environment Variables**:
+```bash
+# Required for authenticated tests
+export TEST_USERNAME="eve.thompson"
+export TEST_PASSWORD="password123"
+export TEST_TOTP_SECRET="[REDACTED-DEV-TOTP]"  # Base32-encoded TOTP secret
+```
+
+**TOTP Code Generation**:
+```bash
+# Generate TOTP code manually for testing
+oathtool --totp --base32 "[REDACTED-DEV-TOTP]"
+# Output: 6-digit code (e.g., 123456)
+```
+
+**Test Coverage**:
+- Full SSO login journey (username/password + TOTP)
+- Portal SPA rendering and asset loading
+- User authentication state verification
+- Error handling (invalid credentials, TOTP failures)
+
+See `tests/e2e/specs/login-journey.ui.spec.ts` for implementation details.
+
 ---
 
 ## Development Environment
