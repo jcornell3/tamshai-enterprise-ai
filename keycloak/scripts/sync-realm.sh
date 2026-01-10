@@ -153,7 +153,7 @@ cache_scope_ids() {
 
 get_cached_scope_id() {
     local scope_name="$1"
-    echo "${SCOPE_ID_CACHE[$scope_name]}"
+    echo "${SCOPE_ID_CACHE[$scope_name]:-}"  # Return empty string if not in cache (:-) prevents unbound variable error)
 }
 
 # Create standard OIDC client scopes if they don't exist
