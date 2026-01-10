@@ -72,7 +72,7 @@ check_prerequisites() {
     log_info "Checking prerequisites..."
 
     # Check for curl (required for Keycloak API calls)
-    if ! command -v /opt/keycloak/curl-static &> /dev/null; then
+    if ! test -f /opt/keycloak/curl-static &> /dev/null; then
         log_error "curl not found. Please install it first."
         exit 1
     fi
@@ -139,7 +139,7 @@ authenticate() {
     TOKEN_RESPONSE=$(/opt/keycloak/curl-static -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=${ADMIN_USER}" \
-        -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+        --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
         -d "grant_type=password" \
         -d "client_id=admin-cli")
 
