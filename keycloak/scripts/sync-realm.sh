@@ -395,6 +395,23 @@ sync_sample_app_clients() {
 
     local apps=("hr-app:4001" "finance-app:4002" "sales-app:4003" "support-app:4004")
 
+    # Determine domain based on environment
+    local domain
+    case "$ENV" in
+        dev)
+            domain="tamshai.local"
+            ;;
+        stage)
+            domain="www.tamshai.com"
+            ;;
+        prod)
+            domain="prod.tamshai.com"
+            ;;
+        *)
+            domain="localhost"
+            ;;
+    esac
+
     for app_port in "${apps[@]}"; do
         local app="${app_port%%:*}"
         local port="${app_port##*:}"
@@ -409,13 +426,11 @@ sync_sample_app_clients() {
             \"protocol\": \"openid-connect\",
             \"redirectUris\": [
                 \"http://localhost:$port/*\",
-                \"https://tamshai.local/$app/*\",
-                \"https://\${VPS_DOMAIN:-vps.tamshai.com}/$app/*\"
+                \"https://$domain/$app/*\"
             ],
             \"webOrigins\": [
                 \"http://localhost:$port\",
-                \"https://tamshai.local\",
-                \"https://\${VPS_DOMAIN:-vps.tamshai.com}\"
+                \"https://$domain\"
             ],
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\"
