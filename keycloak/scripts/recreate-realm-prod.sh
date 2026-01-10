@@ -71,9 +71,9 @@ log_error() {
 check_prerequisites() {
     log_info "Checking prerequisites..."
 
-    # Check for gcloud CLI
-    if ! command -v gcloud &> /dev/null; then
-        log_error "gcloud CLI not found. Please install it first."
+    # Check for curl (required for Keycloak API calls)
+    if ! command -v curl &> /dev/null; then
+        log_error "curl not found. Please install it first."
         exit 1
     fi
 
@@ -86,8 +86,7 @@ check_prerequisites() {
     # Check for KEYCLOAK_ADMIN_PASSWORD
     if [[ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ]]; then
         log_error "KEYCLOAK_ADMIN_PASSWORD environment variable not set"
-        log_info "Get it from GCP Secret Manager:"
-        log_info "  gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password"
+        log_error "This should be provided via Cloud Run job secrets configuration"
         exit 1
     fi
 
