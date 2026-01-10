@@ -53,9 +53,16 @@ jobs:
       - name: Make Script Executable
         run: chmod +x scripts/keycloak/recreate-realm-prod.sh
 
+      - name: Get Keycloak Admin Password from Secret Manager
+        id: get-password
+        run: |
+          PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password --project=${{ secrets.GCP_PROJECT_ID }})
+          echo "::add-mask::$PASSWORD"
+          echo "password=$PASSWORD" >> $GITHUB_OUTPUT
+
       - name: Run Realm Recreation Script
         env:
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ steps.get-password.outputs.password }}
         run: |
           echo "🚀 Starting realm recreation..."
           ./scripts/keycloak/recreate-realm-prod.sh --force
@@ -69,7 +76,7 @@ jobs:
 
       - name: Verify TOTP Configuration
         env:
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ steps.get-password.outputs.password }}
         run: |
           echo "🔍 Verifying test-user.journey TOTP configuration..."
 
