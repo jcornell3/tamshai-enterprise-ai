@@ -51,17 +51,17 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 configure_environment() {
     case "$ENV" in
         dev)
-            KEYCLOAK_URL="http://localhost:8080/auth"
+            KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
             ;;
         stage)
-            KEYCLOAK_URL="http://localhost:8080/auth"  # Inside container
+            KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"  # Use env var or default to localhost
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD}"
             ;;
         prod)
-            KEYCLOAK_URL="http://localhost:8080/auth"  # Inside container
+            KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"  # Use env var or default to localhost
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD}"
             ;;
