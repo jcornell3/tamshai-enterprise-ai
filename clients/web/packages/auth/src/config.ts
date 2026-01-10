@@ -54,7 +54,17 @@ function getKeycloakConfig() {
   const origin = window.location.origin;
   const basePath = getAppBasePath();
 
-  // Deployed environment (Caddy routing, stage VPS, or production)
+  // GCP Production - Keycloak on separate Cloud Run URL (not proxied)
+  if (hostname === 'prod.tamshai.com') {
+    return {
+      authority: import.meta.env.VITE_KEYCLOAK_URL,
+      client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'tamshai-website',
+      redirect_uri: `${origin}${basePath}/callback`,
+      post_logout_redirect_uri: origin,
+    };
+  }
+
+  // Deployed environment with proxied Keycloak (Caddy routing, stage VPS)
   if (isDeployedEnvironment(hostname)) {
     return {
       authority: `${origin}/auth/realms/tamshai-corp`,
