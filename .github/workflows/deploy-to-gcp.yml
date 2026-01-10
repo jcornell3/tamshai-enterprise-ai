@@ -225,7 +225,8 @@ jobs:
         run: |
           echo "Waiting for Keycloak to be fully ready..."
           for i in {1..6}; do
-            if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/health/ready" > /dev/null 2>&1; then
+            # Check realm endpoint instead of /health/ready which doesn't exist
+            if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               break
             fi
@@ -234,7 +235,7 @@ jobs:
           done
 
           # Final check
-          if ! curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/health/ready" > /dev/null 2>&1; then
+          if ! curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
             echo "ERROR: Keycloak not ready after 60 seconds"
             exit 1
           fi
