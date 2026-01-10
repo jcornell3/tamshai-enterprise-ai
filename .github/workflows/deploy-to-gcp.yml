@@ -98,7 +98,7 @@ jobs:
             --cpu=1 \
             --timeout=300 \
             --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
-            --set-env-vars=NODE_ENV=production
+            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://keycloak-fn44nd7wba-uc.a.run.app/auth,KEYCLOAK_ISSUER=https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp,JWKS_URI=https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-fn44nd7wba-uc.a.run.app,MCP_FINANCE_URL=https://mcp-finance-fn44nd7wba-uc.a.run.app,MCP_SALES_URL=https://mcp-sales-fn44nd7wba-uc.a.run.app,MCP_SUPPORT_URL=https://mcp-support-fn44nd7wba-uc.a.run.app,TOKEN_REVOCATION_FAIL_OPEN=true"
 
   deploy-mcp-suite:
     needs: detect-changes
@@ -305,11 +305,14 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Deploy to GCS
         run: |
-          gsutil -m rsync -r -d clients/web/apps/portal/dist gs://prod.tamshai.com
-          gsutil web set -m index.html -e 404.html gs://prod.tamshai.com
-          gsutil -m setmeta -h "Cache-Control:no-cache,must-revalidate" gs://prod.tamshai.com/index.html
+          gcloud storage rsync --recursive --delete-unmatched-destination-objects clients/web/apps/portal/dist gs://prod.tamshai.com
+          gcloud storage buckets update gs://prod.tamshai.com --web-main-page-suffix=index.html --web-error-page=404.html
+          gcloud storage objects update gs://prod.tamshai.com/index.html --cache-control="no-cache,must-revalidate"
 
   notify:
     needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website]
