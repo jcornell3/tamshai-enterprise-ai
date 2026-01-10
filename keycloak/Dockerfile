@@ -53,10 +53,10 @@ FROM quay.io/keycloak/keycloak:26.0.7
 # Copy optimized Keycloak from builder stage (build-time config already baked in)
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 
-# Copy jq binary from deps stage for realm recreation script
+# Copy curl and jq binaries from deps stage for realm recreation script
+COPY --from=deps /usr/bin/curl /usr/bin/curl
 COPY --from=deps /usr/local/bin/jq /usr/local/bin/jq
 
-# Note: curl is already available in the Keycloak base image
 # The realm recreation script needs curl and jq, both are now available
 
 # Start Keycloak in production mode with realm import
