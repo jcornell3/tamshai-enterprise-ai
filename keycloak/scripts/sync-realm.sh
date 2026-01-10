@@ -149,7 +149,7 @@ cache_scope_ids() {
     local scopes=("roles" "web-origins" "profile" "email" "address" "phone" "offline_access")
 
     for scope in "${scopes[@]}"; do
-        local scope_id=$($KCADM get client-scopes -r "$REALM" -q "name=$scope" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+        local scope_id=$(get_scope_id "$scope")
         if [ -n "$scope_id" ]; then
             SCOPE_ID_CACHE["$scope"]="$scope_id"
             log_info "  Cached scope '$scope': $scope_id"
