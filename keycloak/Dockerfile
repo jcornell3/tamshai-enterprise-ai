@@ -28,9 +28,8 @@ COPY --from=deps /libs/jdbc-socket-factory-core.jar /opt/keycloak/providers/
 # Copy realm export for import
 COPY realm-export.json /opt/keycloak/data/import/realm-export.json
 
-# Copy realm sync scripts for Cloud Run job execution
-COPY scripts/ /opt/keycloak/scripts/
-RUN chmod +x /opt/keycloak/scripts/*.sh
+# Copy realm sync scripts for Cloud Run job execution (with execute permissions)
+COPY --chmod=755 scripts/ /opt/keycloak/scripts/
 
 # Set build-time configuration
 ENV KC_DB=postgres
