@@ -649,14 +649,11 @@ See `tests/performance/README.md` for complete documentation.
 - 8GB RAM minimum (16GB recommended)
 - 20GB free disk space
 
-**IMPORTANT: Google Cloud SDK (gcloud) PATH Configuration**
+**Google Cloud SDK (gcloud) Configuration**
 
-On Windows, gcloud is installed but not automatically added to PATH. You must set the PATH in each new shell session:
+The gcloud CLI is installed and available in PATH.
 
 ```bash
-# Windows (Git Bash / WSL)
-export PATH="$PATH:/c/Users/jcorn/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin"
-
 # Verify gcloud is accessible
 gcloud --version
 # Should output: Google Cloud SDK 551.0.0
@@ -668,7 +665,7 @@ gcloud auth activate-service-account --key-file=infrastructure/terraform/gcp/gcp
 gcloud auth configure-docker us-central1-docker.pkg.dev
 ```
 
-**Location**: `C:\Users\jcorn\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`
+**Installation Location**: `C:\Users\jcorn\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`
 
 **IMPORTANT: Elasticsearch Kernel Parameter**
 
