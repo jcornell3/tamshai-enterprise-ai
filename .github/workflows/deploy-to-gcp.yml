@@ -310,9 +310,13 @@ jobs:
 
       - name: Deploy to GCS
         run: |
+          # Sync files to bucket
           gcloud storage rsync --recursive --delete-unmatched-destination-objects clients/web/apps/portal/dist gs://prod.tamshai.com
-          gcloud storage buckets update gs://prod.tamshai.com --web-main-page-suffix=index.html --web-error-page=404.html
+
+          # Set cache control for index.html (requires storage.objects.update)
           gcloud storage objects update gs://prod.tamshai.com/index.html --cache-control="no-cache,must-revalidate"
+
+          # Note: Bucket website configuration is set via Terraform and doesn't need to be updated on every deployment
 
   notify:
     needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website]
