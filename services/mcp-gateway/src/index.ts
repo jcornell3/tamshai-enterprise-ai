@@ -39,7 +39,9 @@ import {
   MCPServerConfig,
 } from './utils/gateway-utils';
 import gdprRoutes from './routes/gdpr';
-import adminRoutes from './routes/admin.routes';
+// TODO: TEMPORARILY DISABLED - Import commented out to prevent audit-logger initialization
+// Importing this module causes PostgreSQL pool creation at module load time (see TODO.md)
+// import adminRoutes from './routes/admin.routes';
 import healthRoutes from './routes/health.routes';
 import userRoutes from './routes/user.routes';
 import { JWTValidator } from './auth/jwt-validator';
