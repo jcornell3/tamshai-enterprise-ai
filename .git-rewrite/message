@@ -1,0 +1,13 @@
+docs(api): Update OpenAPI spec with missing GDPR endpoints
+
+Added missing endpoints to match current implementation:
+- GET /api/admin/gdpr/erase/{erasureId} - Get erasure status
+- GET /api/admin/gdpr/breach - List all breaches
+
+Added new schemas:
+- GDPREraseStatusResponse
+- GDPRBreachListResponse
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>

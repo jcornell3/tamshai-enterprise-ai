@@ -1,0 +1,18 @@
+tree 44c46786499315e0757b056d7b5de765928ab7fd
+parent d9693d97685c5b798b0046b700cc63a4d29c1a08
+author Tamshai-Dev <claude-dev@tamshai.com> 1767816709 -0800
+committer Tamshai-Dev <claude-dev@tamshai.com> 1767816709 -0800
+
+docs(api): Update OpenAPI spec with missing GDPR endpoints
+
+Added missing endpoints to match current implementation:
+- GET /api/admin/gdpr/erase/{erasureId} - Get erasure status
+- GET /api/admin/gdpr/breach - List all breaches
+
+Added new schemas:
+- GDPREraseStatusResponse
+- GDPRBreachListResponse
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
