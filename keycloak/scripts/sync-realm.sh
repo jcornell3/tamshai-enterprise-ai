@@ -123,7 +123,21 @@ create_or_update_client() {
 
 get_scope_id() {
     local scope_name="$1"
-    $KCADM get client-scopes -r "$REALM" -q "name=$scope_name" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1
+    # Get all scopes with id and name, then filter for exact match
+    # kcadm -q parameter doesn't do exact matching, so we parse JSON manually
+    local output=$($KCADM get client-scopes -r "$REALM" --fields id,name 2>/dev/null)
+
+    # Parse JSON to find scope with exact name match
+    # Format: [ { "id" : "uuid", "name" : "scopename" }, ... ]
+    echo "$output" | awk -v name="$scope_name" '
+        /"id" : "/ { id = $0; sub(/.*"id" : "/, "", id); sub(/".*/, "", id) }
+        /"name" : "/ {
+            scope = $0;
+            sub(/.*"name" : "/, "", scope);
+            sub(/".*/, "", scope);
+            if (scope == name) { print id; exit }
+        }
+    '
 }
 
 # Global scope ID cache (populated once at start)
