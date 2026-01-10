@@ -69,9 +69,18 @@ export interface AuditLogEntry {
 }
 
 class AuditLogger {
-  private pool: Pool;
+  private pool: Pool | null = null;
+  private isInitialized = false;
 
-  constructor() {
+  /**
+   * Lazy initialization of database pool
+   * Only connects when first needed, not at module load time
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.isInitialized && this.pool) {
+      return;
+    }
+
     this.pool = new Pool({
       host: process.env.POSTGRES_HOST || 'postgres',
       port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
@@ -80,21 +89,16 @@ class AuditLogger {
       password: process.env.POSTGRES_PASSWORD,
     });
 
-    // Test connection on initialization
-    this.testConnection();
-  }
-
-  /**
-   * Test PostgreSQL connection
-   */
-  private async testConnection(): Promise<void> {
+    // Test connection
     try {
       const result = await this.pool.query('SELECT NOW()');
       logger.info('Audit logger connected to PostgreSQL', {
         timestamp: result.rows[0].now,
       });
+      this.isInitialized = true;
     } catch (error) {
       logger.error('Failed to connect audit logger to PostgreSQL', { error });
+      throw error;
     }
   }
 
@@ -105,6 +109,8 @@ class AuditLogger {
    * @returns Audit log entry ID (UUID)
    */
   async log(entry: AuditLogEntry): Promise<string> {
+    await this.ensureInitialized();
+
     const query = `
       INSERT INTO admin.user_management_audit (
         admin_user_id,
@@ -141,6 +147,10 @@ class AuditLogger {
     ];
 
     try {
+      if (!this.pool) {
+        throw new Error('Database pool not initialized');
+      }
+
       const result = await this.pool.query(query, values);
       const auditId = result.rows[0].id;
 
@@ -181,6 +191,8 @@ class AuditLogger {
     limit?: number;
     offset?: number;
   }): Promise<any[]> {
+    await this.ensureInitialized();
+
     const conditions: string[] = [];
     const values: any[] = [];
     let paramCount = 0;
@@ -245,6 +257,10 @@ class AuditLogger {
     `;
 
     try {
+      if (!this.pool) {
+        throw new Error('Database pool not initialized');
+      }
+
       const result = await this.pool.query(query, values);
       return result.rows;
     } catch (error) {
@@ -257,8 +273,12 @@ class AuditLogger {
    * Cleanup (call on server shutdown)
    */
   async cleanup(): Promise<void> {
-    await this.pool.end();
-    logger.info('Audit logger connection pool closed');
+    if (this.pool) {
+      await this.pool.end();
+      logger.info('Audit logger connection pool closed');
+      this.pool = null;
+      this.isInitialized = false;
+    }
   }
 }
 

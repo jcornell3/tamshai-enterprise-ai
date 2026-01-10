@@ -7,12 +7,34 @@
 
 import request from 'supertest';
 import express, { Express, Request, Response, NextFunction } from 'express';
-import adminRoutes from './admin.routes';
-import { mockKcAdminClient } from '../lib/__mocks__/keycloak-admin';
 import { auditLogger as mockAuditLogger } from '../services/audit-logger';
 
-// Mock Keycloak admin client
-jest.mock('../lib/keycloak-admin');
+// Mock Keycloak admin client - defined before the module mock
+const mockKcAdminClient = {
+  users: {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    del: jest.fn(),
+    resetPassword: jest.fn(),
+    listRealmRoleMappings: jest.fn(),
+    addRealmRoleMappings: jest.fn(),
+  },
+  roles: {
+    find: jest.fn(),
+  },
+  setConfig: jest.fn(),
+};
+
+// Mock Keycloak admin client module
+jest.mock('../lib/keycloak-admin', () => ({
+  getKeycloakAdminClient: jest.fn(async () => mockKcAdminClient),
+  cleanupKeycloakAdminClient: jest.fn(),
+  isKeycloakAdminHealthy: jest.fn(async () => true),
+}));
+
+import adminRoutes from './admin.routes';
 
 // Mock audit logger
 jest.mock('../services/audit-logger', () => ({
