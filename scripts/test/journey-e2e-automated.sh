@@ -75,7 +75,7 @@ configure_environment() {
             BASE_URL="https://prod.tamshai.com"
             # GCP production uses direct Cloud Run URLs
             KEYCLOAK_URL="https://keycloak-fn44nd7wba-uc.a.run.app/auth"
-            CLIENT_ID="tamshai-web-portal"
+            CLIENT_ID="tamshai-website"
             INSECURE=""
             ;;
         *)
