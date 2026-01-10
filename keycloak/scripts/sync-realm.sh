@@ -483,6 +483,17 @@ provision_test_user() {
     # Check if user already exists
     local user_id=$($KCADM get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
 
+    if [ -n "$user_id" ]; then
+        log_info "  User already exists (ID: $user_id), deleting to recreate with TOTP..."
+        $KCADM delete users/$user_id -r "$REALM" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            log_info "  User deleted successfully"
+            user_id=""  # Reset so we create fresh
+        else
+            log_warn "  Failed to delete existing user"
+        fi
+    fi
+
     if [ -z "$user_id" ]; then
         log_info "  Creating test-user.journey user..."
 
@@ -544,16 +555,6 @@ provision_test_user() {
             fi
         else
             log_error "  Failed to create user"
-        fi
-    else
-        log_info "  User test-user.journey already exists (ID: $user_id)"
-
-        # Optionally update email if it changed (for @tamshai.local -> @tamshai.com migration)
-        local current_email=$($KCADM get users/$user_id -r "$REALM" --fields email 2>/dev/null | grep -o '"email" : "[^"]*"' | cut -d'"' -f4)
-
-        if [ "$current_email" != "test-user@tamshai.com" ]; then
-            log_info "  Updating email from $current_email to test-user@tamshai.com"
-            $KCADM update users/$user_id -r "$REALM" -s email=test-user@tamshai.com
         fi
     fi
 }
