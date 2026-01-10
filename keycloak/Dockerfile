@@ -2,7 +2,7 @@
 # Multi-stage build for PostgreSQL connectivity via Unix sockets
 
 # =============================================================================
-# Stage 1: Fetch the Cloud SQL JDBC Socket Factory
+# Stage 1: Fetch the Cloud SQL JDBC Socket Factory and jq binary
 # =============================================================================
 FROM alpine:latest AS deps
 RUN apk add --no-cache curl
@@ -15,6 +15,10 @@ RUN curl -L -o postgres-socket-factory.jar \
     https://repo1.maven.org/maven2/com/google/cloud/sql/postgres-socket-factory/1.27.1/postgres-socket-factory-1.27.1.jar && \
     curl -L -o jdbc-socket-factory-core.jar \
     https://repo1.maven.org/maven2/com/google/cloud/sql/jdbc-socket-factory-core/1.27.1/jdbc-socket-factory-core-1.27.1.jar
+
+# Download jq static binary for realm recreation script
+RUN curl -L -o /usr/local/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 && \
+    chmod +x /usr/local/bin/jq
 
 # =============================================================================
 # Stage 2: Build Optimized Keycloak with PostgreSQL Driver
@@ -42,19 +46,18 @@ ENV KC_HTTP_RELATIVE_PATH=/auth
 RUN /opt/keycloak/bin/kc.sh build --verbose
 
 # =============================================================================
-# Stage 3: Final Production Image
+# Stage 3: Final Production Image (UBI-based)
 # =============================================================================
 FROM quay.io/keycloak/keycloak:26.0.7
-
-# Install curl and jq for realm recreation script (run as root)
-USER root
-RUN microdnf install -y curl jq && microdnf clean all
 
 # Copy optimized Keycloak from builder stage (build-time config already baked in)
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 
-# Switch back to keycloak user for runtime
-USER 1000
+# Copy jq binary from deps stage for realm recreation script
+COPY --from=deps /usr/local/bin/jq /usr/local/bin/jq
+
+# Note: curl is already available in the Keycloak base image
+# The realm recreation script needs curl and jq, both are now available
 
 # Start Keycloak in production mode with realm import
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
