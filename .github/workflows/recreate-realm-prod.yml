@@ -1,0 +1,132 @@
+name: Recreate Keycloak Realm (Production)
+
+# Manual workflow for recreating the tamshai-corp realm in production
+# Use this to enable TOTP import for test-user.journey
+# ⚠️ WARNING: This DELETES and RECREATES the entire realm!
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "recreate-realm" to confirm deletion'
+        required: true
+        type: string
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  AR_REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai-prod
+
+jobs:
+  confirm:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Confirmation Input
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "recreate-realm" ]; then
+            echo "❌ Confirmation failed. Expected 'recreate-realm', got: ${{ github.event.inputs.confirmation }}"
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+  recreate-realm:
+    name: Recreate Realm with TOTP
+    runs-on: ubuntu-latest
+    needs: confirm
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY_PROD }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          export_default_credentials: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Make Script Executable
+        run: chmod +x scripts/keycloak/recreate-realm-prod.sh
+
+      - name: Run Realm Recreation Script
+        env:
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+        run: |
+          echo "🚀 Starting realm recreation..."
+          ./scripts/keycloak/recreate-realm-prod.sh --force
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Realm recreation completed successfully"
+          else
+            echo "❌ Realm recreation failed"
+            exit 1
+          fi
+
+      - name: Verify TOTP Configuration
+        env:
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+        run: |
+          echo "🔍 Verifying test-user.journey TOTP configuration..."
+
+          # Get access token
+          TOKEN_RESPONSE=$(curl -s -X POST "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=$KEYCLOAK_ADMIN_PASSWORD" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "❌ Failed to authenticate to Keycloak"
+            exit 1
+          fi
+
+          # Get user ID
+          USER_RESPONSE=$(curl -s -X GET "https://keycloak-fn44nd7wba-uc.a.run.app/auth/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
+            -H "Authorization: Bearer $ACCESS_TOKEN")
+
+          USER_ID=$(echo "$USER_RESPONSE" | jq -r '.[0].id')
+
+          if [ "$USER_ID" = "null" ] || [ -z "$USER_ID" ]; then
+            echo "❌ test-user.journey not found"
+            exit 1
+          fi
+
+          # Check TOTP credentials
+          CREDENTIALS_RESPONSE=$(curl -s -X GET "https://keycloak-fn44nd7wba-uc.a.run.app/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+            -H "Authorization: Bearer $ACCESS_TOKEN")
+
+          TOTP_COUNT=$(echo "$CREDENTIALS_RESPONSE" | jq '[.[] | select(.type == "otp")] | length')
+
+          if [ "$TOTP_COUNT" -gt 0 ]; then
+            echo "✅ TOTP configured successfully! Found $TOTP_COUNT TOTP credential(s)"
+          else
+            echo "⚠️ TOTP not found - this may indicate an issue with realm import"
+            exit 1
+          fi
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Realm Recreation Complete!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Run E2E tests to verify TOTP:"
+          echo "     cd tests/e2e && npm run test:login:prod"
+          echo ""
+          echo "  2. Verify login at:"
+          echo "     https://prod.tamshai.com"
+          echo ""
+          echo "  3. Test credentials:"
+          echo "     • Username: test-user.journey"
+          echo "     • Password: ***REDACTED_PASSWORD***"
+          echo "     • TOTP Secret: JBSWY3DPEHPK3PXP"
+          echo ""
