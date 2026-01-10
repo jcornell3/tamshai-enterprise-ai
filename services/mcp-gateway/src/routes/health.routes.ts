@@ -16,7 +16,6 @@ const router = Router();
 router.get('/health', (req: Request, res: Response) => {
   const tokenRevocationStats = getTokenRevocationStats();
   // Phase 1: Always return 200 even if Redis is unavailable (TOKEN_REVOCATION_FAIL_OPEN=true)
-  const isHealthy = true;
 
   res.status(200).json({
     status: 'healthy',
