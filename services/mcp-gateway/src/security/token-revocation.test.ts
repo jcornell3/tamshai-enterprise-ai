@@ -15,10 +15,14 @@ jest.mock('ioredis', () => ioredisMock);
 import { Request, Response, NextFunction } from 'express';
 
 // Authenticated request type for tests
+// Extended to include JWT token fields needed for revocation
 interface AuthenticatedRequest extends Request {
   user?: {
+    sub: string;
+    preferred_username: string;
+    email?: string;
+    roles: string[];
     jti?: string;
-    sub?: string;
     iat?: number;
   };
   auth?: {
@@ -156,6 +160,8 @@ describe('createRevocationMiddleware', () => {
       jti: 'valid-jti-123',
       sub: 'user-123',
       iat: Math.floor(Date.now() / 1000),
+      preferred_username: 'test.user',
+      roles: ['user'],
     };
 
     await middleware(req as Request, res as Response, next);
@@ -188,6 +194,8 @@ describe('createRevocationMiddleware', () => {
     (req as AuthenticatedRequest).user = {
       sub: 'user-123',
       iat: 1640000000,
+      preferred_username: 'test.user',
+      roles: ['user'],
     };
 
     await middleware(req as Request, res as Response, next);
@@ -197,10 +205,13 @@ describe('createRevocationMiddleware', () => {
   });
 
   test('rejects requests with missing sub claim', async () => {
+    // Use 'as any' to bypass type checking for this error condition test
     (req as AuthenticatedRequest).user = {
       jti: 'jti-123',
       iat: 1640000000,
-    };
+      preferred_username: 'test.user',
+      roles: ['user'],
+    } as any;
 
     await middleware(req as Request, res as Response, next);
 
@@ -212,6 +223,8 @@ describe('createRevocationMiddleware', () => {
     (req as AuthenticatedRequest).user = {
       jti: 'jti-123',
       sub: 'user-123',
+      preferred_username: 'test.user',
+      roles: ['user'],
     };
 
     await middleware(req as Request, res as Response, next);

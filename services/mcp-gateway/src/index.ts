@@ -39,9 +39,7 @@ import {
   MCPServerConfig,
 } from './utils/gateway-utils';
 import gdprRoutes from './routes/gdpr';
-// TODO: TEMPORARILY DISABLED - Import commented out to prevent audit-logger initialization
-// Importing this module causes PostgreSQL pool creation at module load time (see TODO.md)
-// import adminRoutes from './routes/admin.routes';
+import adminRoutes from './routes/admin.routes';
 import healthRoutes from './routes/health.routes';
 import userRoutes from './routes/user.routes';
 import { JWTValidator } from './auth/jwt-validator';
@@ -405,13 +403,9 @@ app.use('/api/admin/gdpr', authMiddleware, gdprRoutes);
 // Authorization: Requires 'admin' or 'executive' role
 // Audit: All actions logged to admin.user_management_audit table
 //
-// TODO: TEMPORARILY DISABLED - Blocking production deployment
-// Issue: auditLogger creates PostgreSQL pool at module load time
-// Production doesn't have Cloud SQL configured yet
-// Fix: Implement lazy initialization in audit-logger.ts (Option 1)
-// Tracked in: services/mcp-gateway/TODO.md
-// Unblock after: Unit tests complete + manual API testing done
-// app.use('/api/admin', authMiddleware, adminRoutes);
+// ADMIN PORTAL ROUTES (Phase 1: User CRUD endpoints)
+// Fixed: Lazy initialization prevents PostgreSQL pool creation at module load time
+app.use('/api/admin', authMiddleware, adminRoutes);
 
 // User info and MCP tools routes - extracted to routes/user.routes.ts
 app.use(authMiddleware, userRoutes);
