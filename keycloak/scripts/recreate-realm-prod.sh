@@ -42,7 +42,7 @@ NC='\033[0m' # No Color
 KEYCLOAK_URL="https://keycloak-fn44nd7wba-uc.a.run.app/auth"
 REALM="tamshai-corp"
 ADMIN_USER="admin"
-REALM_JSON="keycloak/realm-export.json"
+REALM_JSON="/opt/keycloak/data/import/realm-export.json"
 FORCE_MODE=false
 
 # Parse arguments
