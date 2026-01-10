@@ -20,6 +20,10 @@ RUN curl -L -o postgres-socket-factory.jar \
 RUN curl -L -o /usr/local/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 && \
     chmod +x /usr/local/bin/jq
 
+# Download static curl binary (no dependencies) for realm recreation script
+RUN curl -L -o /usr/local/bin/curl https://github.com/moparisthebest/static-curl/releases/download/v8.6.0/curl-amd64 && \
+    chmod +x /usr/local/bin/curl
+
 # =============================================================================
 # Stage 2: Build Optimized Keycloak with PostgreSQL Driver
 # =============================================================================
@@ -53,11 +57,11 @@ FROM quay.io/keycloak/keycloak:26.0.7
 # Copy optimized Keycloak from builder stage (build-time config already baked in)
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 
-# Copy curl and jq binaries from deps stage for realm recreation script
-COPY --from=deps /usr/bin/curl /usr/bin/curl
+# Copy static curl and jq binaries from deps stage for realm recreation script
+COPY --from=deps /usr/local/bin/curl /usr/bin/curl
 COPY --from=deps /usr/local/bin/jq /usr/local/bin/jq
 
-# The realm recreation script needs curl and jq, both are now available
+# The realm recreation script needs curl and jq, both are now available as static binaries
 
 # Start Keycloak in production mode with realm import
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
