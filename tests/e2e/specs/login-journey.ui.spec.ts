@@ -112,27 +112,45 @@ function generateTotpCode(secret: string): string {
 
 /**
  * Wait for Keycloak login page to load
+ * Uses flexible selectors that work across different Keycloak versions
  */
 async function waitForKeycloakLogin(page: Page): Promise<void> {
-  await page.waitForSelector('#username', { state: 'visible', timeout: 30000 });
-  await page.waitForSelector('#password', { state: 'visible', timeout: 5000 });
+  // Wait for either the ID-based selector (#username) or the label-based selector
+  await page.waitForSelector('#username, input[name="username"], [placeholder*="sername" i], [aria-label*="sername" i]', {
+    state: 'visible',
+    timeout: 30000
+  });
+  await page.waitForSelector('#password, input[name="password"], input[type="password"]', {
+    state: 'visible',
+    timeout: 5000
+  });
 }
 
 /**
  * Complete Keycloak login form
+ * Uses flexible selectors that work across different Keycloak versions
  */
 async function completeKeycloakLogin(
   page: Page,
   username: string,
   password: string
 ): Promise<void> {
-  await page.fill('#username', username);
-  await page.fill('#password', password);
-  await page.click('#kc-login');
+  // Try multiple selectors for username field
+  const usernameSelector = '#username, input[name="username"], [placeholder*="sername" i]';
+  await page.fill(usernameSelector, username);
+
+  // Try multiple selectors for password field
+  const passwordSelector = '#password, input[name="password"], input[type="password"]';
+  await page.fill(passwordSelector, password);
+
+  // Click login button - try multiple selectors
+  const loginButtonSelector = '#kc-login, button[type="submit"], button:has-text("Sign In")';
+  await page.click(loginButtonSelector);
 }
 
 /**
  * Handle TOTP if required
+ * Uses flexible selectors that work across different Keycloak versions
  */
 async function handleTotpIfRequired(
   page: Page,
@@ -140,7 +158,9 @@ async function handleTotpIfRequired(
 ): Promise<boolean> {
   // Check if TOTP page appears (wait briefly)
   try {
-    const otpInput = await page.waitForSelector('#otp', {
+    // Try multiple selectors for OTP field
+    const otpSelector = '#otp, input[name="otp"], input[name="totp"], input[autocomplete="one-time-code"]';
+    const otpInput = await page.waitForSelector(otpSelector, {
       state: 'visible',
       timeout: 5000,
     });
@@ -153,8 +173,12 @@ async function handleTotpIfRequired(
       }
 
       const totpCode = generateTotpCode(totpSecret);
-      await page.fill('#otp', totpCode);
-      await page.click('#kc-login');
+      console.log(`Filling TOTP code: ${totpCode.substring(0, 2)}****`);
+      await page.fill(otpSelector, totpCode);
+
+      // Click submit button
+      const submitSelector = '#kc-login, button[type="submit"], button:has-text("Sign In"), button:has-text("Submit")';
+      await page.click(submitSelector);
       return true;
     }
   } catch {
@@ -215,6 +239,11 @@ test.describe('Employee Login Journey', () => {
       test.skip(true, 'No test credentials configured');
     }
 
+    // Skip if using dev credentials in production (they don't exist there)
+    if (ENV === 'prod' && TEST_USER.username === 'eve.thompson') {
+      test.skip(true, 'Dev credentials cannot be used in production - requires production TEST_USERNAME and TEST_PASSWORD environment variables');
+    }
+
     // Start at employee login page
     await page.goto(`${urls.app}/employee-login.html`);
 
@@ -227,6 +256,10 @@ test.describe('Employee Login Journey', () => {
 
     // Enter credentials
     await completeKeycloakLogin(page, TEST_USER.username, TEST_USER.password);
+
+    // Wait briefly for potential authentication errors
+    // If credentials are invalid, the test will fail at the next assertion with a clear error
+    await page.waitForTimeout(1000);
 
     // Handle TOTP if required
     const totpHandled = await handleTotpIfRequired(page, TEST_USER.totpSecret);
