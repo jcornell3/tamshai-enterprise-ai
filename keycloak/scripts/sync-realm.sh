@@ -126,6 +126,28 @@ get_scope_id() {
     $KCADM get client-scopes -r "$REALM" -q "name=$scope_name" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1
 }
 
+# Global scope ID cache (populated once at start)
+declare -A SCOPE_ID_CACHE
+
+# Populate scope ID cache (call once at startup)
+cache_scope_ids() {
+    log_info "Caching scope IDs..."
+    local scopes=("roles" "web-origins" "profile" "email" "address" "phone" "offline_access")
+
+    for scope in "${scopes[@]}"; do
+        local scope_id=$($KCADM get client-scopes -r "$REALM" -q "name=$scope" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+        if [ -n "$scope_id" ]; then
+            SCOPE_ID_CACHE["$scope"]="$scope_id"
+            log_info "  Cached scope '$scope': $scope_id"
+        fi
+    done
+}
+
+get_cached_scope_id() {
+    local scope_name="$1"
+    echo "${SCOPE_ID_CACHE[$scope_name]}"
+}
+
 # Create standard OIDC client scopes if they don't exist
 create_standard_scopes() {
     log_info "Ensuring standard OIDC client scopes exist..."
@@ -186,24 +208,25 @@ assign_client_scopes() {
     # Optional scopes - can be requested via scope parameter
     local optional_scopes=("profile" "email" "address" "phone" "offline_access")
 
+    # Use cached scope IDs instead of querying for each client
     for scope in "${default_scopes[@]}"; do
-        local scope_id=$(get_scope_id "$scope")
+        local scope_id=$(get_cached_scope_id "$scope")
         if [ -n "$scope_id" ]; then
             $KCADM create "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
             log_info "  Assigned default scope '$scope' to client '$client_id'"
         else
-            log_warn "  Default scope '$scope' not found in realm"
+            log_warn "  Default scope '$scope' not found in cache"
         fi
     done
 
     for scope in "${optional_scopes[@]}"; do
-        local scope_id=$(get_scope_id "$scope")
+        local scope_id=$(get_cached_scope_id "$scope")
         if [ -n "$scope_id" ]; then
             # Add as optional scope so it can be requested in OAuth flows
             $KCADM create "clients/$uuid/optional-client-scopes/$scope_id" -r "$REALM" 2>/dev/null || true
             log_info "  Assigned optional scope '$scope' to client '$client_id'"
         else
-            log_warn "  Optional scope '$scope' not found in realm"
+            log_warn "  Optional scope '$scope' not found in cache"
         fi
     done
 }
@@ -541,6 +564,9 @@ main() {
 
     # Ensure standard OIDC scopes exist
     create_standard_scopes
+
+    # Cache scope IDs once (avoid repeated API calls)
+    cache_scope_ids
 
     # Sync all clients
     sync_website_client
