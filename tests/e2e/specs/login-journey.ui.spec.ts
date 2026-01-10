@@ -14,6 +14,7 @@
  */
 
 import { test, expect, Page } from '@playwright/test';
+import { execSync } from 'child_process';
 import { authenticator } from 'otplib';
 
 // Environment configuration
@@ -27,6 +28,10 @@ const BASE_URLS: Record<string, { app: string; keycloak: string }> = {
     app: 'https://www.tamshai.com',
     keycloak: 'https://www.tamshai.com/auth',
   },
+  prod: {
+    app: 'https://prod.tamshai.com',
+    keycloak: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth',
+  },
 };
 
 // Test credentials - loaded from environment or defaults for dev
@@ -34,26 +39,75 @@ const TEST_USER = {
   username: process.env.TEST_USERNAME || 'eve.thompson',
   password: process.env.TEST_PASSWORD || 'password123',
   // TOTP secret - only available for dev environment
-  // For stage, this would need to be retrieved from a secrets manager
+  // For stage/prod, this would need to be retrieved from a secrets manager
   totpSecret: process.env.TEST_TOTP_SECRET || '',
 };
 
 /**
+ * Check if oathtool is available on the system
+ */
+function isOathtoolAvailable(): boolean {
+  try {
+    execSync('oathtool --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Generate a TOTP code from the secret
+ *
+ * Prefers system oathtool command (more reliable, matches authenticator apps)
+ * but falls back to otplib for CI/CD environments where oathtool isn't installed.
+ *
+ * @param secret - Base32-encoded TOTP secret
+ * @returns 6-digit TOTP code
  */
 function generateTotpCode(secret: string): string {
   if (!secret) {
     throw new Error('TOTP secret is required but not provided');
   }
-  // Most authenticator apps use SHA1 by default, even when Keycloak configures SHA256
-  // The algorithm can be overridden via TEST_TOTP_ALGORITHM env var
-  const algorithm = process.env.TEST_TOTP_ALGORITHM || 'sha1';
-  authenticator.options = {
-    digits: 6,
-    step: 30,
-    algorithm: algorithm,
-  };
-  return authenticator.generate(secret);
+
+  // Try oathtool first (local development)
+  if (isOathtoolAvailable()) {
+    try {
+      // Use oathtool to generate TOTP code
+      // --totp: Generate TOTP (time-based one-time password)
+      // --base32: Secret is base32-encoded (standard for TOTP)
+      const totpCode = execSync(`oathtool --totp --base32 "${secret}"`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+
+      if (!/^\d{6}$/.test(totpCode)) {
+        throw new Error(`Invalid TOTP code generated: ${totpCode}`);
+      }
+
+      console.log('Generated TOTP code using oathtool');
+      return totpCode;
+    } catch (error: any) {
+      console.warn(`oathtool failed, falling back to otplib: ${error.message}`);
+    }
+  }
+
+  // Fallback to otplib (CI/CD environments)
+  try {
+    const algorithm = process.env.TEST_TOTP_ALGORITHM || 'sha1';
+    authenticator.options = {
+      digits: 6,
+      step: 30,
+      algorithm: algorithm,
+    };
+    const totpCode = authenticator.generate(secret);
+    console.log('Generated TOTP code using otplib (fallback)');
+    return totpCode;
+  } catch (error: any) {
+    throw new Error(
+      `Failed to generate TOTP code: ${error.message}\n` +
+      `Tried both oathtool and otplib. Secret provided: ${secret.substring(0, 4)}...`
+    );
+  }
 }
 
 /**
