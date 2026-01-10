@@ -292,7 +292,7 @@ jobs:
         env:
           VITE_RELEASE_TAG: v1.0.0
           VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
-          VITE_KEYCLOAK_CLIENT_ID: tamshai-web-portal
+          VITE_KEYCLOAK_CLIENT_ID: tamshai-website
           VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
           VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
         run: |
