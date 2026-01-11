@@ -49,8 +49,8 @@ jobs:
         working-directory: infrastructure/terraform/gcp
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
+          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY_PROD }}
+          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI_PROD }}
         run: |
           echo "📋 Planning domain mapping creation..."
           terraform plan \
@@ -61,8 +61,8 @@ jobs:
         working-directory: infrastructure/terraform/gcp
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
+          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY_PROD }}
+          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI_PROD }}
         run: |
           echo "🚀 Creating domain mapping for auth.tamshai.com..."
           terraform apply tfplan
