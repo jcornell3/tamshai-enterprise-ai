@@ -1,0 +1,118 @@
+name: Reset Production Database
+
+# Resets the production Keycloak database to enable clean realm import
+# Part of Phase 3: Terraform user provisioning migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "reset-database" to confirm'
+        required: true
+        type: string
+
+env:
+  GCP_REGION: us-central1
+
+jobs:
+  confirm:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Confirmation Input
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "reset-database" ]; then
+            echo "❌ Confirmation failed. Expected 'reset-database', got: ${{ github.event.inputs.confirmation }}"
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+  reset-database:
+    name: Reset Keycloak Database
+    runs-on: ubuntu-latest
+    needs: confirm
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get Cloud SQL Instance Name
+        id: get-instance
+        run: |
+          INSTANCE=$(gcloud sql instances list \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --format='value(name)' \
+            --filter='name:postgres')
+
+          echo "instance=$INSTANCE" >> $GITHUB_OUTPUT
+          echo "Found instance: $INSTANCE"
+
+      - name: Drop Keycloak Database
+        run: |
+          echo "🗑️ Dropping keycloak database..."
+          gcloud sql databases delete keycloak \
+            --instance=${{ steps.get-instance.outputs.instance }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --quiet
+
+      - name: Recreate Keycloak Database
+        run: |
+          echo "✨ Creating fresh keycloak database..."
+          gcloud sql databases create keycloak \
+            --instance=${{ steps.get-instance.outputs.instance }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Restart Keycloak Service
+        run: |
+          echo "🔄 Restarting Keycloak to trigger realm import..."
+
+          # Get latest revision
+          LATEST_REVISION=$(gcloud run services describe keycloak \
+            --region=${{ env.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --format='value(status.latestReadyRevisionName)')
+
+          echo "Latest revision: $LATEST_REVISION"
+
+          # Force new revision by updating a label
+          gcloud run services update keycloak \
+            --region=${{ env.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --update-labels="last-reset=$(date +%s)"
+
+      - name: Wait for Keycloak to be Ready
+        run: |
+          echo "⏳ Waiting for Keycloak to start and import realm..."
+          sleep 30
+
+          for i in {1..12}; do
+            if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+              echo "✅ Keycloak is ready! Realm imported successfully."
+              exit 0
+            fi
+            echo "Attempt $i/12: Waiting for realm import... (${i}0s elapsed)"
+            sleep 10
+          done
+
+          echo "❌ Keycloak not ready after 2 minutes"
+          exit 1
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Database Reset Complete!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "The production Keycloak database has been reset and the"
+          echo "tamshai-corp realm has been imported from realm-export.json"
+          echo ""
+          echo "Next step:"
+          echo "  Run the Terraform Keycloak User Provisioning workflow"
+          echo "  to provision users, roles, and clients"
+          echo ""
