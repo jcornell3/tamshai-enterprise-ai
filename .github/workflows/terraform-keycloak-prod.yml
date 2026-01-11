@@ -70,7 +70,7 @@ jobs:
           echo "🔧 Initializing Terraform..."
           terraform init
 
-      - name: Import Existing Resources
+      - name: Import Existing Realm
         working-directory: infrastructure/terraform/keycloak
         env:
           TF_VAR_environment: prod
@@ -78,49 +78,8 @@ jobs:
           TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
           TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
         run: |
-          echo "📥 Importing existing resources into Terraform state..."
-
-          # Import realm
-          terraform import keycloak_realm.tamshai_corp tamshai-corp || echo "Realm already imported"
-
-          # Import existing clients (mcp-gateway, mcp-hr-service were in old realm export)
-          # Get client IDs from Keycloak API
-          KEYCLOAK_ADMIN_PASSWORD="${{ steps.get-password.outputs.password }}"
-
-          # Get access token
-          TOKEN=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
-            -d "username=admin" \
-            -d "password=$KEYCLOAK_ADMIN_PASSWORD" \
-            -d "grant_type=password" \
-            -d "client_id=admin-cli" | jq -r '.access_token')
-
-          # Get mcp-gateway client ID
-          MCP_GATEWAY_ID=$(curl -s -X GET "${{ env.KEYCLOAK_URL }}/admin/realms/tamshai-corp/clients" \
-            -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.clientId == "mcp-gateway") | .id')
-
-          if [ -n "$MCP_GATEWAY_ID" ]; then
-            echo "Importing mcp-gateway client (ID: $MCP_GATEWAY_ID)..."
-            terraform import keycloak_openid_client.mcp_gateway tamshai-corp/$MCP_GATEWAY_ID || echo "Already imported"
-          fi
-
-          # Get mcp-hr-service client ID
-          MCP_HR_ID=$(curl -s -X GET "${{ env.KEYCLOAK_URL }}/admin/realms/tamshai-corp/clients" \
-            -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.clientId == "mcp-hr-service") | .id')
-
-          if [ -n "$MCP_HR_ID" ]; then
-            echo "Importing mcp-hr-service client (ID: $MCP_HR_ID)..."
-            terraform import keycloak_openid_client.mcp_hr_service tamshai-corp/$MCP_HR_ID || echo "Already imported"
-          fi
-
-          # Import test-user.journey if exists
-          TEST_USER_ID=$(curl -s -X GET "${{ env.KEYCLOAK_URL }}/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
-            -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
-
-          if [ -n "$TEST_USER_ID" ]; then
-            echo "Importing test-user.journey (ID: $TEST_USER_ID)..."
-            terraform import keycloak_user.test_user_journey tamshai-corp/$TEST_USER_ID || echo "Already imported"
-          fi
-
+          echo "📥 Importing existing realm (if not already in state)..."
+          terraform import keycloak_realm.tamshai_corp tamshai-corp 2>/dev/null || echo "Realm already in state"
           echo "✅ Import complete"
 
       - name: Terraform Plan
