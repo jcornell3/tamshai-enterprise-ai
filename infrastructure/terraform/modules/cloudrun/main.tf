@@ -385,6 +385,11 @@ resource "google_cloud_run_service" "keycloak" {
           value = "edge"
         }
 
+        env {
+          name  = "KC_PROXY_HEADERS"
+          value = "xforwarded"
+        }
+
         # Use TCP probe instead of HTTP - Cloud Run will check if port 8080 is listening
         startup_probe {
           tcp_socket {
