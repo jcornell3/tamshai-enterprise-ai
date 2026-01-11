@@ -219,7 +219,7 @@ Once prerequisites are provided, Claude will execute these tasks:
 | 3.1 | Build and push container images to Artifact Registry (manual) | 20 min | ✅ |
 | 3.2 | Deploy all 6 Cloud Run services via `terraform apply` | 10 min | ✅ |
 | 3.3 | Deploy static website content to GCS (`prod.tamshai.com`) | 10 min | ✅ |
-| 4.1 | Configure Cloud Run domain mappings | 10 min | ⬜ |
+| 4.1 | Configure Cloud Run domain mappings | 10 min | ✅ |
 | 4.2 | Provide DNS records for you to add | 5 min | ✅ |
 | 4.3 | Run database migrations | 10 min | ✅ |
 | 4.5 | Run smoke tests and verify deployment | 15 min | ✅ |
@@ -550,10 +550,13 @@ terraform apply \
 |--------|------|-------|---------|
 | prod.tamshai.com | CNAME | c.storage.googleapis.com | Main production website (static) |
 | api.tamshai.com | CNAME | Cloud Run URL | MCP Gateway API |
-| auth.tamshai.com | CNAME | Cloud Run URL | Keycloak authentication |
+| auth.tamshai.com | CNAME | ghs.googlehosted.com | Keycloak authentication (Cloud Run domain mapping) |
 | app.tamshai.com | CNAME | Cloud Run URL | Portal/Dashboard app |
 
-> **Note:** For `prod.tamshai.com`, the GCS bucket must be named exactly `prod.tamshai.com` for CNAME-based hosting to work. Alternatively, use Cloud Load Balancer with Cloud CDN for more flexibility.
+> **Notes:**
+> - For `prod.tamshai.com`, the GCS bucket must be named exactly `prod.tamshai.com` for CNAME-based hosting to work.
+> - For `auth.tamshai.com`, the CNAME must point to `ghs.googlehosted.com` (Google's ingress gateway for Cloud Run domain mappings), not directly to the Cloud Run service URL.
+> - **Cloudflare SSL/TLS Configuration**: Create a Configuration Rule for `auth.tamshai.com` with SSL mode set to "Full" (not "Flexible"). This ensures HTTPS connections from Cloudflare to Cloud Run domain mappings work correctly.
 
 ### 4. Keycloak Sync
 
