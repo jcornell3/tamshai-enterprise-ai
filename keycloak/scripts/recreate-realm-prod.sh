@@ -267,6 +267,33 @@ verify_test_user() {
     fi
 }
 
+# Reset test-user.journey password to known value
+reset_test_user_password() {
+    log_info "Resetting test-user.journey password..."
+
+    # Reset password to Test123!Journey
+    HTTP_CODE=$(/opt/keycloak/curl-static -s -o /dev/null -w "%{http_code}" \
+        -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/${USER_ID}/reset-password" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "type": "password",
+            "value": "Test123!Journey",
+            "temporary": false
+        }')
+
+    if [[ "$HTTP_CODE" == "204" ]]; then
+        log_success "Password reset successfully"
+        echo "  • Username: test-user.journey"
+        echo "  • Password: Test123!Journey"
+        echo "  • Temporary: false"
+    else
+        log_error "Failed to reset password (HTTP $HTTP_CODE)"
+        log_error "E2E tests may fail due to invalid credentials"
+        exit 1
+    fi
+}
+
 # Main execution
 main() {
     echo ""
@@ -290,6 +317,7 @@ main() {
 
     import_realm
     verify_test_user
+    reset_test_user_password
 
     echo ""
     log_success "═══════════════════════════════════════════════════════════"

@@ -58,6 +58,11 @@ function isOathtoolAvailable(): boolean {
 /**
  * Generate a TOTP code from the secret
  *
+ * IMPORTANT: Always uses SHA1 algorithm (RFC 6238 standard)
+ * - oathtool only supports SHA1 (not SHA256 or SHA512)
+ * - Google Authenticator uses SHA1 by default
+ * - Keycloak is configured to use SHA1 for TOTP (see keycloak/realm-export.json)
+ *
  * Prefers system oathtool command (more reliable, matches authenticator apps)
  * but falls back to otplib for CI/CD environments where oathtool isn't installed.
  *
@@ -70,11 +75,13 @@ function generateTotpCode(secret: string): string {
   }
 
   // Try oathtool first (local development)
+  // NOTE: oathtool ONLY supports SHA1 algorithm - cannot specify other algorithms
   if (isOathtoolAvailable()) {
     try {
       // Use oathtool to generate TOTP code
       // --totp: Generate TOTP (time-based one-time password)
       // --base32: Secret is base32-encoded (standard for TOTP)
+      // No algorithm flag - oathtool defaults to SHA1 (and only supports SHA1)
       const totpCode = execSync(`oathtool --totp --base32 "${secret}"`, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -84,7 +91,7 @@ function generateTotpCode(secret: string): string {
         throw new Error(`Invalid TOTP code generated: ${totpCode}`);
       }
 
-      console.log('Generated TOTP code using oathtool');
+      console.log('Generated TOTP code using oathtool (SHA1)');
       return totpCode;
     } catch (error: any) {
       console.warn(`oathtool failed, falling back to otplib: ${error.message}`);
@@ -93,14 +100,14 @@ function generateTotpCode(secret: string): string {
 
   // Fallback to otplib (CI/CD environments)
   try {
-    const algorithm = process.env.TEST_TOTP_ALGORITHM || 'sha1';
+    // CRITICAL: Force SHA1 algorithm to match oathtool and Keycloak configuration
     authenticator.options = {
       digits: 6,
       step: 30,
-      algorithm: algorithm,
+      algorithm: 'sha1',  // Must be 'sha1' to match oathtool and Keycloak
     };
     const totpCode = authenticator.generate(secret);
-    console.log('Generated TOTP code using otplib (fallback)');
+    console.log('Generated TOTP code using otplib (SHA1 fallback)');
     return totpCode;
   } catch (error: any) {
     throw new Error(
@@ -146,6 +153,95 @@ async function completeKeycloakLogin(
   // Click login button - try multiple selectors
   const loginButtonSelector = '#kc-login, button[type="submit"], button:has-text("Sign In")';
   await page.click(loginButtonSelector);
+}
+
+/**
+ * Handle TOTP setup if required
+ * Captures the TOTP secret from Keycloak's setup page
+ */
+async function handleTotpSetupIfRequired(page: Page): Promise<string | null> {
+  try {
+    // Check if we're on the OTP setup page (Mobile Authenticator Setup heading)
+    const setupHeading = await page.waitForSelector('h1:has-text("Mobile Authenticator Setup"), heading:has-text("Mobile Authenticator")', {
+      state: 'visible',
+      timeout: 5000,
+    });
+
+    if (!setupHeading) {
+      return null;
+    }
+
+    console.log('*** TOTP SETUP PAGE DETECTED - CONFIGURING TOTP ***');
+
+    // Take screenshot for debugging
+    await page.screenshot({ path: 'test-results/totp-setup-before-extraction.png' });
+
+    // Check if we're in QR mode or text mode
+    const scanBarcodeLink = await page.locator('a:has-text("Scan barcode?")').count();
+    const unableToScanLink = await page.locator('a:has-text("Unable to scan?")').count();
+
+    if (unableToScanLink > 0) {
+      // We're in QR mode - click to reveal text
+      console.log('Clicking "Unable to scan?" to reveal text secret');
+      await page.locator('a:has-text("Unable to scan?")').first().click();
+      await page.waitForTimeout(2000);
+      await page.screenshot({ path: 'test-results/totp-setup-after-click.png' });
+    } else if (scanBarcodeLink > 0) {
+      // We're already in text mode - secret is visible
+      console.log('Already in text mode - secret is visible');
+    }
+
+    // Extract TOTP secret from page content
+    // The secret appears as space-separated groups: "NNBT I52J IM3U 25CJ MZFD ORKX G5XE W4LT"
+    const pageContent = await page.textContent('body');
+
+    // Look for base32 pattern with optional spaces (8 groups of 4 characters)
+    const spacedMatch = pageContent?.match(/([A-Z2-7]{4}\s+[A-Z2-7]{4}\s+[A-Z2-7]{4}\s+[A-Z2-7]{4}\s+[A-Z2-7]{4}\s+[A-Z2-7]{4}\s+[A-Z2-7]{4}\s+[A-Z2-7]{4})/);
+    // Also try without spaces
+    const compactMatch = pageContent?.match(/([A-Z2-7]{32})/);
+
+    let totpSecret = '';
+    if (spacedMatch) {
+      // Remove spaces from the matched secret
+      totpSecret = spacedMatch[0].replace(/\s+/g, '');
+      console.log('Found space-separated secret in page content');
+    } else if (compactMatch) {
+      totpSecret = compactMatch[0];
+      console.log('Found compact secret in page content');
+    }
+
+    if (!totpSecret || !/^[A-Z2-7]{32}$/.test(totpSecret)) {
+      await page.screenshot({ path: 'test-results/totp-extraction-failed.png' });
+      throw new Error('Could not extract TOTP secret from setup page');
+    }
+
+    console.log(`Captured TOTP secret: ${totpSecret.substring(0, 4)}...${totpSecret.substring(28)}`);
+
+    // Generate OTP code using the secret
+    const totpCode = generateTotpCode(totpSecret);
+    console.log(`Generated setup code: ${totpCode.substring(0, 2)}****`);
+
+    // Enter the OTP code to complete setup
+    const otpInput = page.locator('#totp, input[name="totp"], input[type="text"]').first();
+    await otpInput.fill(totpCode);
+
+    // Click submit to complete setup
+    const submitButton = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit")');
+    await submitButton.first().click();
+
+    // Wait for navigation after submit
+    await page.waitForLoadState('networkidle', { timeout: 10000 });
+
+    console.log('TOTP setup completed successfully');
+    return totpSecret;
+  } catch (error: any) {
+    // Not on setup page or setup not required
+    if (error.message?.includes('Timeout') || error.message?.includes('waiting for')) {
+      return null;
+    }
+    console.error(`TOTP setup failed: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
@@ -256,8 +352,19 @@ test.describe('Employee Login Journey', () => {
     // If credentials are invalid, the test will fail at the next assertion with a clear error
     await page.waitForTimeout(1000);
 
-    // Handle TOTP if required
-    const totpHandled = await handleTotpIfRequired(page, TEST_USER.totpSecret);
+    // Check if TOTP setup is required (first time login or forced reconfiguration)
+    const capturedSecret = await handleTotpSetupIfRequired(page);
+    let effectiveTotpSecret = TEST_USER.totpSecret;
+
+    if (capturedSecret) {
+      console.log('TOTP was configured, captured new secret');
+      effectiveTotpSecret = capturedSecret;
+      // Note: In a real scenario, you would save this to a secure location
+      // For now, we'll use it for this session
+    }
+
+    // Handle TOTP if required (subsequent logins after setup)
+    const totpHandled = await handleTotpIfRequired(page, effectiveTotpSecret);
     if (totpHandled) {
       console.log('TOTP authentication completed');
     }
