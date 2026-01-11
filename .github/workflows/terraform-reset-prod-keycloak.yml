@@ -1,0 +1,109 @@
+name: Reset Production Keycloak Database (Terraform)
+
+# Uses Terraform to drop/recreate keycloak database in Cloud SQL
+# This triggers clean realm import via --import-realm flag
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "terraform-reset" to confirm'
+        required: true
+        type: string
+
+env:
+  GCP_REGION: us-central1
+
+jobs:
+  confirm:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Confirmation Input
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "terraform-reset" ]; then
+            echo "❌ Confirmation failed. Expected 'terraform-reset', got: ${{ github.event.inputs.confirmation }}"
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+  terraform-reset:
+    name: Terraform Database Reset
+    runs-on: ubuntu-latest
+    needs: confirm
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/gcp
+        run: terraform init
+
+      - name: Taint Keycloak Database
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          echo "🔧 Marking keycloak database for recreation..."
+          terraform taint module.database.google_sql_database.keycloak_db || echo "Database not in state or already tainted"
+
+      - name: Terraform Plan
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          echo "📋 Planning database reset..."
+          terraform plan -target=module.database.google_sql_database.keycloak_db -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          echo "🚀 Applying database reset..."
+          terraform apply tfplan
+
+      - name: Restart Keycloak
+        run: |
+          echo "🔄 Restarting Keycloak to trigger realm import..."
+
+          # Force new revision by updating a label
+          gcloud run services update keycloak \
+            --region=${{ env.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --update-labels="db-reset=$(date +%s)"
+
+      - name: Wait for Keycloak
+        run: |
+          echo "⏳ Waiting for Keycloak to start and import realm..."
+          sleep 30
+
+          for i in {1..12}; do
+            if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+              echo "✅ Keycloak is ready! Realm imported successfully."
+              exit 0
+            fi
+            echo "Attempt $i/12: Waiting... (${i}0s elapsed)"
+            sleep 10
+          done
+
+          echo "❌ Keycloak not ready after 2 minutes"
+          exit 1
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Database Reset Complete!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Next step: Run terraform-keycloak-prod.yml workflow"
+          echo ""
