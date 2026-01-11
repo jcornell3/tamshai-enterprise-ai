@@ -64,6 +64,16 @@ jobs:
         with:
           terraform_version: 1.5.0
 
+      - name: Warm Up Keycloak
+        run: |
+          echo "🔥 Warming up Keycloak Cloud Run service..."
+          # Make multiple requests to ensure service is fully started
+          for i in {1..5}; do
+            curl -s "${{ env.KEYCLOAK_URL }}/realms/master/.well-known/openid-configuration" > /dev/null && echo "Attempt $i: OK" || echo "Attempt $i: Still starting..."
+            sleep 2
+          done
+          echo "✅ Keycloak is warmed up"
+
       - name: Terraform Init
         working-directory: infrastructure/terraform/keycloak
         run: |
