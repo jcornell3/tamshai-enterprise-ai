@@ -16,6 +16,8 @@
 import { test, expect, Page } from '@playwright/test';
 import { execSync } from 'child_process';
 import { authenticator } from 'otplib';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Environment configuration
 const ENV = process.env.TEST_ENV || 'dev';
@@ -34,6 +36,9 @@ const BASE_URLS: Record<string, { app: string; keycloak: string }> = {
   },
 };
 
+// Directory for persisting TOTP secrets per environment
+const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
+
 // Test credentials - using test-user.journey service account (exists in all environments)
 // See docs/testing/TEST_USER_JOURNEY.md for details
 const TEST_USER = {
@@ -42,6 +47,40 @@ const TEST_USER = {
   // TOTP secret for test-user.journey (same across all environments)
   totpSecret: process.env.TEST_TOTP_SECRET || 'JBSWY3DPEHPK3PXP',
 };
+
+/**
+ * Save TOTP secret to file for reuse in subsequent test runs
+ */
+function saveTotpSecret(username: string, environment: string, secret: string): void {
+  try {
+    if (!fs.existsSync(TOTP_SECRETS_DIR)) {
+      fs.mkdirSync(TOTP_SECRETS_DIR, { recursive: true });
+    }
+
+    const secretFile = path.join(TOTP_SECRETS_DIR, `${username}-${environment}.secret`);
+    fs.writeFileSync(secretFile, secret, 'utf-8');
+    console.log(`Saved TOTP secret to ${secretFile}`);
+  } catch (error: any) {
+    console.warn(`Failed to save TOTP secret: ${error.message}`);
+  }
+}
+
+/**
+ * Load previously saved TOTP secret from file
+ */
+function loadTotpSecret(username: string, environment: string): string | null {
+  try {
+    const secretFile = path.join(TOTP_SECRETS_DIR, `${username}-${environment}.secret`);
+    if (fs.existsSync(secretFile)) {
+      const secret = fs.readFileSync(secretFile, 'utf-8').trim();
+      console.log(`Loaded TOTP secret from ${secretFile}: ${secret.substring(0, 4)}****`);
+      return secret;
+    }
+  } catch (error: any) {
+    console.warn(`Failed to load TOTP secret: ${error.message}`);
+  }
+  return null;
+}
 
 /**
  * Check if oathtool is available on the system
@@ -351,15 +390,20 @@ test.describe('Employee Login Journey', () => {
     // If credentials are invalid, the test will fail at the next assertion with a clear error
     await page.waitForTimeout(1000);
 
+    // Try to load previously saved TOTP secret from file
+    // This enables test resilience: if TOTP was configured in a previous run,
+    // we use that secret instead of the default TEST_TOTP_SECRET
+    let effectiveTotpSecret = loadTotpSecret(TEST_USER.username, ENV) || TEST_USER.totpSecret;
+    console.log(`Using TOTP secret: ${effectiveTotpSecret.substring(0, 4)}****`);
+
     // Check if TOTP setup is required (first time login or forced reconfiguration)
     const capturedSecret = await handleTotpSetupIfRequired(page);
-    let effectiveTotpSecret = TEST_USER.totpSecret;
 
     if (capturedSecret) {
-      console.log('TOTP was configured, captured new secret');
+      console.log('TOTP setup completed, captured new secret');
       effectiveTotpSecret = capturedSecret;
-      // Note: In a real scenario, you would save this to a secure location
-      // For now, we'll use it for this session
+      // Save the captured secret for use in subsequent test runs
+      saveTotpSecret(TEST_USER.username, ENV, capturedSecret);
     }
 
     // Handle TOTP if required (subsequent logins after setup)
