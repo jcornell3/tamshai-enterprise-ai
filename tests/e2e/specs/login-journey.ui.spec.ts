@@ -79,10 +79,9 @@ function generateTotpCode(secret: string): string {
   if (isOathtoolAvailable()) {
     try {
       // Use oathtool to generate TOTP code
-      // --totp: Generate TOTP (time-based one-time password)
-      // --base32: Secret is base32-encoded (standard for TOTP)
-      // No algorithm flag - oathtool defaults to SHA1 (and only supports SHA1)
-      const totpCode = execSync(`oathtool --totp --base32 "${secret}"`, {
+      // oathtool takes the base32 secret as a positional argument
+      // No flags needed - it defaults to TOTP with SHA1 algorithm
+      const totpCode = execSync(`oathtool "${secret}"`, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
