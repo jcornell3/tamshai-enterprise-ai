@@ -291,11 +291,36 @@ resource "google_project_iam_member" "cicd_artifact_registry_writer" {
   member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 
-# Grant CI/CD service account Service Account User role (to deploy as other service accounts)
-resource "google_project_iam_member" "cicd_service_account_user" {
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.cicd.email}"
+# =============================================================================
+# CI/CD Service Account Impersonation - RESOURCE SCOPED (SECURE)
+# =============================================================================
+# Principle of Least Privilege: Grant CI/CD access ONLY to specific service
+# accounts needed for Cloud Run deployments, not project-wide access.
+#
+# Security: Fixes CKV_GCP_41 and CKV_GCP_49 (High severity)
+# Previously: Project-level roles/iam.serviceAccountUser allowed impersonation
+#             of ANY service account in the project (privilege escalation risk)
+# Now: Resource-scoped bindings limit CI/CD to only required service accounts
+
+# Allow CI/CD to impersonate Keycloak service account (for Cloud Run deployments)
+resource "google_service_account_iam_member" "cicd_can_use_keycloak_sa" {
+  service_account_id = google_service_account.keycloak.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.cicd.email}"
+}
+
+# Allow CI/CD to impersonate MCP Gateway service account (for Cloud Run deployments)
+resource "google_service_account_iam_member" "cicd_can_use_mcp_gateway_sa" {
+  service_account_id = google_service_account.mcp_gateway.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.cicd.email}"
+}
+
+# Allow CI/CD to impersonate MCP Servers service account (for Cloud Run deployments)
+resource "google_service_account_iam_member" "cicd_can_use_mcp_servers_sa" {
+  service_account_id = google_service_account.mcp_servers.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.cicd.email}"
 }
 
 # Grant CI/CD service account Secret Manager Accessor role (to access secrets during deployment)
