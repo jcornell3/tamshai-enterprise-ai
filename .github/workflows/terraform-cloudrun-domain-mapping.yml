@@ -1,0 +1,95 @@
+name: Terraform - Apply Cloud Run Domain Mapping
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "apply" to confirm domain mapping creation'
+        required: true
+        type: string
+
+jobs:
+  apply-domain-mapping:
+    name: Apply Domain Mapping for auth.tamshai.com
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "apply" ]; then
+            echo "❌ Confirmation failed. You must type 'apply' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation received"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_PROD_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          echo "🔧 Initializing Terraform..."
+          terraform init
+
+      - name: Terraform Plan (Domain Mapping Only)
+        working-directory: infrastructure/terraform/gcp
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
+        run: |
+          echo "📋 Planning domain mapping creation..."
+          terraform plan \
+            -target=module.cloudrun.google_cloud_run_domain_mapping.keycloak \
+            -out=tfplan
+
+      - name: Terraform Apply (Domain Mapping Only)
+        working-directory: infrastructure/terraform/gcp
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
+        run: |
+          echo "🚀 Creating domain mapping for auth.tamshai.com..."
+          terraform apply tfplan
+
+      - name: Verify Domain Mapping
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          echo "🔍 Checking domain mapping status..."
+          gcloud run domain-mappings describe auth.tamshai.com \
+            --region=us-central1 \
+            --platform=managed \
+            --project=$GCP_PROJECT_ID
+
+      - name: Test Keycloak Accessibility
+        run: |
+          echo "🧪 Testing Keycloak via custom domain..."
+          sleep 10  # Wait for DNS propagation
+
+          # Test HTTPS access
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration)
+
+          echo "Status code: $STATUS_CODE"
+
+          if [ "$STATUS_CODE" = "200" ]; then
+            echo "✅ Keycloak accessible via auth.tamshai.com"
+          else
+            echo "⚠️ Keycloak returned status $STATUS_CODE (may need DNS propagation time)"
+          fi
