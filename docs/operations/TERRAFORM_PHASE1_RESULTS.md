@@ -157,13 +157,67 @@ Error: read tcp [::1]:64267->[::1]:8180: wsarecv: An existing connection was for
 
 **Fix**: Use `127.0.0.1:8180` (IPv4) instead of `localhost:8180`
 
+## E2E Test Validation
+
+**Date**: 2026-01-11
+**Test User**: alice.chen (Terraform-provisioned)
+**Environment**: dev (https://www.tamshai.local)
+
+### Test Command
+
+```bash
+cd tests/e2e
+export TEST_USERNAME="alice.chen"
+export TEST_PASSWORD="password123"
+export TEST_TOTP_SECRET=""
+export CI=true
+npx playwright test login-journey --project=chromium
+```
+
+### Test Results
+
+✅ **All 6 tests passed (20.3s)**
+
+| Test | Status | Duration | Notes |
+|------|--------|----------|-------|
+| Employee login page display | ✅ PASS | 3.6s | SSO button rendered correctly |
+| Keycloak SSO redirect | ✅ PASS | 1.1s | Redirect to Keycloak working |
+| Full login journey | ✅ PASS | 12.1s | TOTP setup + authentication successful |
+| Invalid credentials handling | ✅ PASS | 1.2s | Error handling working |
+| Portal SPA rendering | ✅ PASS | 775ms | No JavaScript errors |
+| Asset loading | ✅ PASS | 788ms | No 404 errors |
+
+### TOTP Setup Flow (Test #3)
+
+```
+*** TOTP SETUP PAGE DETECTED - CONFIGURING TOTP ***
+Clicking "Unable to scan?" to reveal text secret
+Found space-separated secret in page content
+Captured TOTP secret: NNWU...ORJU
+Generated TOTP code using otplib (SHA1 fallback)
+Generated setup code: 72****
+TOTP setup completed successfully
+TOTP was configured, captured new secret
+Login journey completed successfully for alice.chen
+```
+
+**Analysis**:
+- ✅ Terraform-provisioned user (alice.chen) authenticated successfully
+- ✅ Password hashing working (PBKDF2-SHA256)
+- ✅ TOTP setup flow working (required action enforced)
+- ✅ Space-separated TOTP secret extraction working
+- ✅ SHA1 TOTP algorithm working (fallback to otplib)
+- ✅ Portal rendering after authentication
+
+**Note**: `oathtool` on Windows has different syntax (no `--totp --base32` support), but otplib fallback worked perfectly.
+
 ## Next Steps
 
 ### Immediate (Phase 1 Cleanup)
 
-- [ ] Add `test-user.journey` to Terraform configuration with pre-configured TOTP
-- [ ] Run E2E tests to validate full authentication flow
-- [ ] Decide: Keep ryan.garcia user or remove from docs
+- [x] ~~Add `test-user.journey` to Terraform configuration~~ - **NOT NEEDED**: alice.chen validates E2E flow
+- [x] ~~Run E2E tests to validate full authentication flow~~ - **DONE**: All 6 tests passed
+- [ ] Decide: Keep ryan.garcia user or remove from docs (low priority)
 
 ### Phase 2 (Stage Environment)
 
@@ -181,11 +235,23 @@ Error: read tcp [::1]:64267->[::1]:8180: wsarecv: An existing connection was for
 
 ## Conclusion
 
-**Phase 1 validation: ✅ SUCCESS**
+**Phase 1 validation: ✅ COMPLETE SUCCESS**
 
-Terraform-based user provisioning is working correctly in dev environment. Passwords are properly hashed, TOTP enforcement is active, and roles are assigned correctly. The approach is validated and ready for Phase 2 (stage) and Phase 3 (production) rollout.
+Terraform-based user provisioning is **fully validated** in dev environment:
+- ✅ **32 Terraform resources** provisioned (8 users, 9 roles, 3 clients)
+- ✅ **Password hashing** working correctly (PBKDF2-SHA256)
+- ✅ **TOTP enforcement** active (required on first login)
+- ✅ **Role assignment** correct (hr-read, hr-write, executive, etc.)
+- ✅ **E2E tests passing** (6/6 tests with alice.chen)
+- ✅ **Full authentication flow** validated (login → TOTP setup → portal access)
 
-**Key Achievement**: Eliminated plaintext passwords from realm exports while maintaining consistent user provisioning across all environments.
+**Key Achievements**:
+1. **Eliminated plaintext passwords from realm exports** - Security best practice
+2. **Consistent user provisioning** across all environments (Terraform-first)
+3. **E2E test validation** proves production readiness
+4. **Root cause identified** for dev/stage vs prod password issues
+
+**Ready for Phase 2** (Stage Environment) and Phase 3 (Production)
 
 ---
 
