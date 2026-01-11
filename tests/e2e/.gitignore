@@ -1,2 +1,5 @@
 # TOTP backup files (temporary, should not be committed)
 .totp-backups/
+
+# TOTP secrets (persisted for test resilience, should not be committed)
+.totp-secrets/
