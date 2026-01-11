@@ -1,0 +1,180 @@
+name: Terraform Keycloak User Provisioning (Production)
+
+# Apply Terraform-based user provisioning to production Keycloak
+# This is Phase 3 of the Terraform user provisioning migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "apply-terraform" to confirm'
+        required: true
+        type: string
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth
+
+jobs:
+  confirm:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Confirmation Input
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "apply-terraform" ]; then
+            echo "❌ Confirmation failed. Expected 'apply-terraform', got: ${{ github.event.inputs.confirmation }}"
+            exit 1
+          fi
+          echo "✅ Confirmation validated"
+
+  terraform-apply:
+    name: Apply Terraform User Provisioning
+    runs-on: ubuntu-latest
+    needs: confirm
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get Keycloak Admin Password
+        id: get-password
+        run: |
+          echo "🔑 Retrieving Keycloak admin password from Secret Manager..."
+          KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest \
+            --secret=tamshai-prod-keycloak-admin-password \
+            --project=${{ secrets.GCP_PROJECT_ID }})
+
+          # Mask the password in logs
+          echo "::add-mask::$KEYCLOAK_ADMIN_PASSWORD"
+          echo "password=$KEYCLOAK_ADMIN_PASSWORD" >> $GITHUB_OUTPUT
+          echo "✅ Password retrieved successfully"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/keycloak
+        run: |
+          echo "🔧 Initializing Terraform..."
+          terraform init
+
+      - name: Terraform Plan
+        working-directory: infrastructure/terraform/keycloak
+        env:
+          TF_VAR_environment: prod
+          TF_VAR_test_user_password: ***REDACTED_PASSWORD***
+          TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
+          TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
+        run: |
+          echo "📋 Planning Terraform changes..."
+          terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform/keycloak
+        env:
+          TF_VAR_environment: prod
+          TF_VAR_test_user_password: ***REDACTED_PASSWORD***
+          TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
+          TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
+        run: |
+          echo "🚀 Applying Terraform changes..."
+          terraform apply tfplan
+
+      - name: Verify User Creation
+        env:
+          KEYCLOAK_ADMIN_PASSWORD: ${{ steps.get-password.outputs.password }}
+        run: |
+          echo "🔍 Verifying user creation..."
+
+          # Install jq for JSON parsing
+          sudo apt-get update && sudo apt-get install -y jq
+
+          # Get access token
+          TOKEN_RESPONSE=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=$KEYCLOAK_ADMIN_PASSWORD" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "❌ Failed to authenticate to Keycloak"
+            echo "Response: $TOKEN_RESPONSE"
+            exit 1
+          fi
+
+          # List all users in tamshai-corp realm
+          USERS_RESPONSE=$(curl -s -X GET "${{ env.KEYCLOAK_URL }}/admin/realms/tamshai-corp/users" \
+            -H "Authorization: Bearer $ACCESS_TOKEN")
+
+          USER_COUNT=$(echo "$USERS_RESPONSE" | jq 'length')
+          echo "✅ Found $USER_COUNT users in tamshai-corp realm"
+
+          # Verify key users exist
+          for username in alice.chen bob.martinez carol.johnson dan.williams eve.thompson test-user.journey; do
+            USER=$(echo "$USERS_RESPONSE" | jq -r ".[] | select(.username == \"$username\") | .username")
+            if [ "$USER" = "$username" ]; then
+              echo "  ✅ $username exists"
+            else
+              echo "  ❌ $username NOT FOUND"
+              exit 1
+            fi
+          done
+
+      - name: Test Authentication
+        env:
+          KEYCLOAK_ADMIN_PASSWORD: ${{ steps.get-password.outputs.password }}
+        run: |
+          echo "🔐 Testing alice.chen authentication..."
+
+          # Try to authenticate as alice.chen (should fail with "Account not fully set up" - TOTP required)
+          AUTH_RESPONSE=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/tamshai-corp/protocol/openid-connect/token" \
+            -d "username=alice.chen" \
+            -d "password=***REDACTED_PASSWORD***" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli")
+
+          ERROR=$(echo "$AUTH_RESPONSE" | jq -r '.error // empty')
+          ERROR_DESC=$(echo "$AUTH_RESPONSE" | jq -r '.error_description // empty')
+
+          if [ "$ERROR" = "invalid_grant" ] && [[ "$ERROR_DESC" == *"not fully set up"* ]]; then
+            echo "✅ Authentication working correctly (TOTP required as expected)"
+          else
+            echo "⚠️ Unexpected authentication response:"
+            echo "$AUTH_RESPONSE"
+            # Don't fail here - this might indicate TOTP is already configured
+          fi
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Terraform User Provisioning Complete!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Resources provisioned:"
+          echo "  • 9 users (alice.chen, bob.martinez, carol.johnson, etc.)"
+          echo "  • 9 roles (hr-read, hr-write, finance-read, etc.)"
+          echo "  • 3 clients (mcp-gateway, mcp-hr-service, web-portal)"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Run E2E tests to verify authentication:"
+          echo "     cd tests/e2e && npm run test:login:prod"
+          echo ""
+          echo "  2. Verify login at:"
+          echo "     https://prod.tamshai.com"
+          echo ""
