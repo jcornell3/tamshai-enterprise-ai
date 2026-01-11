@@ -70,6 +70,18 @@ jobs:
           echo "🔧 Initializing Terraform..."
           terraform init
 
+      - name: Import Existing Realm
+        working-directory: infrastructure/terraform/keycloak
+        env:
+          TF_VAR_environment: prod
+          TF_VAR_test_user_password: ***REDACTED_PASSWORD***
+          TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
+          TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
+        run: |
+          echo "📥 Importing existing tamshai-corp realm into Terraform state..."
+          # Import will fail if already in state, so we use || true to continue
+          terraform import keycloak_realm.tamshai_corp tamshai-corp || echo "Realm already in state or import failed, continuing..."
+
       - name: Terraform Plan
         working-directory: infrastructure/terraform/keycloak
         env:
