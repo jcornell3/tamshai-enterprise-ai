@@ -29,7 +29,7 @@
   "actionTokenGeneratedByAdminLifespan": 43200,
   "actionTokenGeneratedByUserLifespan": 300,
   "otpPolicyType": "totp",
-  "otpPolicyAlgorithm": "HmacSHA256",
+  "otpPolicyAlgorithm": "HmacSHA1",
   "otpPolicyInitialCounter": 0,
   "otpPolicyDigits": 6,
   "otpPolicyLookAheadWindow": 1,
@@ -165,281 +165,7 @@
       ]
     }
   ],
-  "users": [
-    {
-      "username": "eve.thompson",
-      "email": "eve@tamshai.com",
-      "firstName": "Eve",
-      "lastName": "Thompson",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/C-Suite"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Executive"
-        ],
-        "employeeId": [
-          "EMP001"
-        ],
-        "title": [
-          "CEO"
-        ]
-      }
-    },
-    {
-      "username": "alice.chen",
-      "email": "alice@tamshai.com",
-      "firstName": "Alice",
-      "lastName": "Chen",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/HR-Department",
-        "/Managers"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Human Resources"
-        ],
-        "employeeId": [
-          "EMP010"
-        ],
-        "title": [
-          "VP of Human Resources"
-        ]
-      }
-    },
-    {
-      "username": "bob.martinez",
-      "email": "bob@tamshai.com",
-      "firstName": "Bob",
-      "lastName": "Martinez",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/Finance-Team",
-        "/Managers"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Finance"
-        ],
-        "employeeId": [
-          "EMP020"
-        ],
-        "title": [
-          "Finance Director"
-        ]
-      }
-    },
-    {
-      "username": "carol.johnson",
-      "email": "carol@tamshai.com",
-      "firstName": "Carol",
-      "lastName": "Johnson",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/Sales-Managers"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Sales"
-        ],
-        "employeeId": [
-          "EMP030"
-        ],
-        "title": [
-          "VP of Sales"
-        ]
-      }
-    },
-    {
-      "username": "dan.williams",
-      "email": "dan@tamshai.com",
-      "firstName": "Dan",
-      "lastName": "Williams",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/Support-Team",
-        "/Managers"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Customer Support"
-        ],
-        "employeeId": [
-          "EMP040"
-        ],
-        "title": [
-          "Support Director"
-        ]
-      }
-    },
-    {
-      "username": "ryan.garcia",
-      "email": "ryan.g@tamshai.com",
-      "firstName": "Ryan",
-      "lastName": "Garcia",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/Sales-Managers"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Sales"
-        ],
-        "employeeId": [
-          "EMP031"
-        ],
-        "title": [
-          "Sales Manager"
-        ]
-      }
-    },
-    {
-      "username": "nina.patel",
-      "email": "nina.p@tamshai.com",
-      "firstName": "Nina",
-      "lastName": "Patel",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/Engineering-Managers"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Engineering"
-        ],
-        "employeeId": [
-          "EMP051"
-        ],
-        "title": [
-          "Engineering Manager"
-        ]
-      }
-    },
-    {
-      "username": "marcus.johnson",
-      "email": "marcus.j@tamshai.com",
-      "firstName": "Marcus",
-      "lastName": "Johnson",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/Engineering-Team"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "Engineering"
-        ],
-        "employeeId": [
-          "EMP052"
-        ],
-        "title": [
-          "Software Engineer"
-        ]
-      }
-    },
-    {
-      "username": "frank.davis",
-      "email": "frank@tamshai.com",
-      "firstName": "Frank",
-      "lastName": "Davis",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "TamshaiTemp123!",
-          "temporary": false
-        }
-      ],
-      "groups": [
-        "/IT-Team"
-      ],
-      "requiredActions": ["CONFIGURE_TOTP"],
-      "attributes": {
-        "department": [
-          "IT"
-        ],
-        "employeeId": [
-          "EMP061"
-        ],
-        "title": [
-          "IT Intern"
-        ]
-      }
-    }
-  ],
+  "users": [],
   "clients": [
     {
       "clientId": "ai-desktop",
@@ -462,6 +188,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
+        
         "profile",
         "email",
         "roles"
@@ -486,53 +213,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        "profile",
-        "email",
-        "roles"
-      ]
-    },
-    {
-      "clientId": "mcp-gateway",
-      "name": "MCP Gateway Service",
-      "description": "Backend service for MCP orchestration",
-      "enabled": true,
-      "publicClient": false,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": true,
-      "protocol": "openid-connect",
-      "secret": "mcp-gateway-secret",
-      "defaultClientScopes": [
-        "profile",
-        "email",
-        "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "audience-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "true",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
-    {
-      "clientId": "mcp-hr-service",
-      "name": "MCP HR Identity Sync Service",
-      "description": "Service account for syncing HR employees to Keycloak users",
-      "enabled": true,
-      "publicClient": false,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
-      "protocol": "openid-connect",
-      "secret": "hr-service-secret",
-      "defaultClientScopes": [
+        
         "profile",
         "email",
         "roles"
@@ -550,15 +231,20 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4001/callback",
-        "http://localhost:4001/*"
+        "http://localhost:4001/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4001"
+        "http://localhost:4001",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
+        
         "profile",
         "email",
         "roles"
@@ -576,15 +262,20 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4002/callback",
-        "http://localhost:4002/*"
+        "http://localhost:4002/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4002"
+        "http://localhost:4002",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
+        
         "profile",
         "email",
         "roles"
@@ -602,15 +293,20 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4003/callback",
-        "http://localhost:4003/*"
+        "http://localhost:4003/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4003"
+        "http://localhost:4003",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
+        
         "profile",
         "email",
         "roles"
@@ -628,15 +324,20 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:4004/callback",
-        "http://localhost:4004/*"
+        "http://localhost:4004/*",
+        "https://www.tamshai.com/*",
+        "https://prod.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4004"
+        "http://localhost:4004",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
+        
         "profile",
         "email",
         "roles"
@@ -667,6 +368,7 @@
         "post.logout.redirect.uris": "http://localhost:*/logout##http://127.0.0.1:*/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout"
       },
       "defaultClientScopes": [
+
         "profile",
         "email",
         "roles"
@@ -683,17 +385,19 @@
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
-        "http://localhost:8080/employee-login.html",
+        "http://localhost:8080/employee-services.html",
         "http://localhost:8080/*",
-        "https://tamshai.local/employee-login.html",
+        "https://tamshai.local/employee-services.html",
         "https://tamshai.local/*",
-        "https://www.tamshai.local/employee-login.html",
+        "https://www.tamshai.local/employee-services.html",
         "https://www.tamshai.local/*",
-        "https://vps.tamshai.com/employee-login.html",
+        "https://vps.tamshai.com/employee-services.html",
         "https://vps.tamshai.com/*",
-        "https://tamshai.com/employee-login.html",
+        "https://prod.tamshai.com/employee-services.html",
+        "https://prod.tamshai.com/*",
+        "https://tamshai.com/employee-services.html",
         "https://tamshai.com/*",
-        "https://www.tamshai.com/employee-login.html",
+        "https://www.tamshai.com/employee-services.html",
         "https://www.tamshai.com/*"
       ],
       "webOrigins": [
@@ -701,30 +405,19 @@
         "https://tamshai.local",
         "https://www.tamshai.local",
         "https://vps.tamshai.com",
+        "https://prod.tamshai.com",
         "https://tamshai.com",
         "https://www.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://vps.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
+        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://vps.tamshai.com/*##https://prod.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
       },
       "defaultClientScopes": [
+
         "profile",
         "email",
         "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "mcp-gateway-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
       ]
     }
   ],
@@ -961,7 +654,7 @@
       "name": "Configure OTP",
       "providerId": "CONFIGURE_TOTP",
       "enabled": true,
-      "defaultAction": false,
+      "defaultAction": true,
       "priority": 10
     },
     {
