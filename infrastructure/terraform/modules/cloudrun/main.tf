@@ -444,3 +444,33 @@ resource "google_cloud_run_service_iam_member" "keycloak_public" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# =============================================================================
+# CLOUD RUN DOMAIN MAPPING (Custom Domain Support)
+# =============================================================================
+
+# Map custom domain to Keycloak service
+# Prerequisites:
+# 1. Domain DNS must point to Cloud Run (CNAME to ghs.googlehosted.com or Cloud Run service URL)
+# 2. Domain ownership verified in Google Search Console
+# 3. SSL certificate automatically provisioned by Google Cloud
+resource "google_cloud_run_domain_mapping" "keycloak" {
+  count = var.keycloak_domain != "" ? 1 : 0
+
+  name     = var.keycloak_domain
+  location = var.region
+  project  = var.project_id
+
+  metadata {
+    namespace = var.project_id
+
+    labels = {
+      environment = var.environment
+      service     = "keycloak"
+    }
+  }
+
+  spec {
+    route_name = google_cloud_run_service.keycloak.name
+  }
+}
