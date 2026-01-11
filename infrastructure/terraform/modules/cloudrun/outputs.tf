@@ -66,6 +66,14 @@ output "keycloak_service_name" {
   value       = google_cloud_run_service.keycloak.name
 }
 
+output "keycloak_domain_mapping" {
+  description = "Keycloak custom domain mapping status"
+  value = length(google_cloud_run_domain_mapping.keycloak) > 0 ? {
+    domain = google_cloud_run_domain_mapping.keycloak[0].name
+    status = google_cloud_run_domain_mapping.keycloak[0].status[0].conditions
+  } : null
+}
+
 # =============================================================================
 # SERVICE URLS MAP
 # =============================================================================
