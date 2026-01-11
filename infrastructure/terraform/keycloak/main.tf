@@ -539,3 +539,25 @@ resource "keycloak_user" "marcus_johnson" {
   # Require TOTP in all environments except CI (where automated testing needs direct login)
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
+
+# Test User Journey - E2E Testing Account
+# This user exists in ALL environments (dev, stage, prod) for automated E2E testing
+# Uses fixed credentials to enable consistent testing across environments
+resource "keycloak_user" "test_user_journey" {
+  realm_id   = keycloak_realm.tamshai_corp.id
+  username   = "test-user.journey"
+  enabled    = true
+  email      = "test-user@tamshai.com"
+  first_name = "Test"
+  last_name  = "User"
+
+  email_verified = true
+
+  initial_password {
+    value     = "***REDACTED_PASSWORD***"
+    temporary = false
+  }
+
+  # For E2E testing: CI mode skips TOTP, other environments require TOTP setup
+  required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
+}

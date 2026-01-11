@@ -165,45 +165,7 @@
       ]
     }
   ],
-  "users": [
-    {
-      "username": "test-user.journey",
-      "email": "test-user@tamshai.com",
-      "firstName": "Test",
-      "lastName": "User",
-      "enabled": true,
-      "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "***REDACTED_PASSWORD***",
-          "temporary": false
-        },
-        {
-          "type": "otp",
-          "value": "JBSWY3DPEHPK3PXP",
-          "algorithm": "HmacSHA256",
-          "digits": 6,
-          "period": 30,
-          "counter": 0
-        }
-      ],
-      "groups": [],
-      "realmRoles": [],
-      "requiredActions": [],
-      "attributes": {
-        "department": [
-          "Testing"
-        ],
-        "employeeId": [
-          "TEST001"
-        ],
-        "title": [
-          "Journey Test Account"
-        ]
-      }
-    }
-  ],
+  "users": [],
   "clients": [
     {
       "clientId": "ai-desktop",
@@ -252,54 +214,6 @@
       },
       "defaultClientScopes": [
         
-        "profile",
-        "email",
-        "roles"
-      ]
-    },
-    {
-      "clientId": "mcp-gateway",
-      "name": "MCP Gateway Service",
-      "description": "Backend service for MCP orchestration",
-      "enabled": true,
-      "publicClient": false,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": true,
-      "protocol": "openid-connect",
-      "secret": "mcp-gateway-secret",
-      "defaultClientScopes": [
-
-        "profile",
-        "email",
-        "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "audience-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "true",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
-    {
-      "clientId": "mcp-hr-service",
-      "name": "MCP HR Identity Sync Service",
-      "description": "Service account for syncing HR employees to Keycloak users",
-      "enabled": true,
-      "publicClient": false,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
-      "protocol": "openid-connect",
-      "secret": "hr-service-secret",
-      "defaultClientScopes": [
         "profile",
         "email",
         "roles"
