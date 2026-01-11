@@ -61,12 +61,20 @@ jobs:
 
       - name: Terraform Plan
         working-directory: infrastructure/terraform/gcp
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
         run: |
           echo "📋 Planning database reset..."
           terraform plan -target=module.database.google_sql_database.keycloak_db -out=tfplan
 
       - name: Terraform Apply
         working-directory: infrastructure/terraform/gcp
+        env:
+          TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
         run: |
           echo "🚀 Applying database reset..."
           terraform apply tfplan
