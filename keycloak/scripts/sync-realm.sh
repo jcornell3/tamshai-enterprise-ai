@@ -735,15 +735,16 @@ provision_test_user() {
 # Audience Mapper Sync
 # =============================================================================
 
-# Sync the mcp-gateway-audience mapper on tamshai-website client
+# Add mcp-gateway-audience mapper to a specific client
 # This ensures tokens include mcp-gateway in the audience claim
 # Without this, MCP Gateway rejects tokens with 401 Unauthorized
-sync_audience_mapper() {
-    log_info "Syncing mcp-gateway-audience mapper..."
+add_audience_mapper_to_client() {
+    local client_id="$1"
+    log_info "  Checking audience mapper for client '$client_id'..."
 
-    local client_uuid=$(get_client_uuid "tamshai-website")
+    local client_uuid=$(get_client_uuid "$client_id")
     if [ -z "$client_uuid" ]; then
-        log_warn "  tamshai-website client not found, skipping audience mapper"
+        log_warn "    Client '$client_id' not found, skipping"
         return 1
     fi
 
@@ -751,12 +752,12 @@ sync_audience_mapper() {
     local mapper_exists=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null | grep -c "mcp-gateway-audience" || echo "0")
 
     if [ "$mapper_exists" -gt 0 ]; then
-        log_info "  Audience mapper already exists"
+        log_info "    Audience mapper already exists for '$client_id'"
         return 0
     fi
 
     # Create the audience mapper
-    log_info "  Creating mcp-gateway-audience mapper..."
+    log_info "    Creating mcp-gateway-audience mapper for '$client_id'..."
     if $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
         -s name=mcp-gateway-audience \
         -s protocol=openid-connect \
@@ -765,10 +766,25 @@ sync_audience_mapper() {
         -s 'config."included.client.audience"=mcp-gateway' \
         -s 'config."id.token.claim"=false' \
         -s 'config."access.token.claim"=true' 2>/dev/null; then
-        log_info "  Audience mapper created successfully"
+        log_info "    Audience mapper created successfully for '$client_id'"
     else
-        log_warn "  Failed to create audience mapper (may already exist)"
+        log_warn "    Failed to create audience mapper for '$client_id' (may already exist)"
     fi
+}
+
+# Sync the mcp-gateway-audience mapper on all web clients
+# Both tamshai-website and web-portal need this for token validation
+sync_audience_mapper() {
+    log_info "Syncing mcp-gateway-audience mapper on all web clients..."
+
+    # Add mapper to tamshai-website (used by marketing site SSO)
+    add_audience_mapper_to_client "tamshai-website"
+
+    # Add mapper to web-portal (used by production Cloud Run apps)
+    add_audience_mapper_to_client "web-portal"
+
+    # Add mapper to Flutter client for mobile/desktop apps
+    add_audience_mapper_to_client "tamshai-flutter-client"
 }
 
 main() {
