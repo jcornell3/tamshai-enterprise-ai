@@ -1,0 +1,112 @@
+# Tamshai Web Apps - Unified Caddy Configuration (Production)
+# Serves all SPAs: portal, hr, finance, sales, support
+#
+# Each app is built with its own base path (e.g., /app/, /hr/)
+# Caddy strips the prefix and serves from the app's dist directory
+
+:80 {
+    # Enable gzip compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Health check endpoint for Cloud Run
+    respond /health 200
+
+    # Redirect root to portal
+    redir / /app/ permanent
+
+    # Portal app at /app/*
+    handle_path /app/* {
+        root * /srv/app
+        try_files {path} {path}/ /index.html
+        file_server
+
+        # Cache static assets
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        # Don't cache index.html (for SPA updates)
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+
+    # HR app at /hr/*
+    handle_path /hr/* {
+        root * /srv/hr
+        try_files {path} {path}/ /index.html
+        file_server
+
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+
+    # Finance app at /finance/*
+    handle_path /finance/* {
+        root * /srv/finance
+        try_files {path} {path}/ /index.html
+        file_server
+
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+
+    # Sales app at /sales/*
+    handle_path /sales/* {
+        root * /srv/sales
+        try_files {path} {path}/ /index.html
+        file_server
+
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+
+    # Support app at /support/*
+    handle_path /support/* {
+        root * /srv/support
+        try_files {path} {path}/ /index.html
+        file_server
+
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+}
