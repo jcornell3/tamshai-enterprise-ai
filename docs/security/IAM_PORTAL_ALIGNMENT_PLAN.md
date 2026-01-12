@@ -322,3 +322,65 @@ After TOTP authentication succeeds, some users see:
 
 **Status**: Under investigation
 **Workaround**: Access portal directly at `https://app.tamshai.com/app`
+
+---
+
+## January 12, 2026 Update: 403 API Error Fix
+
+### Problem Identified
+
+After successfully logging in and seeing apps on the portal landing page, eve.thompson was getting 403 Forbidden errors when the apps tried to fetch data from MCP Gateway (e.g., `/api/mcp/finance/list_invoices`).
+
+### Root Cause
+
+The `mcp-gateway-audience` protocol mapper was only being added to the `tamshai-website` client in `sync-realm.sh`, but production uses the `web-portal` client (defined in deploy-to-gcp.yml: `VITE_KEYCLOAK_CLIENT_ID: web-portal`).
+
+Tokens issued by `web-portal` did not include `mcp-gateway` in the audience claim, causing MCP Gateway to reject them with 403.
+
+### Solution
+
+Updated `sync_audience_mapper()` in `keycloak/scripts/sync-realm.sh` to add the audience mapper to ALL web clients:
+
+```bash
+# Before: Only added to tamshai-website
+sync_audience_mapper() {
+    log_info "Syncing mcp-gateway-audience mapper..."
+    local client_uuid=$(get_client_uuid "tamshai-website")
+    # ... add mapper only to tamshai-website
+}
+
+# After: Added to all web clients
+sync_audience_mapper() {
+    log_info "Syncing mcp-gateway-audience mapper on all web clients..."
+    add_audience_mapper_to_client "tamshai-website"
+    add_audience_mapper_to_client "web-portal"
+    add_audience_mapper_to_client "tamshai-flutter-client"
+}
+```
+
+### Clients Receiving Audience Mapper
+
+| Client ID | Purpose | Fix Applied |
+|-----------|---------|-------------|
+| `tamshai-website` | Marketing site SSO | Already had mapper |
+| `web-portal` | Production Cloud Run apps | **NEW** - Mapper added |
+| `tamshai-flutter-client` | Mobile/desktop Flutter apps | **NEW** - Mapper added |
+
+### Deployment
+
+1. Committed fix to `keycloak/scripts/sync-realm.sh`
+2. Push triggered deploy-to-gcp.yml workflow
+3. `sync-keycloak-realm` job ran and applied the mappers to production Keycloak
+
+### Verification
+
+After deployment, eve.thompson should be able to:
+1. Log in to `app.tamshai.com`
+2. Click on any department app (HR, Finance, Sales, Support)
+3. See data fetched from MCP Gateway without 403 errors
+
+### Related Files
+
+- `keycloak/scripts/sync-realm.sh` - Fixed sync_audience_mapper function
+- `keycloak/realm-export.json` - Already had mapper defined for web-portal (but not applied to live Keycloak)
+- `.github/workflows/deploy-to-gcp.yml` - sync-keycloak-realm job runs the fix
