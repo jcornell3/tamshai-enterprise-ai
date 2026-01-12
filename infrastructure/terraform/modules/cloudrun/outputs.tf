@@ -75,17 +75,36 @@ output "keycloak_domain_mapping" {
 }
 
 # =============================================================================
+# WEB PORTAL
+# =============================================================================
+
+output "web_portal_url" {
+  description = "Web Portal Cloud Run URL"
+  value       = var.enable_web_portal ? google_cloud_run_service.web_portal[0].status[0].url : null
+}
+
+output "web_portal_service_name" {
+  description = "Web Portal Cloud Run service name"
+  value       = var.enable_web_portal ? google_cloud_run_service.web_portal[0].name : null
+}
+
+# =============================================================================
 # SERVICE URLS MAP
 # =============================================================================
 
 output "service_urls" {
   description = "Map of all Cloud Run service URLs"
-  value = {
-    mcp_gateway = google_cloud_run_service.mcp_gateway.status[0].url
-    mcp_hr      = google_cloud_run_service.mcp_suite["hr"].status[0].url
-    mcp_finance = google_cloud_run_service.mcp_suite["finance"].status[0].url
-    mcp_sales   = google_cloud_run_service.mcp_suite["sales"].status[0].url
-    mcp_support = google_cloud_run_service.mcp_suite["support"].status[0].url
-    keycloak    = google_cloud_run_service.keycloak.status[0].url
-  }
+  value = merge(
+    {
+      mcp_gateway = google_cloud_run_service.mcp_gateway.status[0].url
+      mcp_hr      = google_cloud_run_service.mcp_suite["hr"].status[0].url
+      mcp_finance = google_cloud_run_service.mcp_suite["finance"].status[0].url
+      mcp_sales   = google_cloud_run_service.mcp_suite["sales"].status[0].url
+      mcp_support = google_cloud_run_service.mcp_suite["support"].status[0].url
+      keycloak    = google_cloud_run_service.keycloak.status[0].url
+    },
+    var.enable_web_portal ? {
+      web_portal = google_cloud_run_service.web_portal[0].status[0].url
+    } : {}
+  )
 }

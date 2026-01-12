@@ -207,5 +207,9 @@ module "cloudrun" {
   # Domain configuration
   keycloak_domain = var.keycloak_domain
 
+  # Web Portal configuration
+  enable_web_portal          = true
+  web_portal_service_account = module.security.mcp_gateway_service_account_email
+
   depends_on = [module.database, module.security, module.networking]
 }

@@ -286,25 +286,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: clients/web/package-lock.json
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
-      - name: Build Portal App
-        working-directory: clients/web
-        env:
-          VITE_RELEASE_TAG: v1.0.0
-          VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
-          VITE_KEYCLOAK_CLIENT_ID: tamshai-website
-          VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
-          VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Marketing Website to GCS
         run: |
-          rm -rf node_modules package-lock.json
-          npm install
-          npm run build
+          # Deploy public marketing website at root (excluding markdown files)
+          gcloud storage rsync --recursive apps/tamshai-website/src gs://prod.tamshai.com --exclude='\.md$'
+
+          # Set cache control for index.html
+          gcloud storage objects update gs://prod.tamshai.com/index.html --cache-control="no-cache,must-revalidate"
+
+  deploy-web-portal:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.web == 'true' ||
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'web'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
@@ -314,22 +320,46 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy to GCS
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Web Portal Image
+        env:
+          VITE_RELEASE_TAG: v1.0.0
+          VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+          VITE_KEYCLOAK_CLIENT_ID: web-portal
+          VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
+          VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
         run: |
-          # Deploy public marketing website at root (excluding markdown files)
-          gcloud storage rsync --recursive apps/tamshai-website/src gs://prod.tamshai.com --exclude='\.md$'
+          # Build the portal Docker image using Dockerfile.prod (Caddy-based)
+          docker build \
+            -f clients/web/apps/portal/Dockerfile.prod \
+            -t ${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/web-portal:latest \
+            --build-arg VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL \
+            --build-arg VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID \
+            --build-arg VITE_API_GATEWAY_URL=$VITE_API_GATEWAY_URL \
+            --build-arg VITE_MCP_GATEWAY_URL=$VITE_MCP_GATEWAY_URL \
+            clients/web
+          docker push ${{ env.AR_REPO }}/web-portal:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/web-portal:latest
 
-          # Deploy React portal app at /app/
-          gcloud storage rsync --recursive clients/web/apps/portal/dist gs://prod.tamshai.com/app
-
-          # Set cache control for index.html files
-          gcloud storage objects update gs://prod.tamshai.com/index.html --cache-control="no-cache,must-revalidate"
-          gcloud storage objects update gs://prod.tamshai.com/app/index.html --cache-control="no-cache,must-revalidate"
-
-          # Note: Bucket website configuration is set via Terraform and doesn't need to be updated on every deployment
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy web-portal \
+            --image=${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=256Mi \
+            --cpu=1 \
+            --timeout=60 \
+            --port=80
 
   notify:
-    needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website]
+    needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website, deploy-web-portal]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -342,3 +372,4 @@ jobs:
           echo "| MCP Suite | ${{ needs.deploy-mcp-suite.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Keycloak | ${{ needs.deploy-keycloak.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Static Website | ${{ needs.deploy-static-website.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web Portal | ${{ needs.deploy-web-portal.result }} |" >> $GITHUB_STEP_SUMMARY

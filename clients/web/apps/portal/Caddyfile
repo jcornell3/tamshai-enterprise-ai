@@ -1,0 +1,46 @@
+# Tamshai Web Portal - Caddy Configuration (Production)
+# SPA routing for React application
+#
+# Cloudflare routes /app/* to this container WITHOUT stripping the prefix
+# (unlike dev/stage where external Caddy uses handle_path to strip /app/)
+# So we use handle_path here to strip the prefix internally
+
+:80 {
+    # Enable gzip compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Health check endpoint for Cloud Run
+    respond /health 200
+
+    # Redirect root to /app/
+    redir / /app/ permanent
+
+    # Portal app at /app/* - strip prefix internally (like dev/stage external Caddy)
+    # Files are at /srv (root), Vite builds with base: '/app/'
+    handle_path /app/* {
+        root * /srv
+        try_files {path} {path}/ /index.html
+        file_server
+
+        # Cache static assets
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        # Don't cache index.html (for SPA updates)
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+}

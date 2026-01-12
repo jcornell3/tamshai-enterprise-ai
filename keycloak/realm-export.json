@@ -458,6 +458,52 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "web-portal",
+      "name": "Tamshai Web Portal (SPA)",
+      "description": "Browser-based AI assistant portal with SSO",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:4000/*",
+        "http://localhost:4000/callback",
+        "https://www.tamshai.local/app/*",
+        "https://www.tamshai.com/app/*",
+        "https://prod.tamshai.com/app/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4000",
+        "https://www.tamshai.local",
+        "https://www.tamshai.com",
+        "https://prod.tamshai.com"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4000/*##https://www.tamshai.local/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles"
+      ],
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "mcp-gateway",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "clientScopes": [
