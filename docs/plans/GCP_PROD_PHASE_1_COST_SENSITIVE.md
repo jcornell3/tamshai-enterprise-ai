@@ -1612,13 +1612,13 @@ DATABASE_URL="postgresql://tamshai_app:PASSWORD@/tamshai?host=/cloudsql/PROJECT:
 | Hostname | Type | Target/Value | Status |
 |----------|------|--------------|--------|
 | `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | ✅ Working (GCS static site - marketing) |
-| `app.tamshai.com` | CNAME | `web-portal-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
+| `app.tamshai.com` | CNAME | `web-portal-fn44nd7wba-uc.a.run.app` | ⬜ **ACTION REQUIRED** - Create this CNAME in Cloudflare |
 | `api.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
 | `auth.tamshai.com` | CNAME | `keycloak-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
 
-**Note**: CNAMEs for api/auth/app are configured but return 404 because Cloud Run requires Load Balancer for custom domains through Cloudflare proxy. Services work perfectly via direct URLs.
+**Note**: CNAMEs for api/auth return 404 because Cloud Run requires Load Balancer for custom domains through Cloudflare proxy. These services work via direct Cloud Run URLs.
 
-**Web Portal Routing**: Cloudflare passes `/app/*` path through to Cloud Run without stripping the prefix. The portal's internal Caddy uses `handle_path /app/*` to strip the prefix before serving files (same pattern as dev/stage external Caddy).
+**Web Portal (app.tamshai.com)**: Once the CNAME is created in Cloudflare (proxied, orange cloud), the portal will be accessible at `https://app.tamshai.com/app/`. Cloudflare passes the `/app/*` path through to Cloud Run without stripping the prefix. The portal's internal Caddy uses `handle_path /app/*` to strip the prefix before serving files (same pattern as dev/stage external Caddy).
 
 #### Configuration Files Updated
 
