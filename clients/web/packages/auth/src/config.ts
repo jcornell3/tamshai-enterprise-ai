@@ -55,10 +55,11 @@ function getKeycloakConfig() {
   const basePath = getAppBasePath();
 
   // GCP Production - Keycloak on separate Cloud Run URL (not proxied)
-  if (hostname === 'prod.tamshai.com') {
+  // Includes both prod.tamshai.com and app.tamshai.com (Cloud Run portal)
+  if (hostname === 'prod.tamshai.com' || hostname === 'app.tamshai.com') {
     return {
       authority: import.meta.env.VITE_KEYCLOAK_URL,
-      client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'tamshai-website',
+      client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'web-portal',
       redirect_uri: `${origin}${basePath}/callback`,
       post_logout_redirect_uri: origin,
     };
