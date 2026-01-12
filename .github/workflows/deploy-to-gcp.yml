@@ -350,6 +350,7 @@ jobs:
             --image=${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
+            --service-account=tamshai-prod-mcp-gateway@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
