@@ -108,7 +108,9 @@ resource "google_storage_bucket" "static_website" {
 
   website {
     main_page_suffix = "index.html"
-    not_found_page   = "404.html"
+    # SPA routing: serve index.html for all routes so React Router can handle them
+    # This enables client-side routing for paths like /app/callback, /app/downloads, etc.
+    not_found_page   = "index.html"
   }
 
   # Allow public read access for website content
