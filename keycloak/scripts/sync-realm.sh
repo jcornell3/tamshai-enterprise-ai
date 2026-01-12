@@ -663,6 +663,56 @@ assign_user_groups() {
 }
 
 # =============================================================================
+# Critical Production User Assignment
+# =============================================================================
+
+# In production, we don't auto-assign all users to groups (security policy).
+# However, certain critical users (e.g., CEO) need group membership for the
+# system to function. This function handles those specific cases.
+assign_critical_prod_users() {
+    # Only run in production
+    if [ "$ENV" != "prod" ]; then
+        return 0
+    fi
+
+    log_info "Assigning critical production users to groups..."
+
+    # Critical users who need group membership for system access
+    # Format: username:group
+    # These users are explicitly approved for automated group assignment
+    local -a critical_users=(
+        "eve.thompson:C-Suite"
+    )
+
+    for mapping in "${critical_users[@]}"; do
+        local username="${mapping%%:*}"
+        local group="${mapping##*:}"
+
+        local user_id=$($KCADM get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+        if [ -z "$user_id" ]; then
+            log_warn "  Critical user $username not found in Keycloak"
+            continue
+        fi
+
+        local group_id=$($KCADM get groups -r "$REALM" -q "name=$group" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+        if [ -z "$group_id" ]; then
+            log_warn "  Group $group not found"
+            continue
+        fi
+
+        if $KCADM update "users/$user_id/groups/$group_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+            log_info "  $username: added to $group"
+        else
+            log_info "  $username: already in $group or error"
+        fi
+    done
+
+    log_info "Critical production user assignment complete"
+}
+
+# =============================================================================
 # Test User Provisioning
 # =============================================================================
 
@@ -829,6 +879,10 @@ main() {
 
     # Assign users to groups (for dev/stage - restores role inheritance)
     assign_user_groups
+
+    # Assign critical production users (CEO, etc.) to groups
+    # This runs ONLY in prod and handles users who need group membership
+    assign_critical_prod_users
 
     log_info "=========================================="
     log_info "Keycloak Realm Sync - Complete"
