@@ -29,6 +29,7 @@
 # =============================================================================
 
 set -euo pipefail
+set +H  # Disable history expansion to handle passwords with special characters like !
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REALM="tamshai-corp"
@@ -319,6 +320,110 @@ sync_flutter_client() {
     create_or_update_client "tamshai-flutter-client" "$client_json"
 }
 
+sync_web_portal_client() {
+    log_info "Syncing web-portal client..."
+
+    # Determine domain based on environment
+    local domain
+    case "$ENV" in
+        dev)
+            domain="tamshai.local"
+            ;;
+        stage)
+            domain="www.tamshai.com"
+            ;;
+        prod)
+            domain="prod.tamshai.com"
+            ;;
+        *)
+            domain="localhost"
+            ;;
+    esac
+
+    local client_json="{
+        \"clientId\": \"web-portal\",
+        \"name\": \"Tamshai Web Portal (SPA)\",
+        \"description\": \"Browser-based AI assistant portal for employees\",
+        \"enabled\": true,
+        \"publicClient\": true,
+        \"standardFlowEnabled\": true,
+        \"directAccessGrantsEnabled\": false,
+        \"serviceAccountsEnabled\": false,
+        \"protocol\": \"openid-connect\",
+        \"redirectUris\": [
+            \"http://localhost:4000/*\",
+            \"https://$domain/*\",
+            \"https://$domain/app/*\"
+        ],
+        \"webOrigins\": [
+            \"http://localhost:4000\",
+            \"https://$domain\"
+        ],
+        \"attributes\": {
+            \"pkce.code.challenge.method\": \"S256\",
+            \"post.logout.redirect.uris\": \"http://localhost:4000/*##https://$domain/*\"
+        },
+        \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
+    }"
+
+    create_or_update_client "web-portal" "$client_json"
+}
+
+sync_mcp_gateway_client() {
+    log_info "Syncing mcp-gateway client..."
+
+    # Get client secret from environment or use default
+    local client_secret="${MCP_GATEWAY_CLIENT_SECRET:-mcp-gateway-secret}"
+
+    # Determine domain based on environment
+    local domain
+    case "$ENV" in
+        dev)
+            domain="tamshai.local"
+            ;;
+        stage)
+            domain="www.tamshai.com"
+            ;;
+        prod)
+            domain="prod.tamshai.com"
+            ;;
+        *)
+            domain="localhost"
+            ;;
+    esac
+
+    local client_json="{
+        \"clientId\": \"mcp-gateway\",
+        \"name\": \"MCP Gateway\",
+        \"description\": \"Backend service for AI orchestration\",
+        \"enabled\": true,
+        \"publicClient\": false,
+        \"standardFlowEnabled\": true,
+        \"directAccessGrantsEnabled\": true,
+        \"serviceAccountsEnabled\": true,
+        \"protocol\": \"openid-connect\",
+        \"redirectUris\": [
+            \"http://localhost:3100/*\",
+            \"https://$domain/*\",
+            \"https://$domain/api/*\"
+        ],
+        \"webOrigins\": [\"+\"],
+        \"fullScopeAllowed\": true,
+        \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
+    }"
+
+    create_or_update_client "mcp-gateway" "$client_json"
+
+    # Set client secret
+    local uuid=$(get_client_uuid "mcp-gateway")
+    if [ -n "$uuid" ]; then
+        log_info "  Setting client secret..."
+        $KCADM update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
+            log_warn "  Failed to set client secret via update"
+        }
+    fi
+}
+
 sync_mcp_hr_service_client() {
     log_info "Syncing mcp-hr-service client (identity sync)..."
 
@@ -474,6 +579,72 @@ sync_sample_app_clients() {
 }
 
 # =============================================================================
+# User Group Assignment
+# =============================================================================
+
+# Assign users to groups based on their department
+# Groups have realm roles assigned, so users inherit roles via group membership
+# This matches the original realm-export user definitions before they were removed
+assign_user_groups() {
+    log_info "Assigning users to groups..."
+
+    # Skip in production (users managed by identity-sync only)
+    if [ "$ENV" = "prod" ]; then
+        log_info "Skipping user group assignment in production"
+        return 0
+    fi
+
+    # Define user-to-group mapping based on original realm-export-dev.json
+    # Format: username:group1,group2 (group names without leading /)
+    # Source: git show dc8337a -- keycloak/realm-export-dev.json
+    local -a user_groups=(
+        "eve.thompson:C-Suite"
+        "alice.chen:HR-Department,Managers"
+        "bob.martinez:Finance-Team,Managers"
+        "carol.johnson:Sales-Managers"
+        "dan.williams:Support-Team,Managers"
+        "frank.davis:IT-Team"
+        "ryan.garcia:Sales-Managers"
+        "nina.patel:Engineering-Managers"
+        "marcus.johnson:Engineering-Team"
+    )
+
+    for mapping in "${user_groups[@]}"; do
+        local username="${mapping%%:*}"
+        local groups="${mapping##*:}"
+
+        # Find user by username
+        local user_id=$($KCADM get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+        if [ -z "$user_id" ]; then
+            log_warn "  User $username not found, skipping"
+            continue
+        fi
+
+        # Split groups by comma and assign each
+        IFS=',' read -ra group_array <<< "$groups"
+        for group in "${group_array[@]}"; do
+            # Find group by path
+            local group_id=$($KCADM get groups -r "$REALM" -q "name=$group" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+            if [ -z "$group_id" ]; then
+                log_warn "  Group $group not found, skipping for $username"
+                continue
+            fi
+
+            # Add user to group (idempotent)
+            if $KCADM update "users/$user_id/groups/$group_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+                log_info "  $username: added to $group"
+            else
+                log_info "  $username: $group (already member or error)"
+            fi
+        done
+    done
+
+    log_info "User group assignment complete"
+}
+
+# =============================================================================
 # Test User Provisioning
 # =============================================================================
 
@@ -571,11 +742,15 @@ main() {
     # Sync all clients
     sync_website_client
     sync_flutter_client
+    sync_web_portal_client
     sync_mcp_hr_service_client
     sync_sample_app_clients
 
     # Provision test user (for E2E testing)
     provision_test_user
+
+    # Assign users to groups (for dev/stage - restores role inheritance)
+    assign_user_groups
 
     log_info "=========================================="
     log_info "Keycloak Realm Sync - Complete"

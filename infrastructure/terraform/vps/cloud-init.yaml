@@ -207,6 +207,7 @@ write_files:
       # Usage: ./deploy.sh [--build] [--pull]
 
       set -e
+      set +H  # Disable history expansion to handle passwords with special characters like !
 
       cd /opt/tamshai
 
