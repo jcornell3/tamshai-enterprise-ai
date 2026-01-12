@@ -13,6 +13,10 @@ const envConfig: Record<string, { baseURL: string; ignoreHTTPSErrors: boolean }>
     baseURL: 'https://www.tamshai.com',
     ignoreHTTPSErrors: false,
   },
+  prod: {
+    baseURL: 'https://app.tamshai.com',
+    ignoreHTTPSErrors: false,
+  },
 };
 
 /**
@@ -51,7 +55,8 @@ export default defineConfig({
     },
   ],
 
-  webServer: process.env.CI ? undefined : {
+  // Only start web server for dev environment (not for stage/prod/CI)
+  webServer: process.env.CI || testEnv !== 'dev' ? undefined : {
     command: 'cd ../../infrastructure/docker && docker compose up -d mcp-gateway',
     url: 'http://localhost:3100/health',
     reuseExistingServer: true,
