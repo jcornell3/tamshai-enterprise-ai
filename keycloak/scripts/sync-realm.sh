@@ -725,6 +725,46 @@ provision_test_user() {
 # Main Execution
 # =============================================================================
 
+# =============================================================================
+# Audience Mapper Sync
+# =============================================================================
+
+# Sync the mcp-gateway-audience mapper on tamshai-website client
+# This ensures tokens include mcp-gateway in the audience claim
+# Without this, MCP Gateway rejects tokens with 401 Unauthorized
+sync_audience_mapper() {
+    log_info "Syncing mcp-gateway-audience mapper..."
+
+    local client_uuid=$(get_client_uuid "tamshai-website")
+    if [ -z "$client_uuid" ]; then
+        log_warn "  tamshai-website client not found, skipping audience mapper"
+        return 1
+    fi
+
+    # Check if mapper already exists
+    local mapper_exists=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null | grep -c "mcp-gateway-audience" || echo "0")
+
+    if [ "$mapper_exists" -gt 0 ]; then
+        log_info "  Audience mapper already exists"
+        return 0
+    fi
+
+    # Create the audience mapper
+    log_info "  Creating mcp-gateway-audience mapper..."
+    if $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
+        -s name=mcp-gateway-audience \
+        -s protocol=openid-connect \
+        -s protocolMapper=oidc-audience-mapper \
+        -s consentRequired=false \
+        -s 'config."included.client.audience"=mcp-gateway' \
+        -s 'config."id.token.claim"=false' \
+        -s 'config."access.token.claim"=true' 2>/dev/null; then
+        log_info "  Audience mapper created successfully"
+    else
+        log_warn "  Failed to create audience mapper (may already exist)"
+    fi
+}
+
 main() {
     log_info "=========================================="
     log_info "Keycloak Realm Sync - Starting"
@@ -745,6 +785,10 @@ main() {
     sync_web_portal_client
     sync_mcp_hr_service_client
     sync_sample_app_clients
+
+    # Sync audience mapper on tamshai-website client
+    # This is critical for MCP Gateway token validation
+    sync_audience_mapper
 
     # Provision test user (for E2E testing)
     provision_test_user
