@@ -313,6 +313,9 @@ app.use(cors({
     'tamshai-ai://*'
   ],
   credentials: true,
+  // Required for cross-origin requests with Authorization header
+  // Without this, browser strips Authorization header from preflight requests
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
 }));
 app.use(express.json({ limit: '10mb' }));
 
