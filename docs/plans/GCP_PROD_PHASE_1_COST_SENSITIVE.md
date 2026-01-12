@@ -1612,13 +1612,13 @@ DATABASE_URL="postgresql://tamshai_app:PASSWORD@/tamshai?host=/cloudsql/PROJECT:
 | Hostname | Type | Target/Value | Status |
 |----------|------|--------------|--------|
 | `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | ✅ Working (GCS static site - marketing) |
-| `app.tamshai.com` | CNAME | `web-portal-fn44nd7wba-uc.a.run.app` | ⬜ **ACTION REQUIRED** - Create this CNAME in Cloudflare |
-| `api.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
-| `auth.tamshai.com` | CNAME | `keycloak-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
+| `app.tamshai.com` | CNAME | `ghs.googlehosted.com` | ✅ Working (Cloud Run domain mapping) |
+| `auth.tamshai.com` | CNAME | `ghs.googlehosted.com` | ✅ Working (Cloud Run domain mapping) |
+| `api.tamshai.com` | CNAME | `ghs.googlehosted.com` | ⚠️ Needs domain mapping (currently uses direct URL) |
 
-**Note**: CNAMEs for api/auth return 404 because Cloud Run requires Load Balancer for custom domains through Cloudflare proxy. These services work via direct Cloud Run URLs.
+**Cloud Run Domain Mappings**: Custom domains require a domain mapping (`gcloud beta run domain-mappings create`) which tells Cloud Run to accept requests for that hostname. The CNAME must point to `ghs.googlehosted.com` (Google's managed hosting endpoint), NOT the `.run.app` URL directly.
 
-**Web Portal (app.tamshai.com)**: Once the CNAME is created in Cloudflare (proxied, orange cloud), the portal will be accessible at `https://app.tamshai.com/app/`. Cloudflare passes the `/app/*` path through to Cloud Run without stripping the prefix. The portal's internal Caddy uses `handle_path /app/*` to strip the prefix before serving files (same pattern as dev/stage external Caddy).
+**Web Portal (app.tamshai.com)**: Cloudflare passes the `/app/*` path through to Cloud Run without stripping the prefix. The portal's internal Caddy uses `handle_path /app/*` to strip the prefix before serving files (same pattern as dev/stage external Caddy).
 
 #### Configuration Files Updated
 
