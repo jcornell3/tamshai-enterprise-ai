@@ -21,17 +21,20 @@ import * as path from 'path';
 
 // Environment configuration
 const ENV = process.env.TEST_ENV || 'dev';
-const BASE_URLS: Record<string, { app: string; keycloak: string }> = {
+const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
-    app: 'https://www.tamshai.local',
+    site: 'https://www.tamshai.local',      // Static marketing site
+    app: 'https://www.tamshai.local/app',   // Portal SPA
     keycloak: 'https://www.tamshai.local/auth',
   },
   stage: {
-    app: 'https://www.tamshai.com',
+    site: 'https://www.tamshai.com',        // Static marketing site
+    app: 'https://www.tamshai.com/app',     // Portal SPA
     keycloak: 'https://www.tamshai.com/auth',
   },
   prod: {
-    app: 'https://prod.tamshai.com',
+    site: 'https://prod.tamshai.com',       // Static marketing site (GCS bucket)
+    app: 'https://app.tamshai.com/app',     // Portal SPA (Cloud Run)
     keycloak: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth',
   },
 };
@@ -335,7 +338,7 @@ test.describe('Employee Login Journey', () => {
     const urls = BASE_URLS[ENV];
 
     // Navigate to employee login page
-    await page.goto(`${urls.app}/employee-login.html`);
+    await page.goto(`${urls.site}/employee-login.html`);
 
     // Verify page loaded
     await expect(page).toHaveTitle(/Tamshai/i);
@@ -349,7 +352,7 @@ test.describe('Employee Login Journey', () => {
     const urls = BASE_URLS[ENV];
 
     // Navigate to employee login
-    await page.goto(`${urls.app}/employee-login.html`);
+    await page.goto(`${urls.site}/employee-login.html`);
 
     // Click SSO button (goes to /app/ which redirects to Keycloak)
     const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');
@@ -374,7 +377,7 @@ test.describe('Employee Login Journey', () => {
     }
 
     // Start at employee login page
-    await page.goto(`${urls.app}/employee-login.html`);
+    await page.goto(`${urls.site}/employee-login.html`);
 
     // Click SSO button to go to Keycloak
     const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');
@@ -436,7 +439,7 @@ test.describe('Employee Login Journey', () => {
     const urls = BASE_URLS[ENV];
 
     // Navigate to login
-    await page.goto(`${urls.app}/employee-login.html`);
+    await page.goto(`${urls.site}/employee-login.html`);
 
     // Click SSO
     const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');

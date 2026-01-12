@@ -506,6 +506,40 @@ test('AI query returns streamed response', async ({ request }) => {
 4. **Modern async/await** - Cleaner test syntax
 5. **GitHub CI integration** - Official GitHub Actions support
 
+### 5.1.1 Environment URL Configuration (January 2026 Update)
+
+**Important**: Production has a **split architecture** - the marketing site and portal are hosted separately:
+
+```typescript
+// tests/e2e/specs/login-journey.ui.spec.ts
+const BASE_URLS = {
+  dev: {
+    site: 'https://www.tamshai.local',      // Marketing site
+    app: 'https://www.tamshai.local/app',   // Portal SPA
+    keycloak: 'https://www.tamshai.local/auth',
+  },
+  stage: {
+    site: 'https://www.tamshai.com',        // Marketing site
+    app: 'https://www.tamshai.com/app',     // Portal SPA
+    keycloak: 'https://www.tamshai.com/auth',
+  },
+  prod: {
+    site: 'https://prod.tamshai.com',       // GCS static bucket
+    app: 'https://app.tamshai.com/app',     // Cloud Run container
+    keycloak: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth',
+  },
+};
+```
+
+**URL Usage:**
+- `urls.site` - Use for employee-login.html, landing pages (marketing content)
+- `urls.app` - Use for portal pages post-authentication (SPA routes)
+
+**Why This Matters:**
+- In dev/stage, both site and portal are served from the same origin
+- In prod, they're on different domains due to GCS limitations with SPA routing
+- Tests must use the correct base URL for each page type
+
 ### 5.2 Flutter Desktop
 
 **Framework:** Flutter Integration Tests
@@ -1141,4 +1175,4 @@ docker compose exec mongodb mongosh < /sample-data/sales-data.js
 
 ### Architecture Version
 **Created for**: v1.4 (December 2025)
-**Last Updated**: December 29, 2025
+**Last Updated**: January 12, 2026

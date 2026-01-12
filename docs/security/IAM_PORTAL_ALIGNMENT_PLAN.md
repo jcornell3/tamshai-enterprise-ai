@@ -229,3 +229,96 @@ If issues arise:
 | 4 | Update prod config | High (production auth) |
 
 **Recommendation**: Execute steps 1-2 first, validate stage, then proceed to dev and prod.
+
+---
+
+## January 12, 2026 Update: SSO Redirect Issue Resolution
+
+### Problem Identified
+
+After successful TOTP authentication, users were being redirected to `prod.tamshai.com/app/callback` instead of `app.tamshai.com/app/callback`, causing a Keycloak error: "Unexpected error when handling authentication request to identity provider."
+
+### Root Cause Analysis
+
+1. **Static Site vs Portal Confusion**: The GCS bucket at `prod.tamshai.com` accidentally had a stale copy of the portal at `/app/`
+2. **SSO Button Misconfiguration**: `employee-login.html` linked to `/app/` (relative path) instead of `https://app.tamshai.com` (absolute URL)
+3. **OAuth redirect_uri Mismatch**: Portal at `prod.tamshai.com/app/` set `redirect_uri` based on `window.location.origin`, sending callbacks to GCS instead of Cloud Run
+
+### Architecture Clarification
+
+| Component | Domain | Hosting | Purpose |
+|-----------|--------|---------|---------|
+| Marketing Site | `prod.tamshai.com` | GCS Bucket | Static HTML pages (employee-login.html) |
+| Portal SPA | `app.tamshai.com` | Cloud Run | React/Vite application |
+| Keycloak | `keycloak-fn44nd7wba-uc.a.run.app` | Cloud Run | Identity provider |
+
+### Changes Made
+
+#### 1. SSO Button URL Fix (`apps/tamshai-website/src/employee-login.html`)
+```html
+<!-- Before -->
+<a href="/app/" id="sso-login-btn" class="sso-btn">
+
+<!-- After -->
+<a href="https://app.tamshai.com" id="sso-login-btn" class="sso-btn">
+```
+
+#### 2. Workflow Path Trigger Fix (`.github/workflows/deploy-to-gcp.yml`)
+```yaml
+# Before - apps/** changes didn't trigger deployment
+paths:
+  - 'services/**'
+  - 'clients/web/**'
+  - 'keycloak/**'
+
+# After - static site changes now trigger deployment
+paths:
+  - 'services/**'
+  - 'clients/web/**'
+  - 'keycloak/**'
+  - 'apps/**'
+```
+
+Also added `apps/tamshai-website/**` to the `web` filter in `detect-changes` job.
+
+#### 3. Cache-Control Update
+```bash
+gcloud storage objects update gs://prod.tamshai.com/employee-login.html \
+  --cache-control="no-cache,must-revalidate"
+```
+
+### Cloudflare Cache Considerations
+
+**Critical Learning**: Cloudflare edge cache must be explicitly purged for single-file changes:
+
+1. "Purge Everything" may not immediately propagate
+2. **Use Custom Purge with specific URL**: `https://prod.tamshai.com/employee-login.html`
+3. Verify with `curl` before testing in browser
+
+### Verification Steps
+
+1. Verify GCS has correct content:
+   ```bash
+   gcloud storage cat gs://prod.tamshai.com/employee-login.html | grep sso-login-btn
+   # Should show: href="https://app.tamshai.com"
+   ```
+
+2. Verify Cloudflare is serving updated content:
+   ```bash
+   curl -s "https://prod.tamshai.com/employee-login.html" | grep sso-login-btn
+   # Should show: href="https://app.tamshai.com"
+   ```
+
+3. Manual browser test:
+   - Clear cache or use incognito
+   - Go to `https://prod.tamshai.com/employee-login.html`
+   - Inspect SSO button URL
+   - Click and verify redirect to `app.tamshai.com`
+
+### Remaining Issue: Keycloak Callback Error
+
+After TOTP authentication succeeds, some users see:
+> "We are sorry... Unexpected error when handling authentication request to identity provider."
+
+**Status**: Under investigation
+**Workaround**: Access portal directly at `https://app.tamshai.com/app`
