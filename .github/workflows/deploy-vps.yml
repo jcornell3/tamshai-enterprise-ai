@@ -216,6 +216,7 @@ jobs:
 
           ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
           set -e
+          set +H  # Disable history expansion to handle passwords with special characters like !
 
           cd /opt/tamshai
 
