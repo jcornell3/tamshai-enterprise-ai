@@ -479,3 +479,80 @@ resource "google_cloud_run_domain_mapping" "keycloak" {
     route_name = google_cloud_run_service.keycloak.name
   }
 }
+
+# =============================================================================
+# WEB PORTAL (Static SPA with Caddy)
+# =============================================================================
+# Serves the React portal application with proper SPA routing.
+# Uses Caddy for consistency with dev/stage environments.
+# Handles /app/* routes and OAuth callback.
+
+resource "google_cloud_run_service" "web_portal" {
+  count = var.enable_web_portal ? 1 : 0
+
+  name     = "web-portal"
+  location = var.region
+  project  = var.project_id
+
+  template {
+    spec {
+      containers {
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/web-portal:latest"
+
+        ports {
+          container_port = 80
+        }
+
+        resources {
+          limits = {
+            cpu    = "1000m"
+            memory = "256Mi"
+          }
+        }
+
+        # Caddy serves static files - no env vars needed
+        # OAuth config is baked into the built React app
+      }
+
+      service_account_name = var.web_portal_service_account
+      timeout_seconds      = 60
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/minScale"         = "0"
+        "autoscaling.knative.dev/maxScale"         = "2"
+        "run.googleapis.com/execution-environment" = "gen2"
+      }
+
+      labels = {
+        environment = var.environment
+        service     = "web-portal"
+      }
+    }
+  }
+
+  traffic {
+    percent         = 100
+    latest_revision = true
+  }
+
+  autogenerate_revision_name = true
+
+  lifecycle {
+    ignore_changes = [
+      template[0].metadata[0].annotations["run.googleapis.com/client-name"],
+      template[0].metadata[0].annotations["run.googleapis.com/client-version"],
+    ]
+  }
+}
+
+# Make Web Portal publicly accessible
+resource "google_cloud_run_service_iam_member" "web_portal_public" {
+  count = var.enable_web_portal ? 1 : 0
+
+  service  = google_cloud_run_service.web_portal[0].name
+  location = google_cloud_run_service.web_portal[0].location
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}

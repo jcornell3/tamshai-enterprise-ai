@@ -158,3 +158,19 @@ variable "keycloak_domain" {
   description = "Keycloak domain (e.g., auth.tamshai.com)"
   type        = string
 }
+
+# =============================================================================
+# WEB PORTAL CONFIGURATION
+# =============================================================================
+
+variable "enable_web_portal" {
+  description = "Enable Web Portal Cloud Run service"
+  type        = bool
+  default     = true
+}
+
+variable "web_portal_service_account" {
+  description = "Service account email for Web Portal"
+  type        = string
+  default     = ""
+}

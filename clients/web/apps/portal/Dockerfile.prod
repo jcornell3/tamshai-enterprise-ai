@@ -1,0 +1,56 @@
+# Multi-stage build for Portal app (Production - Cloud Run)
+# Uses Caddy for SPA routing consistency with stage/dev
+
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+# Build-time arguments for Vite environment variables
+ARG VITE_KEYCLOAK_URL
+ARG VITE_KEYCLOAK_CLIENT_ID
+ARG VITE_API_GATEWAY_URL
+ARG VITE_MCP_GATEWAY_URL
+ARG VITE_RELEASE_TAG=v1.0.0
+
+# Convert ARGs to ENV so Vite can read them during build
+ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL
+ENV VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
+ENV VITE_API_GATEWAY_URL=$VITE_API_GATEWAY_URL
+ENV VITE_MCP_GATEWAY_URL=$VITE_MCP_GATEWAY_URL
+ENV VITE_RELEASE_TAG=$VITE_RELEASE_TAG
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY package*.json ./
+COPY turbo.json ./
+COPY tsconfig.json ./
+
+# Copy all workspace packages
+COPY packages/ ./packages/
+COPY apps/portal/ ./apps/portal/
+
+# Install dependencies
+RUN rm -f package-lock.json && npm install
+
+# Build the portal app (Vite reads VITE_* env vars during build)
+WORKDIR /app/apps/portal
+RUN npm run build
+
+# Stage 2: Production with Caddy
+FROM caddy:2-alpine
+
+# Copy Caddyfile
+COPY apps/portal/Caddyfile /etc/caddy/Caddyfile
+
+# Copy built assets to /srv (root) - matches dev/stage where proxy strips /app/ prefix
+COPY --from=builder /app/apps/portal/dist /srv
+
+# Expose port 80 (Cloud Run expects this)
+EXPOSE 80
+
+# Health check for Cloud Run
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1
+
+# Caddy runs as PID 1 by default
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]

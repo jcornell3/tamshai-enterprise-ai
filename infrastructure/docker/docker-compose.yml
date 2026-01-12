@@ -365,7 +365,7 @@ services:
     container_name: tamshai-web-portal
     environment:
       VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
     ports:
@@ -390,7 +390,7 @@ services:
     container_name: tamshai-web-hr
     environment:
       VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
     ports:
@@ -415,7 +415,7 @@ services:
     container_name: tamshai-web-finance
     environment:
       VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
     ports:
@@ -440,7 +440,7 @@ services:
     container_name: tamshai-web-sales
     environment:
       VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
     ports:
@@ -465,7 +465,7 @@ services:
     container_name: tamshai-web-support
     environment:
       VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: mcp-gateway
+      VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
     ports:
