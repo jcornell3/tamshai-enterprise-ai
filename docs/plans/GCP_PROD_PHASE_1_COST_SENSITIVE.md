@@ -1,9 +1,9 @@
 # Phase 1: Cost-Optimized Production (Pilot)
 
-**Document Version**: 1.4
+**Document Version**: 1.5
 **Created**: January 2026
-**Updated**: January 9, 2026
-**Status**: ✅ **COMPLETE** - 6/6 Services Running (100%)
+**Updated**: January 11, 2026
+**Status**: ✅ **COMPLETE** - 7/7 Services Running (100%)
 
 ## Executive Summary
 
@@ -30,11 +30,11 @@ export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/gcp-sa-key.json"
 gcloud auth activate-service-account --key-file=gcp-sa-key.json
 gcloud auth configure-docker us-central1-docker.pkg.dev
 
-# 3. BUILD AND PUSH ALL 6 DOCKER IMAGES (see detailed commands in Phase D below)
+# 3. BUILD AND PUSH ALL 7 DOCKER IMAGES (see detailed commands in Phase D below)
 # This MUST happen BEFORE terraform apply, or Cloud Run will fail with "image not found"
 docker build -t us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-gateway:v1.0.3 services/mcp-gateway
 docker push us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-gateway:v1.0.3
-# ... repeat for all 6 services (mcp-hr, mcp-finance, mcp-sales, mcp-support, keycloak)
+# ... repeat for all 7 services (mcp-hr, mcp-finance, mcp-sales, mcp-support, keycloak, web-portal)
 
 # 4. NOW run terraform apply
 terraform init
@@ -263,13 +263,14 @@ Once prerequisites are provided, Claude will execute these tasks:
 ### Infrastructure as Code
 
 **Cloud Run Module Created** (`infrastructure/terraform/modules/cloudrun/`)
-- Manages 6 Cloud Run services:
-  - MCP Gateway (1GiB RAM, public access, ports 3100)
+- Manages 7 Cloud Run services:
+  - MCP Gateway (1GiB RAM, public access, port 8080)
   - MCP HR (512MiB RAM, private, port 3101)
   - MCP Finance (512MiB RAM, private, port 3102)
   - MCP Sales (512MiB RAM, private, port 3103)
   - MCP Support (512MiB RAM, private, port 3104)
   - Keycloak (1GiB RAM, public access, port 8080)
+  - Web Portal (256MiB RAM, public access, port 80) - Caddy for SPA routing
 - Artifact Registry for Docker images
 - Scale-to-zero configuration (min_instances=0)
 - Max instances=2 (Phase 1 cost optimization)
@@ -485,7 +486,7 @@ Once prerequisites are provided, Claude will execute these tasks:
 
 | Service | Monthly Estimate | Notes |
 |---------|------------------|-------|
-| Cloud Run (5 services) | $5-15 | Scale to zero, pay per request |
+| Cloud Run (6 services) | $5-18 | Scale to zero, pay per request (MCP suite + web-portal) |
 | Cloud Run (Keycloak) | $0-25 | Min=0 is free when idle |
 | Cloud SQL (db-f1-micro) | $10-15 | Shared core, zonal |
 | Utility VM (e2-micro) | $0-7 | Free tier eligible |
@@ -580,9 +581,11 @@ VPS_DOMAIN=tamshai.com ./keycloak/scripts/sync-realm.sh prod
 
 | Client ID | Type | Purpose |
 |-----------|------|---------|
-| `tamshai-web-portal` | Public | Web portal (app.tamshai.com) |
+| `web-portal` | Public | Web portal (app.tamshai.com) - aligned across dev/stage/prod |
 | `tamshai-flutter-client` | Public | Flutter native apps |
 | `mcp-gateway` | Confidential | Backend service authentication |
+
+> **Note**: The OAuth client ID was changed from `tamshai-web-portal` to `web-portal` (January 11, 2026) for alignment across dev/stage/prod environments.
 
 ---
 
@@ -600,7 +603,9 @@ The `deploy-to-gcp.yml` workflow handles automated deployment of all application
 | MCP Suite (HR, Finance, Sales, Support) | Cloud Run | Push to `main` |
 | Keycloak | Cloud Run | Push to `main` |
 | Static Website (`prod.tamshai.com`) | GCS Bucket | Push to `main` |
-| Portal App (`app.tamshai.com`) | Cloud Run | Push to `main` |
+| Web Portal (`app.tamshai.com`) | Cloud Run | Push to `main` |
+
+> **Note**: The Web Portal was moved from GCS to Cloud Run (January 11, 2026) to fix SPA routing issues. GCS static website hosting cannot handle per-directory SPA routing (`/app/callback` returns wrong index.html). See `docs/troubleshooting/GCS_SPA_ROUTING_LIMITATION.md` for details.
 
 ### Workflow Triggers
 
@@ -1463,13 +1468,14 @@ Phase D deploys application services to the provisioned infrastructure.
 - ⚠️ **Custom Domain Mapping**: Cloud Run services accessible via direct URLs only. Custom domains (api.tamshai.com, auth.tamshai.com) require Load Balancer or domain mapping configuration.
 - ⚠️ **GitHub Actions Workflow**: Incomplete - missing VPC connector, database config. See `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md` for details.
 
-**6/6 Cloud Run Services Running (100%)**:
+**7/7 Cloud Run Services Running (100%)**:
 - MCP Gateway: ✅ Running (v1.0.3)
 - MCP HR: ✅ Running (latest)
 - MCP Finance: ✅ Running (latest)
 - MCP Sales: ✅ Running (latest)
 - MCP Support: ✅ Running (latest)
 - Keycloak: ✅ Running with PostgreSQL (v2.0.0-postgres, TCP via VPC Connector)
+- Web Portal: ✅ Running with Caddy (SPA routing for /app/*)
 
 ### ✅ Recommended: Terraform-Based Deployment
 
@@ -1528,8 +1534,8 @@ terraform output deployment_summary
 ```
 
 **What Terraform deploys**:
-- 6 Cloud Run services (mcp-gateway, mcp-hr, mcp-finance, mcp-sales, mcp-support, keycloak)
-- 6 Cloud Run IAM bindings (public access for gateway/keycloak, private for MCP suite)
+- 7 Cloud Run services (mcp-gateway, mcp-hr, mcp-finance, mcp-sales, mcp-support, keycloak, web-portal)
+- 7 Cloud Run IAM bindings (public access for gateway/keycloak/web-portal, private for MCP suite)
 - Complete environment variables (database URLs, Redis, Keycloak config)
 - VPC connector for Cloud SQL private IP access
 - Secret Manager integration
@@ -1598,17 +1604,21 @@ DATABASE_URL="postgresql://tamshai_app:PASSWORD@/tamshai?host=/cloudsql/PROJECT:
 |---------|----------------------|---------|
 | **MCP Gateway** | `https://mcp-gateway-fn44nd7wba-uc.a.run.app` | API endpoint for AI queries |
 | **Keycloak** | `https://keycloak-fn44nd7wba-uc.a.run.app` | Authentication/SSO |
-| **Static Website** | `https://prod.tamshai.com` | Portal app (GCS bucket) |
+| **Web Portal** | `https://web-portal-fn44nd7wba-uc.a.run.app` | Portal app with SPA routing (Cloud Run + Caddy) |
+| **Static Website** | `https://prod.tamshai.com` | Marketing site (GCS bucket) |
 
 #### DNS Records Configured in Cloudflare
 
 | Hostname | Type | Target/Value | Status |
 |----------|------|--------------|--------|
-| `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | ✅ Working (GCS static site) |
+| `prod.tamshai.com` | CNAME | `c.storage.googleapis.com` | ✅ Working (GCS static site - marketing) |
+| `app.tamshai.com` | CNAME | `web-portal-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
 | `api.tamshai.com` | CNAME | `mcp-gateway-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
 | `auth.tamshai.com` | CNAME | `keycloak-fn44nd7wba-uc.a.run.app` | ⚠️ Reserved (requires Load Balancer) |
 
-**Note**: CNAMEs for api/auth are configured but return 404 because Cloud Run requires Load Balancer for custom domains through Cloudflare proxy. Services work perfectly via direct URLs.
+**Note**: CNAMEs for api/auth/app are configured but return 404 because Cloud Run requires Load Balancer for custom domains through Cloudflare proxy. Services work perfectly via direct URLs.
+
+**Web Portal Routing**: Cloudflare passes `/app/*` path through to Cloud Run without stripping the prefix. The portal's internal Caddy uses `handle_path /app/*` to strip the prefix before serving files (same pattern as dev/stage external Caddy).
 
 #### Configuration Files Updated
 
@@ -1959,6 +1969,27 @@ gcloud projects describe your-project-id
 ---
 
 ## Document Changelog
+
+### Version 1.5 (January 11, 2026)
+
+**Web Portal Cloud Run Migration:**
+- Added 7th Cloud Run service: `web-portal` with Caddy for SPA routing
+- Updated OAuth client ID from `tamshai-web-portal` to `web-portal` for dev/stage/prod alignment
+- Added `docs/troubleshooting/GCS_SPA_ROUTING_LIMITATION.md` documenting why portal moved from GCS to Cloud Run
+- Updated CI/CD workflow with `deploy-web-portal` job
+- Added `clients/web/apps/portal/Dockerfile.prod` for Cloud Run deployment
+- Added `clients/web/apps/portal/Caddyfile` for SPA routing
+
+**Key Technical Details:**
+- GCS static website hosting cannot do per-directory SPA routing (`/app/callback` returns wrong index.html)
+- Cloudflare passes `/app/*` path through to Cloud Run (doesn't strip prefix)
+- Internal Caddy uses `handle_path /app/*` to strip prefix (same as dev/stage external Caddy)
+- Vite builds with `base: '/app/'` - consistent across all environments
+
+### Version 1.4 (January 9, 2026)
+
+- DNS Configuration and Custom Domain Strategy added
+- Phase D deployment status updated to COMPLETE (6/6 services)
 
 ### Version 1.2 (January 8, 2026)
 
