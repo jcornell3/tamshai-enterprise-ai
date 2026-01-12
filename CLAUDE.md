@@ -99,6 +99,7 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 ./scripts/infra/deploy.sh dev            # Deploy all dev services
 ./scripts/infra/deploy.sh dev --build    # Rebuild containers
 ./scripts/infra/deploy.sh dev --sync     # Deploy and sync Keycloak
+./scripts/infra/deploy.sh dev --reseed   # Reload all sample data (Finance, Sales, Support)
 ./scripts/infra/deploy.sh stage          # Deploy to stage VPS
 
 # Keycloak management
