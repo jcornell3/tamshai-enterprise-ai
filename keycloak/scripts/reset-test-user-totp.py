@@ -293,7 +293,9 @@ def main():
     print("\n" + "=" * 50)
     log_success("TOTP Configuration Complete!")
     print("=" * 50)
-    print(f"\nUser '{username}' now has TOTP configured with secret: {totp_secret[:4]}****")
+    print(
+        f"\nUser '{username}' now has TOTP configured with secret: {totp_secret[:4]}****"
+    )
     print(f"\nTo generate a TOTP code:")
     print(f"  oathtool --totp --base32 {totp_secret}")
     print()
