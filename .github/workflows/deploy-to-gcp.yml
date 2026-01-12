@@ -335,7 +335,7 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Build and Push Web Portal Image
+      - name: Build and Push Web Apps Image
         env:
           VITE_RELEASE_TAG: v1.0.0
           VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
@@ -343,16 +343,16 @@ jobs:
           VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
           VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
         run: |
-          # Build the portal Docker image using Dockerfile.prod (Caddy-based)
+          # Build ALL web apps (portal, hr, finance, sales, support) using unified Dockerfile
           docker build \
-            -f clients/web/apps/portal/Dockerfile.prod \
+            -f clients/web/Dockerfile.prod \
             -t ${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
             -t ${{ env.AR_REPO }}/web-portal:latest \
             --build-arg VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL \
             --build-arg VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID \
             --build-arg VITE_API_GATEWAY_URL=$VITE_API_GATEWAY_URL \
             --build-arg VITE_MCP_GATEWAY_URL=$VITE_MCP_GATEWAY_URL \
-            clients/web
+            .
           docker push ${{ env.AR_REPO }}/web-portal:${{ github.sha }}
           docker push ${{ env.AR_REPO }}/web-portal:latest
 
