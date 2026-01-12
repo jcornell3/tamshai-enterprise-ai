@@ -53,9 +53,14 @@ The test user is configured in **all environments**:
 
 ### Prod (GCP)
 - **Realm Export**: `keycloak/realm-export.json` (synced to GCP)
-- **Base URL**: `https://prod.tamshai.com`
+- **Marketing Site URL**: `https://prod.tamshai.com` (GCS bucket - employee-login.html)
+- **Portal App URL**: `https://app.tamshai.com/app` (Cloud Run - SPA)
 - **Keycloak URL**: `https://keycloak-fn44nd7wba-uc.a.run.app`
-- **Client ID**: `tamshai-web-portal`
+- **Client ID**: `web-portal`
+
+**⚠️ Important Architecture Note (January 2026)**: In production, the marketing site and portal are hosted separately:
+- `prod.tamshai.com` = GCS static bucket (landing pages, employee-login.html)
+- `app.tamshai.com` = Cloud Run container (React SPA portal)
 
 ## Automated Testing Scripts
 
@@ -390,6 +395,51 @@ oathtool --totp --base32 JBSWY3DPEHPK3PXP
 
 **Expected Behavior**: This test user **should** be denied access to MCP endpoints (HR, Finance, Sales, Support) because it has no data access roles. This validates that RBAC is working correctly.
 
+### Issue: E2E tests fail with "element not found" for SSO button (Prod)
+
+**Cause**: The E2E test configuration must distinguish between the marketing site URL and the portal app URL in production.
+
+**Symptoms**:
+- Tests look for `employee-login.html` at `app.tamshai.com` (doesn't exist there)
+- Tests get 404s or empty pages
+- SSO button locator times out
+
+**Fix**: Update `tests/e2e/specs/login-journey.ui.spec.ts` URL configuration:
+
+```typescript
+// Before (incorrect for prod)
+const BASE_URLS = {
+  prod: {
+    app: 'https://prod.tamshai.com',  // Wrong - mixed static site and portal
+    keycloak: '...'
+  }
+};
+
+// After (correct for prod)
+const BASE_URLS = {
+  prod: {
+    site: 'https://prod.tamshai.com',       // Marketing site (employee-login.html)
+    app: 'https://app.tamshai.com/app',     // Portal SPA (post-login)
+    keycloak: '...'
+  }
+};
+```
+
+Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
+
+### Issue: "We are sorry... Unexpected error when handling authentication request"
+
+**Cause**: OAuth callback redirect_uri mismatch or Keycloak session state issue.
+
+**Symptoms**:
+- TOTP authentication completes successfully
+- Keycloak displays error page instead of redirecting to portal
+- Test user has no roles (by design)
+
+**Status**: Under investigation (January 2026)
+
+**Workaround**: Access portal directly at `https://app.tamshai.com/app` which triggers OAuth flow with correct redirect_uri.
+
 ## Future Enhancements
 
 ### Phase 2 Improvements
@@ -423,6 +473,6 @@ oathtool --totp --base32 JBSWY3DPEHPK3PXP
 
 ---
 
-**Last Updated**: January 9, 2026
+**Last Updated**: January 12, 2026
 **Maintainer**: QA Team
 **Status**: ✅ Active - Ready for use in automated testing
