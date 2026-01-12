@@ -297,11 +297,20 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: [
+    // Local development
     'http://localhost:3100',     // MCP Gateway itself
     'http://localhost:4000',     // Portal app
     'http://localhost:4001',     // HR app
     'http://localhost:4002',     // Finance app
-    'tamshai-ai://*'             // Desktop app (Electron)
+    // Dev environment
+    'https://www.tamshai.local',
+    // Stage environment
+    'https://www.tamshai.com',
+    // Production environment
+    'https://prod.tamshai.com',
+    'https://app.tamshai.com',
+    // Desktop app
+    'tamshai-ai://*'
   ],
   credentials: true,
 }));
