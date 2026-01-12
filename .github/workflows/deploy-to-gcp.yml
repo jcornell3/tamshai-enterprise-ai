@@ -7,6 +7,7 @@ on:
       - 'services/**'
       - 'clients/web/**'
       - 'keycloak/**'
+      - 'apps/**'
   workflow_dispatch:
     inputs:
       service:
@@ -23,6 +24,7 @@ on:
           - support
           - keycloak
           - web
+          - website
 
 # Prevent concurrent deployments to production
 # New deployments will wait in queue until current deployment completes
@@ -60,6 +62,7 @@ jobs:
               - 'keycloak/**'
             web:
               - 'clients/web/**'
+              - 'apps/tamshai-website/**'
 
   deploy-gateway:
     needs: detect-changes
@@ -289,7 +292,8 @@ jobs:
     if: |
       needs.detect-changes.outputs.web == 'true' ||
       github.event.inputs.service == 'all' ||
-      github.event.inputs.service == 'web'
+      github.event.inputs.service == 'web' ||
+      github.event.inputs.service == 'website'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
