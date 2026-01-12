@@ -27,22 +27,23 @@ Author: Tamshai-Dev
 Date: January 2026
 """
 
+import getpass
 import os
 import sys
-import json
-import getpass
+
 import requests
 
 # Environment configuration
 ENVIRONMENTS = {
     "dev": "https://www.tamshai.local/auth",
     "stage": "https://www.tamshai.com/auth",
-    "prod": "https://keycloak-fn44nd7wba-uc.a.run.app/auth"
+    "prod": "https://keycloak-fn44nd7wba-uc.a.run.app/auth",
 }
 
 REALM = "tamshai-corp"
 DEFAULT_USERNAME = "test-user.journey"
 DEFAULT_TOTP_SECRET = "JBSWY3DPEHPK3PXP"
+
 
 # ANSI colors for output
 class Colors:
@@ -79,8 +80,8 @@ def get_admin_token(keycloak_url: str, password: str) -> str:
             "username": "admin",
             "password": password,
             "grant_type": "password",
-            "client_id": "admin-cli"
-        }
+            "client_id": "admin-cli",
+        },
     )
 
     if not response.ok:
@@ -99,7 +100,7 @@ def find_user(keycloak_url: str, token: str, username: str) -> dict | None:
     response = requests.get(
         f"{keycloak_url}/admin/realms/{REALM}/users",
         params={"username": username, "exact": "true"},
-        headers={"Authorization": f"Bearer {token}"}
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     if response.ok and response.json():
@@ -117,7 +118,7 @@ def delete_user(keycloak_url: str, token: str, user_id: str) -> bool:
 
     response = requests.delete(
         f"{keycloak_url}/admin/realms/{REALM}/users/{user_id}",
-        headers={"Authorization": f"Bearer {token}"}
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     if response.status_code == 204:
@@ -128,7 +129,9 @@ def delete_user(keycloak_url: str, token: str, user_id: str) -> bool:
     return False
 
 
-def create_user_with_totp(keycloak_url: str, token: str, username: str, totp_secret: str) -> bool:
+def create_user_with_totp(
+    keycloak_url: str, token: str, username: str, totp_secret: str
+) -> bool:
     """
     Create a user with TOTP credential using Partial Import API.
 
@@ -154,7 +157,7 @@ def create_user_with_totp(keycloak_url: str, token: str, username: str, totp_sec
                     {
                         "type": "password",
                         "value": "Test123!Journey",
-                        "temporary": False
+                        "temporary": False,
                     },
                     {
                         # IMPORTANT: Use "totp" type with flat structure
@@ -165,9 +168,9 @@ def create_user_with_totp(keycloak_url: str, token: str, username: str, totp_sec
                         "digits": "6",
                         "period": "30",
                         "algorithm": "HmacSHA1",
-                        "counter": "0"
-                    }
-                ]
+                        "counter": "0",
+                    },
+                ],
             }
         ]
     }
@@ -178,9 +181,9 @@ def create_user_with_totp(keycloak_url: str, token: str, username: str, totp_sec
         f"{keycloak_url}/admin/realms/{REALM}/partialImport",
         headers={
             "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         },
-        json=import_data
+        json=import_data,
     )
 
     if response.status_code == 200:
@@ -207,7 +210,7 @@ def verify_credentials(keycloak_url: str, token: str, username: str) -> bool:
 
     response = requests.get(
         f"{keycloak_url}/admin/realms/{REALM}/users/{user['id']}/credentials",
-        headers={"Authorization": f"Bearer {token}"}
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     if not response.ok:
