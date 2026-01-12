@@ -1,15 +1,17 @@
 # TOTP Secrets Reset - Technical Analysis
 
-**Document Version**: 1.0
+**Document Version**: 2.0
 **Date**: January 12, 2026
-**Status**: Under Review
+**Status**: RESOLVED - Solution Found
 **Author**: Tamshai-Dev
 
 ## Executive Summary
 
 This document describes the challenges encountered when attempting to programmatically configure TOTP (Time-based One-Time Password) credentials for Keycloak users via the Admin REST API. The goal was to create a script that could reset a user's TOTP credential to a known secret, enabling automated E2E testing with predictable TOTP codes.
 
-**Key Finding**: Keycloak's Admin REST API does not support creating OTP credentials post-user-creation. OTP credentials can only be reliably set during initial realm import or through user self-service.
+**Key Finding**: Keycloak's Admin REST API does not support creating OTP credentials post-user-creation via direct credential endpoints. However, the **Partial Import API works for NEW users** when using a specific JSON format (`type: "totp"` with flat structure).
+
+**SOLUTION FOUND**: A working Python script (`reset-test-user-totp.py`) was developed that deletes and recreates the user via Partial Import with TOTP credentials.
 
 ---
 
@@ -287,24 +289,106 @@ Modify the `browser-with-otp` flow to make OTP optional:
 
 ### 7.2 What Does Not Work
 
-- ❌ Creating OTP credentials with known secrets via Admin API
-- ❌ Partial import with OTP credentials (JSON parse error)
+- ❌ Creating OTP credentials via direct Admin API (`POST /credentials`)
+- ❌ Partial import with OTP credentials using `type: "otp"` (JSON parse error)
 - ❌ User update with OTP credentials (secretData not stored)
+
+### 7.3 SOLUTION: What DOES Work
+
+- ✅ **Partial Import with `type: "totp"` (flat structure) for NEW users**
 
 ---
 
-## 8. Files Referenced
+## 8. Solution Implementation
+
+### 8.1 Third-Party Specialist Recommendations
+
+A GCP Production Specialist reviewed this document and provided the following guidance:
+
+1. **Phoenix Solution**: Pre-enroll TOTP credentials in `realm-export.json` for initial imports
+2. **Partial Import works for NEW users** - but requires correct JSON format
+3. **Abandon the bash script** - use Python with proper JSON handling
+4. **Break-Glass SQL option** - direct database manipulation for truly stuck situations
+
+### 8.2 Working JSON Format for Partial Import
+
+The key discovery is that the Partial Import API **DOES** accept TOTP credentials when:
+1. Creating a NEW user (not updating existing)
+2. Using `type: "totp"` (NOT `type: "otp"`)
+3. Using a flat structure (NOT nested JSON strings)
+
+**Working Format:**
+```json
+{
+  "users": [{
+    "username": "test-user.journey",
+    "credentials": [
+      {
+        "type": "password",
+        "value": "***REDACTED_PASSWORD***",
+        "temporary": false
+      },
+      {
+        "type": "totp",
+        "secretData": "JBSWY3DPEHPK3PXP",
+        "userLabel": "E2E Test Authenticator",
+        "digits": "6",
+        "period": "30",
+        "algorithm": "HmacSHA1",
+        "counter": "0"
+      }
+    ]
+  }]
+}
+```
+
+**NON-Working Format (causes JSON parse error):**
+```json
+{
+  "type": "otp",
+  "secretData": "{\"value\":\"JBSWY3DPEHPK3PXP\",\"period\":30}",
+  "credentialData": "{\"subType\":\"totp\",\"period\":30}"
+}
+```
+
+### 8.3 Python Script Solution
+
+A working Python script was created: `keycloak/scripts/reset-test-user-totp.py`
+
+**Usage:**
+```bash
+# Reset test-user.journey with default TOTP secret
+KEYCLOAK_ADMIN_PASSWORD='xxx' python reset-test-user-totp.py prod
+
+# Reset with custom user/secret
+KEYCLOAK_ADMIN_PASSWORD='xxx' python reset-test-user-totp.py prod myuser MYSECRET123
+```
+
+**Algorithm:**
+1. Authenticate to Keycloak Admin API
+2. Find and DELETE the existing user (if exists)
+3. Create NEW user via Partial Import with TOTP credential
+4. Verify both password and OTP credentials were created
+
+### 8.4 Verification
+
+After running the script, the E2E tests show "TOTP authentication completed" confirming the TOTP secret is correctly configured and working with `oathtool`.
+
+---
+
+## 9. Files Referenced
 
 | File | Purpose |
 |------|---------|
-| `keycloak/scripts/set-user-totp.sh` | TOTP reset script (created, not fully functional) |
+| `keycloak/scripts/reset-test-user-totp.py` | **Working** Python script for TOTP reset |
+| `keycloak/scripts/set-user-totp.sh` | Bash script (deprecated - use Python version) |
 | `keycloak/realm-export.json` | Production realm export with test user |
 | `keycloak/realm-export-dev.json` | Development realm export |
 | `tests/e2e/specs/login-journey.ui.spec.ts` | E2E test requiring TOTP |
 
 ---
 
-## 9. Open Questions for Third-Party Review
+## 10. Open Questions for Third-Party Review
 
 1. **Is there an undocumented Admin API endpoint** for creating OTP credentials that we haven't discovered?
 
@@ -316,9 +400,15 @@ Modify the `browser-with-otp` flow to make OTP optional:
 
 5. **Do other identity providers** (Auth0, Okta, Azure AD) have similar limitations, or is this Keycloak-specific?
 
+### 10.1 Answers from Third-Party Review
+
+**Q2 Answer**: Yes! The Partial Import API works with TOTP credentials when using `type: "totp"` with flat structure for NEW user creation.
+
+**Q4 Answer**: Direct database manipulation is viable for test/stage environments but not recommended for production.
+
 ---
 
-## 10. References
+## 11. References
 
 - [Keycloak Admin REST API Documentation](https://www.keycloak.org/docs-api/25.0.0/rest-api/index.html)
 - [Keycloak User Credentials API](https://www.keycloak.org/docs-api/25.0.0/rest-api/index.html#_users)
