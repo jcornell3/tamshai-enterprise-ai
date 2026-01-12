@@ -445,7 +445,7 @@ jobs:
           # Pull Elasticsearch image with retry logic (docker.elastic.co can be flaky)
           for i in 1 2 3 4 5; do
             echo "Attempt $i: Pulling Elasticsearch image..."
-            if docker pull docker.elastic.co/elasticsearch/elasticsearch:8.11.0; then
+            if docker pull elasticsearch:8.11.0; then
               echo "✅ Image pulled successfully"
               break
             fi
@@ -463,7 +463,7 @@ jobs:
             -e discovery.type=single-node \
             -e xpack.security.enabled=false \
             -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
-            docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+            elasticsearch:8.11.0
 
           # Wait for Elasticsearch using TCP socket check (up to 3 minutes)
           echo "Waiting for Elasticsearch to start..."
