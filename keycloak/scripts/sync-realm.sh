@@ -111,15 +111,15 @@ create_or_update_client() {
         log_info "Client '$client_id' exists, updating..."
         local uuid=$(get_client_uuid "$client_id")
         echo "$client_json" | $KCADM update "clients/$uuid" -r "$REALM" -f -
-        log_info "Client '$client_id' updated (scopes already assigned)"
+        log_info "Client '$client_id' updated"
     else
         log_info "Client '$client_id' does not exist, creating..."
         echo "$client_json" | $KCADM create clients -r "$REALM" -f -
         log_info "Client '$client_id' created"
-
-        # Only assign scopes on creation (not on updates - scopes already exist)
-        assign_client_scopes "$client_id"
     fi
+
+    # Always ensure scopes are assigned (idempotent - uses || true)
+    assign_client_scopes "$client_id"
 }
 
 get_scope_id() {
