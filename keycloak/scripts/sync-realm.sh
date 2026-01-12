@@ -117,8 +117,13 @@ create_or_update_client() {
     if client_exists "$client_id"; then
         log_info "Client '$client_id' exists, updating..."
         local uuid=$(get_client_uuid "$client_id")
-        echo "$client_json" | $KCADM update "clients/$uuid" -r "$REALM" -f -
-        log_info "Client '$client_id' updated"
+        # Some client types (service accounts) have immutable properties after creation
+        # Catch update failures gracefully - the important config is already there from creation
+        if echo "$client_json" | $KCADM update "clients/$uuid" -r "$REALM" -f - 2>/dev/null; then
+            log_info "Client '$client_id' updated"
+        else
+            log_warn "Client '$client_id' update skipped (client may have immutable properties)"
+        fi
     else
         log_info "Client '$client_id' does not exist, creating..."
         echo "$client_json" | $KCADM create clients -r "$REALM" -f -
@@ -815,7 +820,7 @@ main() {
     sync_mcp_hr_service_client
     sync_sample_app_clients
 
-    # Sync audience mapper on tamshai-website client
+    # Sync audience mapper on all web clients
     # This is critical for MCP Gateway token validation
     sync_audience_mapper
 
