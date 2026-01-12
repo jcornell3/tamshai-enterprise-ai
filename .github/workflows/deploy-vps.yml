@@ -269,8 +269,7 @@ jobs:
 
           # Re-seed sample data if requested (DROP and RELOAD for clean data)
           # NOTE: Run this BEFORE Keycloak sync to avoid heredoc termination issues
-          # NOTE: Currently always enabled. To make conditional, need to pass as env var to VPS
-          if [ "true" = "true" ]; then
+          if [ "${{ env.RESEED_DATA }}" = "true" ]; then
             echo "=== Re-seeding sample data (clean reload) ==="
 
             echo "  [1/4] Stopping MCP services..."

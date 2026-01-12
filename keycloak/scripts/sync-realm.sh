@@ -323,20 +323,33 @@ sync_flutter_client() {
 sync_web_portal_client() {
     log_info "Syncing web-portal client..."
 
-    # Determine domain based on environment
-    local domain
+    # Build redirect URIs and web origins based on environment
+    # Each environment may have multiple valid domains
+    local redirect_uris
+    local web_origins
+    local logout_uris
+
     case "$ENV" in
         dev)
-            domain="tamshai.local"
+            redirect_uris="\"http://localhost:4000/*\", \"https://www.tamshai.local/*\", \"https://www.tamshai.local/app/*\""
+            web_origins="\"http://localhost:4000\", \"https://www.tamshai.local\""
+            logout_uris="http://localhost:4000/*##https://www.tamshai.local/*"
             ;;
         stage)
-            domain="www.tamshai.com"
+            redirect_uris="\"http://localhost:4000/*\", \"https://www.tamshai.com/*\", \"https://www.tamshai.com/app/*\""
+            web_origins="\"http://localhost:4000\", \"https://www.tamshai.com\""
+            logout_uris="http://localhost:4000/*##https://www.tamshai.com/*"
             ;;
         prod)
-            domain="prod.tamshai.com"
+            # Prod uses app.tamshai.com (Cloud Run) and prod.tamshai.com (if needed)
+            redirect_uris="\"http://localhost:4000/*\", \"https://prod.tamshai.com/*\", \"https://prod.tamshai.com/app/*\", \"https://app.tamshai.com/*\", \"https://app.tamshai.com/callback\""
+            web_origins="\"http://localhost:4000\", \"https://prod.tamshai.com\", \"https://app.tamshai.com\""
+            logout_uris="http://localhost:4000/*##https://prod.tamshai.com/*##https://app.tamshai.com/*"
             ;;
         *)
-            domain="localhost"
+            redirect_uris="\"http://localhost:4000/*\""
+            web_origins="\"http://localhost:4000\""
+            logout_uris="http://localhost:4000/*"
             ;;
     esac
 
@@ -350,18 +363,11 @@ sync_web_portal_client() {
         \"directAccessGrantsEnabled\": false,
         \"serviceAccountsEnabled\": false,
         \"protocol\": \"openid-connect\",
-        \"redirectUris\": [
-            \"http://localhost:4000/*\",
-            \"https://$domain/*\",
-            \"https://$domain/app/*\"
-        ],
-        \"webOrigins\": [
-            \"http://localhost:4000\",
-            \"https://$domain\"
-        ],
+        \"redirectUris\": [$redirect_uris],
+        \"webOrigins\": [$web_origins],
         \"attributes\": {
             \"pkce.code.challenge.method\": \"S256\",
-            \"post.logout.redirect.uris\": \"http://localhost:4000/*##https://$domain/*\"
+            \"post.logout.redirect.uris\": \"$logout_uris\"
         },
         \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
     }"
