@@ -38,6 +38,53 @@ git config user.email
 
 ---
 
+## Environment Alignment Goals
+
+**CRITICAL REQUIREMENT**: Dev, Stage, and Prod environments must be aligned so that:
+
+1. **Terraform destroy + apply** on any environment brings all services up and working
+2. **Realm exports** (realm-export-dev.json, realm-export-stage.json) contain identical configuration
+3. **sync-realm.sh** handles any missing configuration (clients, mappers, groups)
+4. **Sample data** can be reloaded with `--reseed` option
+
+### Key Alignment Items
+
+| Item | Location | Purpose |
+|------|----------|---------|
+| Audience Mapper | tamshai-website client | Adds `mcp-gateway` to token audience claim |
+| MCP Gateway Client | Created by sync-realm.sh | Confidential client for API gateway |
+| Group Assignments | sync-realm.sh | Maps users to groups for role inheritance |
+| Sample Data | sample-data/*.sql, *.js, *.ndjson | Reloadable via `./scripts/infra/deploy.sh --reseed` |
+
+### Environment-Specific Files
+
+| Environment | Realm Export | Terraform | Cloud-Init |
+|-------------|--------------|-----------|------------|
+| Dev | realm-export-dev.json | terraform/dev/ | N/A |
+| Stage | realm-export-stage.json | terraform/vps/ | cloud-init.yaml |
+| Prod | realm-export.json | terraform/gcp/ | N/A |
+
+### After Terraform Destroy + Apply
+
+When recreating an environment from scratch:
+
+1. **Cloud-init runs** (VPS only) - installs Docker, clones repo, starts services
+2. **Keycloak imports realm** from realm export file
+3. **sync-realm.sh runs** - creates clients, mappers, assigns groups
+4. **identity-sync runs** - provisions HR employees as Keycloak users
+5. **Sample data loads** - from docker-entrypoint-initdb.d or manual reseed
+
+### Common Alignment Issues
+
+| Symptom | Root Cause | Fix |
+|---------|------------|-----|
+| 401 Unauthorized from MCP Gateway | Missing audience mapper | Add `mcp-gateway-audience` mapper to tamshai-website client |
+| "Your roles: None" in portal | Users not in groups | Run sync-realm.sh to assign groups |
+| Kong "no Route matched" | Wrong HTTP method or stale DNS | Use GET for /api/query; restart Kong |
+| Apps show zeroes | Sample data not loaded | Run `--reseed` or reload sample data manually |
+
+---
+
 ## Quick Reference
 
 ### Workflow Requirements
@@ -188,6 +235,11 @@ export KEYCLOAK_ADMIN_PASSWORD="xxx"     # For Keycloak admin commands
 > | `VITE_STAGE_HOST` | Browser hostname detection | IP address | Matches URL bar when accessing via IP |
 >
 > **Never use `vps.tamshai.com` for SSH** - it will timeout because Cloudflare only proxies HTTP/HTTPS (ports 80/443).
+
+> **IMPORTANT FOR CLAUDE CODE**: Do NOT attempt direct SSH to the VPS. The SSH private key is stored ONLY in GitHub Secrets (`VPS_SSH_KEY`) and is not available locally. All stage/VPS operations must be done through:
+> 1. **GitHub Actions workflows** (deploy-vps.yml) - trigger via `gh workflow run`
+> 2. **User-initiated SSH** - ask the user to run SSH commands manually
+> 3. **Web endpoints** - use `curl` or `WebFetch` to check HTTPS endpoints
 
 ### MCP Gateway Development
 
