@@ -25,6 +25,7 @@
 #   ./deploy.sh stage                     # Deploy to stage (requires SSH)
 #   ./deploy.sh dev --service=mcp-gateway # Deploy only MCP Gateway
 #   ./deploy.sh dev --sync                # Deploy and sync Keycloak
+#   ./deploy.sh dev --reseed              # Reload all sample data (Finance, Sales, Support)
 #
 # Environment Variables (for stage):
 #   VPS_HOST     - VPS IP address or hostname (required for stage deployments)
@@ -43,6 +44,7 @@ BUILD_FLAG=""
 SERVICE=""
 SYNC_KEYCLOAK=false
 PULL_FLAG=""
+RESEED_DATA=false
 
 for arg in "$@"; do
     case $arg in
@@ -51,6 +53,7 @@ for arg in "$@"; do
         --service=*) SERVICE="${arg#*=}" ;;
         --sync) SYNC_KEYCLOAK=true ;;
         --pull) PULL_FLAG="--pull" ;;
+        --reseed) RESEED_DATA=true ;;
     esac
 done
 
@@ -65,6 +68,61 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_header() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
+
+reseed_data_dev() {
+    log_header "Re-seeding Sample Data (Dev)"
+
+    cd "$PROJECT_ROOT"
+
+    # Get MongoDB password from .env
+    local mongo_pass
+    mongo_pass=$(grep '^MONGODB_ROOT_PASSWORD=' infrastructure/docker/.env 2>/dev/null | cut -d= -f2) || mongo_pass="tamshai_password"
+
+    log_info "[1/4] Stopping MCP services..."
+    docker stop tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support 2>/dev/null || true
+
+    log_info "[2/4] Reloading Finance data (PostgreSQL)..."
+    if docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
+       docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
+       docker exec -i tamshai-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql; then
+        log_info "Finance database reloaded"
+    else
+        log_warn "Finance data reload failed"
+    fi
+
+    log_info "[3/4] Reloading Sales data (MongoDB)..."
+    if docker exec -i tamshai-mongodb mongosh -u tamshai -p "$mongo_pass" --authenticationDatabase admin < sample-data/sales-data.js; then
+        log_info "Sales data reloaded"
+    else
+        log_warn "Sales data reload failed"
+    fi
+
+    log_info "[4/4] Reloading Support data (Elasticsearch)..."
+    # Delete existing indexes
+    docker exec tamshai-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
+    # Bulk load fresh data
+    if cat sample-data/support-data.ndjson | docker exec -i tamshai-elasticsearch curl -X POST "http://localhost:9200/_bulk" \
+        -H "Content-Type: application/x-ndjson" --data-binary @- >/dev/null 2>&1; then
+        log_info "Support data reloaded"
+    else
+        log_warn "Support data reload failed"
+    fi
+
+    log_info "Restarting MCP services..."
+    docker start tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support 2>/dev/null || true
+    docker restart tamshai-mcp-gateway 2>/dev/null || true
+    sleep 5
+
+    log_info "Verifying data counts..."
+    echo "  Finance budgets:"
+    docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" 2>/dev/null || echo "  (Finance DB not available)"
+    echo "  Sales deals:"
+    docker exec tamshai-mongodb mongosh -u tamshai -p "$mongo_pass" --authenticationDatabase admin tamshai_sales --quiet --eval "print(db.deals.countDocuments())" 2>/dev/null || echo "  (MongoDB not available)"
+    echo "  Support tickets:"
+    docker exec tamshai-elasticsearch curl -s "http://localhost:9200/support_tickets/_count" 2>/dev/null | grep -o '"count":[0-9]*' || echo "  (Elasticsearch not available)"
+
+    log_info "Sample data re-seed complete"
+}
 
 deploy_dev() {
     log_header "Deploying to Dev Environment"
@@ -110,6 +168,11 @@ deploy_dev() {
     # Sync Keycloak if requested
     if [ "$SYNC_KEYCLOAK" = true ]; then
         sync_keycloak_dev
+    fi
+
+    # Reseed data if requested
+    if [ "$RESEED_DATA" = true ]; then
+        reseed_data_dev
     fi
 
     log_info "Dev deployment complete"
@@ -209,7 +272,7 @@ SYNC_SCRIPT
 main() {
     echo "Tamshai Deployment Script"
     echo "Environment: $ENV"
-    echo "Options: build=$BUILD_FLAG service=$SERVICE sync=$SYNC_KEYCLOAK"
+    echo "Options: build=$BUILD_FLAG service=$SERVICE sync=$SYNC_KEYCLOAK reseed=$RESEED_DATA"
     echo ""
 
     case "$ENV" in
