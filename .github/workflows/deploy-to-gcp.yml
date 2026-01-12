@@ -246,35 +246,43 @@ jobs:
             exit 1
           fi
 
-      - name: Sync Realm Configuration
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Download Keycloak CLI Tools
         run: |
-          echo "Creating Cloud Run job to sync realm configuration..."
+          echo "Downloading Keycloak CLI tools..."
+          # Download Keycloak 25.0.0 (matches our deployed version)
+          wget -q https://github.com/keycloak/keycloak/releases/download/25.0.0/keycloak-25.0.0.tar.gz
+          tar -xzf keycloak-25.0.0.tar.gz
+          echo "KEYCLOAK_HOME=$PWD/keycloak-25.0.0" >> $GITHUB_ENV
+          echo "$PWD/keycloak-25.0.0/bin" >> $GITHUB_PATH
+          echo "Keycloak CLI tools ready"
 
-          # Create temporary job (will be cleaned up after execution)
-          gcloud run jobs create keycloak-realm-sync-${{ github.sha }} \
-            --image=${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
-            --region=${{ env.GCP_REGION }} \
-            --service-account=tamshai-prod-keycloak@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
-            --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest \
-            --set-env-vars="KEYCLOAK_ADMIN=admin,KEYCLOAK_URL=https://keycloak-fn44nd7wba-uc.a.run.app/auth" \
-            --vpc-connector=tamshai-prod-connector \
-            --vpc-egress=private-ranges-only \
-            --max-retries=0 \
-            --task-timeout=5m \
-            --command="/bin/bash" \
-            --args="-c,/opt/keycloak/scripts/sync-realm.sh prod || (echo 'Realm sync failed but continuing deployment' && exit 0)"
+      - name: Sync Realm Configuration
+        env:
+          KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth
+          KEYCLOAK_ADMIN: admin
+        run: |
+          echo "Running realm sync directly from GitHub Actions runner..."
+          echo "This eliminates Cloud Run Job overhead (container pull + JVM startup)"
 
-          echo "Executing realm sync job..."
-          gcloud run jobs execute keycloak-realm-sync-${{ github.sha }} \
-            --region=${{ env.GCP_REGION }} \
-            --wait
+          # Fetch admin password from GCP Secret Manager
+          export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
 
-          echo "Cleaning up temporary job..."
-          gcloud run jobs delete keycloak-realm-sync-${{ github.sha }} \
-            --region=${{ env.GCP_REGION }} \
-            --quiet || true
+          # Make script executable and run it
+          chmod +x keycloak/scripts/sync-realm.sh
 
-          echo "Realm sync completed!"
+          # Run sync with error handling
+          if keycloak/scripts/sync-realm.sh prod; then
+            echo "Realm sync completed successfully!"
+          else
+            echo "WARNING: Realm sync had errors but continuing deployment"
+            # Don't fail the deployment - sync errors are usually recoverable
+          fi
 
   deploy-static-website:
     needs: detect-changes
