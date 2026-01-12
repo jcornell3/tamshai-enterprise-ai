@@ -83,6 +83,28 @@ When recreating an environment from scratch:
 | Kong "no Route matched" | Wrong HTTP method or stale DNS | Use GET for /api/query; restart Kong |
 | Apps show zeroes | Sample data not loaded | Run `--reseed` or reload sample data manually |
 
+### User Provisioning Policy
+
+**CRITICAL**: Each environment has different user provisioning strategies.
+
+| Environment | Test Users | Corporate Users | Password |
+|-------------|------------|-----------------|----------|
+| **Dev** | Pre-seeded in realm-export-dev.json | identity-sync from PostgreSQL | `STAGE_TESTING_PASSWORD` |
+| **Stage** | identity-sync provisions | identity-sync from PostgreSQL | `STAGE_TESTING_PASSWORD` (TamshaiTemp123!) |
+| **Prod** | `test-user.journey` only (in realm-export.json) | **Manual provisioning only** | Random (unknown) |
+
+**Prod-Specific Rules:**
+
+1. **Only `test-user.journey` is auto-provisioned** - imported from `realm-export.json` with TOTP
+2. **Identity sync is disabled** - `MCP_HR_SERVICE_CLIENT_SECRET` not set in GCP deploy
+3. **sync-realm.sh skips user functions** - `assign_user_groups()` and `provision_test_user()` return early in prod
+4. **Corporate users must be manually created** via Keycloak Admin UI or API
+
+**Why This Design:**
+- Production should not have test users with known passwords (security risk)
+- Identity sync in prod requires careful planning (HR data source, password delivery, MFA enrollment)
+- `test-user.journey` is safe because it has no data access privileges
+
 ---
 
 ## Quick Reference
