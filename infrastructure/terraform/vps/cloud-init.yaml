@@ -92,7 +92,7 @@ write_files:
       KEYCLOAK_MODE=start
 
       # Use VPS-specific Caddyfile (HTTP-only, Cloudflare handles TLS)
-      CADDYFILE=./Caddyfile
+      CADDYFILE=./infrastructure/docker/Caddyfile.stage
 
       # Web Apps
       # NOTE: Authority URL must include full realm path for OIDC discovery
