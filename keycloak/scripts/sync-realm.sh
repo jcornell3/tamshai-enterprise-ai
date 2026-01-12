@@ -81,7 +81,14 @@ configure_environment() {
 # Keycloak Admin CLI Helpers
 # =============================================================================
 
-KCADM="/opt/keycloak/bin/kcadm.sh"
+# Use KEYCLOAK_HOME if set (GitHub Actions), otherwise default to Docker container path
+if [ -n "$KEYCLOAK_HOME" ] && [ -f "$KEYCLOAK_HOME/bin/kcadm.sh" ]; then
+    KCADM="$KEYCLOAK_HOME/bin/kcadm.sh"
+elif command -v kcadm.sh &> /dev/null; then
+    KCADM="kcadm.sh"
+else
+    KCADM="/opt/keycloak/bin/kcadm.sh"
+fi
 
 kcadm_login() {
     log_info "Authenticating to Keycloak..."
