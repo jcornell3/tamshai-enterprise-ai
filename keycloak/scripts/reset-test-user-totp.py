@@ -46,16 +46,27 @@ DEFAULT_TOTP_SECRET = "JBSWY3DPEHPK3PXP"
 
 # ANSI colors for output
 class Colors:
-    BLUE = '\033[0;34m'
-    GREEN = '\033[0;32m'
-    YELLOW = '\033[1;33m'
-    RED = '\033[0;31m'
-    NC = '\033[0m'  # No Color
+    BLUE = "\033[0;34m"
+    GREEN = "\033[0;32m"
+    YELLOW = "\033[1;33m"
+    RED = "\033[0;31m"
+    NC = "\033[0m"  # No Color
 
-def log_info(msg): print(f"{Colors.BLUE}[INFO]{Colors.NC} {msg}")
-def log_success(msg): print(f"{Colors.GREEN}[SUCCESS]{Colors.NC} {msg}")
-def log_warn(msg): print(f"{Colors.YELLOW}[WARN]{Colors.NC} {msg}")
-def log_error(msg): print(f"{Colors.RED}[ERROR]{Colors.NC} {msg}")
+
+def log_info(msg):
+    print(f"{Colors.BLUE}[INFO]{Colors.NC} {msg}")
+
+
+def log_success(msg):
+    print(f"{Colors.GREEN}[SUCCESS]{Colors.NC} {msg}")
+
+
+def log_warn(msg):
+    print(f"{Colors.YELLOW}[WARN]{Colors.NC} {msg}")
+
+
+def log_error(msg):
+    print(f"{Colors.RED}[ERROR]{Colors.NC} {msg}")
 
 
 def get_admin_token(keycloak_url: str, password: str) -> str:
