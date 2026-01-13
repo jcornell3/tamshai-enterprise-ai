@@ -531,6 +531,154 @@ The `id` property (user's UUID) is built-in, so it requires `property-mapper`.
 
 ---
 
+## Issue #6: MCP Services Can't Connect to Cloud SQL (January 13, 2026)
+
+### Symptoms
+- mcp-hr returns: `{"status":"error","code":"DATABASE_ERROR","message":"Unable to connect to the HR database"}`
+- All MCP services fail with database connection errors
+- Error details show connection refused to localhost
+
+### Root Cause: Wrong Environment Variables
+
+Terraform was setting `DATABASE_URL` but MCP services expect individual `POSTGRES_*` variables:
+
+**What Terraform Set**:
+```hcl
+env {
+  name  = "DATABASE_URL"
+  value = "postgresql://user:pass@/db?host=/cloudsql/..."
+}
+```
+
+**What MCP Services Expect** (from `services/mcp-hr/src/database/connection.ts`):
+```typescript
+host: process.env.POSTGRES_HOST || 'localhost',     // Falls back to localhost!
+port: parseInt(process.env.POSTGRES_PORT || '5433'),
+database: process.env.POSTGRES_DB || 'tamshai_hr',
+user: process.env.POSTGRES_USER || 'tamshai',
+password: process.env.POSTGRES_PASSWORD || '...',
+```
+
+Since `POSTGRES_HOST` wasn't set, services defaulted to `localhost:5433` which doesn't exist in Cloud Run.
+
+### Fixes Applied
+
+| Fix | File | Changes |
+|-----|------|---------|
+| Add POSTGRES_* env vars | `infrastructure/terraform/modules/cloudrun/main.tf` | Replace DATABASE_URL with individual POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_PORT |
+| Add db_name per service | `infrastructure/terraform/modules/cloudrun/main.tf` | Each service gets its own database (tamshai_hr, tamshai_finance, etc.) |
+
+### Database Configuration
+
+| MCP Service | Primary Storage | PostgreSQL DB | Notes |
+|-------------|-----------------|---------------|-------|
+| mcp-hr | PostgreSQL | tamshai_hr | Employee data |
+| mcp-finance | PostgreSQL | tamshai_finance | Invoices, budgets |
+| mcp-sales | MongoDB | N/A | Uses MONGODB_URI |
+| mcp-support | Elasticsearch | N/A | Knowledge base, tickets |
+
+### Key Code Change
+
+```hcl
+# Before (wrong)
+env {
+  name  = "DATABASE_URL"
+  value = "postgresql://..."
+}
+
+# After (correct)
+env {
+  name  = "POSTGRES_HOST"
+  value = "/cloudsql/${each.value.cloudsql_instance}"
+}
+env {
+  name  = "POSTGRES_DB"
+  value = each.value.db_name  # e.g., "tamshai_hr"
+}
+env {
+  name  = "POSTGRES_USER"
+  value = var.tamshai_db_user
+}
+env {
+  name  = "POSTGRES_PASSWORD"
+  value = var.tamshai_db_password
+}
+```
+
+---
+
+## Issue #7: Elasticsearch Not Deployed in GCP (January 13, 2026)
+
+### Symptoms
+- mcp-support returns: `{"status":"error","code":"DATABASE_ERROR","message":"Failed to search knowledge base","details":{"errorMessage":"connect ECONNREFUSED 127.0.0.1:9201"}}`
+
+### Root Cause: No Elasticsearch in Production
+
+- Dev/Stage: Elasticsearch runs in Docker container on port 9201
+- Production: No Elasticsearch deployed (Cloud Run only)
+
+The mcp-support service defaults to `localhost:9201` when `ELASTICSEARCH_URL` is not set.
+
+### Options
+
+| Option | Effort | Cost | Notes |
+|--------|--------|------|-------|
+| **A) Deploy Elastic Cloud** | Medium | ~$16/month | Managed service, easy setup |
+| **B) Deploy on GCE** | High | ~$20/month | Self-managed, complex |
+| **C) Graceful degradation** | Low | $0 | Return friendly error for KB searches |
+| **D) Use Cloud SQL FTS** | High | $0 | Requires code changes |
+
+### Current State
+
+mcp-support knowledge base features are non-functional in production. Ticket management may still work if it doesn't require Elasticsearch.
+
+**Recommendation**: Implement Option C (graceful degradation) short-term, Option A (Elastic Cloud) long-term.
+
+---
+
+## Issue #8: Empty Production Databases (January 13, 2026)
+
+### Symptoms
+- API calls succeed but return empty arrays
+- No employees, invoices, or other data displayed
+
+### Root Cause: Sample Data Not Loaded
+
+Cloud SQL databases were created by Terraform but contain no data:
+
+| Database | Status | Data |
+|----------|--------|------|
+| keycloak | ✅ Working | Keycloak manages its own schema |
+| tamshai_hr | ⚠️ Empty | No employee records |
+| tamshai_finance | ⚠️ Empty | No invoices/budgets |
+
+### How Dev/Stage Get Data
+
+- Docker Compose mounts `sample-data/*.sql` files
+- PostgreSQL container runs init scripts on first start
+- Data is automatically seeded
+
+### Production Data Options
+
+| Option | Effort | Notes |
+|--------|--------|-------|
+| **A) Load sample data via Cloud SQL proxy** | Medium | One-time manual task |
+| **B) Create data seeding workflow** | Medium | Automated for future deploys |
+| **C) Real data integration** | High | Connect to actual HR/Finance systems |
+
+### To Load Sample Data Manually
+
+```bash
+# Connect via Cloud SQL Auth Proxy
+cloud_sql_proxy -instances=PROJECT:REGION:INSTANCE=tcp:5432
+
+# In another terminal, run sample data scripts
+psql -h localhost -U tamshai -d tamshai_hr -f sample-data/hr/employees.sql
+psql -h localhost -U tamshai -d tamshai_finance -f sample-data/finance/invoices.sql
+```
+
+---
+
 ## Complete Issue Summary
 
 | Issue | HTTP Status | Error Message | Root Cause | Fix Location |
@@ -540,6 +688,9 @@ The `id` property (user's UUID) is built-in, so it requires `property-mapper`.
 | #3 Cloud Run auth | 401 | Unauthorized | No GCP identity token | gcp-auth.ts + mcp-proxy.routes.ts |
 | #4 Missing sub claim | 400 | MISSING_USER_CONTEXT | No `sub` claim in JWT | sync-realm.sh |
 | #5 Wrong mapper type | 400 | MISSING_USER_CONTEXT | Used attribute-mapper instead of property-mapper | sync-realm.sh |
+| #6 Database env vars | DATABASE_ERROR | Can't connect to database | Wrong env vars (DATABASE_URL vs POSTGRES_*) | modules/cloudrun/main.tf |
+| #7 No Elasticsearch | DATABASE_ERROR | Connect ECONNREFUSED 9201 | Elasticsearch not deployed in GCP | Not yet fixed |
+| #8 Empty databases | N/A | Zero records returned | Sample data not loaded in Cloud SQL | Manual data load required |
 
 ## Lessons Learned
 
@@ -547,17 +698,40 @@ The `id` property (user's UUID) is built-in, so it requires `property-mapper`.
 2. **GCP Cloud Run requires identity tokens**: Service-to-service calls need IAM authentication
 3. **JWT claims can be missing**: Don't assume standard OIDC claims are present; explicitly map them
 4. **Test with real tokens**: Decode JWTs to verify all expected claims are present
+5. **Match env var names to code**: Check what env vars the code actually reads, don't assume `DATABASE_URL` is universal
+6. **Dev/Prod parity**: Services that work in Docker may fail in Cloud Run due to missing dependencies (Elasticsearch, Redis)
+7. **Empty databases are silent failures**: APIs return empty arrays, which looks like "working but no data"
 
 ## Verification After All Fixes
 
-Eve.thompson must:
-1. Log out of portal at `app.tamshai.com`
-2. Log back in to get fresh JWT
-3. Decode JWT at jwt.io and verify:
-   - `sub` claim is present (user's Keycloak ID)
-   - `aud` claim contains `mcp-gateway`
-   - `realm_access.roles` contains `executive`
-   - `resource_access.mcp-gateway.roles` contains roles
-4. Test Finance/HR/Sales/Support apps
+### Authentication Fixes (Issues #1-5) - ✅ VERIFIED
 
-**Status**: ✅ All fixes applied, pending user verification
+Eve.thompson JWT now contains:
+- ✅ `sub`: `a8c39c58-11cc-4c28-b9fe-cbb2ad754bb9`
+- ✅ `aud`: `mcp-gateway`
+- ✅ `realm_access.roles`: executive, manager, hr-read, sales-read, support-read, finance-read
+- ✅ `resource_access.mcp-gateway.roles`: executive, hr-read, sales-read, support-read, finance-read
+
+### Database Connectivity (Issue #6) - ⏳ PENDING TERRAFORM APPLY
+
+After Terraform apply:
+1. MCP HR should connect to Cloud SQL
+2. Test: `curl https://mcp-gateway-.../api/mcp/hr/list_employees`
+3. Expected: Either employee data (if loaded) or empty array (not DATABASE_ERROR)
+
+### Elasticsearch (Issue #7) - ❌ NOT FIXED
+
+Knowledge base features in mcp-support will not work until Elasticsearch is deployed.
+
+### Sample Data (Issue #8) - ⏳ PENDING DATA LOAD
+
+After Terraform apply succeeds:
+1. Connect to Cloud SQL via proxy
+2. Load sample data scripts
+3. Verify data appears in apps
+
+**Current Status**:
+- ✅ Issues #1-5: Authentication fully working
+- ⏳ Issue #6: Terraform changes ready, needs `terraform apply`
+- ❌ Issue #7: Elasticsearch not deployed (future work)
+- ⏳ Issue #8: Data load needed after Issue #6 is fixed
