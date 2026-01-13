@@ -1,0 +1,232 @@
+// Tamshai Corp Support Tickets Sample Data
+// MongoDB initialization script
+//
+// NOTE: Knowledge Base articles are stored in Elasticsearch (not deployed in GCP Phase 1)
+// See: sample-data/support-data.ndjson for KB articles in Elasticsearch NDJSON format
+
+// Switch to the support database
+db = db.getSiblingDB('tamshai_support');
+
+// =============================================================================
+// TICKETS COLLECTION
+// =============================================================================
+db.tickets.drop();
+db.tickets.insertMany([
+  {
+    _id: ObjectId("670000000000000000000001"),
+    ticket_id: "TICK-001",
+    title: "Cannot login to TamshaiAI app",
+    description: "I'm unable to login to the TamshaiAI desktop application. Getting 'Invalid credentials' error even though I'm using the correct password.",
+    status: "open",
+    priority: "high",
+    created_by: "marcus.johnson",
+    created_at: new Date("2025-12-30T09:15:00Z"),
+    updated_at: new Date("2025-12-30T09:15:00Z"),
+    tags: ["authentication", "login", "desktop-app"],
+    assigned_to: "dan.williams",
+    resolution: null
+  },
+  {
+    _id: ObjectId("670000000000000000000002"),
+    ticket_id: "TICK-002",
+    title: "Slow query performance on HR data",
+    description: "Queries about employee data are taking 30+ seconds to return results. This seems unusually slow.",
+    status: "in_progress",
+    priority: "medium",
+    created_by: "alice.chen",
+    created_at: new Date("2025-12-29T14:30:00Z"),
+    updated_at: new Date("2025-12-30T10:00:00Z"),
+    tags: ["performance", "hr", "database"],
+    assigned_to: "dan.williams",
+    resolution: null
+  },
+  {
+    _id: ObjectId("670000000000000000000003"),
+    ticket_id: "TICK-003",
+    title: "Add new user to Finance team",
+    description: "Please create account for new hire Sarah Martinez (sarah.martinez@tamshai.local) with finance-read role.",
+    status: "resolved",
+    priority: "medium",
+    created_by: "bob.martinez",
+    created_at: new Date("2025-12-28T11:00:00Z"),
+    updated_at: new Date("2025-12-29T15:30:00Z"),
+    tags: ["user-management", "finance", "onboarding"],
+    assigned_to: "dan.williams",
+    resolution: "User account created and granted finance-read role"
+  },
+  {
+    _id: ObjectId("670000000000000000000004"),
+    ticket_id: "TICK-004",
+    title: "Request access to Sales CRM data",
+    description: "I need access to the Sales MCP server to view customer opportunity pipeline for Q1 planning.",
+    status: "closed",
+    priority: "low",
+    created_by: "nina.patel",
+    created_at: new Date("2025-12-27T16:45:00Z"),
+    updated_at: new Date("2025-12-28T09:00:00Z"),
+    tags: ["access-request", "sales", "crm"],
+    assigned_to: "dan.williams",
+    resolution: "Denied - user role (manager) does not require sales data access"
+  },
+  {
+    _id: ObjectId("670000000000000000000005"),
+    ticket_id: "TICK-005",
+    title: "Claude AI returns incomplete results",
+    description: "When querying 'List all employees in Engineering', the AI response says 'showing 50 of 50+ results' but I need to see all 75 engineers.",
+    status: "open",
+    priority: "medium",
+    created_by: "nina.patel",
+    created_at: new Date("2025-12-30T08:00:00Z"),
+    updated_at: new Date("2025-12-30T08:00:00Z"),
+    tags: ["ai", "pagination", "hr"],
+    assigned_to: "dan.williams",
+    resolution: null
+  },
+  {
+    _id: ObjectId("670000000000000000000006"),
+    ticket_id: "TICK-006",
+    title: "TOTP setup instructions needed",
+    description: "I received email about required TOTP setup but the link doesn't work. Can you send new instructions?",
+    status: "resolved",
+    priority: "high",
+    created_by: "frank.davis",
+    created_at: new Date("2025-12-26T10:30:00Z"),
+    updated_at: new Date("2025-12-27T11:00:00Z"),
+    tags: ["security", "mfa", "totp"],
+    assigned_to: "dan.williams",
+    resolution: "Sent new TOTP setup link via secure email"
+  },
+  {
+    _id: ObjectId("670000000000000000000007"),
+    ticket_id: "TICK-007",
+    title: "Budget report export failing",
+    description: "Trying to export Q4 2024 budget report but getting 500 error. Urgent - need for board meeting tomorrow.",
+    status: "in_progress",
+    priority: "critical",
+    created_by: "bob.martinez",
+    created_at: new Date("2025-12-30T13:00:00Z"),
+    updated_at: new Date("2025-12-30T13:30:00Z"),
+    tags: ["finance", "export", "bug"],
+    assigned_to: "dan.williams",
+    resolution: null
+  },
+  {
+    _id: ObjectId("670000000000000000000008"),
+    ticket_id: "TICK-008",
+    title: "Feature request: Dark mode for desktop app",
+    description: "Would love to have a dark mode option in the TamshaiAI Windows app for late-night work sessions.",
+    status: "open",
+    priority: "low",
+    created_by: "marcus.johnson",
+    created_at: new Date("2025-12-29T18:00:00Z"),
+    updated_at: new Date("2025-12-29T18:00:00Z"),
+    tags: ["feature-request", "ui", "desktop-app"],
+    assigned_to: null,
+    resolution: null
+  },
+  {
+    _id: ObjectId("670000000000000000000009"),
+    ticket_id: "TICK-009",
+    title: "Executive dashboard not loading",
+    description: "Eve Thompson's executive dashboard shows blank screen. Other users report working fine.",
+    status: "open",
+    priority: "high",
+    created_by: "eve.thompson",
+    created_at: new Date("2025-12-30T07:30:00Z"),
+    updated_at: new Date("2025-12-30T07:30:00Z"),
+    tags: ["dashboard", "executive", "bug"],
+    assigned_to: "dan.williams",
+    resolution: null
+  },
+  {
+    _id: ObjectId("670000000000000000000010"),
+    ticket_id: "TICK-010",
+    title: "Password reset not working",
+    description: "Clicked 'Forgot Password' but never received reset email. Checked spam folder.",
+    status: "resolved",
+    priority: "medium",
+    created_by: "carol.johnson",
+    created_at: new Date("2025-12-25T14:00:00Z"),
+    updated_at: new Date("2025-12-26T09:30:00Z"),
+    tags: ["authentication", "password", "email"],
+    assigned_to: "dan.williams",
+    resolution: "Email server issue fixed, reset link sent"
+  }
+]);
+
+// =============================================================================
+// TICKET SUMMARY (for dashboard)
+// =============================================================================
+db.ticket_summary.drop();
+db.ticket_summary.insertMany([
+  {
+    _id: ObjectId("680000000000000000000001"),
+    status: "open",
+    count: 4,
+    priority_breakdown: {
+      critical: 0,
+      high: 2,
+      medium: 1,
+      low: 1
+    },
+    updated_at: new Date("2025-12-30T13:30:00Z")
+  },
+  {
+    _id: ObjectId("680000000000000000000002"),
+    status: "in_progress",
+    count: 2,
+    priority_breakdown: {
+      critical: 1,
+      high: 0,
+      medium: 1,
+      low: 0
+    },
+    updated_at: new Date("2025-12-30T13:30:00Z")
+  },
+  {
+    _id: ObjectId("680000000000000000000003"),
+    status: "resolved",
+    count: 3,
+    priority_breakdown: {
+      critical: 0,
+      high: 1,
+      medium: 2,
+      low: 0
+    },
+    updated_at: new Date("2025-12-30T13:30:00Z")
+  },
+  {
+    _id: ObjectId("680000000000000000000004"),
+    status: "closed",
+    count: 1,
+    priority_breakdown: {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 1
+    },
+    updated_at: new Date("2025-12-30T13:30:00Z")
+  }
+]);
+
+// Create indexes for efficient querying
+db.tickets.createIndex({ ticket_id: 1 }, { unique: true });
+db.tickets.createIndex({ status: 1 });
+db.tickets.createIndex({ priority: 1 });
+db.tickets.createIndex({ assigned_to: 1 });
+db.tickets.createIndex({ created_by: 1 });
+db.tickets.createIndex({ created_at: -1 });
+db.tickets.createIndex({ tags: 1 });
+
+// Print summary
+print("=== Support Data Loaded ===");
+print("Tickets: " + db.tickets.countDocuments());
+print("Summary records: " + db.ticket_summary.countDocuments());
+print("");
+print("Status breakdown:");
+db.tickets.aggregate([
+  { $group: { _id: "$status", count: { $sum: 1 } } },
+  { $sort: { _id: 1 } }
+]).forEach(function(doc) {
+  print("  " + doc._id + ": " + doc.count);
+});
