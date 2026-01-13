@@ -851,6 +851,74 @@ No DNS changes required - the custom domain was already set up:
 | #8 Empty databases | N/A | Zero records returned | Sample data not loaded in Cloud SQL | ⏳ Pending |
 | #9 JWT issuer mismatch | 401 | Invalid token issuer | CI/Terraform URL mismatch | ✅ Fixed |
 | #10 KC_PROXY_HEADERS missing | 403 | HTTPS required | Keycloak not reading X-Forwarded-Proto | ✅ Fixed |
+| #11 CI missing DB config | DATABASE_ERROR | Unable to connect to HR database | CI workflow missing POSTGRES_* env vars | ✅ Fixed |
+
+---
+
+## Issue #11: CI Workflow Missing Database Configuration (January 13, 2026)
+
+### Symptoms
+
+- MCP HR returns: `{"status":"error","code":"DATABASE_ERROR","message":"Unable to connect to the HR database"}`
+- All MCP services fail with database connection errors
+- Issue appeared after fixing Issue #6 (Terraform was fixed but CI workflow was not)
+
+### Root Cause: CI Workflow Deploys Differently Than Terraform
+
+The `deploy-mcp-suite` job in `.github/workflows/deploy-to-gcp.yml` only set `NODE_ENV=production`:
+
+```yaml
+--set-env-vars=NODE_ENV=production
+```
+
+Meanwhile, Terraform's `cloudrun/main.tf` sets all database environment variables:
+
+| Setting | Terraform | CI Workflow (Before) |
+|---------|-----------|---------------------|
+| POSTGRES_HOST | `/cloudsql/...` or `10.180.0.3` | **MISSING** |
+| POSTGRES_PORT | `5432` | **MISSING** |
+| POSTGRES_DB | `tamshai_hr`, etc. | **MISSING** |
+| POSTGRES_USER | `tamshai` | **MISSING** |
+| POSTGRES_PASSWORD | From secret | **MISSING** |
+| VPC connector | `tamshai-prod-connector` | **MISSING** |
+
+Without these, MCP services fell back to `localhost:5433` which doesn't exist in Cloud Run.
+
+### Fix Applied
+
+**File**: `.github/workflows/deploy-to-gcp.yml`
+
+**Changes**:
+
+1. Added database names to matrix:
+```yaml
+include:
+  - service: mcp-hr
+    port: 3101
+    db_name: tamshai_hr
+  - service: mcp-finance
+    port: 3102
+    db_name: tamshai_finance
+  # ... etc
+```
+
+2. Added VPC connector and database configuration:
+```yaml
+--vpc-connector=tamshai-prod-connector \
+--vpc-egress=private-ranges-only \
+--set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest \
+--set-env-vars="NODE_ENV=production,POSTGRES_HOST=10.180.0.3,POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
+```
+
+### Commit Reference
+
+- **Commit**: `6133084` - `fix(ci): Add database configuration to MCP suite deployment`
+
+### Lessons Learned
+
+1. **CI/Terraform drift is a recurring theme** - Issues #9, #10, and #11 all stem from the same root cause
+2. **Test after CI deployments** - Terraform apply works ≠ CI deployment works
+3. **Document all deployment paths** - Having both Terraform and CI deploying the same services is risky
 
 ---
 
