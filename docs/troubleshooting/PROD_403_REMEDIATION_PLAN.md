@@ -494,6 +494,43 @@ sync_sub_claim_mapper() {
 
 ---
 
+## Issue #5: Wrong Mapper Type for Sub Claim (January 12, 2026)
+
+### Symptoms
+- Sub claim mapper was created but `sub` still missing from JWT
+- Workflow logs showed "Sub claim mapper created successfully"
+- User logged out/in but token still had no `sub` claim
+
+### Root Cause: Wrong protocolMapper Type
+
+The initial fix used `oidc-usermodel-attribute-mapper` which maps **custom user attributes** (from the Attributes tab). The Keycloak user ID is a **built-in property**, not a custom attribute.
+
+**Wrong** (maps custom attributes):
+```bash
+-s protocolMapper=oidc-usermodel-attribute-mapper
+```
+
+**Correct** (maps built-in properties like id, username, email):
+```bash
+-s protocolMapper=oidc-usermodel-property-mapper
+```
+
+### Fixes Applied
+
+| Fix | Commit | Purpose |
+|-----|--------|---------|
+| sync-realm.sh | ce8dd73 | Changed from `attribute-mapper` to `property-mapper` |
+
+### Why This Matters
+
+Keycloak has two different mapper types for user data:
+- **oidc-usermodel-attribute-mapper**: Custom attributes added to users
+- **oidc-usermodel-property-mapper**: Built-in properties (id, username, firstName, etc.)
+
+The `id` property (user's UUID) is built-in, so it requires `property-mapper`.
+
+---
+
 ## Complete Issue Summary
 
 | Issue | HTTP Status | Error Message | Root Cause | Fix Location |
@@ -502,6 +539,7 @@ sync_sub_claim_mapper() {
 | #2 Missing audience | 401 | Invalid audience | No `mcp-gateway` in `aud` claim | sync-realm.sh |
 | #3 Cloud Run auth | 401 | Unauthorized | No GCP identity token | gcp-auth.ts + mcp-proxy.routes.ts |
 | #4 Missing sub claim | 400 | MISSING_USER_CONTEXT | No `sub` claim in JWT | sync-realm.sh |
+| #5 Wrong mapper type | 400 | MISSING_USER_CONTEXT | Used attribute-mapper instead of property-mapper | sync-realm.sh |
 
 ## Lessons Learned
 
