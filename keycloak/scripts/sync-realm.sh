@@ -797,9 +797,11 @@ provision_test_user() {
 # Audience Mapper Sync
 # =============================================================================
 
-# Add mcp-gateway-audience mapper to a specific client
+
+# Add or update mcp-gateway-audience mapper on a specific client
 # This ensures tokens include mcp-gateway in the audience claim
 # Without this, MCP Gateway rejects tokens with 401 Unauthorized
+# IMPORTANT: This function UPDATES existing mappers to fix broken configs
 add_audience_mapper_to_client() {
     local client_id="$1"
     log_info "  Checking audience mapper for client '$client_id'..."
@@ -810,30 +812,43 @@ add_audience_mapper_to_client() {
         return 1
     fi
 
-    # Check if mapper already exists
-    local mapper_exists=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null | grep -c "mcp-gateway-audience" || echo "0")
+    # Check if mapper already exists and get its ID
+    local existing_mapper=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null | grep -o '"id" *: *"[^"]*".*"name" *: *"mcp-gateway-audience"' | head -1)
 
-    if [ "$mapper_exists" -gt 0 ]; then
-        log_info "    Audience mapper already exists for '$client_id'"
-        return 0
-    fi
+    if [ -n "$existing_mapper" ]; then
+        # Mapper exists - get its ID and UPDATE it (fixes broken mappers)
+        local mapper_id=$(echo "$existing_mapper" | grep -o '"id" *: *"[^"]*"' | cut -d'"' -f4)
+        log_info "    Updating existing audience mapper for '$client_id' (id: $mapper_id)..."
 
-    # Create the audience mapper
-    log_info "    Creating mcp-gateway-audience mapper for '$client_id'..."
-    if $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
-        -s name=mcp-gateway-audience \
-        -s protocol=openid-connect \
-        -s protocolMapper=oidc-audience-mapper \
-        -s consentRequired=false \
-        -s 'config."included.client.audience"=mcp-gateway' \
-        -s 'config."id.token.claim"=false' \
-        -s 'config."access.token.claim"=true' 2>/dev/null; then
-        log_info "    Audience mapper created successfully for '$client_id'"
+        if $KCADM update "clients/$client_uuid/protocol-mappers/models/$mapper_id" -r "$REALM" \
+            -s name=mcp-gateway-audience \
+            -s protocol=openid-connect \
+            -s protocolMapper=oidc-audience-mapper \
+            -s consentRequired=false \
+            -s 'config."included.client.audience"=mcp-gateway' \
+            -s 'config."id.token.claim"=false' \
+            -s 'config."access.token.claim"=true' 2>/dev/null; then
+            log_info "    Audience mapper updated successfully for '$client_id'"
+        else
+            log_warn "    Failed to update audience mapper for '$client_id'"
+        fi
     else
-        log_warn "    Failed to create audience mapper for '$client_id' (may already exist)"
+        # Create new audience mapper
+        log_info "    Creating mcp-gateway-audience mapper for '$client_id'..."
+        if $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
+            -s name=mcp-gateway-audience \
+            -s protocol=openid-connect \
+            -s protocolMapper=oidc-audience-mapper \
+            -s consentRequired=false \
+            -s 'config."included.client.audience"=mcp-gateway' \
+            -s 'config."id.token.claim"=false' \
+            -s 'config."access.token.claim"=true' 2>/dev/null; then
+            log_info "    Audience mapper created successfully for '$client_id'"
+        else
+            log_warn "    Failed to create audience mapper for '$client_id' (may already exist)"
+        fi
     fi
 }
-
 # Sync the mcp-gateway-audience mapper on all web clients
 # Both tamshai-website and web-portal need this for token validation
 sync_audience_mapper() {
