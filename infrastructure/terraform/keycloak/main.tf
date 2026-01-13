@@ -183,10 +183,15 @@ resource "keycloak_openid_client" "web_portal" {
 }
 
 # Protocol Mapper: Client Roles in Access Token (Web Portal)
+# Maps web-portal's own client roles to the token (if any exist)
 resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_roles" {
   realm_id  = keycloak_realm.tamshai_corp.id
   client_id = keycloak_openid_client.web_portal.id
   name      = "client-roles-mapper"
+
+  # CRITICAL: Specify which client's roles to map
+  # Without this, the mapper creates an empty/broken configuration
+  client_id_for_role_mappings = keycloak_openid_client.web_portal.id
 
   claim_name       = "resource_access.web-portal.roles"
   claim_value_type = "String"
@@ -204,6 +209,11 @@ resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_mcp_role
   realm_id  = keycloak_realm.tamshai_corp.id
   client_id = keycloak_openid_client.web_portal.id
   name      = "mcp-gateway-roles-mapper"
+
+  # CRITICAL: Specify which client's roles to map
+  # This maps mcp-gateway's client roles (hr-read, finance-read, executive, etc.)
+  # into web-portal tokens so users can access MCP Gateway resources
+  client_id_for_role_mappings = keycloak_openid_client.mcp_gateway.id
 
   # Include mcp-gateway roles in web-portal tokens
   claim_name       = "resource_access.mcp-gateway.roles"
