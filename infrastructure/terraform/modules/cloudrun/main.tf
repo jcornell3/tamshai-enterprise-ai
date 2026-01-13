@@ -185,20 +185,24 @@ resource "google_cloud_run_service_iam_member" "mcp_gateway_public" {
 locals {
   mcp_services = {
     hr = {
-      port     = 3101
-      database = var.postgres_connection_name
+      port            = 3101
+      cloudsql_instance = var.postgres_connection_name
+      db_name         = "tamshai_hr"
     }
     finance = {
-      port     = 3102
-      database = var.postgres_connection_name
+      port            = 3102
+      cloudsql_instance = var.postgres_connection_name
+      db_name         = "tamshai_finance"
     }
     sales = {
-      port     = 3103
-      database = var.postgres_connection_name
+      port            = 3103
+      cloudsql_instance = var.postgres_connection_name
+      db_name         = "tamshai_sales"  # Uses MongoDB primarily, but needs PostgreSQL for some data
     }
     support = {
-      port     = 3104
-      database = var.postgres_connection_name
+      port            = 3104
+      cloudsql_instance = var.postgres_connection_name
+      db_name         = "tamshai_support"  # Uses Elasticsearch primarily, but needs PostgreSQL for tickets
     }
   }
 }
@@ -226,9 +230,31 @@ resource "google_cloud_run_service" "mcp_suite" {
           }
         }
 
+        # PostgreSQL connection via Cloud SQL Unix socket
+        # MCP services expect individual POSTGRES_* env vars, not DATABASE_URL
         env {
-          name  = "DATABASE_URL"
-          value = "postgresql://${var.tamshai_db_user}:${var.tamshai_db_password}@/${var.tamshai_db_name}?host=/cloudsql/${each.value.database}"
+          name  = "POSTGRES_HOST"
+          value = "/cloudsql/${each.value.cloudsql_instance}"
+        }
+
+        env {
+          name  = "POSTGRES_DB"
+          value = each.value.db_name
+        }
+
+        env {
+          name  = "POSTGRES_USER"
+          value = var.tamshai_db_user
+        }
+
+        env {
+          name  = "POSTGRES_PASSWORD"
+          value = var.tamshai_db_password
+        }
+
+        env {
+          name  = "POSTGRES_PORT"
+          value = "5432"  # Standard port (ignored for Unix socket, but required by pg library)
         }
 
         env {
@@ -256,7 +282,7 @@ resource "google_cloud_run_service" "mcp_suite" {
           "autoscaling.knative.dev/maxScale"         = var.cloud_run_max_instances
           "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
           "run.googleapis.com/execution-environment" = "gen2"
-          "run.googleapis.com/cloudsql-instances"    = each.value.database
+          "run.googleapis.com/cloudsql-instances"    = each.value.cloudsql_instance
         },
         var.vpc_connector_name != "" ? {
           "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
