@@ -259,9 +259,32 @@ resource "google_cloud_run_service" "mcp_suite" {
           value = "5432" # Standard port (ignored for Unix socket, but required by pg library)
         }
 
+        # PostgreSQL SSL mode - required for Cloud SQL with ssl_mode=ENCRYPTED_ONLY
         env {
-          name  = "MONGODB_URI"
-          value = var.mongodb_uri
+          name  = "PGSSLMODE"
+          value = "require"
+        }
+
+        # MongoDB URI - use Secret Manager if configured, otherwise fall back to plain value
+        dynamic "env" {
+          for_each = var.mongodb_uri_secret != "" ? [1] : []
+          content {
+            name = "MONGODB_URI"
+            value_from {
+              secret_key_ref {
+                name = var.mongodb_uri_secret
+                key  = "latest"
+              }
+            }
+          }
+        }
+
+        dynamic "env" {
+          for_each = var.mongodb_uri_secret == "" && var.mongodb_uri != "" ? [1] : []
+          content {
+            name  = "MONGODB_URI"
+            value = var.mongodb_uri
+          }
         }
 
         # PORT is automatically set by Cloud Run (cannot be overridden)

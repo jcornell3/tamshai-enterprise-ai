@@ -136,9 +136,16 @@ variable "tamshai_db_password" {
 }
 
 variable "mongodb_uri" {
-  description = "MongoDB Atlas connection URI"
+  description = "MongoDB Atlas connection URI (used when mongodb_uri_secret is not set)"
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "mongodb_uri_secret" {
+  description = "GCP Secret Manager secret name for MongoDB URI (preferred over mongodb_uri)"
+  type        = string
+  default     = ""
 }
 
 # =============================================================================

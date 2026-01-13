@@ -198,8 +198,9 @@ module "cloudrun" {
   tamshai_db_user          = "tamshai_app"
   tamshai_db_password      = module.security.tamshai_db_password
 
-  # MongoDB Atlas
-  mongodb_uri = var.mongodb_atlas_uri
+  # MongoDB Atlas - use Secret Manager in production
+  mongodb_uri        = "" # Not used when mongodb_uri_secret is set
+  mongodb_uri_secret = "tamshai-prod-mongodb-uri"
 
   # Redis (Utility VM internal IP)
   redis_host = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_internal_ip : "10.0.0.10"
