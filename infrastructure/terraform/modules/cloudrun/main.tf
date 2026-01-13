@@ -36,7 +36,7 @@ resource "google_cloud_run_service" "mcp_gateway" {
   template {
     spec {
       containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-gateway:v1.0.3"
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-gateway:v1.0.4"
 
         ports {
           container_port = 8080
@@ -60,13 +60,15 @@ resource "google_cloud_run_service" "mcp_gateway" {
         }
 
         env {
-          name  = "KEYCLOAK_ISSUER"
-          value = "${google_cloud_run_service.keycloak.status[0].url}/auth/realms/tamshai-corp"
+          name = "KEYCLOAK_ISSUER"
+          # Use custom domain if configured, otherwise fall back to Cloud Run URL
+          value = var.keycloak_domain != "" ? "https://${var.keycloak_domain}/auth/realms/tamshai-corp" : "${google_cloud_run_service.keycloak.status[0].url}/auth/realms/tamshai-corp"
         }
 
         env {
-          name  = "JWKS_URI"
-          value = "${google_cloud_run_service.keycloak.status[0].url}/auth/realms/tamshai-corp/protocol/openid-connect/certs"
+          name = "JWKS_URI"
+          # Use custom domain if configured, otherwise fall back to Cloud Run URL
+          value = var.keycloak_domain != "" ? "https://${var.keycloak_domain}/auth/realms/tamshai-corp/protocol/openid-connect/certs" : "${google_cloud_run_service.keycloak.status[0].url}/auth/realms/tamshai-corp/protocol/openid-connect/certs"
         }
 
         env {
@@ -185,24 +187,24 @@ resource "google_cloud_run_service_iam_member" "mcp_gateway_public" {
 locals {
   mcp_services = {
     hr = {
-      port            = 3101
+      port              = 3101
       cloudsql_instance = var.postgres_connection_name
-      db_name         = "tamshai_hr"
+      db_name           = "tamshai_hr"
     }
     finance = {
-      port            = 3102
+      port              = 3102
       cloudsql_instance = var.postgres_connection_name
-      db_name         = "tamshai_finance"
+      db_name           = "tamshai_finance"
     }
     sales = {
-      port            = 3103
+      port              = 3103
       cloudsql_instance = var.postgres_connection_name
-      db_name         = "tamshai_sales"  # Uses MongoDB primarily, but needs PostgreSQL for some data
+      db_name           = "tamshai_sales" # Uses MongoDB primarily, but needs PostgreSQL for some data
     }
     support = {
-      port            = 3104
+      port              = 3104
       cloudsql_instance = var.postgres_connection_name
-      db_name         = "tamshai_support"  # Uses Elasticsearch primarily, but needs PostgreSQL for tickets
+      db_name           = "tamshai_support" # Uses Elasticsearch primarily, but needs PostgreSQL for tickets
     }
   }
 }
@@ -254,7 +256,7 @@ resource "google_cloud_run_service" "mcp_suite" {
 
         env {
           name  = "POSTGRES_PORT"
-          value = "5432"  # Standard port (ignored for Unix socket, but required by pg library)
+          value = "5432" # Standard port (ignored for Unix socket, but required by pg library)
         }
 
         env {
@@ -532,7 +534,7 @@ resource "google_cloud_run_service" "web_portal" {
         resources {
           limits = {
             cpu    = "1000m"
-            memory = "256Mi"
+            memory = "512Mi" # gen2 requires minimum 512Mi
           }
         }
 
