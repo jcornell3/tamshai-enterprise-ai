@@ -125,12 +125,16 @@ jobs:
         include:
           - service: mcp-hr
             port: 3101
+            db_name: tamshai_hr
           - service: mcp-finance
             port: 3102
+            db_name: tamshai_finance
           - service: mcp-sales
             port: 3103
+            db_name: tamshai_sales
           - service: mcp-support
             port: 3104
+            db_name: tamshai_support
     steps:
       - uses: actions/checkout@v4
 
@@ -166,7 +170,10 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --timeout=300 \
-            --set-env-vars=NODE_ENV=production
+            --vpc-connector=tamshai-prod-connector \
+            --vpc-egress=private-ranges-only \
+            --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest \
+            --set-env-vars="NODE_ENV=production,POSTGRES_HOST=10.180.0.3,POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
 
   deploy-keycloak:
     needs: detect-changes
