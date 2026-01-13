@@ -107,7 +107,7 @@ jobs:
             --cpu=1 \
             --timeout=300 \
             --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
-            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://keycloak-fn44nd7wba-uc.a.run.app/auth,KEYCLOAK_ISSUER=https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp,JWKS_URI=https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-fn44nd7wba-uc.a.run.app,MCP_FINANCE_URL=https://mcp-finance-fn44nd7wba-uc.a.run.app,MCP_SALES_URL=https://mcp-sales-fn44nd7wba-uc.a.run.app,MCP_SUPPORT_URL=https://mcp-support-fn44nd7wba-uc.a.run.app,TOKEN_REVOCATION_FAIL_OPEN=true"
+            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://auth.tamshai.com/auth,KEYCLOAK_ISSUER=https://auth.tamshai.com/auth/realms/tamshai-corp,JWKS_URI=https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-fn44nd7wba-uc.a.run.app,MCP_FINANCE_URL=https://mcp-finance-fn44nd7wba-uc.a.run.app,MCP_SALES_URL=https://mcp-sales-fn44nd7wba-uc.a.run.app,MCP_SUPPORT_URL=https://mcp-support-fn44nd7wba-uc.a.run.app,TOKEN_REVOCATION_FAIL_OPEN=true"
 
   deploy-mcp-suite:
     needs: detect-changes
@@ -213,7 +213,7 @@ jobs:
             --vpc-connector=tamshai-prod-connector \
             --vpc-egress=private-ranges-only \
             --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
-            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=https://keycloak-fn44nd7wba-uc.a.run.app/auth,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_HTTP_RELATIVE_PATH=/auth"
+            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_HTTP_RELATIVE_PATH=/auth"
 
   sync-keycloak-realm:
     needs: deploy-keycloak
@@ -235,7 +235,7 @@ jobs:
           echo "Waiting for Keycloak to be fully ready..."
           for i in {1..6}; do
             # Check realm endpoint instead of /health/ready which doesn't exist
-            if curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               break
             fi
@@ -244,7 +244,7 @@ jobs:
           done
 
           # Final check
-          if ! curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+          if ! curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
             echo "ERROR: Keycloak not ready after 60 seconds"
             exit 1
           fi
@@ -267,7 +267,7 @@ jobs:
 
       - name: Sync Realm Configuration
         env:
-          KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth
+          KEYCLOAK_URL: https://auth.tamshai.com/auth
           KEYCLOAK_ADMIN: admin
         run: |
           echo "Running realm sync directly from GitHub Actions runner..."
@@ -338,7 +338,7 @@ jobs:
       - name: Build and Push Web Apps Image
         env:
           VITE_RELEASE_TAG: v1.0.0
-          VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+          VITE_KEYCLOAK_URL: https://auth.tamshai.com/auth/realms/tamshai-corp
           VITE_KEYCLOAK_CLIENT_ID: web-portal
           VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
           VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
@@ -366,7 +366,7 @@ jobs:
             --allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
-            --memory=256Mi \
+            --memory=512Mi \
             --cpu=1 \
             --timeout=60 \
             --port=80
