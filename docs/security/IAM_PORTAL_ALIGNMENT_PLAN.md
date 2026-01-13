@@ -498,3 +498,100 @@ Cloud Run IAM → 403 Forbidden (missing identity token)
 3. **Cloud Run service-to-service auth is required** - Even with correct IAM permissions, the calling service must include an identity token
 
 4. **sync-realm.sh is the source of truth for production** - Since Terraform can't reliably manage production Keycloak (state issues), sync-realm.sh should handle all critical configuration
+
+---
+
+## January 13, 2026 Update: CI/Terraform Configuration Alignment
+
+### Problem Identified
+
+After fixing Keycloak mappers and GCP identity tokens, users were still getting **401 Unauthorized** errors when the portal tried to access MCP Gateway. The JWT tokens were being rejected due to an **issuer mismatch**.
+
+### Root Cause: Two Sources of Truth Out of Sync
+
+The production environment had **two different deployment configurations** that were using different Keycloak URLs:
+
+| Configuration Source | Keycloak URLs Used |
+|---------------------|-------------------|
+| **Terraform** (`infrastructure/terraform/modules/cloudrun/main.tf`) | `https://auth.tamshai.com/...` |
+| **CI Workflow** (`.github/workflows/deploy-to-gcp.yml`) | `https://keycloak-fn44nd7wba-uc.a.run.app/...` |
+
+**How the mismatch occurred:**
+
+1. Terraform was updated to use the custom domain `auth.tamshai.com` for `KEYCLOAK_ISSUER`
+2. Running `terraform apply` deployed MCP Gateway with the new issuer URL
+3. The CI workflow was still building `web-portal` with `VITE_KEYCLOAK_URL` pointing to the Cloud Run URL
+4. Users authenticated via Cloud Run URL → JWT tokens had `iss: https://keycloak-fn44nd7wba-uc.a.run.app/...`
+5. MCP Gateway validated against `https://auth.tamshai.com/...` → issuer didn't match → **401 Unauthorized**
+
+### JWT Issuer Claim Explained
+
+When a user authenticates, Keycloak issues a JWT token with an `iss` (issuer) claim that matches the URL the user authenticated against:
+
+```json
+{
+  "iss": "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp",
+  "sub": "user-uuid",
+  "aud": ["mcp-gateway"],
+  ...
+}
+```
+
+The MCP Gateway validates tokens by checking that `iss` matches its configured `KEYCLOAK_ISSUER`. If they don't match, the token is rejected.
+
+### Hardcoded URLs in deploy-to-gcp.yml (Before Fix)
+
+The CI workflow had Cloud Run URLs hardcoded in multiple places:
+
+```yaml
+# Line 110 - MCP Gateway deployment
+KEYCLOAK_ISSUER=https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+
+# Line 216 - Keycloak deployment
+KC_HOSTNAME=https://keycloak-fn44nd7wba-uc.a.run.app/auth
+
+# Line 341 - Web Portal build
+VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+
+# Lines 238, 247 - Health checks
+curl -sf "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/..."
+```
+
+### Solution: Standardize on auth.tamshai.com
+
+Updated `.github/workflows/deploy-to-gcp.yml` to use the custom domain consistently:
+
+| Location | Before | After |
+|----------|--------|-------|
+| deploy-gateway `KEYCLOAK_URL` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-gateway `KEYCLOAK_ISSUER` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-gateway `JWKS_URI` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-keycloak `KC_HOSTNAME` | `https://keycloak-fn44nd7wba-uc.a.run.app/auth` | `auth.tamshai.com` |
+| sync-keycloak-realm `KEYCLOAK_URL` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| sync-keycloak-realm health checks | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-web-portal `VITE_KEYCLOAK_URL` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-web-portal `--memory` | `256Mi` | `512Mi` (gen2 requirement) |
+
+### Domain Mapping Configuration
+
+The custom domain `auth.tamshai.com` was already configured via:
+
+1. **DNS**: CNAME record pointing to `ghs.googlehosted.com` (Google Cloud Run hosting)
+2. **Cloud Run Domain Mapping**: Terraform resource `google_cloud_run_domain_mapping.keycloak`
+3. **SSL Certificate**: Automatically provisioned by Google
+
+No DNS changes were required for this fix.
+
+### Commit Reference
+
+- **Commit**: `9a19af8` - `fix(ci): Use auth.tamshai.com consistently for Keycloak URLs`
+
+### Key Learnings
+
+1. **Keep CI and Terraform in sync** - Both deployment paths must use the same configuration values
+
+2. **Custom domains require consistency** - If using a custom domain in Terraform, the CI workflow must also use it
+
+3. **JWT issuer validation is strict** - The URL must match exactly, including protocol and path
+
+4. **Build-time vs runtime configuration** - `VITE_*` variables are baked into the build; changing them requires rebuilding the image
