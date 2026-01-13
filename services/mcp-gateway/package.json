@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "axios": "^1.6.2",
+    "google-auth-library": "^9.14.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",

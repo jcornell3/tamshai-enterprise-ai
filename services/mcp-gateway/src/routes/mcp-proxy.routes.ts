@@ -19,6 +19,7 @@ import {
   isPendingConfirmationResponse,
 } from '../types/mcp-response';
 import { UserContext } from '../test-utils/mock-user-context';
+import { getIdentityToken } from '../utils/gcp-auth';
 
 // Extended Request type with userContext property
 interface AuthenticatedRequest extends Request {
@@ -121,8 +122,14 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
 
       // Forward request to MCP server
       // SECURITY: toolName is validated above, server.url comes from trusted config
+      const targetUrl = `${server.url}/tools/${encodeURIComponent(toolName)}`;
+
+      // Get GCP identity token for Cloud Run service-to-service auth
+      // Returns null in dev/stage (non-GCP environments)
+      const identityToken = await getIdentityToken(server.url);
+
       const mcpResponse = await axios.post(
-        `${server.url}/tools/${encodeURIComponent(toolName)}`,
+        targetUrl,
         {
           ...queryParams, // Spread query params at root level (MCP servers read directly from body)
           userContext: {
@@ -137,6 +144,8 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
           headers: {
             'Content-Type': 'application/json',
             'X-Request-ID': requestId,
+            // Include GCP identity token if available (Cloud Run service-to-service)
+            ...(identityToken && { Authorization: `Bearer ${identityToken}` }),
           },
         }
       );
@@ -224,8 +233,14 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
 
       // Forward request to MCP server
       // SECURITY: toolName is validated above, server.url comes from trusted config
+      const targetUrl = `${server.url}/tools/${encodeURIComponent(toolName)}`;
+
+      // Get GCP identity token for Cloud Run service-to-service auth
+      // Returns null in dev/stage (non-GCP environments)
+      const identityToken = await getIdentityToken(server.url);
+
       const mcpResponse = await axios.post(
-        `${server.url}/tools/${encodeURIComponent(toolName)}`,
+        targetUrl,
         body,
         {
           timeout,
@@ -234,6 +249,8 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
             'X-User-ID': userContext.userId,
             'X-User-Roles': userContext.roles.join(','),
             'X-Request-ID': requestId,
+            // Include GCP identity token if available (Cloud Run service-to-service)
+            ...(identityToken && { Authorization: `Bearer ${identityToken}` }),
           },
         }
       );
