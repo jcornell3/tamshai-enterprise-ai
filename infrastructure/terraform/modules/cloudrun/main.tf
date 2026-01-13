@@ -36,7 +36,7 @@ resource "google_cloud_run_service" "mcp_gateway" {
   template {
     spec {
       containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-gateway:v1.0.4"
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-gateway:latest"
 
         ports {
           container_port = 8080
