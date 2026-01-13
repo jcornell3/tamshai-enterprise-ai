@@ -384,3 +384,117 @@ After deployment, eve.thompson should be able to:
 - `keycloak/scripts/sync-realm.sh` - Fixed sync_audience_mapper function
 - `keycloak/realm-export.json` - Already had mapper defined for web-portal (but not applied to live Keycloak)
 - `.github/workflows/deploy-to-gcp.yml` - sync-keycloak-realm job runs the fix
+
+---
+
+## January 13, 2026 Update: Multiple 403 Error Causes Identified
+
+After the audience mapper fix, eve.thompson was still seeing 403 errors. Investigation revealed **two additional issues**:
+
+### Issue 1: Broken Client Role Mappers (Keycloak Configuration)
+
+**Problem**: The `web-portal` Keycloak client had two protocol mappers that were created without the required `usermodel.clientRoleMapping.clientId` configuration:
+
+- `client-roles-mapper` - supposed to map web-portal's client roles
+- `mcp-gateway-roles-mapper` - supposed to map mcp-gateway's client roles into web-portal tokens
+
+**Root Cause**: Commit `ec878fa` (Jan 1, 2026) created these mappers in Terraform without the required `client_id_for_role_mappings` parameter:
+
+```hcl
+# BROKEN - missing client_id_for_role_mappings
+resource "keycloak_openid_user_client_role_protocol_mapper" "web_portal_mcp_roles" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.web_portal.id
+  name      = "mcp-gateway-roles-mapper"
+  claim_name = "resource_access.mcp-gateway.roles"
+  # MISSING: client_id_for_role_mappings = keycloak_openid_client.mcp_gateway.id
+}
+```
+
+The `terraform-keycloak-prod.yml` workflow applied this broken configuration to production Keycloak on January 11.
+
+**Symptoms**: JWT tokens had empty role claims (`resource_access.mcp-gateway.roles` was undefined), causing MCP Gateway to see "Your roles: None" and return 403.
+
+**Fixes Applied**:
+
+| Fix | Commit | Purpose |
+|-----|--------|---------|
+| Terraform config | `b1b0d69` | Added `client_id_for_role_mappings` to both mappers |
+| Keycloak API | Manual | Immediately updated mappers in production via Admin API |
+| sync-realm.sh | `f168c85` | Added `sync_client_role_mappers()` to permanently fix on every sync |
+
+The `sync_client_role_mappers()` function ensures mappers are correctly configured even if Keycloak is reimported or Terraform runs again.
+
+### Issue 2: Cloud Run Service-to-Service Authentication
+
+**Problem**: After fixing the Keycloak mappers, a **different** 403 error appeared - an HTML response from Cloud Run IAM:
+
+```html
+<h1>Error: Forbidden</h1>
+<h2>Your client does not have permission to get URL <code>/tools/list_employees</code></h2>
+```
+
+**Root Cause**: The MCP Gateway was calling Cloud Run services (mcp-hr, mcp-finance, etc.) without including a GCP identity token for service-to-service authentication.
+
+**Request Flow**:
+```
+Browser → Portal → /api/mcp/hr/list_employees
+                           ↓
+MCP Gateway → https://mcp-hr-fn44nd7wba-uc.a.run.app/tools/list_employees
+                           ↓
+Cloud Run IAM → 403 Forbidden (missing identity token)
+```
+
+**Key Insight**: This was NOT the same 403 as before:
+- Previous 403: JSON from MCP Gateway authorization (`ACCESS_DENIED`, includes roles info)
+- New 403: HTML from Cloud Run IAM (`Your client does not have permission`)
+
+**IAM Configuration**:
+- The service account `tamshai-prod-mcp-gateway` has `roles/run.invoker` on all MCP services ✅
+- But the MCP Gateway code wasn't sending the identity token ❌
+
+**Affected Scope**:
+- **Production only** - Dev and stage use Docker Compose where services communicate directly
+- **All MCP services** - HR, Finance, Sales, Support all affected equally
+
+**Fix Applied**:
+
+1. Added `google-auth-library` to `services/mcp-gateway/package.json`
+
+2. Created `services/mcp-gateway/src/utils/gcp-auth.ts`:
+   - Detects if running on GCP (checks metadata server availability)
+   - Fetches identity tokens with proper audience
+   - Caches tokens (they expire after 1 hour)
+   - Returns null in dev/stage (no-op)
+
+3. Updated `services/mcp-gateway/src/routes/mcp-proxy.routes.ts`:
+   ```typescript
+   // Get GCP identity token for Cloud Run service-to-service auth
+   const identityToken = await getIdentityToken(server.url);
+
+   const mcpResponse = await axios.post(targetUrl, body, {
+     headers: {
+       'Content-Type': 'application/json',
+       // Include GCP identity token if available
+       ...(identityToken && { Authorization: `Bearer ${identityToken}` }),
+     },
+   });
+   ```
+
+### Summary of All 403 Error Causes
+
+| Error Type | Source | Symptom | Status |
+|------------|--------|---------|--------|
+| Missing audience mapper | Keycloak | JSON: `ACCESS_DENIED` from MCP Gateway | ✅ Fixed |
+| Broken client role mappers | Keycloak/Terraform | JSON: `Your roles: None` in MCP Gateway response | ✅ Fixed |
+| Missing GCP identity token | MCP Gateway code | HTML: Cloud Run IAM 403 Forbidden | ✅ Fixed |
+
+### Key Learnings
+
+1. **Different 403s have different sources** - Always check if the response is JSON (application) or HTML (infrastructure)
+
+2. **Terraform without state is destructive** - The `terraform-keycloak-prod.yml` workflow runs without backend state, causing it to try creating resources that already exist
+
+3. **Cloud Run service-to-service auth is required** - Even with correct IAM permissions, the calling service must include an identity token
+
+4. **sync-realm.sh is the source of truth for production** - Since Terraform can't reliably manage production Keycloak (state issues), sync-realm.sh should handle all critical configuration
