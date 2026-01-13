@@ -895,7 +895,7 @@ add_sub_claim_mapper_to_client() {
         if $KCADM update "clients/$client_uuid/protocol-mappers/models/$mapper_id" -r "$REALM" \
             -s name="$mapper_name" \
             -s protocol=openid-connect \
-            -s protocolMapper=oidc-usermodel-attribute-mapper \
+            -s protocolMapper=oidc-usermodel-property-mapper \
             -s consentRequired=false \
             -s 'config."user.attribute"=id' \
             -s 'config."claim.name"=sub' \
@@ -913,7 +913,7 @@ add_sub_claim_mapper_to_client() {
         if $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
             -s name="$mapper_name" \
             -s protocol=openid-connect \
-            -s protocolMapper=oidc-usermodel-attribute-mapper \
+            -s protocolMapper=oidc-usermodel-property-mapper \
             -s consentRequired=false \
             -s 'config."user.attribute"=id' \
             -s 'config."claim.name"=sub' \
