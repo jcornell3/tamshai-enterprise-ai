@@ -735,3 +735,118 @@ After Terraform apply succeeds:
 - ⏳ Issue #6: Terraform changes ready, needs `terraform apply`
 - ❌ Issue #7: Elasticsearch not deployed (future work)
 - ⏳ Issue #8: Data load needed after Issue #6 is fixed
+
+---
+
+## Issue #9: JWT Issuer Mismatch - 401 Errors (January 13, 2026)
+
+### Symptoms
+
+- Users logged in successfully but got 401 Unauthorized when accessing MCP Gateway APIs
+- Portal apps showed blank white screen or loading state
+- MCP Gateway logs showed "Invalid token issuer"
+
+### Root Cause: CI Workflow and Terraform Out of Sync
+
+Two different deployment configurations were using different Keycloak URLs:
+
+| Configuration Source | KEYCLOAK_ISSUER / VITE_KEYCLOAK_URL |
+|---------------------|-------------------------------------|
+| **Terraform** (local `terraform apply`) | `https://auth.tamshai.com/auth/realms/tamshai-corp` |
+| **CI Workflow** (GitHub Actions) | `https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp` |
+
+**How the mismatch occurred:**
+
+1. Terraform `cloudrun/main.tf` was updated to use custom domain `auth.tamshai.com`
+2. `terraform apply` was run locally, deploying MCP Gateway with new issuer URL
+3. CI workflow `deploy-to-gcp.yml` still had hardcoded Cloud Run URLs
+4. Web portal (built by CI) authenticated via Cloud Run URL → JWT `iss` = Cloud Run URL
+5. MCP Gateway validated against `auth.tamshai.com` → JWT rejected → 401 Unauthorized
+
+### Technical Detail: JWT Issuer Validation
+
+When a user authenticates, Keycloak issues a JWT with an `iss` (issuer) claim matching the URL they authenticated against:
+
+```json
+{
+  "iss": "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp",
+  "sub": "user-uuid",
+  "aud": ["mcp-gateway"]
+}
+```
+
+MCP Gateway rejects tokens where `iss` doesn't match its configured `KEYCLOAK_ISSUER`.
+
+### Hardcoded URLs in deploy-to-gcp.yml (Before Fix)
+
+```yaml
+# Line 110 - deploy-gateway job
+KEYCLOAK_ISSUER=https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+
+# Line 216 - deploy-keycloak job
+KC_HOSTNAME=https://keycloak-fn44nd7wba-uc.a.run.app/auth
+
+# Line 270 - sync-keycloak-realm job
+KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth
+
+# Line 341 - deploy-web-portal job
+VITE_KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/tamshai-corp
+```
+
+### Fix Applied
+
+Updated `.github/workflows/deploy-to-gcp.yml` to use `auth.tamshai.com` everywhere:
+
+| Location | Before | After |
+|----------|--------|-------|
+| deploy-gateway `KEYCLOAK_URL` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-gateway `KEYCLOAK_ISSUER` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-gateway `JWKS_URI` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-keycloak `KC_HOSTNAME` | `https://keycloak-fn44nd7wba-uc.a.run.app/auth` | `auth.tamshai.com` |
+| sync-keycloak-realm `KEYCLOAK_URL` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| sync-keycloak-realm health checks | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-web-portal `VITE_KEYCLOAK_URL` | `keycloak-fn44nd7wba-uc.a.run.app` | `auth.tamshai.com` |
+| deploy-web-portal `--memory` | `256Mi` | `512Mi` (gen2 requirement) |
+
+### Commit Reference
+
+- **Commit**: `9a19af8` - `fix(ci): Use auth.tamshai.com consistently for Keycloak URLs`
+
+### Domain Mapping Already Configured
+
+No DNS changes required - the custom domain was already set up:
+
+- **DNS**: `auth.tamshai.com` CNAME → `ghs.googlehosted.com`
+- **Cloud Run Domain Mapping**: Terraform resource `google_cloud_run_domain_mapping.keycloak[0]`
+- **SSL Certificate**: Automatically provisioned by Google (status: Ready, CertificateProvisioned)
+
+### Verification After Fix
+
+1. CI workflow must rebuild and deploy web-portal with new `VITE_KEYCLOAK_URL`
+2. Users authenticate via `https://auth.tamshai.com/...`
+3. JWT `iss` claim = `https://auth.tamshai.com/auth/realms/tamshai-corp`
+4. MCP Gateway `KEYCLOAK_ISSUER` = `https://auth.tamshai.com/auth/realms/tamshai-corp`
+5. Issuer matches → Token accepted → 200 OK
+
+### Lessons Learned
+
+1. **Keep CI and Terraform in sync** - Both deployment paths must use identical configuration values
+2. **Custom domains require consistency** - Once you configure a custom domain, use it everywhere
+3. **Build-time vs runtime config** - `VITE_*` variables are baked into the build; changing them requires rebuilding
+4. **Check all deployment paths** - Manual `terraform apply` and CI workflows can diverge silently
+
+---
+
+## Updated Issue Summary
+
+| Issue | HTTP Status | Error Message | Root Cause | Status |
+|-------|-------------|---------------|------------|--------|
+| #1 Broken role mappers | 403 | No roles in token | Missing `client_id_for_role_mappings` | ✅ Fixed |
+| #2 Missing audience | 401 | Invalid audience | No `mcp-gateway` in `aud` claim | ✅ Fixed |
+| #3 Cloud Run auth | 403 HTML | Unauthorized | No GCP identity token | ✅ Fixed |
+| #4 Missing sub claim | 400 | MISSING_USER_CONTEXT | No `sub` claim in JWT | ✅ Fixed |
+| #5 Wrong mapper type | 400 | MISSING_USER_CONTEXT | Used attribute-mapper instead of property-mapper | ✅ Fixed |
+| #6 Database env vars | DATABASE_ERROR | Can't connect to database | Wrong env vars (DATABASE_URL vs POSTGRES_*) | ✅ Fixed |
+| #7 No Elasticsearch | DATABASE_ERROR | Connect ECONNREFUSED 9201 | Elasticsearch not deployed in GCP | ❌ Not Fixed |
+| #8 Empty databases | N/A | Zero records returned | Sample data not loaded in Cloud SQL | ⏳ Pending |
+| #9 JWT issuer mismatch | 401 | Invalid token issuer | CI/Terraform URL mismatch | ✅ Fixed |
