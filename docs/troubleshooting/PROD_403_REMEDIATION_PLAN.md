@@ -354,3 +354,172 @@ Eve.thompson must:
 3. Test Finance/HR/Sales/Support apps
 
 **Status**: ✅ Fixed
+
+---
+
+## Issue #2: 401 Unauthorized from MCP Gateway (January 12, 2026)
+
+### Symptoms
+- Users got 401 errors when calling MCP Gateway APIs
+- Keycloak tokens were valid but MCP Gateway rejected them
+
+### Root Cause: Missing Audience Mapper
+
+The `mcp-gateway-audience` mapper was either missing or broken on web clients. This mapper adds `mcp-gateway` to the `aud` claim in JWT tokens.
+
+**Why it matters**: MCP Gateway validates that tokens are intended for it by checking `aud` claim contains `mcp-gateway`.
+
+### Fixes Applied
+
+| Fix | Commit | Purpose |
+|-----|--------|---------|
+| sync-realm.sh | (same session) | Updated `add_audience_mapper_to_client()` to UPDATE existing broken mappers instead of skipping them |
+
+### Key Code Change
+
+**Before** (just skipped if mapper existed):
+```bash
+if [ -n "$existing_mapper" ]; then
+    log_info "    Audience mapper already exists, skipping"
+    return 0
+fi
+```
+
+**After** (updates existing mappers):
+```bash
+if [ -n "$existing_mapper" ]; then
+    # Mapper exists - UPDATE it to ensure correct configuration
+    local mapper_id=$(...)
+    $KCADM update "clients/$client_uuid/protocol-mappers/models/$mapper_id" ...
+fi
+```
+
+---
+
+## Issue #3: 401 from Cloud Run MCP Servers (January 12, 2026)
+
+### Symptoms
+- MCP Gateway could reach MCP servers in dev/stage but not in GCP production
+- MCP servers returned 401 Unauthorized
+
+### Root Cause: Missing GCP Identity Token
+
+In GCP Cloud Run, service-to-service calls require identity tokens for IAM authentication. The MCP Gateway was sending user JWT tokens but not GCP identity tokens.
+
+**Technical Detail**: Cloud Run requires `Authorization: Bearer <identity-token>` where the identity token is obtained from the GCP metadata server.
+
+### Fixes Applied
+
+| Fix | Commit | Purpose |
+|-----|--------|---------|
+| gcp-auth.ts | New file | Created utility to fetch identity tokens from GCP metadata server |
+| mcp-proxy.routes.ts | Updated | Added identity token to outgoing MCP server requests |
+| package.json | Updated | Added `google-auth-library` dependency |
+
+### Key Code
+
+```typescript
+// services/mcp-gateway/src/utils/gcp-auth.ts
+export async function getIdentityToken(targetUrl: string): Promise<string | null> {
+  if (!(await checkGCPEnvironment())) {
+    return null;  // Not on GCP, skip
+  }
+  // Fetch identity token for target audience
+  const client = await authInstance.getIdTokenClient(audience);
+  const headers = await client.getRequestHeaders();
+  return headers['Authorization'].substring(7);  // Strip 'Bearer '
+}
+
+// services/mcp-gateway/src/routes/mcp-proxy.routes.ts
+const identityToken = await getIdentityToken(server.url);
+const mcpResponse = await axios.post(targetUrl, body, {
+  headers: {
+    ...(identityToken && { Authorization: `Bearer ${identityToken}` }),
+  },
+});
+```
+
+---
+
+## Issue #4: 400 MISSING_USER_CONTEXT from MCP Servers (January 12, 2026)
+
+### Symptoms
+- After fixing Cloud Run auth (Issue #3), got 400 instead of 401
+- MCP HR returned: `{"status":"error","code":"MISSING_USER_CONTEXT","message":"User context is required"}`
+
+### Root Cause: Missing `sub` Claim in JWT
+
+The JWT token was missing the `sub` (subject) claim entirely. MCP Gateway extracts `userId` from `payload.sub`:
+
+```typescript
+// jwt-validator.ts line 149
+userId: payload.sub || ''  // Returns empty string if sub missing
+```
+
+When `userId` is empty, MCP servers return 400 because they can't identify the user.
+
+### Why Sub Claim Was Missing
+
+The `web-portal` client didn't have a protocol mapper to include the `sub` claim. While OpenID Connect should include `sub` by default, certain Keycloak configurations can result in it being omitted.
+
+### Fixes Applied
+
+| Fix | Commit | Purpose |
+|-----|--------|---------|
+| sync-realm.sh | (this session) | Added `sync_sub_claim_mapper()` function to ensure `sub` claim is included |
+
+### Key Code
+
+```bash
+# keycloak/scripts/sync-realm.sh
+add_sub_claim_mapper_to_client() {
+    local client_id="$1"
+    # Create mapper that adds user's Keycloak ID as 'sub' claim
+    $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
+        -s name="subject-claim-mapper" \
+        -s protocol=openid-connect \
+        -s protocolMapper=oidc-usermodel-attribute-mapper \
+        -s 'config."user.attribute"=id' \
+        -s 'config."claim.name"=sub' \
+        -s 'config."access.token.claim"=true' \
+        -s 'config."id.token.claim"=true'
+}
+
+sync_sub_claim_mapper() {
+    add_sub_claim_mapper_to_client "web-portal"
+    add_sub_claim_mapper_to_client "tamshai-website"
+    add_sub_claim_mapper_to_client "tamshai-flutter-client"
+}
+```
+
+---
+
+## Complete Issue Summary
+
+| Issue | HTTP Status | Error Message | Root Cause | Fix Location |
+|-------|-------------|---------------|------------|--------------|
+| #1 Broken role mappers | 403 | No roles in token | Missing `client_id_for_role_mappings` | Terraform + sync-realm.sh |
+| #2 Missing audience | 401 | Invalid audience | No `mcp-gateway` in `aud` claim | sync-realm.sh |
+| #3 Cloud Run auth | 401 | Unauthorized | No GCP identity token | gcp-auth.ts + mcp-proxy.routes.ts |
+| #4 Missing sub claim | 400 | MISSING_USER_CONTEXT | No `sub` claim in JWT | sync-realm.sh |
+
+## Lessons Learned
+
+1. **Protocol mappers must be idempotent**: `sync-realm.sh` functions should UPDATE existing mappers, not just skip them
+2. **GCP Cloud Run requires identity tokens**: Service-to-service calls need IAM authentication
+3. **JWT claims can be missing**: Don't assume standard OIDC claims are present; explicitly map them
+4. **Test with real tokens**: Decode JWTs to verify all expected claims are present
+
+## Verification After All Fixes
+
+Eve.thompson must:
+1. Log out of portal at `app.tamshai.com`
+2. Log back in to get fresh JWT
+3. Decode JWT at jwt.io and verify:
+   - `sub` claim is present (user's Keycloak ID)
+   - `aud` claim contains `mcp-gateway`
+   - `realm_access.roles` contains `executive`
+   - `resource_access.mcp-gateway.roles` contains roles
+4. Test Finance/HR/Sales/Support apps
+
+**Status**: ✅ All fixes applied, pending user verification
