@@ -990,3 +990,150 @@ curl -s "https://mcp-gateway-fn44nd7wba-uc.a.run.app/health"
 2. **KC_PROXY=edge is not enough** - You also need KC_PROXY_HEADERS=xforwarded for load balancers
 3. **"HTTPS required" on HTTPS requests** - Indicates proxy header configuration issue, not DNS or certificate problem
 4. **Startup probes cascade** - If Keycloak JWKS fails, MCP Gateway startup fails, causing 503 for all endpoints
+
+---
+
+## Issue #12: Cloud SQL SSL Requirement and MongoDB Configuration (January 13, 2026)
+
+### Symptoms
+
+- MCP HR returns: `{"status":"error","code":"DATABASE_ERROR","message":"Unable to connect to the HR database"}`
+- All MCP services fail with database connection errors
+- Cloud SQL connection rejected with: `pg_hba.conf rejects connection for host "...", user "tamshai", database "tamshai_hr", no encryption`
+
+### Root Cause: SSL Not Enabled for PostgreSQL Connections
+
+Cloud SQL is configured with `ssl_mode = ENCRYPTED_ONLY` in Terraform, meaning all database connections must use SSL encryption. The Node.js `pg` library doesn't use SSL by default.
+
+**Why the error occurred:**
+1. Terraform creates Cloud SQL with `ssl_mode = ENCRYPTED_ONLY` (security best practice)
+2. MCP services connect using `pg` library without SSL configuration
+3. Cloud SQL rejects non-SSL connections with "no encryption" error
+4. Services return DATABASE_ERROR to clients
+
+**Initial Wrong Approach:**
+
+⚠️ **DO NOT modify source code to fix this issue** - that would break dev/stage environments that don't require SSL.
+
+**Correct Approach:**
+
+The `pg` library respects the `PGSSLMODE` environment variable, allowing SSL to be enabled without code changes.
+
+### Secondary Issue: MongoDB URI Not Configured
+
+MCP services also need `MONGODB_URI` environment variable. The CI workflow was missing this configuration entirely.
+
+### Fixes Applied
+
+| Fix | File | Changes |
+|-----|------|---------|
+| Add PGSSLMODE=require | `.github/workflows/deploy-to-gcp.yml` | Added to `--set-env-vars` in deploy-mcp-suite |
+| Add PGSSLMODE=require | `infrastructure/terraform/modules/cloudrun/main.tf` | Added env block for MCP Suite services |
+| Create MongoDB secret | GCP Secret Manager | Created `tamshai-prod-mongodb-uri` secret |
+| Grant IAM access | GCP IAM | Added secretAccessor role to MCP servers service account |
+| Add MONGODB_URI from secret | `.github/workflows/deploy-to-gcp.yml` | Added `MONGODB_URI=tamshai-prod-mongodb-uri:latest` to `--set-secrets` |
+| Add MONGODB_URI from secret | `infrastructure/terraform/modules/cloudrun/main.tf` | Added dynamic block for MongoDB secret reference |
+
+### Key Code Changes
+
+**Terraform (`modules/cloudrun/main.tf`)** - Added to MCP Suite services:
+
+```hcl
+# PostgreSQL SSL mode - required for Cloud SQL with ssl_mode=ENCRYPTED_ONLY
+env {
+  name  = "PGSSLMODE"
+  value = "require"
+}
+
+# MongoDB URI - use Secret Manager if configured
+dynamic "env" {
+  for_each = var.mongodb_uri_secret != "" ? [1] : []
+  content {
+    name = "MONGODB_URI"
+    value_from {
+      secret_key_ref {
+        name = var.mongodb_uri_secret
+        key  = "latest"
+      }
+    }
+  }
+}
+```
+
+**CI Workflow (`deploy-to-gcp.yml`)** - deploy-mcp-suite job:
+
+```yaml
+--set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest,MONGODB_URI=tamshai-prod-mongodb-uri:latest \
+--set-env-vars="NODE_ENV=production,POSTGRES_HOST=10.180.0.3,POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai,PGSSLMODE=require"
+```
+
+### GCP Secret Manager Configuration
+
+```bash
+# Create the secret
+gcloud secrets create tamshai-prod-mongodb-uri \
+  --project=gen-lang-client-0553641830 \
+  --replication-policy=automatic
+
+# Add the secret value
+gcloud secrets versions add tamshai-prod-mongodb-uri \
+  --project=gen-lang-client-0553641830 \
+  --data-file=-
+# (Enter MongoDB Atlas URI when prompted)
+
+# Grant IAM access to MCP servers service account
+gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
+  --project=gen-lang-client-0553641830 \
+  --member="serviceAccount:tamshai-prod-mcp-servers@gen-lang-client-0553641830.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+### Terraform Plan Verification
+
+```
+Plan: 0 to add, 7 to change, 0 to destroy
+```
+
+Changes affect all 4 MCP Suite services (hr, finance, sales, support) plus minor changes to other services.
+
+### Environment Variable Approach - Why This Works
+
+The `pg` library (Node.js PostgreSQL client) automatically reads `PGSSLMODE` from environment:
+
+```typescript
+// services/mcp-hr/src/database/connection.ts
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  // ... other options
+});
+// pg library automatically reads PGSSLMODE from environment
+```
+
+This means:
+- **Dev/Stage**: No `PGSSLMODE` set → SSL not required (works with local Docker PostgreSQL)
+- **Prod**: `PGSSLMODE=require` → SSL required (works with Cloud SQL)
+
+### Lessons Learned
+
+1. **Don't modify source code for environment-specific behavior** - Use environment variables instead
+2. **Check what env vars libraries respect** - Many libraries like `pg` have undocumented env var support
+3. **CI/Terraform must stay in sync** - This is now the fourth issue (9, 10, 11, 12) caused by drift
+4. **Use Secret Manager for sensitive values** - MongoDB URI contains credentials
+5. **PGSSLMODE is the standard PostgreSQL way** - Works with any PostgreSQL client library
+
+### Updated Issue Summary
+
+| Issue | HTTP Status | Error Message | Root Cause | Status |
+|-------|-------------|---------------|------------|--------|
+| #1 Broken role mappers | 403 | No roles in token | Missing `client_id_for_role_mappings` | ✅ Fixed |
+| #2 Missing audience | 401 | Invalid audience | No `mcp-gateway` in `aud` claim | ✅ Fixed |
+| #3 Cloud Run auth | 403 HTML | Unauthorized | No GCP identity token | ✅ Fixed |
+| #4 Missing sub claim | 400 | MISSING_USER_CONTEXT | No `sub` claim in JWT | ✅ Fixed |
+| #5 Wrong mapper type | 400 | MISSING_USER_CONTEXT | Used attribute-mapper instead of property-mapper | ✅ Fixed |
+| #6 Database env vars | DATABASE_ERROR | Can't connect to database | Wrong env vars (DATABASE_URL vs POSTGRES_*) | ✅ Fixed |
+| #7 No Elasticsearch | DATABASE_ERROR | Connect ECONNREFUSED 9201 | Elasticsearch not deployed in GCP | ❌ Not Fixed |
+| #8 Empty databases | N/A | Zero records returned | Sample data not loaded in Cloud SQL | ⏳ Pending |
+| #9 JWT issuer mismatch | 401 | Invalid token issuer | CI/Terraform URL mismatch | ✅ Fixed |
+| #10 KC_PROXY_HEADERS missing | 403 | HTTPS required | Keycloak not reading X-Forwarded-Proto | ✅ Fixed |
+| #11 CI missing DB config | DATABASE_ERROR | Unable to connect to HR database | CI workflow missing POSTGRES_* env vars | ✅ Fixed |
+| #12 Cloud SQL SSL required | DATABASE_ERROR | pg_hba.conf rejects, no encryption | PGSSLMODE not set + MongoDB URI missing | ⏳ Pending terraform apply |
