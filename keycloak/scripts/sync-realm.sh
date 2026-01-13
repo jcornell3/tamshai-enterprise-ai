@@ -885,11 +885,12 @@ add_sub_claim_mapper_to_client() {
     local mapper_name="subject-claim-mapper"
 
     # Check if mapper already exists and get its ID
-    local existing_mapper=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null | grep -o '"id" *: *"[^"]*".*"name" *: *"'$mapper_name'"' | head -1)
+    # Use a simpler grep that handles JSON formatting variations
+    local all_mappers=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null)
+    local mapper_id=$(echo "$all_mappers" | grep -B5 "\"name\" *: *\"$mapper_name\"" | grep '"id"' | head -1 | sed 's/.*"id" *: *"\([^"]*\)".*/\1/')
 
-    if [ -n "$existing_mapper" ]; then
-        # Mapper exists - get its ID and UPDATE it
-        local mapper_id=$(echo "$existing_mapper" | grep -o '"id" *: *"[^"]*"' | cut -d'"' -f4)
+    if [ -n "$mapper_id" ]; then
+        # Mapper exists - UPDATE it with correct type
         log_info "    Updating existing sub claim mapper for '$client_id' (id: $mapper_id)..."
 
         if $KCADM update "clients/$client_uuid/protocol-mappers/models/$mapper_id" -r "$REALM" \
