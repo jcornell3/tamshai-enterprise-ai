@@ -195,7 +195,7 @@ module "cloudrun" {
   keycloak_db_name         = "keycloak"
   keycloak_db_user         = "keycloak"
   tamshai_db_name          = "tamshai"
-  tamshai_db_user          = "tamshai_app"
+  tamshai_db_user          = "tamshai"
   tamshai_db_password      = module.security.tamshai_db_password
 
   # MongoDB Atlas - use Secret Manager in production
