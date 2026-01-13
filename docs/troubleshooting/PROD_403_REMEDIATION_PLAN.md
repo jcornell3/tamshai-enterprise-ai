@@ -1251,3 +1251,81 @@ The `ssl_mode=ENCRYPTED_ONLY` setting on Cloud SQL only applies to TCP connectio
 2. **PGSSLMODE only applies to TCP** - Don't set it with Unix socket connections
 3. **Keep Terraform and CI aligned** - This was the 5th issue caused by drift
 4. **Google recommends Unix socket** for Cloud Run → Cloud SQL connections
+
+---
+
+## Issue #14: Database User Name Mismatch (January 13, 2026)
+
+### Symptoms
+
+- MCP HR returns: `{"status":"error","code":"DATABASE_ERROR","message":"Unable to connect to the HR database"}`
+- Cloud Run logs show: `Database health check failed password authentication failed for user "tamshai_app"`
+
+### Root Cause: Terraform/CI Drift - Wrong Database User Name
+
+The database module creates a user named `tamshai`, but Terraform was configured to use `tamshai_app`:
+
+| Source | POSTGRES_USER Value | Status |
+|--------|---------------------|--------|
+| Database module (`modules/database/main.tf`) | `tamshai` | Source of truth |
+| CI Workflow (`deploy-to-gcp.yml`) | `tamshai` | ✅ Correct |
+| Terraform (`gcp/main.tf`) | `tamshai_app` | ❌ Wrong |
+
+**How the mismatch occurred:**
+
+1. Database module at line 141: `name = "tamshai"` (creates the actual PostgreSQL user)
+2. CI workflow at line 177: `POSTGRES_USER=tamshai` (correct, aligned with database)
+3. Terraform `gcp/main.tf` at line 198: `tamshai_db_user = "tamshai_app"` (wrong, doesn't match database)
+
+**Why the CI workflow was correct:**
+Issue #11 fixed the CI workflow to add database configuration, and it used the correct user name `tamshai` based on the database module.
+
+**Why Terraform was wrong:**
+The `tamshai_db_user` variable in `gcp/main.tf` was set to `tamshai_app` (possibly from an earlier configuration attempt), but this doesn't match the actual database user created by the database module.
+
+### Fix Applied
+
+**File**: `infrastructure/terraform/gcp/main.tf`
+
+**Before:**
+```hcl
+tamshai_db_user = "tamshai_app"
+```
+
+**After:**
+```hcl
+tamshai_db_user = "tamshai"
+```
+
+### Verification
+
+After `terraform apply`:
+1. MCP HR revision should use `POSTGRES_USER=tamshai`
+2. Database connection should succeed
+3. API calls should return data (or empty arrays if no sample data)
+
+### Lessons Learned
+
+1. **This is the 6th CI/Terraform drift issue** - Issues 9, 10, 11, 12, 13, and now 14 all stem from configuration divergence
+2. **Verify all config values against the source of truth** - The database module defines the actual user name
+3. **CI workflow can be more up-to-date than Terraform** - Issue #11's fix used the correct user name
+4. **Check logs carefully** - The error message `password authentication failed for user "tamshai_app"` directly revealed the wrong user name
+
+### Updated Issue Summary
+
+| Issue | HTTP Status | Error Message | Root Cause | Status |
+|-------|-------------|---------------|------------|--------|
+| #1 Broken role mappers | 403 | No roles in token | Missing `client_id_for_role_mappings` | ✅ Fixed |
+| #2 Missing audience | 401 | Invalid audience | No `mcp-gateway` in `aud` claim | ✅ Fixed |
+| #3 Cloud Run auth | 403 HTML | Unauthorized | No GCP identity token | ✅ Fixed |
+| #4 Missing sub claim | 400 | MISSING_USER_CONTEXT | No `sub` claim in JWT | ✅ Fixed |
+| #5 Wrong mapper type | 400 | MISSING_USER_CONTEXT | Used attribute-mapper instead of property-mapper | ✅ Fixed |
+| #6 Database env vars | DATABASE_ERROR | Can't connect to database | Wrong env vars (DATABASE_URL vs POSTGRES_*) | ✅ Fixed |
+| #7 No Elasticsearch | DATABASE_ERROR | Connect ECONNREFUSED 9201 | Elasticsearch not deployed in GCP | ❌ Not Fixed |
+| #8 Empty databases | N/A | Zero records returned | Sample data not loaded in Cloud SQL | ⏳ Pending |
+| #9 JWT issuer mismatch | 401 | Invalid token issuer | CI/Terraform URL mismatch | ✅ Fixed |
+| #10 KC_PROXY_HEADERS missing | 403 | HTTPS required | Keycloak not reading X-Forwarded-Proto | ✅ Fixed |
+| #11 CI missing DB config | DATABASE_ERROR | Unable to connect to HR database | CI workflow missing POSTGRES_* env vars | ✅ Fixed |
+| #12 Cloud SQL SSL required | DATABASE_ERROR | pg_hba.conf rejects, no encryption | PGSSLMODE not set + MongoDB URI missing | ✅ Fixed |
+| #13 Unix socket vs TCP mismatch | DATABASE_ERROR | server does not support SSL | PGSSLMODE with Unix socket | ✅ Fixed |
+| #14 Database user mismatch | DATABASE_ERROR | password authentication failed for user "tamshai_app" | Terraform used wrong user name | ✅ Fixed |
