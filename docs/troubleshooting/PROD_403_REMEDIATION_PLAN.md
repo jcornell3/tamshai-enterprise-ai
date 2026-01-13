@@ -850,3 +850,75 @@ No DNS changes required - the custom domain was already set up:
 | #7 No Elasticsearch | DATABASE_ERROR | Connect ECONNREFUSED 9201 | Elasticsearch not deployed in GCP | ❌ Not Fixed |
 | #8 Empty databases | N/A | Zero records returned | Sample data not loaded in Cloud SQL | ⏳ Pending |
 | #9 JWT issuer mismatch | 401 | Invalid token issuer | CI/Terraform URL mismatch | ✅ Fixed |
+| #10 KC_PROXY_HEADERS missing | 403 | HTTPS required | Keycloak not reading X-Forwarded-Proto | ✅ Fixed |
+
+---
+
+## Issue #10: KC_PROXY_HEADERS Missing - HTTPS Required Error (January 13, 2026)
+
+### Symptoms
+
+- JWKS endpoint (`/auth/realms/tamshai-corp/protocol/openid-connect/certs`) returns 403
+- Error response: `{"error":"invalid_request","error_description":"HTTPS required"}`
+- MCP Gateway startup probe fails (can't validate JWTs without JWKS)
+- All services return 503 Service Unavailable
+
+### Root Cause: Missing KC_PROXY_HEADERS in CI Workflow
+
+Cloud Run uses a load balancer that terminates HTTPS and forwards HTTP to containers. The original request protocol is passed via `X-Forwarded-Proto` header. Without `KC_PROXY_HEADERS=xforwarded`, Keycloak doesn't read this header and assumes requests are HTTP.
+
+| Setting | CI Workflow (Before) | Terraform | CI Workflow (After) |
+|---------|---------------------|-----------|---------------------|
+| KC_PROXY | edge ✅ | edge ✅ | edge ✅ |
+| KC_PROXY_HEADERS | **MISSING** ❌ | xforwarded ✅ | xforwarded ✅ |
+
+**Technical flow without fix:**
+1. Browser makes HTTPS request to `https://auth.tamshai.com/auth/...`
+2. Cloud Run load balancer terminates SSL, forwards as HTTP + `X-Forwarded-Proto: https`
+3. Keycloak ignores the header (KC_PROXY_HEADERS not set)
+4. Keycloak sees HTTP request, responds with "HTTPS required"
+
+**Technical flow with fix:**
+1. Browser makes HTTPS request to `https://auth.tamshai.com/auth/...`
+2. Cloud Run load balancer terminates SSL, forwards as HTTP + `X-Forwarded-Proto: https`
+3. Keycloak reads `X-Forwarded-Proto` header (KC_PROXY_HEADERS=xforwarded)
+4. Keycloak treats request as HTTPS, responds normally
+
+### Fix Applied
+
+**File**: `.github/workflows/deploy-to-gcp.yml` (line 216)
+
+**Before:**
+```yaml
+--set-env-vars="...,KC_PROXY=edge,KC_HTTP_RELATIVE_PATH=/auth"
+```
+
+**After:**
+```yaml
+--set-env-vars="...,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth"
+```
+
+### Commit Reference
+
+- **Commit**: `1e51cf2` - `fix(keycloak): Add KC_PROXY_HEADERS=xforwarded to fix HTTPS detection`
+
+### Verification
+
+After deploying the fix:
+
+```bash
+# JWKS endpoint now returns 200 with keys
+curl -s -w "\nHTTP: %{http_code}\n" "https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs"
+# HTTP: 200
+
+# MCP Gateway health is restored
+curl -s "https://mcp-gateway-fn44nd7wba-uc.a.run.app/health"
+# {"status":"healthy",...}
+```
+
+### Lessons Learned
+
+1. **Compare CI workflow with Terraform** - Configuration drift between deployment methods causes subtle failures
+2. **KC_PROXY=edge is not enough** - You also need KC_PROXY_HEADERS=xforwarded for load balancers
+3. **"HTTPS required" on HTTPS requests** - Indicates proxy header configuration issue, not DNS or certificate problem
+4. **Startup probes cascade** - If Keycloak JWKS fails, MCP Gateway startup fails, causing 503 for all endpoints
