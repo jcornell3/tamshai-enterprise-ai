@@ -259,11 +259,9 @@ resource "google_cloud_run_service" "mcp_suite" {
           value = "5432" # Standard port (ignored for Unix socket, but required by pg library)
         }
 
-        # PostgreSQL SSL mode - required for Cloud SQL with ssl_mode=ENCRYPTED_ONLY
-        env {
-          name  = "PGSSLMODE"
-          value = "require"
-        }
+        # Note: PGSSLMODE is NOT set when using Unix socket via Cloud SQL connector
+        # Unix socket connections are secured by the Cloud SQL Auth Proxy at the transport layer
+        # Setting PGSSLMODE=require with Unix socket causes "server does not support SSL" error
 
         # MongoDB URI - use Secret Manager if configured, otherwise fall back to plain value
         dynamic "env" {

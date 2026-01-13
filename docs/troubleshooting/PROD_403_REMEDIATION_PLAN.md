@@ -1136,4 +1136,118 @@ This means:
 | #9 JWT issuer mismatch | 401 | Invalid token issuer | CI/Terraform URL mismatch | ✅ Fixed |
 | #10 KC_PROXY_HEADERS missing | 403 | HTTPS required | Keycloak not reading X-Forwarded-Proto | ✅ Fixed |
 | #11 CI missing DB config | DATABASE_ERROR | Unable to connect to HR database | CI workflow missing POSTGRES_* env vars | ✅ Fixed |
-| #12 Cloud SQL SSL required | DATABASE_ERROR | pg_hba.conf rejects, no encryption | PGSSLMODE not set + MongoDB URI missing | ⏳ Pending terraform apply |
+| #12 Cloud SQL SSL required | DATABASE_ERROR | pg_hba.conf rejects, no encryption | PGSSLMODE not set + MongoDB URI missing | ✅ Fixed |
+| #13 Unix socket vs TCP mismatch | DATABASE_ERROR | server does not support SSL | PGSSLMODE with Unix socket | ✅ Fixed |
+
+---
+
+## Issue #13: Unix Socket vs TCP Connection Mismatch (January 13, 2026)
+
+### Symptoms
+
+- MCP HR returns: `{"status":"error","code":"DATABASE_ERROR","message":"Unable to connect to the HR database"}`
+- Cloud Run logs show: `error=The server does not support SSL connections`
+
+### Root Cause: Incompatible Connection Method and SSL Setting
+
+**Two ways to connect Cloud Run to Cloud SQL:**
+
+| Method | POSTGRES_HOST | SSL | Security Layer |
+|--------|---------------|-----|----------------|
+| **Unix Socket** | `/cloudsql/project:region:instance` | ❌ Not supported | Cloud SQL Auth Proxy |
+| **TCP via VPC** | `10.180.0.3` (private IP) | ✅ Required | PostgreSQL SSL |
+
+**The Problem:**
+
+Terraform was configured with Unix socket path BUT also had `PGSSLMODE=require`:
+
+```hcl
+# Terraform (WRONG combination)
+POSTGRES_HOST = "/cloudsql/project:region:instance"  # Unix socket
+PGSSLMODE = "require"                                 # Expects SSL
+```
+
+Unix socket connections don't use PostgreSQL-level SSL - they're secured by the Cloud SQL Auth Proxy at the transport layer. Setting `PGSSLMODE=require` with a Unix socket causes the `pg` library to request SSL negotiation, which the Unix socket doesn't support.
+
+**CI vs Terraform Drift:**
+
+| Deployment | POSTGRES_HOST | PGSSLMODE | Cloud SQL Connector | Result |
+|------------|---------------|-----------|---------------------|--------|
+| Terraform | `/cloudsql/...` | require | Yes | ❌ SSL error |
+| CI Workflow | `10.180.0.3` | require | No | ✅ Works |
+
+### Decision: Standardize on Unix Socket (Option C)
+
+**Why Unix Socket:**
+
+1. **Google's recommended approach** for Cloud Run → Cloud SQL
+2. **Simpler configuration** - no need to manage private IPs
+3. **Automatic IAM authentication** via Cloud SQL Auth Proxy
+4. **No SSL configuration needed** - proxy handles encryption
+5. **Works with `ssl_mode=ENCRYPTED_ONLY`** - Unix sockets bypass this check (it only applies to TCP)
+
+**Why NOT TCP:**
+
+1. Requires hardcoding or passing private IP addresses
+2. Requires explicit SSL configuration
+3. More moving parts (VPC connector + SSL)
+
+### Fixes Applied
+
+| Fix | File | Changes |
+|-----|------|---------|
+| Remove PGSSLMODE | `modules/cloudrun/main.tf` | Removed `PGSSLMODE=require` env block |
+| Add Cloud SQL connector to CI | `deploy-to-gcp.yml` | Added `--add-cloudsql-instances` flag |
+| Change POSTGRES_HOST in CI | `deploy-to-gcp.yml` | Changed from `10.180.0.3` to `/cloudsql/...` |
+| Remove PGSSLMODE from CI | `deploy-to-gcp.yml` | Removed from `--set-env-vars` |
+
+### Key Code Changes
+
+**Terraform (`modules/cloudrun/main.tf`):**
+
+```hcl
+# REMOVED - Unix socket doesn't support PostgreSQL SSL
+# env {
+#   name  = "PGSSLMODE"
+#   value = "require"
+# }
+
+# Note: PGSSLMODE is NOT set when using Unix socket via Cloud SQL connector
+# Unix socket connections are secured by the Cloud SQL Auth Proxy at the transport layer
+```
+
+**CI Workflow (`deploy-to-gcp.yml`):**
+
+```yaml
+# Before (TCP connection)
+--set-env-vars="...,POSTGRES_HOST=10.180.0.3,...,PGSSLMODE=require"
+
+# After (Unix socket via Cloud SQL connector)
+--add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres \
+--set-env-vars="...,POSTGRES_HOST=/cloudsql/${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres,..."
+```
+
+### Environment Alignment
+
+| Environment | Connection Method | SSL Config | Impact |
+|-------------|-------------------|------------|--------|
+| **Dev** | Docker network (`postgres`) | None | ✅ No change |
+| **Stage** | Docker network (`postgres`) | None | ✅ No change |
+| **Prod (Terraform)** | Unix socket | None (proxy encrypted) | ✅ Fixed |
+| **Prod (CI)** | Unix socket | None (proxy encrypted) | ✅ Aligned |
+
+### Security Note
+
+Both connection methods are secure:
+
+- **Unix Socket**: Cloud SQL Auth Proxy encrypts traffic at transport layer
+- **TCP + SSL**: PostgreSQL protocol-level encryption
+
+The `ssl_mode=ENCRYPTED_ONLY` setting on Cloud SQL only applies to TCP connections. Unix socket connections via the Cloud SQL connector are inherently secure and bypass this check.
+
+### Lessons Learned
+
+1. **Unix socket ≠ TCP** - They have fundamentally different SSL behaviors
+2. **PGSSLMODE only applies to TCP** - Don't set it with Unix socket connections
+3. **Keep Terraform and CI aligned** - This was the 5th issue caused by drift
+4. **Google recommends Unix socket** for Cloud Run → Cloud SQL connections
