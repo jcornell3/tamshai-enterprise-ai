@@ -15,9 +15,10 @@ import dotenv from 'dotenv';
 import winston from 'winston';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { Client } from '@elastic/elasticsearch';
 import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from './types/response';
 import { storePendingConfirmation } from './utils/redis';
+import { ISupportBackend, UserContext } from './database/types';
+import { createSupportBackend } from './database/backend.factory';
 
 dotenv.config();
 
@@ -27,17 +28,13 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-// Elasticsearch client
-const esClient = new Client({
-  node: process.env.ELASTICSEARCH_URL || 'http://localhost:9201',
-});
+// Initialize backend based on SUPPORT_DATA_BACKEND environment variable
+// - elasticsearch (default): Dev/Stage with Elasticsearch
+// - mongodb: GCP Prod Phase 1
+const backend: ISupportBackend = createSupportBackend();
+const backendType = process.env.SUPPORT_DATA_BACKEND || 'elasticsearch';
 
-interface UserContext {
-  userId: string;
-  username: string;
-  email?: string;
-  roles: string[];
-}
+logger.info(`MCP Support initialized with backend: ${backendType}`);
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3104');
@@ -62,43 +59,32 @@ function hasSupportAccess(roles: string[]): boolean {
 // =============================================================================
 
 app.get('/health', async (req: Request, res: Response) => {
-  try {
-    await esClient.ping();
-    res.json({ status: 'healthy', service: 'mcp-support', version: '1.4.0', database: 'connected', timestamp: new Date().toISOString() });
-  } catch (error) {
-    res.status(503).json({ status: 'unhealthy', database: 'disconnected', timestamp: new Date().toISOString() });
+  const isHealthy = await backend.checkConnection();
+  if (!isHealthy) {
+    res.status(503).json({
+      status: 'unhealthy',
+      service: 'mcp-support',
+      version: '1.4.0',
+      backend: backendType,
+      database: 'disconnected',
+      timestamp: new Date().toISOString(),
+    });
+    return;
   }
+
+  res.json({
+    status: 'healthy',
+    service: 'mcp-support',
+    version: '1.4.0',
+    backend: backendType,
+    database: 'connected',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // =============================================================================
 // TOOL: search_tickets (v1.4 with cursor-based pagination)
 // =============================================================================
-
-/**
- * Cursor structure for Elasticsearch search_after pagination
- */
-interface SearchCursor {
-  sort: any[]; // Elasticsearch sort values
-}
-
-/**
- * Encode cursor for client transport
- */
-function encodeCursor(cursor: SearchCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString('base64');
-}
-
-/**
- * Decode cursor from client request
- */
-function decodeCursor(encoded: string): SearchCursor | null {
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    return JSON.parse(decoded) as SearchCursor;
-  } catch {
-    return null;
-  }
-}
 
 const SearchTicketsInputSchema = z.object({
   query: z.string().optional(),
@@ -112,79 +98,41 @@ async function searchTickets(input: any, userContext: UserContext): Promise<MCPT
   try {
     const { query, status, priority, limit, cursor } = SearchTicketsInputSchema.parse(input);
 
-    // Decode cursor if provided
-    const cursorData = cursor ? decodeCursor(cursor) : null;
-
-    const must: any[] = [];
-    if (query) {
-      must.push({ multi_match: { query, fields: ['title', 'description', 'tags'] } });
-    }
-    if (status) {
-      must.push({ term: { status } });
-    }
-    if (priority) {
-      must.push({ term: { priority } });
-    }
-
-    // Role-based filtering
-    const roleFilter: any[] = [];
-    if (!userContext.roles.includes('executive') && !userContext.roles.includes('support-read') && !userContext.roles.includes('support-write')) {
-      roleFilter.push({ term: { created_by: userContext.userId } });
-    }
-
-    // v1.4: LIMIT+1 pattern to detect if more records exist
-    const queryLimit = limit + 1;
-
-    const searchBody: any = {
-      query: {
-        bool: {
-          must: must.length > 0 ? must : [{ match_all: {} }],
-          filter: roleFilter,
-        },
-      },
-      size: queryLimit,
-      sort: [{ created_at: 'desc' }], // Sort by created_at (date field) - no secondary sort needed to avoid fielddata issues
-    };
-
-    // Add search_after if cursor provided
-    if (cursorData) {
-      searchBody.search_after = cursorData.sort;
-    }
-
-    const result = await esClient.search({
-      index: 'support_tickets',
-      body: searchBody,
+    // Call backend (Elasticsearch or MongoDB)
+    const result = await backend.searchTickets({
+      query,
+      status,
+      priority,
+      limit,
+      cursor,
+      userContext,
     });
-
-    const hits = result.hits.hits;
-    const hasMore = hits.length > limit;
-    const results = hasMore ? hits.slice(0, limit) : hits;
 
     // Build pagination metadata
     let metadata: PaginationMetadata | undefined;
 
-    if (hasMore || cursorData) {
-      // Get the last record's sort values for next cursor
-      const lastHit = results[results.length - 1];
-
+    if (result.hasMore || cursor) {
       metadata = {
-        hasMore,
-        returnedCount: results.length,
-        ...(hasMore && lastHit && lastHit.sort && {
-          nextCursor: encodeCursor({
-            sort: lastHit.sort as any[],
+        hasMore: result.hasMore,
+        returnedCount: result.data.length,
+        ...(result.hasMore &&
+          result.nextCursor && {
+            nextCursor: result.nextCursor,
+            totalEstimate: result.totalCount,
+            hint: `To see more tickets, say "show next page" or "get more tickets". You can also refine your search with filters like status or priority.`,
           }),
-          totalEstimate: `${limit}+`,
-          hint: `To see more tickets, say "show next page" or "get more tickets". You can also refine your search with filters like status or priority.`,
-        }),
       };
     }
 
-    const tickets = results.map((hit: any) => ({ id: hit._id, ...hit._source }));
-    return createSuccessResponse(tickets, metadata);
+    return createSuccessResponse(result.data, metadata);
   } catch (error: any) {
     logger.error('search_tickets error:', error);
-    return createErrorResponse('DATABASE_ERROR', 'Failed to search tickets', 'Please try again or contact support', { errorMessage: error.message });
+    return createErrorResponse(
+      'DATABASE_ERROR',
+      'Failed to search tickets',
+      'Please try again or contact support',
+      { errorMessage: error.message }
+    );
   }
 }
 
@@ -203,69 +151,50 @@ async function searchKnowledgeBase(input: any, userContext: UserContext): Promis
   try {
     const { query, category, limit, cursor } = SearchKnowledgeBaseInputSchema.parse(input);
 
-    // Decode cursor if provided
-    const cursorData = cursor ? decodeCursor(cursor) : null;
-
-    const must: any[] = [
-      { multi_match: { query, fields: ['title^2', 'content', 'tags'] } },
-    ];
-
-    if (category) {
-      must.push({ term: { category } });
-    }
-
-    // v1.4: LIMIT+1 pattern to detect if more records exist
-    const queryLimit = limit + 1;
-
-    const searchBody: any = {
-      query: {
-        bool: {
-          must,
-        },
-      },
-      size: queryLimit,
-      sort: [{ _score: 'desc' }, { _id: 'desc' }], // Sort by relevance, then _id for stable pagination
-    };
-
-    // Add search_after if cursor provided
-    if (cursorData) {
-      searchBody.search_after = cursorData.sort;
-    }
-
-    const result = await esClient.search({
-      index: 'knowledge_base',
-      body: searchBody,
+    // Call backend (Elasticsearch only - MongoDB throws NOT_IMPLEMENTED)
+    const result = await backend.searchKnowledgeBase({
+      query,
+      category,
+      limit,
+      cursor,
     });
-
-    const hits = result.hits.hits;
-    const hasMore = hits.length > limit;
-    const results = hasMore ? hits.slice(0, limit) : hits;
 
     // Build pagination metadata
     let metadata: PaginationMetadata | undefined;
 
-    if (hasMore || cursorData) {
-      // Get the last record's sort values for next cursor
-      const lastHit = results[results.length - 1];
-
+    if (result.hasMore || cursor) {
       metadata = {
-        hasMore,
-        returnedCount: results.length,
-        ...(hasMore && lastHit && lastHit.sort && {
-          nextCursor: encodeCursor({
-            sort: lastHit.sort as any[],
+        hasMore: result.hasMore,
+        returnedCount: result.data.length,
+        ...(result.hasMore &&
+          result.nextCursor && {
+            nextCursor: result.nextCursor,
+            totalEstimate: result.totalCount,
+            hint: `To see more knowledge base articles, say "show next page" or "get more articles". You can also refine your search query for better results.`,
           }),
-          totalEstimate: `${limit}+`,
-          hint: `To see more knowledge base articles, say "show next page" or "get more articles". You can also refine your search query for better results.`,
-        }),
       };
     }
 
-    const articles = results.map((hit: any) => ({ id: hit._id, score: hit._score, ...hit._source }));
-    return createSuccessResponse(articles, metadata);
+    return createSuccessResponse(result.data, metadata);
   } catch (error: any) {
     logger.error('search_knowledge_base error:', error);
-    return createErrorResponse('DATABASE_ERROR', 'Failed to search knowledge base', 'Please try again or contact support', { errorMessage: error.message });
+
+    // Special handling for NOT_IMPLEMENTED (MongoDB backend)
+    if (error.message && error.message.includes('NOT_IMPLEMENTED')) {
+      return createErrorResponse(
+        'NOT_IMPLEMENTED',
+        'Knowledge Base not available',
+        'Knowledge Base requires Elasticsearch which is not deployed in this environment. Only ticket search is available.',
+        { backend: backendType }
+      );
+    }
+
+    return createErrorResponse(
+      'DATABASE_ERROR',
+      'Failed to search knowledge base',
+      'Please try again or contact support',
+      { errorMessage: error.message }
+    );
   }
 }
 
@@ -281,18 +210,10 @@ async function getKnowledgeArticle(input: any, userContext: UserContext): Promis
   try {
     const { articleId } = GetKnowledgeArticleInputSchema.parse(input);
 
-    // Search by kb_id field (not Elasticsearch document _id)
-    // Use kb_id.keyword for exact match (text fields are analyzed by default)
-    const result = await esClient.search({
-      index: 'knowledge_base',
-      body: {
-        query: {
-          term: { 'kb_id.keyword': articleId }
-        }
-      }
-    });
+    // Call backend (Elasticsearch only - MongoDB throws NOT_IMPLEMENTED)
+    const article = await backend.getArticleById(articleId);
 
-    if (result.hits.hits.length === 0) {
+    if (!article) {
       return createErrorResponse(
         'ARTICLE_NOT_FOUND',
         `Knowledge base article with ID ${articleId} not found.`,
@@ -300,15 +221,26 @@ async function getKnowledgeArticle(input: any, userContext: UserContext): Promis
       );
     }
 
-    const hit = result.hits.hits[0];
-    const article = {
-      id: hit._id,
-      ...(hit._source as Record<string, any>)
-    };
     return createSuccessResponse(article);
   } catch (error: any) {
     logger.error('get_knowledge_article error:', error);
-    return createErrorResponse('DATABASE_ERROR', 'Failed to get knowledge article', 'Please try again or contact support', { errorMessage: error.message });
+
+    // Special handling for NOT_IMPLEMENTED (MongoDB backend)
+    if (error.message && error.message.includes('NOT_IMPLEMENTED')) {
+      return createErrorResponse(
+        'NOT_IMPLEMENTED',
+        'Knowledge Base not available',
+        'Knowledge Base requires Elasticsearch which is not deployed in this environment. Only ticket operations are available.',
+        { backend: backendType }
+      );
+    }
+
+    return createErrorResponse(
+      'DATABASE_ERROR',
+      'Failed to get knowledge article',
+      'Please try again or contact support',
+      { errorMessage: error.message }
+    );
   }
 }
 
@@ -328,29 +260,27 @@ function hasClosePermission(roles: string[]): boolean {
 async function closeTicket(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
   try {
     if (!hasClosePermission(userContext.roles)) {
-      return createErrorResponse('INSUFFICIENT_PERMISSIONS', `This operation requires "support-write or executive" role. You have: ${userContext.roles.join(', ')}`, 'Please contact your administrator if you need additional permissions.', { requiredRole: 'support-write or executive', userRoles: userContext.roles });
+      return createErrorResponse(
+        'INSUFFICIENT_PERMISSIONS',
+        `This operation requires "support-write or executive" role. You have: ${userContext.roles.join(', ')}`,
+        'Please contact your administrator if you need additional permissions.',
+        { requiredRole: 'support-write or executive', userRoles: userContext.roles }
+      );
     }
 
     const { ticketId, resolution } = CloseTicketInputSchema.parse(input);
 
-    // Fetch ticket by ticket_id field (not Elasticsearch _id)
-    // Use ticket_id.keyword for exact match (text fields are analyzed by default)
-    const searchResult = await esClient.search({
-      index: 'support_tickets',
-      body: {
-        query: {
-          term: { 'ticket_id.keyword': ticketId }
-        }
-      }
-    });
+    // Fetch ticket from backend
+    const ticket = await backend.getTicketById(ticketId);
 
-    if (searchResult.hits.hits.length === 0) {
-      return createErrorResponse('TICKET_NOT_FOUND', `Ticket with ID "${ticketId}" was not found`, 'Please verify the ticket ID.', { ticketId });
+    if (!ticket) {
+      return createErrorResponse(
+        'TICKET_NOT_FOUND',
+        `Ticket with ID "${ticketId}" was not found`,
+        'Please verify the ticket ID using search_tickets tool to find valid ticket IDs.',
+        { ticketId }
+      );
     }
-
-    const ticket = searchResult.hits.hits[0];
-    const ticketData: any = ticket._source;
-    const esDocId = ticket._id; // Store Elasticsearch document _id for update
 
     const confirmationId = uuidv4();
     const confirmationData = {
@@ -359,17 +289,16 @@ async function closeTicket(input: any, userContext: UserContext): Promise<MCPToo
       userId: userContext.userId,
       timestamp: Date.now(),
       ticketId,
-      esDocId, // Elasticsearch document _id for update operation
-      ticketTitle: ticketData.title,
-      currentStatus: ticketData.status,
+      ticketTitle: ticket.title,
+      currentStatus: ticket.status,
       resolution,
     };
 
     await storePendingConfirmation(confirmationId, confirmationData, 300);
 
-    const message = `⚠️ Close support ticket "${ticketData.title}"?
+    const message = `⚠️ Close support ticket "${ticket.title}"?
 
-Current Status: ${ticketData.status}
+Current Status: ${ticket.status}
 Resolution: ${resolution}
 
 This action will close the ticket and mark it as resolved.`;
@@ -377,28 +306,39 @@ This action will close the ticket and mark it as resolved.`;
     return createPendingConfirmationResponse(confirmationId, message, confirmationData);
   } catch (error: any) {
     logger.error('close_ticket error:', error);
-    return createErrorResponse('DATABASE_ERROR', 'Failed to close ticket', 'Please try again or contact support', { errorMessage: error.message });
+    return createErrorResponse(
+      'DATABASE_ERROR',
+      'Failed to close ticket',
+      'Please try again or contact support',
+      { errorMessage: error.message }
+    );
   }
 }
 
-async function executeCloseTicket(confirmationData: Record<string, unknown>, userContext: UserContext): Promise<MCPToolResponse<any>> {
+async function executeCloseTicket(
+  confirmationData: Record<string, unknown>,
+  userContext: UserContext
+): Promise<MCPToolResponse<any>> {
   try {
     const ticketId = confirmationData.ticketId as string;
-    const esDocId = confirmationData.esDocId as string; // Use ES document _id for update
     const resolution = confirmationData.resolution as string;
 
-    await esClient.update({
-      index: 'support_tickets',
-      id: esDocId, // Use Elasticsearch document _id, not ticket_id field
-      body: {
-        doc: {
-          status: 'closed',
-          resolution,
-          closed_at: new Date().toISOString(),
-          closed_by: userContext.userId,
-        },
-      },
+    // Update ticket via backend
+    const updated = await backend.updateTicket(ticketId, {
+      status: 'closed',
+      resolution,
+      closed_at: new Date().toISOString(),
+      closed_by: userContext.userId,
     });
+
+    if (!updated) {
+      return createErrorResponse(
+        'TICKET_NOT_FOUND',
+        `Ticket with ID "${ticketId}" was not found`,
+        'The ticket may have been deleted.',
+        { ticketId }
+      );
+    }
 
     return createSuccessResponse({
       success: true,
@@ -407,7 +347,12 @@ async function executeCloseTicket(confirmationData: Record<string, unknown>, use
     });
   } catch (error: any) {
     logger.error('execute_close_ticket error:', error);
-    return createErrorResponse('DATABASE_ERROR', 'Failed to execute close ticket', 'Please try again or contact support', { errorMessage: error.message });
+    return createErrorResponse(
+      'DATABASE_ERROR',
+      'Failed to execute close ticket',
+      'Please try again or contact support',
+      { errorMessage: error.message }
+    );
   }
 }
 
@@ -598,18 +543,21 @@ app.post('/execute', async (req: Request, res: Response) => {
 const server = app.listen(PORT, async () => {
   logger.info(`MCP Support Server listening on port ${PORT}`);
   logger.info('Architecture version: 1.4');
-  try {
-    await esClient.ping();
-    logger.info('Elasticsearch connection: OK');
-  } catch (error) {
-    logger.error('Elasticsearch connection: FAILED');
+  logger.info(`Backend: ${backendType}`);
+
+  // Check backend connection
+  const isHealthy = await backend.checkConnection();
+  if (isHealthy) {
+    logger.info(`${backendType} connection: OK`);
+  } else {
+    logger.error(`${backendType} connection: FAILED`);
   }
 });
 
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, closing server...');
   server.close(async () => {
-    await esClient.close();
+    await backend.close();
     logger.info('Server closed');
     process.exit(0);
   });
@@ -618,7 +566,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, closing server...');
   server.close(async () => {
-    await esClient.close();
+    await backend.close();
     logger.info('Server closed');
     process.exit(0);
   });

@@ -339,6 +339,8 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3104
+      # Backend selection: elasticsearch (dev/stage) or mongodb (prod)
+      SUPPORT_DATA_BACKEND: elasticsearch
       # v1.4: Elasticsearch connection
       ELASTICSEARCH_URL: http://elasticsearch:9200
       # v1.4: Redis for confirmations

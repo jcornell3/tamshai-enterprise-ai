@@ -103,6 +103,9 @@ write_files:
       # Logging
       LOG_LEVEL=info
 
+      # MCP Support Backend Selection
+      SUPPORT_DATA_BACKEND=elasticsearch
+
       # Feature Flags
       ENABLE_AUDIT_LOGGING=true
       ENABLE_RATE_LIMITING=true

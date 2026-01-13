@@ -285,6 +285,24 @@ resource "google_cloud_run_service" "mcp_suite" {
           }
         }
 
+        # Support-specific: Backend selection (MongoDB for GCP Prod Phase 1)
+        dynamic "env" {
+          for_each = each.key == "support" ? [1] : []
+          content {
+            name  = "SUPPORT_DATA_BACKEND"
+            value = "mongodb"
+          }
+        }
+
+        # Support-specific: MongoDB database name
+        dynamic "env" {
+          for_each = each.key == "support" ? [1] : []
+          content {
+            name  = "MONGODB_DB"
+            value = "tamshai_support"
+          }
+        }
+
         # PORT is automatically set by Cloud Run (cannot be overridden)
         # Cloud Run always listens on $PORT environment variable (default: 8080)
 
