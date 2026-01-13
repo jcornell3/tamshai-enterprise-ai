@@ -849,6 +849,89 @@ sync_audience_mapper() {
     add_audience_mapper_to_client "tamshai-flutter-client"
 }
 
+# =============================================================================
+# Client Role Mapper Functions
+# =============================================================================
+# These mappers include mcp-gateway client roles in web-portal tokens
+# CRITICAL: Without usermodel.clientRoleMapping.clientId, mappers are broken
+# and tokens will have empty role claims, causing 403 Forbidden errors
+
+# Add or update a client role mapper on a specific client
+add_client_role_mapper() {
+    local client_id="$1"
+    local mapper_name="$2"
+    local source_client_id="$3"  # Which client's roles to map
+    local claim_name="$4"
+
+    log_info "  Checking client role mapper '$mapper_name' for client '$client_id'..."
+
+    local client_uuid=$(get_client_uuid "$client_id")
+    if [ -z "$client_uuid" ]; then
+        log_warn "    Client '$client_id' not found, skipping"
+        return 1
+    fi
+
+    # Check if mapper already exists
+    local existing_mapper=$($KCADM get "clients/$client_uuid/protocol-mappers/models" -r "$REALM" 2>/dev/null | grep -o "\"id\" *: *\"[^\"]*\".*\"name\" *: *\"$mapper_name\"" | head -1)
+
+    if [ -n "$existing_mapper" ]; then
+        # Mapper exists - get its ID and update it
+        local mapper_id=$(echo "$existing_mapper" | grep -o '"id" *: *"[^"]*"' | cut -d'"' -f4)
+        log_info "    Updating existing mapper '$mapper_name' (id: $mapper_id)..."
+
+        if $KCADM update "clients/$client_uuid/protocol-mappers/models/$mapper_id" -r "$REALM" \
+            -s name="$mapper_name" \
+            -s protocol=openid-connect \
+            -s protocolMapper=oidc-usermodel-client-role-mapper \
+            -s consentRequired=false \
+            -s 'config."multivalued"=true' \
+            -s 'config."userinfo.token.claim"=true' \
+            -s 'config."id.token.claim"=true' \
+            -s 'config."access.token.claim"=true' \
+            -s "config.\"claim.name\"=$claim_name" \
+            -s 'config."jsonType.label"=String' \
+            -s "config.\"usermodel.clientRoleMapping.clientId\"=$source_client_id" 2>/dev/null; then
+            log_info "    Mapper '$mapper_name' updated successfully"
+        else
+            log_warn "    Failed to update mapper '$mapper_name'"
+        fi
+    else
+        # Create new mapper
+        log_info "    Creating new mapper '$mapper_name'..."
+
+        if $KCADM create "clients/$client_uuid/protocol-mappers/models" -r "$REALM" \
+            -s name="$mapper_name" \
+            -s protocol=openid-connect \
+            -s protocolMapper=oidc-usermodel-client-role-mapper \
+            -s consentRequired=false \
+            -s 'config."multivalued"=true' \
+            -s 'config."userinfo.token.claim"=true' \
+            -s 'config."id.token.claim"=true' \
+            -s 'config."access.token.claim"=true' \
+            -s "config.\"claim.name\"=$claim_name" \
+            -s 'config."jsonType.label"=String' \
+            -s "config.\"usermodel.clientRoleMapping.clientId\"=$source_client_id" 2>/dev/null; then
+            log_info "    Mapper '$mapper_name' created successfully"
+        else
+            log_warn "    Failed to create mapper '$mapper_name'"
+        fi
+    fi
+}
+
+# Sync client role mappers on web-portal
+# These mappers include mcp-gateway roles in web-portal tokens so users
+# can access MCP Gateway resources with their assigned roles
+sync_client_role_mappers() {
+    log_info "Syncing client role mappers on web-portal..."
+
+    # Map mcp-gateway roles into web-portal tokens
+    # This is CRITICAL for authorization - without it, users get 403 Forbidden
+    add_client_role_mapper "web-portal" "mcp-gateway-roles-mapper" "mcp-gateway" "resource_access.mcp-gateway.roles"
+
+    # Map web-portal's own roles (if any exist)
+    add_client_role_mapper "web-portal" "client-roles-mapper" "web-portal" "resource_access.web-portal.roles"
+}
+
 main() {
     log_info "=========================================="
     log_info "Keycloak Realm Sync - Starting"
@@ -873,6 +956,10 @@ main() {
     # Sync audience mapper on all web clients
     # This is critical for MCP Gateway token validation
     sync_audience_mapper
+
+    # Sync client role mappers on web-portal
+    # This ensures mcp-gateway roles are included in tokens for authorization
+    sync_client_role_mappers
 
     # Provision test user (for E2E testing)
     provision_test_user
