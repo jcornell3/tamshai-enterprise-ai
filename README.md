@@ -5,9 +5,12 @@
 [![Security](https://github.com/jcornell3/tamshai-enterprise-ai/actions/workflows/security.yml/badge.svg)](https://github.com/jcornell3/tamshai-enterprise-ai/actions/workflows/security.yml)
 [![qlty](https://qlty.sh/badges/jcornell3/tamshai-enterprise-ai/maintainability.svg)](https://qlty.sh/gh/jcornell3/tamshai-enterprise-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Status: Active Development](https://img.shields.io/badge/Status-Active%20Development-brightgreen)
+![Architecture: v1.4](https://img.shields.io/badge/Architecture-v1.4-blue)
+![Status: VPS Staging Deployed](https://img.shields.io/badge/Status-VPS%20Staging%20Deployed-brightgreen)
 
 Enterprise-grade AI access system enabling secure Claude AI integration with role-based data access. Employees use AI assistants while data access respects existing security boundaries through defense-in-depth architecture.
+
+> **New to the project?** See the [Quick Start Deployment Guide](docs/deployment/QUICK_START.md) for complete prerequisites, dependency installation, and step-by-step setup instructions.
 
 ## Architecture
 
@@ -29,26 +32,33 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 │Site │   │ (Auth)    │  │Gateway│  │  Apps   │  │ Client  │
 └─────┘   └───────────┘  └───┬───┘  └─────────┘  └─────────┘
                              │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-┌───────▼───────┐   ┌────────▼────────┐   ┌──────▼──────┐
-│    MCP HR     │   │  MCP Finance    │   │  MCP Sales  │
-│   (Employee)  │   │   (Budgets)     │   │    (CRM)    │
-└───────┬───────┘   └────────┬────────┘   └──────┬──────┘
-        │                    │                    │
-┌───────▼───────┐   ┌────────▼────────┐   ┌──────▼──────┐
-│  PostgreSQL   │   │   PostgreSQL    │   │   MongoDB   │
-└───────────────┘   └─────────────────┘   └─────────────┘
+        ┌────────────┬───────┼───────┬────────────┐
+        │            │       │       │            │
+┌───────▼───────┐ ┌──▼───────▼───┐ ┌─▼────────┐ ┌─▼──────────┐
+│    MCP HR     │ │ MCP Finance  │ │MCP Sales │ │MCP Support │
+│  (Employees)  │ │  (Budgets)   │ │  (CRM)   │ │ (Tickets)  │
+└───────┬───────┘ └──────┬───────┘ └────┬─────┘ └─────┬──────┘
+        │                │              │             │
+┌───────▼───────┐ ┌──────▼───────┐ ┌────▼─────┐ ┌─────▼──────┐
+│  PostgreSQL   │ │  PostgreSQL  │ │ MongoDB  │ │Elasticsearch│
+└───────────────┘ └──────────────┘ └──────────┘ └────────────┘
 ```
 
 ## Features
 
+### Core Capabilities
 - **Secure AI Access**: Claude AI integration with role-based access control
 - **Defense in Depth**: 6 security layers from network to data
 - **SSO with MFA**: Keycloak with TOTP/WebAuthn support
 - **MCP Protocol**: Model Context Protocol for secure AI-to-data communication
-- **Multi-Platform**: Flutter clients for Windows, macOS, Linux, iOS, Android
+- **Multi-Platform**: Flutter clients for Windows, macOS, Linux, Android
 - **Enterprise Ready**: Audit logging, token revocation, rate limiting
+
+### v1.4 Enhancements (Current)
+- **SSE Streaming**: Real-time AI response streaming via Server-Sent Events
+- **Truncation Warnings**: AI-visible warnings when data exceeds query limits
+- **Human-in-the-Loop**: Confirmation flow for destructive operations (delete, update)
+- **LLM-Friendly Errors**: Structured error responses with suggested actions for AI self-correction
 
 ## Infrastructure Stack
 
@@ -70,10 +80,12 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 |-------------|----------|--------|--------|
 | **CI** | GitHub Actions | Docker Compose | ✅ Automated |
 | **Dev** | Docker Desktop | Terraform + Docker Compose | ✅ Local |
-| **Stage** | Hetzner Cloud | Terraform + GitHub Actions (Vault SSH) | ✅ Deployed |
-| **Prod** | Google Cloud | Terraform + GKE | Planned |
+| **Stage** | Hetzner Cloud (CPX31) | Terraform + GitHub Actions (Vault SSH) | ✅ Deployed (vps.tamshai.com) |
+| **Prod** | Google Cloud Run | Terraform + Cloud Run | ✅ Phase 1 Complete |
 
 ## Quick Start
+
+> **Complete Setup Guide**: For detailed prerequisites including all required and optional dependencies, platform-specific setup (Windows/macOS/Linux), and troubleshooting, see the **[Quick Start Deployment Guide](docs/deployment/QUICK_START.md)**.
 
 ### Prerequisites
 
@@ -85,6 +97,8 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 | **Docker Desktop** | 4.0+ | Container runtime | [docker.com](https://www.docker.com/products/docker-desktop/) |
 | **Node.js** | 20 LTS | MCP Gateway, tests | [nodejs.org](https://nodejs.org/) |
 | **Flutter** | 3.24+ | Desktop/mobile client | [flutter.dev](https://docs.flutter.dev/get-started/install) |
+| **Terraform** | 1.5+ | Infrastructure deployment | [terraform.io](https://developer.hashicorp.com/terraform/install) |
+| **GitHub CLI** | 2.40+ | CI/CD, workflow triggers | [cli.github.com](https://cli.github.com/) |
 
 #### Windows-Specific Requirements
 
@@ -330,33 +344,41 @@ All users: password `[REDACTED-DEV-PASSWORD]`, TOTP secret `[REDACTED-DEV-TOTP]`
 
 | Username | Role | Access |
 |----------|------|--------|
-| eve.thompson | executive | All departments |
+| eve.thompson | executive | All departments (read) |
 | alice.chen | hr-read, hr-write | HR data |
 | bob.martinez | finance-read, finance-write | Finance data |
 | carol.johnson | sales-read, sales-write | Sales/CRM data |
+| dan.williams | support-read, support-write | Tickets, KB |
+
+**E2E Test User**: `test-user.journey` (exists in all environments, no data access)
 
 ## Project Structure
 
 ```
 tamshai-enterprise-ai/
 ├── services/
-│   ├── mcp-gateway/        # AI orchestration service (Node.js)
-│   ├── mcp-hr/             # HR data MCP server
-│   ├── mcp-finance/        # Finance data MCP server
-│   ├── mcp-sales/          # Sales/CRM MCP server
-│   └── mcp-support/        # Support ticket MCP server
+│   ├── mcp-gateway/        # AI orchestration service (Node.js) - Claude API integration
+│   ├── mcp-hr/             # HR data MCP server (PostgreSQL)
+│   ├── mcp-finance/        # Finance data MCP server (PostgreSQL)
+│   ├── mcp-sales/          # Sales/CRM MCP server (MongoDB)
+│   └── mcp-support/        # Support ticket MCP server (Elasticsearch/MongoDB)
 ├── clients/
-│   └── unified_flutter/    # Cross-platform Flutter client
+│   ├── unified_flutter/    # Cross-platform Flutter client (Windows/macOS/Linux/Android)
+│   └── web/                # Web client packages (auth, portal)
 ├── apps/
-│   ├── tamshai-website/    # Corporate website (static)
-│   └── web/                # Web portal applications
+│   ├── tamshai-website/    # Corporate website (static HTML/CSS)
+│   └── web/                # Web portal applications (HR, Finance, Sales, Support)
 ├── infrastructure/
-│   ├── docker/             # Docker Compose configs
-│   └── terraform/          # IaC for cloud deployment
-├── keycloak/               # Keycloak realm configuration
-├── sample-data/            # Sample data for development
+│   ├── docker/             # Docker Compose configs for dev/stage
+│   └── terraform/          # IaC for dev, VPS, and GCP deployment
+├── keycloak/               # Keycloak realm configuration and sync scripts
+├── sample-data/            # Sample data for development (SQL, JS, NDJSON)
+├── scripts/                # Utility scripts (infra, MCP, testing)
+├── docs/                   # Documentation (architecture, deployment, security)
 └── tests/
-    └── integration/        # Integration tests
+    ├── e2e/                # Playwright E2E tests with TOTP support
+    ├── integration/        # Integration tests
+    └── performance/        # k6 performance tests
 ```
 
 ## Development
@@ -420,15 +442,22 @@ gh workflow run deploy-vps.yml --ref main
 
 See [VPS Deployment Guide](infrastructure/terraform/vps/README.md) for details.
 
-### GCP Production (Planned)
+### GCP Production
+
+Production is deployed on Google Cloud Run with Cloud SQL and Memorystore:
 
 ```bash
-cd infrastructure/terraform
+cd infrastructure/terraform/gcp
 terraform init
-terraform apply
+terraform apply -var-file=prod.tfvars
 ```
 
-See [infrastructure/terraform/README.md](infrastructure/terraform/README.md) for GCP configuration.
+**Current Production Status**:
+- Phase 1 Complete: Core infrastructure, Cloud Run services, Keycloak
+- MCP Gateway and HR/Finance services operational
+- Automated deployments via GitHub Actions
+
+See [infrastructure/terraform/gcp/README.md](infrastructure/terraform/gcp/README.md) for GCP configuration and [docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md](docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md) for deployment details.
 
 ## Security
 
@@ -444,6 +473,7 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 ## Documentation
 
 ### Getting Started
+- [Quick Start Deployment Guide](docs/deployment/QUICK_START.md) - Prerequisites, dependencies, and setup
 - [CLAUDE.md](CLAUDE.md) - Comprehensive development guide
 - [Terraform Dev Setup](infrastructure/terraform/dev/README.md) - Local development with Terraform
 
@@ -451,11 +481,17 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 - [Architecture Overview](docs/architecture/overview.md)
 - [Security Model](docs/architecture/security-model.md)
 - [Architecture Specs](.specify/ARCHITECTURE_SPECS.md) - All specifications and ADRs
+- [v1.4 Implementation Summary](docs/architecture/V1.4_IMPLEMENTATION_SUMMARY.md) - SSE streaming, truncation warnings, HITL
 
 ### Infrastructure
 - [Port Allocation](docs/development/PORT_ALLOCATION.md) - Service port assignments
 - [VPS Deployment](infrastructure/terraform/vps/README.md) - Hetzner Cloud setup
+- [GCP Production Deployment](docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md) - Cloud Run deployment
 - [Terraform State Security](docs/security/TERRAFORM_STATE_SECURITY.md)
+
+### Testing
+- [Test User Journey](docs/testing/TEST_USER_JOURNEY.md) - E2E test user documentation
+- [Keycloak User Testing](docs/troubleshooting/KEYCLOAK_USER_TESTING_METHODOLOGIES.md) - Testing methodologies
 
 ### Contributing
 - [Contributing Guide](CONTRIBUTING.md)
