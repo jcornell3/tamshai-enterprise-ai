@@ -415,26 +415,31 @@ jobs:
           )
 
           # Note: Keycloak Admin API doesn't support creating OTP credentials directly
-          # We need to use a different approach - configure via Keycloak SPI or delete realm
-          echo "Note: Direct OTP credential creation via Admin API is not supported"
-          echo "Attempting alternative approach: Delete and reimport realm..."
+          # Check if the realm needs to be deleted and reimported
+          echo "Checking if realm reimport is needed..."
 
-          # Delete the realm to force reimport
-          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE \
-            "https://auth.tamshai.com/auth/admin/realms/tamshai-corp" \
-            -H "Authorization: Bearer $TOKEN" || echo "000")
+          # Test TOTP by checking if it's properly configured
+          # If the user has OTP but no secretData, we need to reimport
+          OTP_COUNT=$(echo "$EXISTING_CREDS" | jq '[.[] | select(.type=="otp")] | length')
 
-          if [ "$HTTP_CODE" = "204" ]; then
-            echo "Realm deleted. Restarting Keycloak to trigger reimport..."
-            # Force new revision deployment to reimport realm
-            gcloud run services update keycloak \
-              --region=${{ env.GCP_REGION }} \
-              --update-env-vars="REALM_REIMPORT_TS=$(date +%s)"
-            # Wait for new revision
-            sleep 30
-            echo "Keycloak restarted with fresh realm import"
+          if [ "$OTP_COUNT" -gt 0 ]; then
+            echo "User has $OTP_COUNT OTP credential(s), deleting for fresh import..."
+            # Delete the realm to force reimport with correct TOTP
+            HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE \
+              "https://auth.tamshai.com/auth/admin/realms/tamshai-corp" \
+              -H "Authorization: Bearer $TOKEN" || echo "000")
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "Realm deleted successfully."
+              echo "Realm will be reimported when Keycloak restarts."
+              echo "Note: Run deploy-to-gcp again to trigger reimport, or wait for next deployment."
+            elif [ "$HTTP_CODE" = "404" ]; then
+              echo "Realm does not exist - will be imported on next Keycloak start."
+            else
+              echo "Warning: Could not delete realm (HTTP $HTTP_CODE). TOTP may not work correctly."
+            fi
           else
-            echo "Warning: Could not delete realm (HTTP $HTTP_CODE). TOTP may not work correctly."
+            echo "No OTP credentials found - realm may need initial import."
           fi
 
       - name: Wait for Realm Reimport
