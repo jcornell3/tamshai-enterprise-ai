@@ -44,11 +44,17 @@ const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 
 // Test credentials - using test-user.journey service account (exists in all environments)
 // See docs/testing/TEST_USER_JOURNEY.md for details
+//
+// IMPORTANT: TOTP secret handling varies by environment:
+// - Dev/Stage: Test captures TOTP during setup (no pre-configured secret needed)
+// - Prod: Set TEST_TOTP_SECRET env var with BASE32-encoded secret from GitHub Secrets
 const TEST_USER = {
   username: process.env.TEST_USERNAME || 'test-user.journey',
   password: process.env.TEST_PASSWORD || '***REDACTED_PASSWORD***',
-  // TOTP secret for test-user.journey (same across all environments)
-  totpSecret: process.env.TEST_TOTP_SECRET || 'JBSWY3DPEHPK3PXP',
+  // TOTP secret must be BASE32-encoded (not raw) - used with oathtool/otplib
+  // For prod, this comes from GitHub Secret TEST_USER_TOTP_SECRET
+  // For dev/stage, tests capture the secret during TOTP setup flow
+  totpSecret: process.env.TEST_TOTP_SECRET || '',
 };
 
 /**
