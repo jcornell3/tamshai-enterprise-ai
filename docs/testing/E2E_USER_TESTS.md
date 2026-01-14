@@ -96,8 +96,8 @@ npx playwright test login-journey.ui.spec.ts  # Uses default workers
 | Field | Value |
 |-------|-------|
 | Username | `test-user.journey` |
-| Password | `***REDACTED_PASSWORD***` |
-| TOTP Secret (BASE32) | `***REDACTED_TOTP_SECRET***` |
+| Password | `[STORED IN GITHUB SECRETS]` (see `TEST_PASSWORD`) |
+| TOTP Secret (BASE32) | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET`) |
 | Roles | None (tests authentication flow only) |
 
 This account exists in all environments (dev, stage, prod) with identical credentials.
@@ -137,7 +137,7 @@ TEST_ENV=prod npx playwright test login-journey.ui.spec.ts --workers=1
 | `TEST_ENV` | Yes | Environment: `dev`, `stage`, or `prod` |
 | `TEST_TOTP_SECRET` | No | BASE32 TOTP secret (auto-captured if not set) |
 | `TEST_USERNAME` | No | Override username (default: `test-user.journey`) |
-| `TEST_PASSWORD` | No | Override password (default: `***REDACTED_PASSWORD***`) |
+| `TEST_PASSWORD` | No | Override password (required - get from GitHub Secrets) |
 
 ### npm Scripts
 
@@ -169,8 +169,8 @@ npm run test:ui
 # macOS: brew install oath-toolkit
 # Windows: Available in WSL or via Chocolatey
 
-# Generate TOTP code
-oathtool --totp --base32 "***REDACTED_TOTP_SECRET***"
+# Generate TOTP code (secret from GitHub Secrets)
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 # Output: 6-digit code (e.g., 123456)
 ```
 

@@ -9,7 +9,7 @@ This document describes the **test-user.journey** account, a dedicated test acco
 | Field | Value | Notes |
 |-------|-------|-------|
 | **Username** | `test-user.journey` | Unique identifier |
-| **Password** | `***REDACTED_PASSWORD***` | Strong password for security |
+| **Password** | `[STORED IN GITHUB SECRETS]` | See `TEST_PASSWORD` secret |
 | **Email** | `test-user@tamshai.local` | Test email address |
 | **TOTP Secret** | Stored in GitHub Secrets | See [TOTP Secret Management](#totp-secret-management) below |
 | **Employee ID** | `TEST001` | Attribute for tracking |
@@ -24,9 +24,9 @@ This document describes the **test-user.journey** account, a dedicated test acco
 
 | Context | Format | Example | Where Used |
 |---------|--------|---------|------------|
-| **Keycloak Internal Storage** | Raw (plaintext) | `***REDACTED_RAW_SECRET***` | `secretData` field in realm-export.json |
-| **QR Code Display** | BASE32-encoded | `***REDACTED_TOTP_SECRET***` | What users see when scanning QR code |
-| **oathtool / TOTP Apps** | BASE32-encoded | `***REDACTED_TOTP_SECRET***` | Input for TOTP code generation |
+| **Keycloak Internal Storage** | Raw (plaintext) | `[STORED IN GITHUB SECRETS]` | See `TEST_USER_TOTP_SECRET_RAW` secret |
+| **QR Code Display** | BASE32-encoded | `[STORED IN GITHUB SECRETS]` | See `TEST_USER_TOTP_SECRET` secret |
+| **oathtool / TOTP Apps** | BASE32-encoded | `[STORED IN GITHUB SECRETS]` | See `TEST_USER_TOTP_SECRET` secret |
 
 **Why this matters**: If you put a BASE32 value directly in Keycloak's `secretData`, Keycloak will double-encode it when displaying QR codes, causing TOTP validation to fail with a `NullPointerException`.
 
@@ -37,7 +37,7 @@ The `secretData` field in realm-export.json **ONLY accepts the `value` field**. 
 ```json
 {
   "type": "otp",
-  "secretData": "{\"value\":\"***REDACTED_RAW_SECRET***\"}",
+  "secretData": "{\"value\":\"[RAW_SECRET_FROM_GITHUB_SECRETS]\"}",
   "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
 }
 ```
@@ -230,7 +230,7 @@ test('test-user.journey can login and access app', async ({ page }) => {
 
   // Enter credentials
   await page.fill('input[name="username"]', 'test-user.journey');
-  await page.fill('input[name="password"]', process.env.TEST_PASSWORD || '***REDACTED_PASSWORD***');
+  await page.fill('input[name="password"]', process.env.TEST_PASSWORD); // Required from environment
   await page.click('input[type="submit"]');
 
   // Generate and enter TOTP (using BASE32 secret)
@@ -320,7 +320,7 @@ print(f'Current TOTP: {code}')
 
 **⚠️ IMPORTANT**: This test user is included in the **production realm export** (`keycloak/realm-export.json`). While safe for testing, consider these points:
 
-1. **Password Strength**: Uses a strong password (`***REDACTED_PASSWORD***`)
+1. **Password Strength**: Uses a strong password (stored in GitHub Secrets)
 2. **TOTP Enabled**: Requires two-factor authentication
 3. **No Data Access**: Cannot access any sensitive data
 4. **Audit Logging**: All login attempts are logged
@@ -425,7 +425,7 @@ Verify the test user exists in Keycloak:
 curl -s http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token \
   -d "client_id=tamshai-website" \
   -d "username=test-user.journey" \
-  -d "password=***REDACTED_PASSWORD***" \
+  -d "password=$TEST_PASSWORD" \
   -d "grant_type=password" \
   | jq -r '.access_token'
 

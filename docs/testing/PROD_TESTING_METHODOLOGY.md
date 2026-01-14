@@ -262,7 +262,7 @@ curl -s "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/clients" \
 
 ```bash
 # Using oathtool (recommended)
-oathtool --totp --base32 "***REDACTED_TOTP_SECRET***"
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 # Output: 6-digit code valid for 30 seconds
 ```
 
