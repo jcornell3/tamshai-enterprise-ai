@@ -1,8 +1,8 @@
 # Scripts Index
 
 **Repository**: Tamshai Enterprise AI
-**Generated**: 2026-01-03
-**Total Scripts**: 59 (43 shell, 16 PowerShell)
+**Generated**: January 13, 2026
+**Total Scripts**: 75 (57 shell, 18 PowerShell)
 
 ---
 
@@ -14,15 +14,19 @@
 | Database (db) | 2 | `scripts/db/` |
 | MCP Server | 2 | `scripts/mcp/` |
 | Vault | 2 | `scripts/vault/`, `scripts/` |
-| Test | 2 | `scripts/test/` |
-| Keycloak | 3 | `keycloak/scripts/` |
+| Test | 4 | `scripts/test/` |
+| GCP Production | 7 | `scripts/gcp/` |
+| VPS Management | 4 | `scripts/vps/` |
+| Keycloak | 5 | `keycloak/scripts/` |
 | Desktop Client (Windows) | 8 | `clients/desktop/` |
 | Spec Kit (.specify) | 6 | `.specify/scripts/` |
 | Secrets | 1 | `scripts/secrets/` |
-| Terraform/Cloud | 3 | `infrastructure/terraform/` |
-| Root Scripts | 7 | `scripts/` |
+| Terraform/Cloud | 4 | `infrastructure/terraform/` |
+| Root Scripts | 9 | `scripts/`, root level |
 | CI/CD Workflows | 26 | `.github/workflows/` |
 | Sample Data | 4 | `sample-data/` |
+| Flutter | 2 | `clients/unified_flutter/` |
+| Archived/Deprecated | 1 | `docs/archived/deprecated-scripts/` |
 
 ---
 
@@ -68,6 +72,29 @@
 |--------|---------|-------------|---------|------------|--------------|
 | `login-journey.sh` | Test SSO login flow end-to-end | dev, stage | Manual | Yes | curl |
 | `user-validation.sh` | Validate test user configuration | dev | Manual | Yes | curl, jq |
+| `e2e-login-with-totp-backup.sh` | E2E login test with TOTP backup/restore | dev, stage | Manual | Yes | oathtool, curl |
+| `journey-e2e-automated.sh` | Automated E2E journey test for CI/CD | CI | Automated | Yes | Playwright, oathtool |
+
+### GCP Production Scripts (`scripts/gcp/`)
+
+| Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
+|--------|---------|-------------|---------|------------|--------------|
+| `gcp-infra-deploy.sh` | Deploy GCP infrastructure via Terraform | prod | Manual | Yes | Terraform, gcloud |
+| `gcp-infra-teardown.sh` | Teardown GCP infrastructure | prod | Manual | No | Terraform, gcloud |
+| `load-sample-data.sh` | Load sample data to GCP production (HR, Finance, Sales, Support) | prod | Manual | Yes | psql, mongosh, cloud-sql-proxy |
+| `remove-sample-data.sh` | Remove sample data from GCP production | prod | Manual | Yes | psql, mongosh, cloud-sql-proxy |
+| `test-data-access.sh` | Test data access for all services in GCP | prod | Manual | Yes | curl, jq |
+| `test-sales-support-access.sh` | Test Sales and Support data access (MongoDB-backed) | prod | Manual | Yes | curl, jq |
+| `enable-apis.sh` | Enable required GCP APIs for the project | prod | Manual | Yes | gcloud |
+
+### VPS Management Scripts (`scripts/vps/`)
+
+| Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
+|--------|---------|-------------|---------|------------|--------------|
+| `manual-reload-finance.sh` | Manually reload Finance sample data on VPS | stage | Manual | Yes | SSH, psql |
+| `reload-finance-data.sh` | Reload Finance data (PostgreSQL) | stage | Manual | Yes | Docker, psql |
+| `reload-sales-data.sh` | Reload Sales data (MongoDB) | stage | Manual | Yes | Docker, mongosh |
+| `reload-support-data.sh` | Reload Support data (Elasticsearch) | stage | Manual | Yes | Docker, curl |
 
 ### Keycloak Scripts (`keycloak/scripts/`)
 
@@ -76,8 +103,10 @@
 | `sync-realm.sh` | Synchronize Keycloak configuration | dev, stage, prod | Manual | Yes | kcadm CLI (in container) |
 | `docker-sync-realm.sh` | Docker wrapper for sync-realm.sh | dev | Manual | Yes | Docker |
 | `sync-users.sh` | Sync test users to Keycloak | dev | Manual | Yes | kcadm CLI |
+| `recreate-realm-prod.sh` | Recreate production realm from export file | prod | Manual | No | kcadm CLI, Docker |
+| `set-user-totp.sh` | Set or update TOTP secret for test users | dev, stage | Manual | Yes | kcadm CLI, Docker |
 
-### Root Scripts (`scripts/`)
+### Root Scripts (`scripts/` and root level)
 
 | Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
 |--------|---------|-------------|---------|------------|--------------|
@@ -88,6 +117,8 @@
 | `validate-production-config.sh` | Validate production configuration | prod | Manual | Yes | - |
 | `vault-install.sh` | Install Vault CLI locally | dev | Manual | Yes | curl |
 | `verify-mcp-servers.sh` | Verify MCP server connectivity | dev | Manual | Yes | curl |
+| `test-dashboard-sequence.sh` (root) | Test dashboard sequence for Sales app | dev, stage | Manual | Yes | curl, jq |
+| `test-finance-status.ps1` (root) | Test Finance app status and health | dev, stage | Manual | Yes | PowerShell, Invoke-WebRequest |
 
 ### PowerShell Scripts (Windows)
 
@@ -152,8 +183,22 @@
 | `infrastructure/docker/postgres/init-multiple-databases.sh` | Initialize PostgreSQL databases | dev | Docker Compose | Yes | psql |
 | `infrastructure/docker/vault/init-dev.sh` | Initialize Vault for dev | dev | Docker Compose | Yes | vault CLI |
 | `infrastructure/terraform/vps/deploy-to-existing-vps.sh` | Deploy to existing VPS | stage | Manual | Yes | SSH |
+| `infrastructure/terraform/gcp/configure-tfvars.ps1` | Configure GCP Terraform variables interactively | prod | Manual | Yes | PowerShell |
 | `infrastructure/terraform/modules/compute/scripts/keycloak-startup.sh` | Keycloak container startup | stage, prod | cloud-init | Yes | Docker |
 | `infrastructure/terraform/modules/compute/scripts/mcp-gateway-startup.sh` | MCP Gateway container startup | stage, prod | cloud-init | Yes | Docker |
+
+### Flutter Client Scripts
+
+| Script | Purpose | Environment | Trigger | Idempotent | Dependencies |
+|--------|---------|-------------|---------|------------|--------------|
+| `clients/unified_flutter/ios/Flutter/flutter_export_environment.sh` | Export Flutter environment for iOS builds | dev | Xcode build | Yes | Flutter SDK |
+| `clients/unified_flutter/macos/Flutter/ephemeral/flutter_export_environment.sh` | Export Flutter environment for macOS builds | dev | Flutter build | Yes | Flutter SDK |
+
+### Archived/Deprecated Scripts
+
+| Script | Purpose | Status | Notes |
+|--------|---------|--------|-------|
+| `docs/archived/deprecated-scripts/setup-dev.sh` | Legacy dev environment setup | **DEPRECATED** | Replaced by Terraform workflow (`infrastructure/terraform/dev/`) |
 
 ### Integration Test Scripts
 
@@ -226,8 +271,40 @@
 - `clients/desktop/*.ps1` - Inconsistent header format
 
 ### Deprecated Scripts
-- `scripts/setup-dev.sh` - **DEPRECATED**, use Terraform workflow
+- `docs/archived/deprecated-scripts/setup-dev.sh` - **DEPRECATED**, use Terraform workflow (`infrastructure/terraform/dev/`)
 - `clients/unified/scripts/register-protocol-handler.ps1` - **DEPRECATED**, clients/unified is deprecated
+
+### New Scripts (January 13, 2026)
+Added 16 new scripts for GCP production, VPS management, E2E testing, and Keycloak operations:
+
+**GCP Production Management (7 scripts)**:
+- `scripts/gcp/gcp-infra-deploy.sh`
+- `scripts/gcp/gcp-infra-teardown.sh`
+- `scripts/gcp/load-sample-data.sh`
+- `scripts/gcp/remove-sample-data.sh`
+- `scripts/gcp/test-data-access.sh`
+- `scripts/gcp/test-sales-support-access.sh`
+- `scripts/gcp/enable-apis.sh`
+
+**VPS Management (4 scripts)**:
+- `scripts/vps/manual-reload-finance.sh`
+- `scripts/vps/reload-finance-data.sh`
+- `scripts/vps/reload-sales-data.sh`
+- `scripts/vps/reload-support-data.sh`
+
+**Testing (2 scripts)**:
+- `scripts/test/e2e-login-with-totp-backup.sh`
+- `scripts/test/journey-e2e-automated.sh`
+
+**Keycloak (2 scripts)**:
+- `keycloak/scripts/recreate-realm-prod.sh`
+- `keycloak/scripts/set-user-totp.sh`
+
+**Other (3 scripts)**:
+- `infrastructure/terraform/gcp/configure-tfvars.ps1`
+- `test-dashboard-sequence.sh` (root level)
+- `test-finance-status.ps1` (root level)
+- `clients/unified_flutter/macos/Flutter/ephemeral/flutter_export_environment.sh`
 
 ---
 
@@ -278,4 +355,19 @@ The following values are hardcoded across multiple scripts:
 
 ---
 
-*Generated 2026-01-03*
+## Recent Changes
+
+### January 13, 2026
+- Updated total script count from 59 to 75 (16 new scripts)
+- Added GCP Production scripts section (7 scripts for production deployment and data management)
+- Added VPS Management scripts section (4 scripts for stage data reloading)
+- Added 2 new E2E testing scripts with TOTP support
+- Added 2 new Keycloak management scripts (realm recreation, TOTP configuration)
+- Added Flutter export environment scripts for iOS and macOS
+- Added GCP Terraform configuration script (PowerShell)
+- Moved deprecated setup-dev.sh to archived location
+- Updated documentation with comprehensive script descriptions
+
+---
+
+*Generated January 13, 2026*

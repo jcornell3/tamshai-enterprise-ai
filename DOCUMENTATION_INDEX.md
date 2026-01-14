@@ -1,8 +1,8 @@
 # Documentation Index
 
-**Generated**: January 3, 2026
-**Last Reorganized**: January 4, 2026
-**Total Documentation Files**: 150
+**Generated**: January 13, 2026
+**Last Updated**: January 13, 2026
+**Total Documentation Files**: 203
 
 This index catalogs all markdown documentation files in the Tamshai Enterprise AI repository.
 
@@ -15,9 +15,12 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `CLAUDE.md`
 - `CODE_OF_CONDUCT.md`
 - `CONTRIBUTING.md`
+- `DOCUMENTATION_INDEX.md`
 - `GEMINI.md`
 - `README.md`
+- `SCRIPTS_INDEX.md`
 - `SECURITY.md`
+- `SECURITY_INCIDENT_2026-01-09.md`
 
 ### .claude/
 - `.claude/instructions.md`
@@ -66,6 +69,9 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `.specify/specs/007-mobile/spec.md`
 - `.specify/specs/007-mobile/tasks.md`
 - `.specify/specs/008-unified-client/spec.md`
+- `.specify/specs/009-flutter-unified/plan.md`
+- `.specify/specs/009-flutter-unified/spec.md`
+- `.specify/specs/009-flutter-unified/tasks.md`
 - `.specify/specs/010-security-compliance/plan.md`
 - `.specify/specs/010-security-compliance/spec.md`
 - `.specify/specs/010-security-compliance/tasks.md`
@@ -138,6 +144,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/deployment/QUICK_START.md`
 - `docs/deployment/STAGE_VPS_DEPLOYMENT_STATUS.md`
 - `docs/deployment/TEARDOWN_REDEPLOY.md`
+- `docs/deployment/terraform-dev-deployment-complete.md`
 - `docs/deployment/TERRAFORM_CLOUD_SETUP.md`
 - `docs/deployment/VAULT_SETUP.md`
 - `docs/deployment/VPS_SETUP_GUIDE.md`
@@ -152,17 +159,34 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/development/UX_DEPLOYMENT_GUIDE.md`
 - `docs/development/V1.4_CODE_EXAMPLES.md`
 
+### docs/keycloak/
+- `docs/keycloak/DEV_PROD_CONFIG_DIFFERENCES.md`
+
 ### docs/operations/
 - `docs/operations/IDENTITY_SYNC.md`
 - `docs/operations/KEYCLOAK_MANAGEMENT.md`
+- `docs/operations/TERRAFORM_PHASE1_RESULTS.md`
+- `docs/operations/TERRAFORM_USER_PROVISIONING_PLAN.md`
+
+### docs/plans/
+- `docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md`
+- `docs/plans/GCP_PROD_PHASE_2_HIGH_AVAILABILITY.md`
+- `docs/plans/MCP_SUPPORT_BACKEND_ABSTRACTION.md`
+- `docs/plans/VPS_IP_REMEDIATION_PLAN.md`
 
 ### docs/security/
 - `docs/security/audits/2025-12-29-permissions-audit.md`
+- `docs/security/IAM_PORTAL_ALIGNMENT_PLAN.md`
+- `docs/security/IAM_SECURITY_REMEDIATION_PLAN.md`
 - `docs/security/incident-response.md`
 - `docs/security/SSH_ACCESS_POLICY.md`
 - `docs/security/TERRAFORM_STATE_SECURITY.md`
+- `docs/security/TOTP-SECRETS-RESET.md`
 - `docs/security/VAULT_SSH_SECRETS_ENGINE.md`
 - `docs/security/VPS_FIREWALL_JUSTIFICATION.md`
+
+### docs/setup/
+- `docs/setup/MONGODB_ATLAS_SETUP.md`
 
 ### docs/status/
 - `docs/status/V1.4_IMPLEMENTATION_STATUS.md`
@@ -182,21 +206,43 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 ### docs/testing/
 - `docs/testing/DEV_INFRASTRUCTURE_TESTS.md`
 - `docs/testing/E2E_USER_TESTS.md`
+- `docs/testing/PROD_TESTING_METHODOLOGY.md`
+- `docs/testing/TEST_USER_JOURNEY.md`
+- `docs/testing/TOTP_FIX_STATUS.md`
+- `docs/testing/TOTP_SETUP_FIX_PLAN.md`
 - `docs/testing/USER_MANAGEMENT.md`
 - `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md`
 
 ### docs/troubleshooting/
 - `docs/troubleshooting/2026-01-01-ci-test-issues.md`
 - `docs/troubleshooting/CI_FIXES_2025-12-30.md`
+- `docs/troubleshooting/FLUTTER_BUILD_ISSUES.md`
+- `docs/troubleshooting/GCP_PHASE1_DEPLOYMENT_ISSUES.md`
+- `docs/troubleshooting/GCS_SPA_ROUTING_LIMITATION.md`
 - `docs/troubleshooting/KEYCLOAK_23_DEEP_DIVE.md`
 - `docs/troubleshooting/KEYCLOAK_USER_TESTING_METHODOLOGIES.md`
+- `docs/troubleshooting/PROD_403_REMEDIATION_PLAN.md`
+- `docs/troubleshooting/VPS_DATA_AVAILABILITY_ISSUES.md`
+- `docs/troubleshooting/WINDOWS_GCLOUD_ISSUES.md`
 
 ### docs/ (Root)
 - `docs/DOCUMENTATION_REORGANIZATION_PLAN.md`
+- `docs/SCRIPTS_REORGANIZATION_PLAN.md`
 
 ### infrastructure/terraform/
 - `infrastructure/terraform/dev/README.md`
+- `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md`
+- `infrastructure/terraform/gcp/DEPLOYMENT_SUCCESS_STATUS.md`
+- `infrastructure/terraform/gcp/DOMAIN_VERIFICATION_ISSUE.md`
+- `infrastructure/terraform/gcp/GCP_PRODUCTION_FIX_STATUS.md`
+- `infrastructure/terraform/gcp/KEYCLOAK_ADMIN_API_TESTING.md`
+- `infrastructure/terraform/gcp/PORTAL_APP_FIX_STATUS.md`
+- `infrastructure/terraform/gcp/PRODUCTION_ISSUES.md`
+- `infrastructure/terraform/gcp/README.md`
+- `infrastructure/terraform/gcp/TERRAFORM_PLAN_SUMMARY.md`
+- `infrastructure/terraform/gcp/WEBSITE_FIX_STATUS.md`
 - `infrastructure/terraform/keycloak/TERRAFORM_KEYCLOAK_DEPLOYMENT.md`
+- `infrastructure/terraform/modules/compute/README.md`
 - `infrastructure/terraform/README.md`
 - `infrastructure/terraform/TERRAFORM_MODULES.md`
 - `infrastructure/terraform/vps/README.md`
@@ -206,6 +252,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `keycloak/README.md`
 
 ### scripts/
+- `scripts/gcp/README.md`
 - `scripts/README.md`
 
 ### tests/
@@ -225,9 +272,12 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | `CLAUDE.md` | Comprehensive project guide for Claude Code AI assistant with architecture, commands, and development instructions. |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant code of conduct defining standards for community participation. |
 | `CONTRIBUTING.md` | Guidelines for contributing to the project including setup, workflow, testing, and pull request process. |
+| `DOCUMENTATION_INDEX.md` | Catalog of all markdown documentation files in the repository with descriptions. |
 | `GEMINI.md` | Project guide for Google Gemini AI assistant with essential commands and architecture overview. |
 | `README.md` | Main project documentation with architecture overview, features, setup instructions, and deployment guide. |
+| `SCRIPTS_INDEX.md` | Catalog of all shell and PowerShell scripts in the repository with descriptions. |
 | `SECURITY.md` | Security policy with vulnerability reporting guidelines, response timelines, and security scope. |
+| `SECURITY_INCIDENT_2026-01-09.md` | Root-level security incident documentation for January 9, 2026 production 403 errors. |
 
 ### .claude/
 
@@ -267,6 +317,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | `.specify/specs/006-ai-desktop/*` | Electron desktop AI assistant client specification. |
 | `.specify/specs/007-mobile/*` | iOS and Android mobile clients specification. |
 | `.specify/specs/008-unified-client/spec.md` | Unified React Native client specification (replaced by Flutter). |
+| `.specify/specs/009-flutter-unified/*` | Flutter unified client specification for Windows, macOS, Linux, iOS, and Android platforms. |
 | `.specify/specs/010-security-compliance/*` | Security and compliance requirements specification (GDPR, SOC 2). |
 | `.specify/specs/011-qa-testing/*` | QA testing infrastructure and coverage strategy specifications. |
 
@@ -341,12 +392,19 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 | File | Description |
 |------|-------------|
+| `docs/deployment/ANDROID_PUBLISHING_GUIDE.md` | Guide for publishing Flutter Android app to Google Play Store. |
+| `docs/deployment/COMPLETE_SETUP_GUIDE.md` | Comprehensive setup guide covering all environments from scratch. |
+| `docs/deployment/FLUTTER_MULTI_ENVIRONMENT_BUILDS.md` | Guide for building Flutter apps for multiple environments (dev, stage, prod). |
+| `docs/deployment/GITHUB_ACTIONS_GUIDE.md` | Guide for setting up and configuring GitHub Actions CI/CD workflows. |
+| `docs/deployment/INCREMENTAL_DEPLOYMENT_GUIDE.md` | Guide for deploying incremental changes without full environment teardown. |
 | `docs/deployment/KEYCLOAK_SETUP.md` | Complete guide for configuring Keycloak for Flutter desktop/mobile applications. |
 | `docs/deployment/QUICK_START.md` | Quick start deployment guide with prerequisites and basic setup steps. |
+| `docs/deployment/STAGE_VPS_DEPLOYMENT_STATUS.md` | Status report for VPS staging deployment on Hetzner Cloud. |
 | `docs/deployment/TEARDOWN_REDEPLOY.md` | Procedures for tearing down and redeploying environments. |
-| `docs/deployment/VPS_SETUP_GUIDE.md` | Step-by-step guide for setting up Hetzner VPS staging environment. |
+| `docs/deployment/terraform-dev-deployment-complete.md` | Completion report for Terraform-based local development environment deployment. |
+| `docs/deployment/TERRAFORM_CLOUD_SETUP.md` | Guide for setting up Terraform Cloud for state management. |
 | `docs/deployment/VAULT_SETUP.md` | Guide for setting up HashiCorp Vault for secrets management. |
-| `docs/deployment/*.md` | Various deployment guides for Android, Flutter, GitHub Actions, and Terraform. |
+| `docs/deployment/VPS_SETUP_GUIDE.md` | Step-by-step guide for setting up Hetzner VPS staging environment. |
 
 ### docs/development/
 
@@ -355,7 +413,17 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | `docs/development/PORT_ALLOCATION.md` | Documents port assignments for all services to avoid conflicts. |
 | `docs/development/UX_DEPLOYMENT_GUIDE.md` | UX engineer guide for pushing content to dev/stage environments with Keycloak SSO, directory structure, and deployment scripts. |
 | `docs/development/V1.4_CODE_EXAMPLES.md` | Code examples demonstrating v1.4 architecture patterns. |
-| `docs/development/*.md` | Development guides for mobile, security checklist, and lessons learned. |
+| `docs/development/lessons-learned.md` | Lessons learned from project development including technical decisions and trade-offs. |
+| `docs/development/MOBILE_DEVELOPMENT_SUMMARY.md` | Summary of mobile development progress and migration from React Native to Flutter. |
+| `docs/development/MOBILE_SETUP.md` | Setup instructions for mobile development environment. |
+| `docs/development/PRODUCTION_SECURITY_CHECKLIST.md` | Security checklist for production deployments. |
+| `docs/development/REACT_NATIVE_TO_FLUTTER_MIGRATION.md` | Migration guide and rationale for moving from React Native to Flutter. |
+
+### docs/keycloak/
+
+| File | Description |
+|------|-------------|
+| `docs/keycloak/DEV_PROD_CONFIG_DIFFERENCES.md` | Documents critical configuration differences between dev and production Keycloak realms. |
 
 ### docs/operations/
 
@@ -363,15 +431,37 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 |------|-------------|
 | `docs/operations/IDENTITY_SYNC.md` | Guide for syncing user identities from HR database to Keycloak for dev and stage environments. |
 | `docs/operations/KEYCLOAK_MANAGEMENT.md` | Guide for managing Keycloak realms, clients, and users. |
+| `docs/operations/TERRAFORM_PHASE1_RESULTS.md` | Results and lessons learned from GCP Production Phase 1 Terraform deployment. |
+| `docs/operations/TERRAFORM_USER_PROVISIONING_PLAN.md` | Plan for implementing user provisioning via Terraform and identity sync. |
+
+### docs/plans/
+
+| File | Description |
+|------|-------------|
+| `docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md` | Comprehensive deployment plan for GCP Production Phase 1 using cost-optimized free/low-cost tiers. |
+| `docs/plans/GCP_PROD_PHASE_2_HIGH_AVAILABILITY.md` | Future Phase 2 plan for scaling to high-availability GCP architecture with VPC peering and managed MongoDB. |
+| `docs/plans/MCP_SUPPORT_BACKEND_ABSTRACTION.md` | Plan for abstracting MCP Support backend to support both Elasticsearch (dev/stage) and MongoDB (prod). |
+| `docs/plans/VPS_IP_REMEDIATION_PLAN.md` | Plan for remediating VPS IP address exposure in OAuth redirect URIs. |
 
 ### docs/security/
 
 | File | Description |
 |------|-------------|
 | `docs/security/audits/2025-12-29-permissions-audit.md` | GitHub Actions workflow permissions audit report. |
+| `docs/security/IAM_PORTAL_ALIGNMENT_PLAN.md` | Plan for aligning IAM roles between Keycloak, Portal UI, and data access policies. |
+| `docs/security/IAM_SECURITY_REMEDIATION_PLAN.md` | Security remediation plan for IAM alignment issues discovered in production. |
 | `docs/security/incident-response.md` | Security incident response runbook with contacts and procedures. |
+| `docs/security/SSH_ACCESS_POLICY.md` | SSH access policy for VPS and production environments. |
 | `docs/security/TERRAFORM_STATE_SECURITY.md` | Security guidelines for handling Terraform state files. |
-| `docs/security/*.md` | Security documentation for SSH, Vault, and VPS firewall. |
+| `docs/security/TOTP-SECRETS-RESET.md` | Guide for resetting TOTP secrets for test users across environments. |
+| `docs/security/VAULT_SSH_SECRETS_ENGINE.md` | Documentation for Vault SSH secrets engine configuration. |
+| `docs/security/VPS_FIREWALL_JUSTIFICATION.md` | Justification for VPS firewall configuration decisions. |
+
+### docs/setup/
+
+| File | Description |
+|------|-------------|
+| `docs/setup/MONGODB_ATLAS_SETUP.md` | Guide for setting up MongoDB Atlas M0 free tier cluster for Sales and Support data. |
 
 ### docs/status/
 
@@ -395,6 +485,10 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 |------|-------------|
 | `docs/testing/DEV_INFRASTRUCTURE_TESTS.md` | Infrastructure tests for development environment validation. |
 | `docs/testing/E2E_USER_TESTS.md` | E2E login testing approach with TOTP backup/restore strategy for Keycloak. |
+| `docs/testing/PROD_TESTING_METHODOLOGY.md` | Methodology for safely testing GCP production services without impacting live users. |
+| `docs/testing/TEST_USER_JOURNEY.md` | Documentation for test-user.journey service account used in E2E tests across all environments. |
+| `docs/testing/TOTP_FIX_STATUS.md` | Status of TOTP authentication fixes in E2E tests. |
+| `docs/testing/TOTP_SETUP_FIX_PLAN.md` | Plan for fixing TOTP setup issues in test environments. |
 | `docs/testing/USER_MANAGEMENT.md` | Guide for managing users including test user credentials and login process. |
 | `docs/testing/V1.4_CONFIRMATION_FLOW_TEST_RESULTS.md` | Test results for human-in-the-loop confirmation flow implementation. |
 
@@ -404,14 +498,21 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 |------|-------------|
 | `docs/troubleshooting/2026-01-01-ci-test-issues.md` | Investigation and resolution of CI test failures from January 2026. |
 | `docs/troubleshooting/CI_FIXES_2025-12-30.md` | CI pipeline fixes applied on December 30, 2025. |
+| `docs/troubleshooting/FLUTTER_BUILD_ISSUES.md` | Troubleshooting guide for Flutter build and compilation issues. |
+| `docs/troubleshooting/GCP_PHASE1_DEPLOYMENT_ISSUES.md` | Documentation of issues encountered during GCP Phase 1 deployment and their resolutions. |
+| `docs/troubleshooting/GCS_SPA_ROUTING_LIMITATION.md` | Analysis of Google Cloud Storage SPA routing limitations for web apps. |
 | `docs/troubleshooting/KEYCLOAK_23_DEEP_DIVE.md` | Deep dive technical analysis of Keycloak 23 features and configuration. |
 | `docs/troubleshooting/KEYCLOAK_USER_TESTING_METHODOLOGIES.md` | Testing methodologies for Keycloak user configuration. |
+| `docs/troubleshooting/PROD_403_REMEDIATION_PLAN.md` | Remediation plan for production 403 errors caused by IAM role misalignment. |
+| `docs/troubleshooting/VPS_DATA_AVAILABILITY_ISSUES.md` | Troubleshooting guide for VPS data availability issues (missing sample data). |
+| `docs/troubleshooting/WINDOWS_GCLOUD_ISSUES.md` | Troubleshooting guide for gcloud CLI issues on Windows. |
 
 ### docs/ (Root)
 
 | File | Description |
 |------|-------------|
 | `docs/DOCUMENTATION_REORGANIZATION_PLAN.md` | Plan for reorganizing documentation files (executed 2026-01-03). |
+| `docs/SCRIPTS_REORGANIZATION_PLAN.md` | Plan for reorganizing shell and PowerShell scripts across the repository. |
 
 ### infrastructure/terraform/
 
@@ -420,7 +521,18 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 | `infrastructure/terraform/README.md` | Overview of Terraform infrastructure with deployment environment comparison. |
 | `infrastructure/terraform/TERRAFORM_MODULES.md` | Documentation of reusable Terraform modules in the project. |
 | `infrastructure/terraform/dev/README.md` | Documentation for local development Terraform configuration. |
+| `infrastructure/terraform/gcp/DEPLOYMENT_STATUS.md` | GCP production deployment status and service health. |
+| `infrastructure/terraform/gcp/DEPLOYMENT_SUCCESS_STATUS.md` | Final success report for GCP Phase 1 deployment. |
+| `infrastructure/terraform/gcp/DOMAIN_VERIFICATION_ISSUE.md` | Documentation of GCP domain verification issues and workarounds. |
+| `infrastructure/terraform/gcp/GCP_PRODUCTION_FIX_STATUS.md` | Status of production fixes for GCP deployment issues. |
+| `infrastructure/terraform/gcp/KEYCLOAK_ADMIN_API_TESTING.md` | Testing documentation for Keycloak Admin API in GCP. |
+| `infrastructure/terraform/gcp/PORTAL_APP_FIX_STATUS.md` | Status of Portal app fixes for GCP production. |
+| `infrastructure/terraform/gcp/PRODUCTION_ISSUES.md` | Comprehensive list of production issues and resolutions. |
+| `infrastructure/terraform/gcp/README.md` | Documentation for GCP production Terraform configuration. |
+| `infrastructure/terraform/gcp/TERRAFORM_PLAN_SUMMARY.md` | Summary of Terraform plan changes for GCP infrastructure. |
+| `infrastructure/terraform/gcp/WEBSITE_FIX_STATUS.md` | Status of website app fixes for GCP production. |
 | `infrastructure/terraform/keycloak/TERRAFORM_KEYCLOAK_DEPLOYMENT.md` | Guide for deploying Keycloak using Terraform provider. |
+| `infrastructure/terraform/modules/compute/README.md` | Documentation for compute module (Cloud Run services). |
 | `infrastructure/terraform/vps/README.md` | Documentation for VPS staging Terraform configuration. |
 | `infrastructure/terraform/vps/SECRETS_MANAGEMENT.md` | Guide for managing secrets in VPS deployments. |
 
@@ -434,6 +546,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 | File | Description |
 |------|-------------|
+| `scripts/gcp/README.md` | Documentation for GCP production management scripts including data loading and testing. |
 | `scripts/README.md` | Overview of utility scripts for development, deployment, and Terraform setup. |
 
 ### tests/
@@ -446,9 +559,64 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 ---
 
-## Recent Changes (2026-01-03 Reorganization)
+## Recent Changes
 
-### Files Moved (Phase 1 - Early January 2026)
+### January 13, 2026 - Documentation Index Update
+**Total Files**: Increased from 150 to 203 markdown files
+
+**New Documentation Added**:
+- Root: `DOCUMENTATION_INDEX.md`, `SCRIPTS_INDEX.md`, `SECURITY_INCIDENT_2026-01-09.md`
+- `.specify/specs/009-flutter-unified/*` - 3 Flutter specification files
+- `docs/deployment/terraform-dev-deployment-complete.md`
+- `docs/keycloak/` - New directory for Keycloak-specific docs
+  - `DEV_PROD_CONFIG_DIFFERENCES.md`
+- `docs/operations/` - 2 new files
+  - `TERRAFORM_PHASE1_RESULTS.md`
+  - `TERRAFORM_USER_PROVISIONING_PLAN.md`
+- `docs/plans/` - New directory for project plans (4 files)
+  - `GCP_PROD_PHASE_1_COST_SENSITIVE.md` (Major update: MongoDB data loading, VPC egress security)
+  - `GCP_PROD_PHASE_2_HIGH_AVAILABILITY.md`
+  - `MCP_SUPPORT_BACKEND_ABSTRACTION.md`
+  - `VPS_IP_REMEDIATION_PLAN.md`
+- `docs/security/` - 3 new security plans
+  - `IAM_PORTAL_ALIGNMENT_PLAN.md`
+  - `IAM_SECURITY_REMEDIATION_PLAN.md`
+  - `TOTP-SECRETS-RESET.md`
+- `docs/setup/` - New directory
+  - `MONGODB_ATLAS_SETUP.md`
+- `docs/testing/` - 4 new testing docs
+  - `PROD_TESTING_METHODOLOGY.md`
+  - `TEST_USER_JOURNEY.md`
+  - `TOTP_FIX_STATUS.md`
+  - `TOTP_SETUP_FIX_PLAN.md`
+- `docs/troubleshooting/` - 6 new troubleshooting guides
+  - `FLUTTER_BUILD_ISSUES.md`
+  - `GCP_PHASE1_DEPLOYMENT_ISSUES.md`
+  - `GCS_SPA_ROUTING_LIMITATION.md`
+  - `PROD_403_REMEDIATION_PLAN.md`
+  - `VPS_DATA_AVAILABILITY_ISSUES.md`
+  - `WINDOWS_GCLOUD_ISSUES.md`
+- `docs/SCRIPTS_REORGANIZATION_PLAN.md`
+- `infrastructure/terraform/gcp/` - 10 new GCP deployment docs
+  - `DEPLOYMENT_STATUS.md`
+  - `DEPLOYMENT_SUCCESS_STATUS.md`
+  - `DOMAIN_VERIFICATION_ISSUE.md`
+  - `GCP_PRODUCTION_FIX_STATUS.md`
+  - `KEYCLOAK_ADMIN_API_TESTING.md`
+  - `PORTAL_APP_FIX_STATUS.md`
+  - `PRODUCTION_ISSUES.md`
+  - `README.md`
+  - `TERRAFORM_PLAN_SUMMARY.md`
+  - `WEBSITE_FIX_STATUS.md`
+- `infrastructure/terraform/modules/compute/README.md`
+- `scripts/gcp/README.md`
+
+**Key Updates**:
+- `docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md` - Added critical MongoDB data loading step, VPC egress security documentation, enhanced smoke tests, and "What We Learned" section
+
+### 2026-01-03 Reorganization
+
+#### Files Moved (Phase 1 - Early January 2026)
 - `KEYCLOAK_SETUP.md` → `docs/deployment/KEYCLOAK_SETUP.md`
 - `PERMISSIONS_AUDIT.md` → `docs/security/audits/2025-12-29-permissions-audit.md`
 - `.specify/V1.4_*.md` → `docs/status/`
@@ -456,7 +624,7 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/keycloak-findings/KEYCLOAK_MANAGEMENT.md` → `docs/operations/`
 - 16 investigation files → `docs/archived/keycloak-debugging-2025-12/`
 
-### Files Moved (Phase 2 - January 3, 2026)
+#### Files Moved (Phase 2 - January 3, 2026)
 - `docs/CI_FIXES_2025-12-30.md` → `docs/troubleshooting/`
 - `docs/KEYCLOAK_23_DEEP_DIVE.md` → `docs/troubleshooting/`
 - `docs/USER_MANAGEMENT.md` → `docs/testing/`
@@ -464,23 +632,27 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 - `docs/deployment/DEV_INFRASTRUCTURE_TESTS.md` → `docs/testing/`
 - `docs/operations/TEARDOWN_REDEPLOY.md` → `docs/deployment/`
 
-### Directories Removed
+#### Directories Removed
 - `docs/keycloak-findings/` (consolidated into troubleshooting)
 
-### Files Deleted
+#### Files Deleted
 - `QUICKSTART.md` (duplicate of `docs/deployment/QUICK_START.md`)
 - `tamshai_auth_scaffold/KEYCLOAK_SETUP.md` (duplicate)
 - `tamshai_auth_scaffold/QUICKSTART.md` (duplicate)
 
-### Current Directory Structure
+#### Current Directory Structure
 - `docs/archived/` - Historical documentation
+- `docs/keycloak/` - Keycloak-specific configuration documentation
+- `docs/operations/` - Operational guides (Keycloak management, identity sync, Terraform)
+- `docs/plans/` - Project plans and deployment strategies
+- `docs/security/` - Security policies, audits, and remediation plans
+- `docs/setup/` - Service setup guides (MongoDB Atlas, etc.)
 - `docs/status/` - Project status reports
 - `docs/tasks/` - Consolidated task documents
 - `docs/testing/` - Test documentation and user management
 - `docs/troubleshooting/` - Debugging guides and CI fixes
 - `docs/deployment/` - Setup guides including teardown/redeploy
-- `docs/operations/` - Keycloak management
 
 ---
 
-*This index was last updated 2026-01-04 (Added IDENTITY_SYNC.md and E2E_USER_TESTS.md).*
+*This index was last updated January 13, 2026 (53 new files added, enhanced file descriptions).*
