@@ -35,6 +35,7 @@ INFRA_APIS=(
 SERVICE_APIS=(
   "run.googleapis.com"                  # Cloud Run API
   "sqladmin.googleapis.com"             # Cloud SQL Admin API
+  "sql-component.googleapis.com"        # Cloud SQL Component (for --add-cloudsql-instances)
   "secretmanager.googleapis.com"        # Secret Manager API
   "artifactregistry.googleapis.com"     # Artifact Registry API
   "storage-api.googleapis.com"          # Cloud Storage API
