@@ -109,19 +109,17 @@ jobs:
             --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
             --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://auth.tamshai.com/auth,KEYCLOAK_ISSUER=https://auth.tamshai.com/auth/realms/tamshai-corp,JWKS_URI=https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-fn44nd7wba-uc.a.run.app,MCP_FINANCE_URL=https://mcp-finance-fn44nd7wba-uc.a.run.app,MCP_SALES_URL=https://mcp-sales-fn44nd7wba-uc.a.run.app,MCP_SUPPORT_URL=https://mcp-support-fn44nd7wba-uc.a.run.app,TOKEN_REVOCATION_FAIL_OPEN=true"
 
-  deploy-mcp-suite:
+  deploy-mcp-postgres:
     needs: detect-changes
     if: |
       needs.detect-changes.outputs.mcp-suite == 'true' ||
       github.event.inputs.service == 'all' ||
       github.event.inputs.service == 'hr' ||
-      github.event.inputs.service == 'finance' ||
-      github.event.inputs.service == 'sales' ||
-      github.event.inputs.service == 'support'
+      github.event.inputs.service == 'finance'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [mcp-hr, mcp-finance, mcp-sales, mcp-support]
+        service: [mcp-hr, mcp-finance]
         include:
           - service: mcp-hr
             port: 3101
@@ -129,12 +127,6 @@ jobs:
           - service: mcp-finance
             port: 3102
             db_name: tamshai_finance
-          - service: mcp-sales
-            port: 3103
-            db_name: tamshai_sales
-          - service: mcp-support
-            port: 3104
-            db_name: tamshai_support
     steps:
       - uses: actions/checkout@v4
 
@@ -173,8 +165,68 @@ jobs:
             --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres \
             --vpc-connector=tamshai-prod-connector \
             --vpc-egress=private-ranges-only \
-            --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest,MONGODB_URI=tamshai-prod-mongodb-uri:latest \
+            --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest \
             --set-env-vars="NODE_ENV=production,POSTGRES_HOST=/cloudsql/${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres,POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
+
+  deploy-mcp-mongodb:
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.mcp-suite == 'true' ||
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'sales' ||
+      github.event.inputs.service == 'support'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [mcp-sales, mcp-support]
+        include:
+          - service: mcp-sales
+            port: 3103
+            db_name: tamshai_sales
+          - service: mcp-support
+            port: 3104
+            db_name: tamshai_support
+            backend: mongodb
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push
+        run: |
+          docker build -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+                       -t ${{ env.AR_REPO }}/${{ matrix.service }}:latest \
+                       services/${{ matrix.service }}
+          docker push ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/${{ matrix.service }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          # MongoDB services need all-traffic egress for MongoDB Atlas
+          gcloud run deploy ${{ matrix.service }} \
+            --image=${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --service-account=tamshai-prod-mcp-servers@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --no-allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=2 \
+            --memory=512Mi \
+            --cpu=1 \
+            --timeout=300 \
+            --vpc-connector=tamshai-prod-connector \
+            --vpc-egress=all-traffic \
+            --set-secrets=MONGODB_URI=tamshai-prod-mongodb-uri:latest \
+            --set-env-vars="NODE_ENV=production,MONGODB_DB=${{ matrix.db_name }}${{ matrix.backend && format(',SUPPORT_DATA_BACKEND={0}', matrix.backend) || '' }}"
 
   deploy-keycloak:
     needs: detect-changes
@@ -380,7 +432,7 @@ jobs:
             --port=80
 
   notify:
-    needs: [deploy-gateway, deploy-mcp-suite, deploy-keycloak, deploy-static-website, deploy-web-portal]
+    needs: [deploy-gateway, deploy-mcp-postgres, deploy-mcp-mongodb, deploy-keycloak, deploy-static-website, deploy-web-portal]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -390,7 +442,8 @@ jobs:
           echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Gateway | ${{ needs.deploy-gateway.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| MCP Suite | ${{ needs.deploy-mcp-suite.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP PostgreSQL (HR, Finance) | ${{ needs.deploy-mcp-postgres.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP MongoDB (Sales, Support) | ${{ needs.deploy-mcp-mongodb.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Keycloak | ${{ needs.deploy-keycloak.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Static Website | ${{ needs.deploy-static-website.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Web Portal | ${{ needs.deploy-web-portal.result }} |" >> $GITHUB_STEP_SUMMARY
