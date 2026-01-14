@@ -399,10 +399,11 @@ test.describe('Employee Login Journey', () => {
     // If credentials are invalid, the test will fail at the next assertion with a clear error
     await page.waitForTimeout(1000);
 
-    // Try to load previously saved TOTP secret from file
-    // This enables test resilience: if TOTP was configured in a previous run,
-    // we use that secret instead of the default TEST_TOTP_SECRET
-    let effectiveTotpSecret = loadTotpSecret(TEST_USER.username, ENV) || TEST_USER.totpSecret;
+    // TOTP secret priority:
+    // 1) Environment variable (TEST_TOTP_SECRET) - always takes precedence when set
+    // 2) Cached file from previous run - enables test resilience
+    // 3) Auto-capture during TOTP setup (handled by handleTotpSetupIfRequired below)
+    let effectiveTotpSecret = TEST_USER.totpSecret || loadTotpSecret(TEST_USER.username, ENV);
     console.log(`Using TOTP secret: ${effectiveTotpSecret.substring(0, 4)}****`);
 
     // Check if TOTP setup is required (first time login or forced reconfiguration)

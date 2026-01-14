@@ -338,15 +338,16 @@ jobs:
           echo "$PWD/keycloak-25.0.0/bin" >> $GITHUB_PATH
           echo "Keycloak CLI tools ready"
 
-      - name: Configure TOTP for test-user.journey
+      - name: Configure credentials for test-user.journey
         env:
           TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
         run: |
-          # Configure TOTP credential for test-user.journey via Admin API
+          # Configure password and TOTP credentials for test-user.journey via Admin API
           # This is necessary because Keycloak's --import-realm doesn't update
-          # OTP credentials for existing users (only during initial realm creation)
+          # credentials for existing users (only during initial realm creation)
 
-          echo "Configuring TOTP for test-user.journey..."
+          echo "Configuring credentials for test-user.journey..."
 
           # Fetch admin password from GCP Secret Manager
           echo "Fetching admin password from GCP Secret Manager..."
@@ -390,6 +391,24 @@ jobs:
             exit 1
           fi
           echo "Found user ID: $USER_ID"
+
+          # Reset password for test-user.journey
+          echo "Resetting password for test-user.journey..."
+          if [ -z "$TEST_PASSWORD" ]; then
+            echo "ERROR: TEST_PASSWORD secret not set"
+            exit 1
+          fi
+          RESET_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/reset-password" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"type\":\"password\",\"value\":\"${TEST_PASSWORD}\",\"temporary\":false}")
+          HTTP_CODE=$(echo "$RESET_RESPONSE" | tail -n1)
+          if [ "$HTTP_CODE" != "204" ]; then
+            echo "ERROR: Failed to reset password (HTTP $HTTP_CODE)"
+            echo "Response: $(echo "$RESET_RESPONSE" | head -n-1)"
+            exit 1
+          fi
+          echo "Password reset successfully"
 
           # Remove existing OTP credentials
           EXISTING_CREDS=$(curl -sf "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/credentials" \
