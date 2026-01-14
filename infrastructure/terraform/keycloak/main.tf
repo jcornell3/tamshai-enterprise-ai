@@ -134,6 +134,18 @@ resource "keycloak_role" "executive" {
   ]
 }
 
+# Employee Role (base access for self-access via RLS)
+# All employees get this role to access MCP servers
+# RLS policies filter data to only show their own records
+# Added: 2026-01-13 for IAM Self-Access feature
+# Rollback: Remove this resource and keycloak_role.employee.id from all user_roles
+resource "keycloak_role" "employee" {
+  realm_id    = keycloak_realm.tamshai_corp.id
+  client_id   = keycloak_openid_client.mcp_gateway.id
+  name        = "employee"
+  description = "Base employee role - allows self-access to all MCP servers via RLS"
+}
+
 # ============================================================
 # MCP Gateway Client
 # ============================================================
@@ -366,6 +378,7 @@ resource "keycloak_user_roles" "alice_chen_roles" {
   user_id  = keycloak_user.alice_chen.id
 
   role_ids = [
+    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
     keycloak_role.hr_read.id,
     keycloak_role.hr_write.id,
   ]
@@ -396,6 +409,7 @@ resource "keycloak_user_roles" "bob_martinez_roles" {
   user_id  = keycloak_user.bob_martinez.id
 
   role_ids = [
+    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
     keycloak_role.finance_read.id,
     keycloak_role.finance_write.id,
   ]
@@ -426,6 +440,7 @@ resource "keycloak_user_roles" "carol_johnson_roles" {
   user_id  = keycloak_user.carol_johnson.id
 
   role_ids = [
+    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
     keycloak_role.sales_read.id,
     keycloak_role.sales_write.id,
   ]
@@ -456,6 +471,7 @@ resource "keycloak_user_roles" "dan_williams_roles" {
   user_id  = keycloak_user.dan_williams.id
 
   role_ids = [
+    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
     keycloak_role.support_read.id,
     keycloak_role.support_write.id,
   ]
@@ -486,11 +502,12 @@ resource "keycloak_user_roles" "eve_thompson_roles" {
   user_id  = keycloak_user.eve_thompson.id
 
   role_ids = [
+    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
     keycloak_role.executive.id,
   ]
 }
 
-# Frank Davis - Intern (no roles)
+# Frank Davis - IT Intern
 resource "keycloak_user" "frank_davis" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "frank.davis"
@@ -510,7 +527,18 @@ resource "keycloak_user" "frank_davis" {
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
-# Nina Patel - Engineering Manager (no roles yet)
+# Added 2026-01-13: Employee role for self-access via RLS
+# Interns can view their own data in all MCP servers
+resource "keycloak_user_roles" "frank_davis_roles" {
+  realm_id = keycloak_realm.tamshai_corp.id
+  user_id  = keycloak_user.frank_davis.id
+
+  role_ids = [
+    keycloak_role.employee.id,
+  ]
+}
+
+# Nina Patel - Engineering Manager
 resource "keycloak_user" "nina_patel" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "nina.patel"
@@ -530,7 +558,18 @@ resource "keycloak_user" "nina_patel" {
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
-# Marcus Johnson - Software Engineer (no roles yet)
+# Added 2026-01-13: Employee role for self-access via RLS
+# Managers can view their own data in all MCP servers
+resource "keycloak_user_roles" "nina_patel_roles" {
+  realm_id = keycloak_realm.tamshai_corp.id
+  user_id  = keycloak_user.nina_patel.id
+
+  role_ids = [
+    keycloak_role.employee.id,
+  ]
+}
+
+# Marcus Johnson - Software Engineer
 resource "keycloak_user" "marcus_johnson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "marcus.johnson"
@@ -548,6 +587,17 @@ resource "keycloak_user" "marcus_johnson" {
 
   # Require TOTP in all environments except CI (where automated testing needs direct login)
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
+}
+
+# Added 2026-01-13: Employee role for self-access via RLS
+# Engineers can view their own data in all MCP servers
+resource "keycloak_user_roles" "marcus_johnson_roles" {
+  realm_id = keycloak_realm.tamshai_corp.id
+  user_id  = keycloak_user.marcus_johnson.id
+
+  role_ids = [
+    keycloak_role.employee.id,
+  ]
 }
 
 # Test User Journey - E2E Testing Account
@@ -570,4 +620,15 @@ resource "keycloak_user" "test_user_journey" {
 
   # For E2E testing: CI mode skips TOTP, other environments require TOTP setup
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
+}
+
+# Added 2026-01-13: Employee role for self-access via RLS
+# Test user can view their own data during E2E tests
+resource "keycloak_user_roles" "test_user_journey_roles" {
+  realm_id = keycloak_realm.tamshai_corp.id
+  user_id  = keycloak_user.test_user_journey.id
+
+  role_ids = [
+    keycloak_role.employee.id,
+  ]
 }

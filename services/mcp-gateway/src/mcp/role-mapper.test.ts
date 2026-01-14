@@ -54,7 +54,7 @@ describe('Role Mapper Module', () => {
       const servers = createDefaultMCPServers(urls);
       const hrServer = servers.find(s => s.name === 'hr');
 
-      expect(hrServer?.requiredRoles).toEqual(['hr-read', 'hr-write', 'executive']);
+      expect(hrServer?.requiredRoles).toEqual(['employee', 'hr-read', 'hr-write', 'executive']);
       expect(hrServer?.description).toContain('HR data');
     });
 
@@ -69,7 +69,7 @@ describe('Role Mapper Module', () => {
       const servers = createDefaultMCPServers(urls);
       const financeServer = servers.find(s => s.name === 'finance');
 
-      expect(financeServer?.requiredRoles).toEqual(['finance-read', 'finance-write', 'executive']);
+      expect(financeServer?.requiredRoles).toEqual(['employee', 'finance-read', 'finance-write', 'executive']);
       expect(financeServer?.description).toContain('Financial data');
     });
 
@@ -84,7 +84,7 @@ describe('Role Mapper Module', () => {
       const servers = createDefaultMCPServers(urls);
       const salesServer = servers.find(s => s.name === 'sales');
 
-      expect(salesServer?.requiredRoles).toEqual(['sales-read', 'sales-write', 'executive']);
+      expect(salesServer?.requiredRoles).toEqual(['employee', 'sales-read', 'sales-write', 'executive']);
       expect(salesServer?.description).toContain('CRM data');
     });
 
@@ -99,7 +99,7 @@ describe('Role Mapper Module', () => {
       const servers = createDefaultMCPServers(urls);
       const supportServer = servers.find(s => s.name === 'support');
 
-      expect(supportServer?.requiredRoles).toEqual(['support-read', 'support-write', 'executive']);
+      expect(supportServer?.requiredRoles).toEqual(['employee', 'support-read', 'support-write', 'executive']);
       expect(supportServer?.description).toContain('Support data');
     });
   });
@@ -109,19 +109,19 @@ describe('Role Mapper Module', () => {
       {
         name: 'hr',
         url: 'http://localhost:3001',
-        requiredRoles: ['hr-read', 'hr-write', 'executive'],
+        requiredRoles: ['employee', 'hr-read', 'hr-write', 'executive'],
         description: 'HR server',
       },
       {
         name: 'finance',
         url: 'http://localhost:3002',
-        requiredRoles: ['finance-read', 'finance-write', 'executive'],
+        requiredRoles: ['employee', 'finance-read', 'finance-write', 'executive'],
         description: 'Finance server',
       },
       {
         name: 'sales',
         url: 'http://localhost:3003',
-        requiredRoles: ['sales-read', 'sales-write', 'executive'],
+        requiredRoles: ['employee', 'sales-read', 'sales-write', 'executive'],
         description: 'Sales server',
       },
     ];
@@ -187,19 +187,19 @@ describe('Role Mapper Module', () => {
       {
         name: 'hr',
         url: 'http://localhost:3001',
-        requiredRoles: ['hr-read', 'hr-write', 'executive'],
+        requiredRoles: ['employee', 'hr-read', 'hr-write', 'executive'],
         description: 'HR server',
       },
       {
         name: 'finance',
         url: 'http://localhost:3002',
-        requiredRoles: ['finance-read', 'finance-write', 'executive'],
+        requiredRoles: ['employee', 'finance-read', 'finance-write', 'executive'],
         description: 'Finance server',
       },
       {
         name: 'sales',
         url: 'http://localhost:3003',
-        requiredRoles: ['sales-read', 'sales-write', 'executive'],
+        requiredRoles: ['employee', 'sales-read', 'sales-write', 'executive'],
         description: 'Sales server',
       },
     ];
@@ -276,11 +276,31 @@ describe('Role Mapper Module', () => {
       expect(accessible.map(s => s.name)).toEqual(['hr', 'finance', 'sales', 'support']);
     });
 
-    it('should grant intern access to no servers', () => {
+    it('should grant intern access to no servers (no employee role)', () => {
       const internRoles = ['intern'];
       const accessible = getAccessibleMCPServers(internRoles, servers);
 
       expect(accessible).toHaveLength(0);
+    });
+
+    it('should grant employee role access to all servers (self-access via RLS)', () => {
+      const employeeRoles = ['employee'];
+      const accessible = getAccessibleMCPServers(employeeRoles, servers);
+
+      expect(accessible).toHaveLength(4);
+      expect(accessible.map(s => s.name)).toEqual(['hr', 'finance', 'sales', 'support']);
+    });
+
+    it('should grant engineer (employee only) access to all servers for self-access', () => {
+      // Marcus Johnson scenario - engineer with only employee role
+      const engineerRoles = ['employee'];
+      const accessible = getAccessibleMCPServers(engineerRoles, servers);
+
+      expect(accessible).toHaveLength(4);
+      expect(accessible.map(s => s.name)).toContain('hr');
+      expect(accessible.map(s => s.name)).toContain('finance');
+      expect(accessible.map(s => s.name)).toContain('sales');
+      expect(accessible.map(s => s.name)).toContain('support');
     });
 
     it('should grant read-only user appropriate access', () => {

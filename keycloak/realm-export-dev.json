@@ -42,6 +42,10 @@
   "roles": {
     "realm": [
       {
+        "name": "employee",
+        "description": "Base employee role - allows self-access to all MCP servers via RLS"
+      },
+      {
         "name": "hr-read",
         "description": "Read access to HR data (employee names, departments, org chart)"
       },
@@ -93,6 +97,13 @@
     ]
   },
   "groups": [
+    {
+      "name": "All-Employees",
+      "path": "/All-Employees",
+      "realmRoles": [
+        "employee"
+      ]
+    },
     {
       "name": "HR-Department",
       "path": "/HR-Department",

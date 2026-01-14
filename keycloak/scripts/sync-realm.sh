@@ -597,6 +597,52 @@ sync_sample_app_clients() {
 }
 
 # =============================================================================
+# All-Employees Group (Self-Access via RLS)
+# =============================================================================
+
+# Ensure the All-Employees group exists with the employee role
+# This group grants access to all MCP servers, with data filtering via RLS
+sync_all_employees_group() {
+    log_info "Syncing All-Employees group..."
+
+    # First, ensure the 'employee' realm role exists
+    local role_exists=$($KCADM get roles -r "$REALM" 2>/dev/null | grep -o '"name" *: *"employee"')
+    if [ -z "$role_exists" ]; then
+        log_info "  Creating 'employee' realm role..."
+        $KCADM create roles -r "$REALM" \
+            -s name=employee \
+            -s 'description=Base employee role - allows self-access to all MCP servers via RLS' 2>/dev/null || {
+            log_info "    Role may already exist"
+        }
+    else
+        log_info "  'employee' role already exists"
+    fi
+
+    # Check if All-Employees group exists
+    local group_id=$($KCADM get groups -r "$REALM" -q "name=All-Employees" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+    if [ -z "$group_id" ]; then
+        log_info "  Creating All-Employees group..."
+        $KCADM create groups -r "$REALM" -s name=All-Employees 2>/dev/null
+        group_id=$($KCADM get groups -r "$REALM" -q "name=All-Employees" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+    else
+        log_info "  All-Employees group already exists"
+    fi
+
+    # Assign employee role to the group
+    if [ -n "$group_id" ]; then
+        log_info "  Assigning 'employee' realm role to All-Employees group..."
+        $KCADM add-roles -r "$REALM" \
+            --gid "$group_id" \
+            --rolename employee 2>/dev/null || {
+            log_info "    Role may already be assigned"
+        }
+    fi
+
+    log_info "  All-Employees group sync complete"
+}
+
+# =============================================================================
 # User Group Assignment
 # =============================================================================
 
@@ -615,16 +661,17 @@ assign_user_groups() {
     # Define user-to-group mapping based on original realm-export-dev.json
     # Format: username:group1,group2 (group names without leading /)
     # Source: git show dc8337a -- keycloak/realm-export-dev.json
+    # Note: All-Employees grants 'employee' role for self-access via RLS
     local -a user_groups=(
-        "eve.thompson:C-Suite"
-        "alice.chen:HR-Department,Managers"
-        "bob.martinez:Finance-Team,Managers"
-        "carol.johnson:Sales-Managers"
-        "dan.williams:Support-Team,Managers"
-        "frank.davis:IT-Team"
-        "ryan.garcia:Sales-Managers"
-        "nina.patel:Engineering-Managers"
-        "marcus.johnson:Engineering-Team"
+        "eve.thompson:All-Employees,C-Suite"
+        "alice.chen:All-Employees,HR-Department,Managers"
+        "bob.martinez:All-Employees,Finance-Team,Managers"
+        "carol.johnson:All-Employees,Sales-Managers"
+        "dan.williams:All-Employees,Support-Team,Managers"
+        "frank.davis:All-Employees,IT-Team"
+        "ryan.garcia:All-Employees,Sales-Managers"
+        "nina.patel:All-Employees,Engineering-Managers"
+        "marcus.johnson:All-Employees,Engineering-Team"
     )
 
     for mapping in "${user_groups[@]}"; do
@@ -780,6 +827,16 @@ provision_test_user() {
                 # or use a different authentication method
                 log_info "  TOTP configuration skipped (not supported via Admin API)"
                 log_info "  Note: TOTP must be configured manually or via realm import"
+
+                # Assign test-user.journey to All-Employees group for self-access
+                local all_emp_id=$($KCADM get groups -r "$REALM" -q "name=All-Employees" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+                if [ -n "$all_emp_id" ]; then
+                    if $KCADM update "users/$user_id/groups/$all_emp_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+                        log_info "  Added test-user.journey to All-Employees group"
+                    else
+                        log_info "  test-user.journey: All-Employees (already member or error)"
+                    fi
+                fi
             else
                 log_warn "  Could not retrieve user ID after creation"
             fi
@@ -1063,6 +1120,9 @@ main() {
 
     # Provision test user (for E2E testing)
     provision_test_user
+
+    # Sync All-Employees group (for self-access via RLS)
+    sync_all_employees_group
 
     # Assign users to groups (for dev/stage - restores role inheritance)
     assign_user_groups
