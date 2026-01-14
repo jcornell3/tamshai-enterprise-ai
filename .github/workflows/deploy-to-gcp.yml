@@ -422,25 +422,12 @@ jobs:
           # If the user has OTP but no secretData, we need to reimport
           OTP_COUNT=$(echo "$EXISTING_CREDS" | jq '[.[] | select(.type=="otp")] | length')
 
-          if [ "$OTP_COUNT" -gt 0 ]; then
-            echo "User has $OTP_COUNT OTP credential(s), deleting for fresh import..."
-            # Delete the realm to force reimport with correct TOTP
-            HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE \
-              "https://auth.tamshai.com/auth/admin/realms/tamshai-corp" \
-              -H "Authorization: Bearer $TOKEN" || echo "000")
-
-            if [ "$HTTP_CODE" = "204" ]; then
-              echo "Realm deleted successfully."
-              echo "Realm will be reimported when Keycloak restarts."
-              echo "Note: Run deploy-to-gcp again to trigger reimport, or wait for next deployment."
-            elif [ "$HTTP_CODE" = "404" ]; then
-              echo "Realm does not exist - will be imported on next Keycloak start."
-            else
-              echo "Warning: Could not delete realm (HTTP $HTTP_CODE). TOTP may not work correctly."
-            fi
-          else
-            echo "No OTP credentials found - realm may need initial import."
-          fi
+          # We no longer delete the realm here - it causes issues because
+          # Keycloak only imports realms on first container startup.
+          # Instead, the realm-export.json should always have correct TOTP config
+          # and deployment always creates a new container revision with the latest realm file.
+          echo "TOTP configuration complete."
+          echo "OTP credentials found: $OTP_COUNT"
 
       - name: Wait for Realm Reimport
         run: |
