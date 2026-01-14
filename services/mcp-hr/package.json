@@ -43,6 +43,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "overrides": {
+    "hono": "^4.11.4"
+  },
   "author": "Tamshai Corp",
   "license": "UNLICENSED",
   "private": true
