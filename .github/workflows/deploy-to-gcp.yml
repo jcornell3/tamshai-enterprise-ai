@@ -165,7 +165,7 @@ jobs:
             --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres \
             --vpc-connector=tamshai-prod-connector \
             --vpc-egress=private-ranges-only \
-            --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest \
+            --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest,MONGODB_URI=tamshai-prod-mongodb-uri:latest \
             --set-env-vars="NODE_ENV=production,POSTGRES_HOST=/cloudsql/${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres,POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
 
   deploy-mcp-mongodb:
