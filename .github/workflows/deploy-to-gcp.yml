@@ -249,43 +249,6 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
-      - name: Delete Realm for Fresh Import
-        env:
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
-        run: |
-          # Delete the existing realm so Keycloak imports fresh with new TOTP credentials
-          # This is required because Keycloak's --import-realm doesn't update OTP credentials
-          # for existing users, only during initial realm creation.
-          # See docs/testing/TEST_USER_JOURNEY.md for details.
-
-          echo "Attempting to delete tamshai-corp realm for fresh import..."
-
-          # Get admin token
-          TOKEN=$(curl -sf -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "username=admin" \
-            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
-            -d "grant_type=password" \
-            -d "client_id=admin-cli" | jq -r '.access_token' || echo "")
-
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-            echo "Warning: Could not get admin token (Keycloak may be unavailable). Continuing..."
-            exit 0
-          fi
-
-          # Delete the realm
-          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE \
-            "https://auth.tamshai.com/auth/admin/realms/tamshai-corp" \
-            -H "Authorization: Bearer $TOKEN" || echo "000")
-
-          if [ "$HTTP_CODE" = "204" ]; then
-            echo "Realm tamshai-corp deleted successfully"
-          elif [ "$HTTP_CODE" = "404" ]; then
-            echo "Realm tamshai-corp does not exist (first deployment or already deleted)"
-          else
-            echo "Warning: Unexpected response code $HTTP_CODE when deleting realm. Continuing..."
-          fi
-
       - name: Inject TOTP Secret into Realm Export
         env:
           TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
@@ -344,8 +307,8 @@ jobs:
         run: |
           echo "Waiting for Keycloak to be fully ready..."
           for i in {1..6}; do
-            # Check realm endpoint instead of /health/ready which doesn't exist
-            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+            # Check master realm (always exists) - tamshai-corp may be deleted and reimported
+            if curl -sf "https://auth.tamshai.com/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               break
             fi
@@ -354,7 +317,7 @@ jobs:
           done
 
           # Final check
-          if ! curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+          if ! curl -sf "https://auth.tamshai.com/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
             echo "ERROR: Keycloak not ready after 60 seconds"
             exit 1
           fi
@@ -374,6 +337,100 @@ jobs:
           echo "KEYCLOAK_HOME=$PWD/keycloak-25.0.0" >> $GITHUB_ENV
           echo "$PWD/keycloak-25.0.0/bin" >> $GITHUB_PATH
           echo "Keycloak CLI tools ready"
+
+      - name: Configure TOTP for test-user.journey
+        env:
+          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
+        run: |
+          # Configure TOTP credential for test-user.journey via Admin API
+          # This is necessary because Keycloak's --import-realm doesn't update
+          # OTP credentials for existing users (only during initial realm creation)
+
+          echo "Configuring TOTP for test-user.journey..."
+
+          # Fetch admin password from GCP Secret Manager
+          KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
+
+          # Get admin token
+          TOKEN=$(curl -sf -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" | jq -r '.access_token')
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "ERROR: Could not get admin token"
+            exit 1
+          fi
+
+          # Get test-user.journey user ID
+          USER_ID=$(curl -sf "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users?username=test-user.journey" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+
+          if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
+            echo "ERROR: Could not find test-user.journey user"
+            exit 1
+          fi
+          echo "Found user ID: $USER_ID"
+
+          # Remove existing OTP credentials
+          EXISTING_CREDS=$(curl -sf "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/credentials" \
+            -H "Authorization: Bearer $TOKEN")
+          echo "Existing credentials: $(echo $EXISTING_CREDS | jq -r '[.[].type]')"
+
+          # Delete OTP credentials
+          for CRED_ID in $(echo $EXISTING_CREDS | jq -r '.[] | select(.type=="otp") | .id'); do
+            echo "Deleting OTP credential: $CRED_ID"
+            curl -sf -X DELETE "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/credentials/${CRED_ID}" \
+              -H "Authorization: Bearer $TOKEN"
+          done
+
+          # Create new OTP credential with raw secret
+          # The secret data must contain the raw value, not BASE32
+          OTP_CREDENTIAL=$(cat <<EOFCRED
+          {
+            "type": "otp",
+            "secretData": "{\"value\":\"${TEST_USER_TOTP_SECRET_RAW}\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}",
+            "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
+          }
+          EOFCRED
+          )
+
+          # Note: Keycloak Admin API doesn't support creating OTP credentials directly
+          # We need to use a different approach - configure via Keycloak SPI or delete realm
+          echo "Note: Direct OTP credential creation via Admin API is not supported"
+          echo "Attempting alternative approach: Delete and reimport realm..."
+
+          # Delete the realm to force reimport
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE \
+            "https://auth.tamshai.com/auth/admin/realms/tamshai-corp" \
+            -H "Authorization: Bearer $TOKEN" || echo "000")
+
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "Realm deleted. Restarting Keycloak to trigger reimport..."
+            # Force new revision deployment to reimport realm
+            gcloud run services update keycloak \
+              --region=${{ env.GCP_REGION }} \
+              --update-env-vars="REALM_REIMPORT_TS=$(date +%s)"
+            # Wait for new revision
+            sleep 30
+            echo "Keycloak restarted with fresh realm import"
+          else
+            echo "Warning: Could not delete realm (HTTP $HTTP_CODE). TOTP may not work correctly."
+          fi
+
+      - name: Wait for Realm Reimport
+        run: |
+          echo "Waiting for Keycloak to reimport realm..."
+          for i in {1..12}; do
+            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+              echo "Realm tamshai-corp is available!"
+              break
+            fi
+            echo "Attempt $i/12: Realm not ready yet, waiting 10s..."
+            sleep 10
+          done
 
       - name: Sync Realm Configuration
         env:
