@@ -26,25 +26,29 @@ export function createDefaultMCPServers(mcpServerUrls: {
     {
       name: 'hr',
       url: mcpServerUrls.hr,
-      requiredRoles: ['hr-read', 'hr-write', 'executive'],
+      // 'employee' grants self-access via RLS, department roles grant full access
+      requiredRoles: ['employee', 'hr-read', 'hr-write', 'executive'],
       description: 'HR data including employees, departments, org structure',
     },
     {
       name: 'finance',
       url: mcpServerUrls.finance,
-      requiredRoles: ['finance-read', 'finance-write', 'executive'],
+      // 'employee' grants self-access via RLS, department roles grant full access
+      requiredRoles: ['employee', 'finance-read', 'finance-write', 'executive'],
       description: 'Financial data including budgets, reports, invoices',
     },
     {
       name: 'sales',
       url: mcpServerUrls.sales,
-      requiredRoles: ['sales-read', 'sales-write', 'executive'],
+      // 'employee' grants self-access via RLS, department roles grant full access
+      requiredRoles: ['employee', 'sales-read', 'sales-write', 'executive'],
       description: 'CRM data including customers, deals, pipeline',
     },
     {
       name: 'support',
       url: mcpServerUrls.support,
-      requiredRoles: ['support-read', 'support-write', 'executive'],
+      // 'employee' grants self-access via RLS, department roles grant full access
+      requiredRoles: ['employee', 'support-read', 'support-write', 'executive'],
       description: 'Support data including tickets, knowledge base',
     },
   ];
