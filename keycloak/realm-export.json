@@ -89,6 +89,10 @@
             "support-read"
           ]
         }
+      },
+      {
+        "name": "employee",
+        "description": "Base employee role - allows self-access to all MCP servers via RLS"
       }
     ]
   },
@@ -162,6 +166,13 @@
       "realmRoles": [
         "executive",
         "manager"
+      ]
+    },
+    {
+      "name": "All-Employees",
+      "path": "/All-Employees",
+      "realmRoles": [
+        "employee"
       ]
     }
   ],
