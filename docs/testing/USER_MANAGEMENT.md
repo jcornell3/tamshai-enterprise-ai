@@ -1,8 +1,25 @@
 # User Management Guide - Tamshai Enterprise AI
 
-## Existing Test Users
+**Last Updated**: January 14, 2026
 
-All test users have the same credentials for development purposes:
+## E2E Test User (All Environments)
+
+A dedicated test account exists for E2E testing across all environments:
+
+| Field | Value |
+|-------|-------|
+| **Username** | `test-user.journey` |
+| **Password** | `***REDACTED_PASSWORD***` |
+| **TOTP Secret (BASE32)** | `***REDACTED_TOTP_SECRET***` |
+| **Roles** | None (authentication testing only) |
+
+This account has no data access privileges and is safe for automated testing. See [TEST_USER_JOURNEY.md](./TEST_USER_JOURNEY.md) for complete documentation.
+
+---
+
+## Development Test Users
+
+All dev test users have the same credentials for development purposes:
 
 | Username | Password | TOTP Secret | Roles | Access |
 |----------|----------|-------------|-------|--------|
@@ -409,6 +426,6 @@ All have password `[REDACTED-DEV-PASSWORD]` and TOTP secret `[REDACTED-DEV-TOTP]
 
 ---
 
-**Last Updated**: December 11, 2025
-**Keycloak Version**: 24.0
+**Last Updated**: January 14, 2026
+**Keycloak Version**: 25.0
 **Realm**: tamshai-corp

@@ -1,6 +1,16 @@
 # TOTP Setup Fix Plan
 
-## Problem Statement
+> **⚠️ SUPERSEDED**: This plan was created on January 10, 2026 but the actual resolution took a different approach. See [TOTP_FIX_STATUS.md](./TOTP_FIX_STATUS.md) for the final solution.
+>
+> **Key Differences from Original Plan**:
+> 1. Algorithm change (SHA256 → SHA1) was NOT needed - Keycloak uses SHA1 by default
+> 2. Password reset was NOT needed - E2E test framework handles TOTP setup automatically
+> 3. The actual issue was `secretData` JSON format (only `value` field allowed)
+> 4. The actual issue was Keycloak `--import-realm` behavior (only imports on first startup)
+
+---
+
+## Original Problem Statement (January 10, 2026)
 
 Three critical issues preventing E2E tests from working:
 
@@ -370,5 +380,39 @@ python set-totp-required.py <admin-password>
 
 ---
 
+## Actual Resolution (January 14, 2026)
+
+The actual fix was simpler than originally planned:
+
+### Root Cause
+
+The `secretData` JSON field in realm-export.json had extra fields that Keycloak's `OTPSecretData` class doesn't recognize:
+
+```json
+// WRONG - causes NullPointerException
+"secretData": "{\"value\":\"...\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
+
+// CORRECT - only value field allowed
+"secretData": "{\"value\":\"...\"}"
+```
+
+### Solution
+
+1. Fixed `secretData` format in `keycloak/realm-export.json`
+2. Added GitHub Secrets for TOTP values (`TEST_USER_TOTP_SECRET_RAW`, `TEST_USER_TOTP_SECRET`)
+3. Updated E2E test framework to auto-capture TOTP secrets from setup page
+
+### Why Original Plan Was Wrong
+
+1. **Algorithm**: Keycloak already uses SHA1 (HmacSHA1) by default - no change needed
+2. **Password**: E2E framework handles credentials correctly
+3. **Secret Extraction**: E2E framework now auto-captures secrets from setup page
+
+See [TOTP_FIX_STATUS.md](./TOTP_FIX_STATUS.md) for complete details.
+
+---
+
 *Created: 2026-01-10*
+*Updated: 2026-01-14*
+*Status: ⚠️ SUPERSEDED - See TOTP_FIX_STATUS.md*
 *Author: Tamshai-QA*
