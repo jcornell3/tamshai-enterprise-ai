@@ -729,6 +729,7 @@ assign_critical_prod_users() {
     # These users are explicitly approved for automated group assignment
     local -a critical_users=(
         "eve.thompson:C-Suite"
+        "test-user.journey:All-Employees"
     )
 
     for mapping in "${critical_users[@]}"; do
