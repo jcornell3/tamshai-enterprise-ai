@@ -9,8 +9,8 @@ A dedicated test account exists for E2E testing across all environments:
 | Field | Value |
 |-------|-------|
 | **Username** | `test-user.journey` |
-| **Password** | `***REDACTED_PASSWORD***` |
-| **TOTP Secret (BASE32)** | `***REDACTED_TOTP_SECRET***` |
+| **Password** | `[STORED IN GITHUB SECRETS]` (see `TEST_PASSWORD`) |
+| **TOTP Secret (BASE32)** | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET`) |
 | **Roles** | None (authentication testing only) |
 
 This account has no data access privileges and is safe for automated testing. See [TEST_USER_JOURNEY.md](./TEST_USER_JOURNEY.md) for complete documentation.

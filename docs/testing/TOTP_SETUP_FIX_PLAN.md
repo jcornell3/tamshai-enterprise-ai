@@ -100,12 +100,12 @@ reset_test_user_password() {
         -H "Content-Type: application/json" \
         -d '{
             "type": "password",
-            "value": "***REDACTED_PASSWORD***",
+            "value": "'"$TEST_PASSWORD"'",
             "temporary": false
         }')
 
     if [[ "$HTTP_CODE" == "204" ]]; then
-        log_success "Password reset to: ***REDACTED_PASSWORD***"
+        log_success "Password reset successfully"
     else
         log_error "Failed to reset password (HTTP $HTTP_CODE)"
         exit 1
@@ -127,7 +127,7 @@ main() {
 **Why This Works**:
 - Realm import creates user with invalid hashed password
 - Immediate password reset via Admin API sets known password
-- Ensures test-user.journey always has "***REDACTED_PASSWORD***" password
+- Ensures test-user.journey always has the correct password (from GitHub Secrets)
 - Runs automatically during realm recreation
 
 ### Phase 3: Fix Playwright Secret Extraction
@@ -337,7 +337,7 @@ npm run test:login:prod
 ```
 
 3. Verify:
-   - test-user.journey can authenticate with "***REDACTED_PASSWORD***"
+   - test-user.journey can authenticate with the configured password
    - TOTP setup captures secret correctly
    - OTP codes generated with SHA1 match Keycloak's expectations
    - Test completes successfully
@@ -345,7 +345,7 @@ npm run test:login:prod
 ## Success Criteria
 
 - ✅ Keycloak TOTP uses SHA1 (shown in setup page: "Algorithm: SHA1")
-- ✅ test-user.journey password is "***REDACTED_PASSWORD***" after realm recreation
+- ✅ test-user.journey password is configured correctly after realm recreation
 - ✅ Playwright extracts TOTP secret from space-separated format
 - ✅ oathtool generates valid OTP codes with SHA1
 - ✅ E2E test completes full login journey successfully
@@ -362,7 +362,7 @@ git push
 
 2. **Manual password reset**:
 ```bash
-python reset-test-user-password.py <admin-password> ***REDACTED_PASSWORD***
+python reset-test-user-password.py <admin-password> "$TEST_PASSWORD"
 ```
 
 3. **Manual TOTP setup**:

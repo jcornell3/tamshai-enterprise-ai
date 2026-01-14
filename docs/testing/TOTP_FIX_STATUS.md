@@ -44,10 +44,10 @@ Production Keycloak's test-user.journey account TOTP authentication was failing 
 
 ### 2. GitHub Secrets Configuration
 
-| Secret | Value | Purpose |
-|--------|-------|---------|
-| `TEST_USER_TOTP_SECRET_RAW` | `***REDACTED_RAW_SECRET***` | Raw secret for Keycloak realm-export.json |
-| `TEST_USER_TOTP_SECRET` | `***REDACTED_TOTP_SECRET***` | BASE32 secret for E2E tests |
+| Secret | Purpose |
+|--------|---------|
+| `TEST_USER_TOTP_SECRET_RAW` | Raw secret for Keycloak realm-export.json |
+| `TEST_USER_TOTP_SECRET` | BASE32 secret for E2E tests |
 
 ### 3. Removed Realm Deletion from Workflow
 
@@ -74,7 +74,7 @@ The E2E test framework now automatically handles TOTP setup:
 
 ```bash
 cd tests/e2e
-TEST_ENV=prod TEST_TOTP_SECRET="***REDACTED_TOTP_SECRET***" \
+TEST_ENV=prod TEST_TOTP_SECRET="$TEST_USER_TOTP_SECRET" \
   npx playwright test login-journey.ui.spec.ts --project=chromium --workers=1
 ```
 
@@ -127,13 +127,13 @@ Running 6 tests using 1 worker
 | Field | Value |
 |-------|-------|
 | **Username** | `test-user.journey` |
-| **Password** | `***REDACTED_PASSWORD***` |
-| **TOTP Secret (BASE32)** | `***REDACTED_TOTP_SECRET***` |
-| **TOTP Secret (Raw)** | `***REDACTED_RAW_SECRET***` |
+| **Password** | `[STORED IN GITHUB SECRETS]` (see `TEST_PASSWORD`) |
+| **TOTP Secret (BASE32)** | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET`) |
+| **TOTP Secret (Raw)** | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET_RAW`) |
 
 **Generate TOTP Code**:
 ```bash
-oathtool --totp --base32 "***REDACTED_TOTP_SECRET***"
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 # Output: 6-digit code valid for 30 seconds
 ```
 
