@@ -378,7 +378,7 @@ resource "keycloak_user_roles" "alice_chen_roles" {
   user_id  = keycloak_user.alice_chen.id
 
   role_ids = [
-    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
     keycloak_role.hr_read.id,
     keycloak_role.hr_write.id,
   ]
@@ -409,7 +409,7 @@ resource "keycloak_user_roles" "bob_martinez_roles" {
   user_id  = keycloak_user.bob_martinez.id
 
   role_ids = [
-    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
     keycloak_role.finance_read.id,
     keycloak_role.finance_write.id,
   ]
@@ -440,7 +440,7 @@ resource "keycloak_user_roles" "carol_johnson_roles" {
   user_id  = keycloak_user.carol_johnson.id
 
   role_ids = [
-    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
     keycloak_role.sales_read.id,
     keycloak_role.sales_write.id,
   ]
@@ -471,7 +471,7 @@ resource "keycloak_user_roles" "dan_williams_roles" {
   user_id  = keycloak_user.dan_williams.id
 
   role_ids = [
-    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
     keycloak_role.support_read.id,
     keycloak_role.support_write.id,
   ]
@@ -502,7 +502,7 @@ resource "keycloak_user_roles" "eve_thompson_roles" {
   user_id  = keycloak_user.eve_thompson.id
 
   role_ids = [
-    keycloak_role.employee.id,  # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
     keycloak_role.executive.id,
   ]
 }
