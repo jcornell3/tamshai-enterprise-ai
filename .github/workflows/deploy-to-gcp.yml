@@ -349,20 +349,35 @@ jobs:
           echo "Configuring TOTP for test-user.journey..."
 
           # Fetch admin password from GCP Secret Manager
+          echo "Fetching admin password from GCP Secret Manager..."
           KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
+          if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+            echo "ERROR: Could not fetch admin password from Secret Manager"
+            exit 1
+          fi
+          echo "Admin password fetched successfully (length: ${#KEYCLOAK_ADMIN_PASSWORD})"
 
-          # Get admin token
-          TOKEN=$(curl -sf -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
+          # Get admin token with verbose error handling
+          echo "Requesting admin token from Keycloak..."
+          TOKEN_RESPONSE=$(curl -s -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=admin" \
             -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
             -d "grant_type=password" \
-            -d "client_id=admin-cli" | jq -r '.access_token')
+            -d "client_id=admin-cli" 2>&1)
 
-          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+          ERROR=$(echo "$TOKEN_RESPONSE" | jq -r '.error_description // .error // empty')
+
+          if [ -z "$TOKEN" ]; then
             echo "ERROR: Could not get admin token"
+            echo "Response: $TOKEN_RESPONSE"
+            if [ -n "$ERROR" ]; then
+              echo "Error details: $ERROR"
+            fi
             exit 1
           fi
+          echo "Admin token obtained successfully"
 
           # Get test-user.journey user ID
           USER_ID=$(curl -sf "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users?username=test-user.journey" \
