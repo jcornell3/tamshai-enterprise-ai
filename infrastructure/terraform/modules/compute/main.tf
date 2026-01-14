@@ -2,7 +2,8 @@
 # Manages GCE instances for Keycloak and MCP Gateway
 
 # Keycloak Instance
-#checkov:skip=CKV_GCP_40:Public IP required for VPS web server access. Protected by firewall rules.
+#checkov:skip=CKV_GCP_40:Public IP required for web server access. Protected by firewall rules and Shielded VM.
+#checkov:skip=CKV_GCP_38:Google-managed disk encryption sufficient. CSEK adds complexity without significant security benefit for this use case.
 resource "google_compute_instance" "keycloak" {
   name         = "tamshai-${var.environment}-keycloak"
   machine_type = var.machine_type_medium
@@ -57,7 +58,8 @@ resource "google_compute_instance" "keycloak" {
 }
 
 # MCP Gateway Instance
-#checkov:skip=CKV_GCP_40:Public IP required for VPS web server access. Protected by firewall rules.
+#checkov:skip=CKV_GCP_40:Public IP required for web server access. Protected by firewall rules and Shielded VM.
+#checkov:skip=CKV_GCP_38:Google-managed disk encryption sufficient. CSEK adds complexity without significant security benefit for this use case.
 resource "google_compute_instance" "mcp_gateway" {
   name         = "tamshai-${var.environment}-mcp-gateway"
   machine_type = var.machine_type

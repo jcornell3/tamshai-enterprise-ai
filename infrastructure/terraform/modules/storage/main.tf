@@ -96,6 +96,7 @@ resource "google_storage_bucket" "public_docs" {
 
 # Static website bucket for prod.tamshai.com
 # Note: Bucket name must match domain for CNAME hosting to work
+#checkov:skip=CKV_GCP_114:Static website bucket requires public access for hosting. Public access is intentional.
 resource "google_storage_bucket" "static_website" {
   count = var.enable_static_website ? 1 : 0
 
@@ -140,6 +141,7 @@ resource "google_storage_bucket" "static_website" {
 }
 
 # Make website bucket publicly readable
+#checkov:skip=CKV_GCP_28:Static website bucket must be publicly readable for GCS website hosting. Access is read-only.
 resource "google_storage_bucket_iam_member" "static_website_public" {
   count = var.enable_static_website ? 1 : 0
 

@@ -18,6 +18,9 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 }
 
 # Cloud SQL PostgreSQL Instance
+#checkov:skip=CKV_GCP_6:SSL enforced via ssl_mode=ENCRYPTED_ONLY (GCP recommended over require_ssl)
+#checkov:skip=CKV_GCP_55:PostgreSQL log_min_messages set to ERROR with comprehensive audit logging
+#checkov:skip=CKV_GCP_109:PostgreSQL logging configured with pgAudit for SOC 2 compliance
 resource "google_sql_database_instance" "postgres" {
   name             = "tamshai-${var.environment}-postgres"
   database_version = var.database_version
@@ -36,8 +39,7 @@ resource "google_sql_database_instance" "postgres" {
     ip_configuration {
       ipv4_enabled    = false # Use private IP only
       private_network = var.network_id
-      #checkov:skip=CKV_GCP_6:SSL already enforced via ssl_mode=ENCRYPTED_ONLY
-      ssl_mode = "ENCRYPTED_ONLY" # Security: Enforce SSL (replaces deprecated require_ssl)
+      ssl_mode        = "ENCRYPTED_ONLY" # Security: Enforce SSL (replaces deprecated require_ssl)
     }
 
     backup_configuration {
@@ -81,8 +83,6 @@ resource "google_sql_database_instance" "postgres" {
       value = "on"
     }
 
-    #checkov:skip=CKV_GCP_55:PostgreSQL log_min_messages already set to ERROR
-    #checkov:skip=CKV_GCP_109:PostgreSQL log levels already configured for security
     database_flags {
       name  = "log_min_messages"
       value = "error" # Lowercase for PostgreSQL
