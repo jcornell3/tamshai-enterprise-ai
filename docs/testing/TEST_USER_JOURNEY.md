@@ -24,11 +24,32 @@ This document describes the **test-user.journey** account, a dedicated test acco
 
 | Context | Format | Example | Where Used |
 |---------|--------|---------|------------|
-| **Keycloak Internal Storage** | Raw (plaintext) | `Hello!` | `secretData` field in realm-export.json |
-| **QR Code Display** | BASE32-encoded | `JBSWY3DPEHPK3PXP` | What users see when scanning QR code |
-| **oathtool / TOTP Apps** | BASE32-encoded | `JBSWY3DPEHPK3PXP` | Input for TOTP code generation |
+| **Keycloak Internal Storage** | Raw (plaintext) | `***REDACTED_RAW_SECRET***` | `secretData` field in realm-export.json |
+| **QR Code Display** | BASE32-encoded | `***REDACTED_TOTP_SECRET***` | What users see when scanning QR code |
+| **oathtool / TOTP Apps** | BASE32-encoded | `***REDACTED_TOTP_SECRET***` | Input for TOTP code generation |
 
 **Why this matters**: If you put a BASE32 value directly in Keycloak's `secretData`, Keycloak will double-encode it when displaying QR codes, causing TOTP validation to fail with a `NullPointerException`.
+
+### Critical: Keycloak secretData Format
+
+The `secretData` field in realm-export.json **ONLY accepts the `value` field**. Other fields like `period`, `digits`, and `algorithm` must go in `credentialData`:
+
+```json
+{
+  "type": "otp",
+  "secretData": "{\"value\":\"***REDACTED_RAW_SECRET***\"}",
+  "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
+}
+```
+
+**⚠️ WRONG FORMAT** (causes Keycloak container crash):
+```json
+{
+  "secretData": "{\"value\":\"...\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
+}
+```
+
+**Error**: `UnrecognizedPropertyException: Unrecognized field "period" (class org.keycloak.models.credential.dto.OTPSecretData)`
 
 ### Correct Flow
 
@@ -59,13 +80,42 @@ gh secret set TEST_USER_TOTP_SECRET_RAW --body "$RAW_SECRET"
 gh secret set TEST_USER_TOTP_SECRET --body "$BASE32_SECRET"
 ```
 
+### Keycloak --import-realm Behavior
+
+**CRITICAL**: Keycloak's `--import-realm` flag has specific behavior that affects TOTP provisioning:
+
+| Scenario | What Happens | TOTP Status |
+|----------|--------------|-------------|
+| **First container start** | Realm imported from JSON file | ✅ TOTP credentials imported |
+| **Subsequent container starts** | Realm exists in database, skipped | ❌ TOTP credentials NOT updated |
+| **Realm deleted via Admin API** | Running container doesn't reimport | ❌ TOTP credentials lost |
+| **New container revision after delete** | Fresh import triggered | ✅ TOTP credentials imported |
+
+**Key Insight (January 2026)**: Deleting a realm via Admin API while the Keycloak container is running does NOT trigger a reimport. The `--import-realm` action only runs at container startup, and only if the realm doesn't exist in the database.
+
+**To force a fresh realm import**:
+1. Delete the realm via Admin API
+2. Deploy a new Keycloak container revision (triggers new startup with `--import-realm`)
+3. New container sees realm doesn't exist → imports from realm-export.json
+
 ### Environment-Specific Behavior
 
 | Environment | TOTP Source | Notes |
 |-------------|-------------|-------|
-| **Dev** | E2E test captures during setup | User created via Admin API without TOTP; test captures QR code |
+| **Dev** | E2E test captures during setup OR pre-configured | Test auto-captures if setup page appears |
 | **Stage** | E2E test captures during setup | Same as dev |
-| **Prod** | Pre-configured in realm-export.json | Secret injected from GitHub Secrets during deployment |
+| **Prod** | Pre-configured in realm-export.json | Secret injected from GitHub Secrets during deployment; E2E test captures if setup page appears |
+
+### E2E Test TOTP Auto-Capture
+
+The E2E test framework automatically handles TOTP configuration:
+
+1. **If TOTP is pre-configured**: Test uses the secret from environment variable or cached file
+2. **If TOTP setup page appears**: Test clicks "Unable to scan?", extracts the secret, configures TOTP, and saves the secret for future runs
+
+**Cached secrets location**: `tests/e2e/.totp-secrets/test-user.journey-{env}.secret`
+
+**Important**: Run E2E tests with `--workers=1` to avoid session conflicts when multiple tests authenticate as the same user simultaneously.
 
 ## Access Privileges
 
@@ -418,56 +468,44 @@ oathtool --totp --base32 "$TEST_TOTP_SECRET"
 
 ### Issue: "Mobile Authenticator Setup" page appears (TOTP not configured)
 
-**Cause**: Keycloak's `--import-realm` flag does **NOT** import TOTP credentials for existing users. TOTP credentials are only imported during initial realm creation.
+**Status**: ✅ **RESOLVED** (January 14, 2026)
+
+**Cause**: Keycloak's `--import-realm` flag only imports TOTP credentials during the **first** realm creation. If the realm already exists, credentials are not updated.
 
 **Symptoms**:
-- E2E test fails at TOTP input step
-- Keycloak shows "Mobile Authenticator Setup" QR code page
+- Keycloak shows "Mobile Authenticator Setup" QR code page instead of TOTP input
 - User can login with password but TOTP is not configured
 
-**Root Cause Analysis** (January 10, 2026):
+**Resolution**: The E2E test framework now automatically handles this scenario:
 
-1. **Keycloak Startup**: Container starts with `--import-realm` flag
-2. **Realm Check**: If realm `tamshai-corp` already exists, Keycloak updates clients/roles/settings
-3. **User Import**: If user `test-user.journey` exists, Keycloak updates basic attributes (email, name, enabled)
-4. **Credentials Import**: ⚠️ **TOTP credentials are SKIPPED** - Keycloak does not reimport OTP credentials for existing users
-5. **Result**: User exists with password but no TOTP configured
+1. **Auto-Detection**: Test detects TOTP setup page
+2. **Secret Capture**: Clicks "Unable to scan?" and extracts the BASE32 secret
+3. **Auto-Configuration**: Generates TOTP code using `oathtool` and completes setup
+4. **Secret Caching**: Saves captured secret to `.totp-secrets/` for future test runs
 
-**Why This Happens**:
-- Keycloak's realm import is designed for configuration updates, not credential management
-- TOTP credentials require special handling (QR codes, device registration) that can't be blindly imported
-- Security design: TOTP setup typically requires user interaction to ensure device possession
-
-**Fix**: Recreate the realm to trigger a fresh import with TOTP credentials
-
+**Test Command**:
 ```bash
-# Run the realm recreation script (production only)
-./keycloak/scripts/recreate-realm-prod.sh
-
-# This will:
-# 1. Delete the existing tamshai-corp realm
-# 2. Trigger a fresh import from realm-export.json
-# 3. TOTP credentials will be imported for test-user.journey
-# 4. All clients and settings will be recreated
+cd tests/e2e
+TEST_ENV=prod npx playwright test login-journey.ui.spec.ts:375 --project=chromium --workers=1
 ```
 
-**⚠️ IMPORTANT**: Only use this script when:
-- No corporate users exist in production (safe during initial setup/testing)
-- You have verified realm-export.json is up-to-date
-- You understand all client configurations will be recreated
+**For Fresh Deployments (Phoenix Principle)**:
 
-**Why This Is Safe in Current State**:
-- Only test-user.journey exists in production (no corporate users to lose)
-- All client configurations are versioned in realm-export.json
-- Identity sync hasn't run yet (no employee data in Keycloak)
+When doing a full infrastructure rebuild (terraform destroy + apply):
 
-**Manual Alternative** (if automation fails):
-1. Login to Keycloak Admin Console: https://keycloak-fn44nd7wba-uc.a.run.app/auth/admin
-2. Select "tamshai-corp" realm
-3. Click "Action" → "Delete"
-4. Confirm deletion
-5. Restart Keycloak container (redeploy on Cloud Run)
-6. Keycloak will import fresh realm with TOTP on startup
+1. **GitHub Secrets must be set**:
+   - `TEST_USER_TOTP_SECRET_RAW` = raw secret for Keycloak
+   - `TEST_USER_TOTP_SECRET` = BASE32 secret for E2E tests
+
+2. **deploy-to-gcp.yml** substitutes the secret into realm-export.json during build
+
+3. **First container start** imports the realm with TOTP credentials
+
+**Manual Alternative** (if E2E capture fails):
+1. Login to Keycloak Admin Console
+2. Delete the `tamshai-corp` realm
+3. Trigger new Keycloak deployment (creates new container revision)
+4. New container imports fresh realm with TOTP
 
 ### Issue: "Access denied to MCP endpoints"
 
@@ -507,16 +545,25 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 
 ### Issue: "We are sorry... Unexpected error when handling authentication request"
 
-**Cause**: OAuth callback redirect_uri mismatch or Keycloak session state issue.
+**Status**: ✅ **RESOLVED** (January 14, 2026)
+
+**Cause**: TOTP `secretData` was NULL because realm-export.json was imported with incorrect format or placeholder not substituted.
 
 **Symptoms**:
-- TOTP authentication completes successfully
-- Keycloak displays error page instead of redirecting to portal
-- Test user has no roles (by design)
+- TOTP authentication fails with error page
+- Keycloak logs show `NullPointerException` in TOTP validation
+- User can enter password but TOTP step fails
 
-**Status**: Under investigation (January 2026)
+**Root Cause**:
+- The `secretData` JSON in realm-export.json had extra fields (`period`, `digits`, `algorithm`) that Keycloak's `OTPSecretData` class doesn't recognize
+- This caused deserialization to fail, leaving `secretData` as NULL
 
-**Workaround**: Access portal directly at `https://app.tamshai.com/app` which triggers OAuth flow with correct redirect_uri.
+**Resolution**:
+1. Fixed `secretData` format in realm-export.json to only include `value` field
+2. Moved `period`, `digits`, `algorithm` to `credentialData` field
+3. Deployed new Keycloak container with correct realm-export.json
+
+**Prevention**: See "Critical: Keycloak secretData Format" section above.
 
 ## Future Enhancements
 
@@ -559,6 +606,11 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-01-14 | Added secretData format documentation | Keycloak only accepts `value` field in secretData |
+| 2026-01-14 | Added Keycloak --import-realm behavior section | Document when TOTP credentials are imported |
+| 2026-01-14 | Added E2E Test TOTP Auto-Capture section | Document automatic TOTP handling |
+| 2026-01-14 | Updated troubleshooting sections as RESOLVED | TOTP issues fixed and verified |
+| 2026-01-14 | Updated TOTP secret examples | Using actual production secrets |
 | 2026-01-14 | Removed hardcoded TOTP secrets | Security risk - secrets now stored in GitHub Secrets |
 | 2026-01-14 | Added TOTP Secret Management section | Document raw vs BASE32 encoding requirements |
 | 2026-01-12 | Initial documentation | Created test-user.journey documentation |

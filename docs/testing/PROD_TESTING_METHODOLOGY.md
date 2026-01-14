@@ -1,6 +1,6 @@
 # Production Testing Methodology
 
-**Date**: January 13, 2026
+**Date**: January 14, 2026 (Updated)
 **Author**: Claude Code (Debugging Session)
 **Purpose**: Document the testing approaches used to diagnose and verify production issues
 
@@ -252,11 +252,45 @@ curl -s "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/clients" \
 
 ---
 
-### 7. API Authentication Testing
+### 7. TOTP Authentication Testing
+
+**Purpose**: Verify TOTP authentication flow works correctly.
+
+**Tools**: `oathtool`, `curl`, Playwright E2E tests
+
+#### Generate TOTP Code
+
+```bash
+# Using oathtool (recommended)
+oathtool --totp --base32 "***REDACTED_TOTP_SECRET***"
+# Output: 6-digit code valid for 30 seconds
+```
+
+#### Common TOTP Issues
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| "Invalid authenticator code" | Clock drift or parallel tests | Sync clock, use `--workers=1` |
+| TOTP setup page appears | User has no TOTP credential | E2E test auto-captures secret |
+| NullPointerException in logs | Wrong secretData format | Only `value` field in secretData |
+| "Unexpected error" on login | secretData is NULL | Fix realm-export.json format |
+
+#### Key TOTP Configuration Facts
+
+1. **secretData format**: Only accepts `{"value":"..."}` - no other fields
+2. **credentialData format**: Contains `subType`, `period`, `digits`, `algorithm`
+3. **Keycloak --import-realm**: Only imports on FIRST container startup
+4. **E2E test auto-capture**: Automatically handles TOTP setup if needed
+
+See [E2E_USER_TESTS.md](./E2E_USER_TESTS.md) for complete TOTP testing documentation.
+
+---
+
+### 8. API Authentication Testing
 
 **Purpose**: Test end-to-end API access with authentication.
 
-**Limitation**: Test user requires TOTP, which cannot be automated via CLI without the TOTP secret.
+**Note**: E2E tests with Playwright handle TOTP authentication automatically. See E2E_USER_TESTS.md.
 
 #### Test Without Auth (Expect 401)
 
@@ -277,7 +311,7 @@ curl -s "https://mcp-hr-fn44nd7wba-uc.a.run.app/health"
 
 ---
 
-### 8. GCP Secret Manager Verification
+### 9. GCP Secret Manager Verification
 
 **Purpose**: Confirm secrets are correctly configured and accessible.
 
@@ -450,4 +484,4 @@ export GOOGLE_APPLICATION_CREDENTIALS=gcp-sa-key.json
 
 ---
 
-*Last Updated: January 13, 2026*
+*Last Updated: January 14, 2026*

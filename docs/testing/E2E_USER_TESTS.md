@@ -2,6 +2,8 @@
 
 This document describes the end-to-end testing approach for user login flows in Tamshai Enterprise AI, including handling TOTP (Time-based One-Time Password) authentication.
 
+**Last Updated**: January 14, 2026
+
 ## Overview
 
 The E2E login tests verify the complete SSO authentication flow:
@@ -9,234 +11,276 @@ The E2E login tests verify the complete SSO authentication flow:
 2. Clicks "Sign in with SSO" button
 3. Redirected to Keycloak for authentication
 4. Enters username and password
-5. Completes TOTP verification (if enabled)
+5. Completes TOTP verification (or TOTP setup if not configured)
 6. Redirected back to the portal
 7. Portal displays user information and available applications
 
 ## TOTP Handling Strategy
 
-### The Challenge
+### Current Approach: Auto-Capture (January 2026)
 
-Keycloak encrypts TOTP secrets before storing them in the database. The `secret_data` field in the `credential` table contains an encrypted value that cannot be used to generate valid TOTP codes. This means we cannot:
-- Extract the TOTP secret from the database
-- Generate valid TOTP codes programmatically without the original secret
+The E2E test framework automatically handles TOTP authentication:
 
-### The Solution: Backup/Disable/Test/Restore
+1. **If TOTP is configured**: Uses secret from environment variable or cached file
+2. **If TOTP setup page appears**: Auto-captures secret and completes setup
 
-Instead of trying to use the TOTP secret, we temporarily disable TOTP for the test user:
+**Benefits**:
+- No manual intervention required
+- Works across all environments (dev, stage, prod)
+- Secrets cached for subsequent test runs
+- Phoenix-compliant (works after infrastructure rebuild)
 
-1. **Backup**: Save the user's TOTP credential record (the entire row from the database)
-2. **Disable**: Delete the credential and switch the realm to a browser flow without OTP requirement
-3. **Restart**: Restart Keycloak to clear cached authentication flow configuration
-4. **Test**: Run the E2E test (user logs in without TOTP prompt)
-5. **Restore**: Insert the backed-up credential record back into the database
-6. **Restart**: Restart Keycloak to restore OTP-required authentication
+### How Auto-Capture Works
 
-This approach preserves the user's authenticator app registration because the exact same credential record is restored.
+```typescript
+// Simplified flow in login-journey.ui.spec.ts
+async function handleTotpSetupIfRequired(page: Page): Promise<string | null> {
+  // 1. Check if we're on the TOTP setup page
+  const isSetupPage = await page.locator('h1:has-text("Mobile Authenticator")').isVisible();
 
-## Keycloak Database Schema
+  if (isSetupPage) {
+    // 2. Click "Unable to scan?" to reveal text secret
+    await page.click('a:has-text("Unable to scan?")');
 
-### Relevant Tables
+    // 3. Extract BASE32 secret from page content
+    const pageContent = await page.textContent('body');
+    const match = pageContent.match(/[A-Z2-7]{32}/);
+    const totpSecret = match[0];
 
-#### `user_entity`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | varchar(36) | User UUID |
-| username | varchar(255) | Username |
-| email | varchar(255) | Email address |
-| realm_id | varchar(255) | Realm UUID |
+    // 4. Generate TOTP code using oathtool
+    const totpCode = execSync(`oathtool --totp --base32 "${totpSecret}"`).trim();
 
-#### `credential`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | varchar(36) | Credential UUID |
-| salt | bytea | Salt (nullable) |
-| type | varchar(255) | Credential type: `password`, `otp`, etc. |
-| user_id | varchar(36) | Foreign key to user_entity |
-| created_date | bigint | Creation timestamp (milliseconds) |
-| user_label | varchar(255) | User-provided label for the credential |
-| secret_data | text | JSON with encrypted secret: `{"value":"..."}` |
-| credential_data | text | JSON with configuration |
-| priority | integer | Priority for multiple credentials |
+    // 5. Submit code to complete setup
+    await page.fill('input[name="totp"]', totpCode);
+    await page.click('button[type="submit"]');
 
-Example `credential_data` for TOTP:
-```json
-{
-  "subType": "totp",
-  "digits": 6,
-  "counter": 0,
-  "period": 30,
-  "algorithm": "HmacSHA256"
+    // 6. Save secret for future runs
+    fs.writeFileSync(`.totp-secrets/test-user-${env}.secret`, totpSecret);
+
+    return totpSecret;
+  }
+
+  return null;
 }
 ```
 
-#### `realm`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | varchar(36) | Realm UUID |
-| name | varchar(255) | Realm name |
-| browser_flow | varchar(36) | UUID of authentication flow for browser logins |
+### Secret Loading Priority
 
-#### `authentication_flow`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | varchar(36) | Flow UUID |
-| alias | varchar(255) | Flow name (e.g., `browser`, `browser-with-otp`) |
-| realm_id | varchar(36) | Foreign key to realm |
+The test framework looks for TOTP secrets in this order:
 
-#### `authentication_execution`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | varchar(36) | Execution UUID |
-| authenticator | varchar(255) | Authenticator class (e.g., `auth-otp-form`) |
-| requirement | integer | 0=REQUIRED, 1=CONDITIONAL, 2=ALTERNATIVE, 3=DISABLED |
-| flow_id | varchar(36) | Foreign key to authentication_flow |
-| priority | integer | Execution order |
+1. **Cached file**: `.totp-secrets/test-user.journey-{env}.secret`
+2. **Environment variable**: `TEST_TOTP_SECRET`
+3. **Auto-capture**: If setup page appears, extract and save
 
-### Authentication Flows
+### Important: Single Worker Mode
 
-Tamshai uses two browser authentication flows:
-
-1. **`browser`** (standard): Username/password only
-2. **`browser-with-otp`**: Username/password + OTP (currently active)
-
-To disable TOTP for testing, we switch the realm's `browser_flow` from `browser-with-otp` to `browser`.
-
-### Important: Keycloak Caching
-
-Keycloak caches authentication flow configurations. After changing the `browser_flow` in the database, you **must restart Keycloak** for the change to take effect.
-
-## Test Scripts
-
-### Main Test Script
-
-Location: `scripts/test/e2e-login-with-totp-backup.sh`
+**Always run login tests with `--workers=1`** to avoid session conflicts:
 
 ```bash
-# Dev environment
-./scripts/test/e2e-login-with-totp-backup.sh dev eve.thompson
+# CORRECT - single worker
+npx playwright test login-journey.ui.spec.ts --workers=1
 
-# Stage environment (requires SSH)
-VPS_HOST=$VPS_HOST ./scripts/test/e2e-login-with-totp-backup.sh stage eve.thompson
+# WRONG - parallel workers cause authentication conflicts
+npx playwright test login-journey.ui.spec.ts  # Uses default workers
 ```
 
-### npm Scripts
-
-Location: `tests/e2e/package.json`
-
-```bash
-# Run all login tests (dev)
-npm run test:login:dev
-
-# Run all login tests (stage)
-npm run test:login:stage
-```
-
-## Database Queries
-
-### Get User ID
-```sql
-SELECT id FROM user_entity
-WHERE username = 'eve.thompson'
-AND realm_id = (SELECT id FROM realm WHERE name = 'tamshai-corp');
-```
-
-### Check User's Credentials
-```sql
-SELECT id, type, user_label, secret_data
-FROM credential
-WHERE user_id = 'bb69be96-edee-4100-9ab5-2efb8e868a2c';
-```
-
-### Check Current Browser Flow
-```sql
-SELECT af.alias
-FROM realm r
-JOIN authentication_flow af ON r.browser_flow = af.id
-WHERE r.name = 'tamshai-corp';
-```
-
-### Get Standard Browser Flow ID
-```sql
-SELECT id FROM authentication_flow
-WHERE alias = 'browser'
-AND realm_id = (SELECT id FROM realm WHERE name = 'tamshai-corp');
-```
-
-### Switch to Standard Browser Flow (Disable OTP)
-```sql
-UPDATE realm
-SET browser_flow = (
-  SELECT id FROM authentication_flow
-  WHERE alias = 'browser'
-  AND realm_id = (SELECT id FROM realm WHERE name = 'tamshai-corp')
-)
-WHERE name = 'tamshai-corp';
-```
-
-### Restore Browser-with-OTP Flow
-```sql
-UPDATE realm
-SET browser_flow = (
-  SELECT id FROM authentication_flow
-  WHERE alias = 'browser-with-otp'
-  AND realm_id = (SELECT id FROM realm WHERE name = 'tamshai-corp')
-)
-WHERE name = 'tamshai-corp';
-```
+**Why**: Multiple tests authenticating as the same user simultaneously causes:
+- Session conflicts in Keycloak
+- TOTP code reuse (30-second window)
+- "Invalid authenticator code" errors
 
 ## Test Users
 
-### Dev Environment
+### test-user.journey (Dedicated E2E Account)
+
+| Field | Value |
+|-------|-------|
+| Username | `test-user.journey` |
+| Password | `***REDACTED_PASSWORD***` |
+| TOTP Secret (BASE32) | `***REDACTED_TOTP_SECRET***` |
+| Roles | None (tests authentication flow only) |
+
+This account exists in all environments (dev, stage, prod) with identical credentials.
+
+### Dev Environment Test Users
+
+These users exist only in development and have data access roles:
 
 | Username | Password | TOTP | Role |
 |----------|----------|------|------|
-| eve.thompson | password123 | Enabled | Executive |
-| alice.chen | password123 | Optional | HR |
-| bob.martinez | password123 | Optional | Finance |
+| eve.thompson | [dev-password] | Enabled | Executive |
+| alice.chen | [dev-password] | Enabled | HR |
+| bob.martinez | [dev-password] | Enabled | Finance |
 
-### Stage Environment
+## Running E2E Tests
 
-Test users in stage should have TOTP enabled for security. The backup/restore script handles this automatically.
+### Quick Start
+
+```bash
+cd tests/e2e
+
+# Install dependencies (first time)
+npm install
+npx playwright install chromium
+
+# Run login tests on dev
+TEST_ENV=dev npm run test:login:dev
+
+# Run login tests on prod (single worker required)
+TEST_ENV=prod npx playwright test login-journey.ui.spec.ts --workers=1
+```
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TEST_ENV` | Yes | Environment: `dev`, `stage`, or `prod` |
+| `TEST_TOTP_SECRET` | No | BASE32 TOTP secret (auto-captured if not set) |
+| `TEST_USERNAME` | No | Override username (default: `test-user.journey`) |
+| `TEST_PASSWORD` | No | Override password (default: `***REDACTED_PASSWORD***`) |
+
+### npm Scripts
+
+```bash
+# Login tests by environment
+npm run test:login:dev    # https://www.tamshai.local
+npm run test:login:stage  # https://www.tamshai.com
+npm run test:login:prod   # https://app.tamshai.com
+
+# All E2E tests
+npm run test:dev
+npm run test:stage
+npm run test:prod
+
+# Debug mode (step through tests)
+npm run test:debug
+
+# UI mode (interactive)
+npm run test:ui
+```
+
+## TOTP Code Generation
+
+### Using oathtool (Recommended)
+
+```bash
+# Install oathtool
+# Ubuntu/Debian: sudo apt-get install oathtool
+# macOS: brew install oath-toolkit
+# Windows: Available in WSL or via Chocolatey
+
+# Generate TOTP code
+oathtool --totp --base32 "***REDACTED_TOTP_SECRET***"
+# Output: 6-digit code (e.g., 123456)
+```
+
+### Manual Testing
+
+```bash
+# Get current TOTP code
+oathtool --totp --base32 "$TEST_TOTP_SECRET"
+
+# Copy to clipboard (macOS)
+oathtool --totp --base32 "$TEST_TOTP_SECRET" | pbcopy
+
+# Use in browser login
+```
+
+## Keycloak Database Schema
+
+### credential Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | varchar(36) | Credential UUID |
+| type | varchar(255) | Credential type: `password`, `otp` |
+| user_id | varchar(36) | Foreign key to user_entity |
+| secret_data | text | JSON: `{"value":"..."}` (only value field allowed) |
+| credential_data | text | JSON: `{"subType":"totp","period":30,"digits":6,"algorithm":"HmacSHA1"}` |
+
+**Important**: The `secret_data` field ONLY accepts the `value` field. Other TOTP parameters go in `credential_data`.
+
+### Authentication Flows
+
+Tamshai uses browser authentication with OTP:
+- `browser-with-otp`: Username/password + TOTP (production)
+- `browser`: Username/password only (development option)
 
 ## Troubleshooting
 
-### "One-time code" Prompt Still Appears After Disabling TOTP
+### "Invalid authenticator code"
 
-**Cause**: Keycloak caches authentication flows.
-**Solution**: Restart Keycloak after changing the browser flow:
+**Cause**: Usually timing or parallel worker issues
+
+**Solutions**:
+1. Run with `--workers=1`
+2. Verify system clock is synchronized
+3. Wait for new 30-second window before retrying
+
+### TOTP Setup Page Appears Unexpectedly
+
+**Cause**: User doesn't have TOTP configured
+
+**Solution**: The test framework auto-handles this. Let it capture and save the secret.
+
+### "Mobile Authenticator Setup" on Every Test
+
+**Cause**: Cached secret file doesn't exist or doesn't match
+
+**Solution**: Delete `.totp-secrets/` directory and let test re-capture:
 ```bash
-docker restart tamshai-keycloak
+rm -rf tests/e2e/.totp-secrets/
 ```
 
-### TOTP Codes Don't Match
+### Authentication Timeout
 
-**Cause**: The `secret_data` in the database is encrypted and cannot be used to generate codes.
-**Solution**: Use the backup/restore approach instead of trying to generate codes.
+**Cause**: Keycloak session expired or network issue
 
-### Test Fails Waiting for URL Pattern
-
-**Cause**: After OAuth redirect, the URL may include query parameters or fragments.
-**Solution**: Wait for portal content instead of strict URL matching:
-```typescript
-// Instead of:
-await page.waitForURL(/\/app\//);
-
-// Use:
-await page.waitForLoadState('networkidle');
-await expect(page.locator('h2:has-text("Available Applications")')).toBeVisible();
-```
-
-### SSH Connection Fails for Stage
-
-**Cause**: SSH key not configured or wrong host.
 **Solution**:
-```bash
-# Test SSH connection
-ssh -o BatchMode=yes root@$VPS_HOST "echo ok"
+1. Verify Keycloak is healthy: `curl https://auth.tamshai.com/auth/health/ready`
+2. Check network connectivity
+3. Increase test timeout if needed
 
-# Set custom host if needed
-VPS_HOST=your-vps-ip ./scripts/test/e2e-login-with-totp-backup.sh stage eve.thompson
+## CI/CD Integration
+
+### GitHub Actions Example
+
+```yaml
+name: E2E Login Tests
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+jobs:
+  e2e-login:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd tests/e2e
+          npm ci
+          npx playwright install chromium
+
+      - name: Install oathtool
+        run: sudo apt-get update && sudo apt-get install -y oathtool
+
+      - name: Run E2E login tests
+        run: |
+          cd tests/e2e
+          npx playwright test login-journey.ui.spec.ts --workers=1
+        env:
+          TEST_ENV: prod
+          TEST_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
 ```
 
 ## File Structure
@@ -244,50 +288,23 @@ VPS_HOST=your-vps-ip ./scripts/test/e2e-login-with-totp-backup.sh stage eve.thom
 ```
 tests/e2e/
 ├── specs/
-│   └── login-journey.ui.spec.ts    # Playwright test specs
+│   └── login-journey.ui.spec.ts    # Login journey tests
 ├── playwright.config.ts             # Playwright configuration
 ├── package.json                     # Dependencies and scripts
-├── .gitignore                       # Ignore backup files
-└── .totp-backups/                   # Temporary backup directory (gitignored)
-
-scripts/test/
-└── e2e-login-with-totp-backup.sh   # Main test runner with TOTP handling
+├── .gitignore                       # Ignore .totp-secrets/
+└── .totp-secrets/                   # Cached TOTP secrets (gitignored)
+    ├── test-user.journey-dev.secret
+    ├── test-user.journey-stage.secret
+    └── test-user.journey-prod.secret
 ```
 
-## CI/CD Integration
+## Related Documentation
 
-For CI/CD pipelines, the test script can be integrated as follows:
-
-```yaml
-jobs:
-  e2e-login:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Start services
-        run: docker compose up -d
-
-      - name: Wait for Keycloak
-        run: |
-          until curl -s http://localhost:8180/health/ready | grep -q UP; do
-            sleep 5
-          done
-
-      - name: Run E2E login tests
-        run: ./scripts/test/e2e-login-with-totp-backup.sh dev eve.thompson
-```
-
-## Security Considerations
-
-1. **Backup files**: TOTP credential backups are stored temporarily and deleted after restore. The `.totp-backups/` directory is gitignored.
-
-2. **GitHub Secrets backup**: The script optionally backs up credentials to GitHub Secrets. This is disabled by default and should only be used if the pipeline needs to resume after failure.
-
-3. **Stage environment**: Requires SSH access. Ensure SSH keys are properly secured and rotated.
-
-4. **Keycloak restarts**: The script restarts Keycloak twice (disable and restore). In production, coordinate with maintenance windows.
+- [TEST_USER_JOURNEY.md](./TEST_USER_JOURNEY.md) - Complete test user documentation
+- [TOTP_FIX_STATUS.md](./TOTP_FIX_STATUS.md) - TOTP issue resolution
+- [PROD_TESTING_METHODOLOGY.md](./PROD_TESTING_METHODOLOGY.md) - Production debugging
 
 ---
 
-*Last Updated: January 4, 2026*
+*Last Updated: January 14, 2026*
+*Status: ✅ Active*

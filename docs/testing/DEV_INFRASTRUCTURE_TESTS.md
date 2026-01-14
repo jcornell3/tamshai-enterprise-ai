@@ -430,3 +430,11 @@ The only partial service (MCP Gateway) is expected to be unhealthy without a Cla
 - Database development
 - UI/UX development
 - Integration testing (with API key)
+
+---
+
+## Related Documentation
+
+- [E2E_USER_TESTS.md](./E2E_USER_TESTS.md) - E2E login testing with TOTP
+- [TEST_USER_JOURNEY.md](./TEST_USER_JOURNEY.md) - Test user configuration
+- [PROD_TESTING_METHODOLOGY.md](./PROD_TESTING_METHODOLOGY.md) - Production testing
