@@ -359,10 +359,12 @@ jobs:
 
           # Get admin token with verbose error handling
           echo "Requesting admin token from Keycloak..."
+          # URL-encode the password to handle special characters
+          ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${KEYCLOAK_ADMIN_PASSWORD}', safe=''))")
           TOKEN_RESPONSE=$(curl -s -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "username=admin" \
-            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            --data-urlencode "username=admin" \
+            --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
             -d "grant_type=password" \
             -d "client_id=admin-cli" 2>&1)
 
