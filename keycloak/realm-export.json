@@ -198,7 +198,7 @@
         },
         {
           "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
           "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
         }
       ]
