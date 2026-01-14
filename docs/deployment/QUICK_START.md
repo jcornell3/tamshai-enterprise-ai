@@ -1,31 +1,331 @@
 # Architecture v1.4 - Quick Start Deployment Guide
 
-**Version**: 1.4.1
-**Last Updated**: December 27, 2025
+**Version**: 1.4.2
+**Last Updated**: January 13, 2026
 **Status**: Ready for Deployment
 
 ---
 
 ## Prerequisites
 
-Before deploying, ensure you have:
-
-### Required Software
-
-| Software | Version | Purpose | Download |
-|----------|---------|---------|----------|
-| **Git** | 2.40+ | Version control | [git-scm.com](https://git-scm.com/downloads) |
-| **GitHub CLI** | 2.40+ | GitHub automation, CI/CD debugging | [cli.github.com](https://cli.github.com/) |
-| **Docker Desktop** | 4.0+ | Container runtime | [docker.com](https://www.docker.com/products/docker-desktop/) |
-| **Node.js** | 20 LTS | MCP Gateway, tests | [nodejs.org](https://nodejs.org/) |
-| **Flutter** | 3.24+ | Desktop/mobile client | [flutter.dev](https://docs.flutter.dev/get-started/install) |
-| **Terraform** | 1.5+ | VPS deployment (optional) | [terraform.io](https://developer.hashicorp.com/terraform/install) |
+Before deploying, ensure you have all required software installed and available in your system PATH.
 
 ### System Requirements
 
 - ✅ 8GB RAM minimum (16GB recommended)
 - ✅ 20GB free disk space
 - ✅ Claude API Key from [Anthropic Console](https://console.anthropic.com/settings/keys)
+- ✅ Windows: WSL2 enabled for shell scripts (or Git Bash)
+
+---
+
+## Required Dependencies
+
+### Core Infrastructure (MANDATORY)
+
+These tools are **required** for any development or deployment:
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **git** | 2.40+ | Version control | [git-scm.com](https://git-scm.com/downloads) | `git --version` |
+| **docker** | 24.0+ | Container runtime | [docker.com](https://www.docker.com/products/docker-desktop/) | `docker --version` |
+| **docker compose** | 2.20+ | Container orchestration | Included with Docker Desktop | `docker compose version` |
+| **node** | 20 LTS+ | JavaScript runtime | [nodejs.org](https://nodejs.org/) | `node --version` |
+| **npm** | 10.0+ | Package manager | Included with Node.js | `npm --version` |
+
+### Cloud & GitHub Tools (REQUIRED for CI/CD)
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **gh** | 2.40+ | GitHub CLI, workflow triggers, secret management | [cli.github.com](https://cli.github.com/) | `gh --version` |
+| **terraform** | 1.5+ | Infrastructure as Code (VPS/GCP deployment) | [terraform.io](https://developer.hashicorp.com/terraform/install) | `terraform --version` |
+| **gcloud** | 500+ | Google Cloud CLI (production only) | [cloud.google.com](https://cloud.google.com/sdk/docs/install) | `gcloud --version` |
+
+### Flutter Development (REQUIRED for Desktop/Mobile)
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **flutter** | 3.24+ | Flutter SDK | [flutter.dev](https://docs.flutter.dev/get-started/install) | `flutter --version` |
+| **dart** | 3.4+ | Dart SDK (included with Flutter) | Included with Flutter | `dart --version` |
+
+### SSH & Remote Access (REQUIRED for VPS)
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **ssh** | OpenSSH 8+ | Remote VPS access | Built-in (Win10+), [OpenSSH](https://learn.microsoft.com/windows-server/administration/openssh/openssh_install_firstuse) | `ssh -V` |
+| **ssh-keygen** | OpenSSH 8+ | SSH key generation | Included with OpenSSH | `ssh-keygen --help` |
+| **ssh-keyscan** | OpenSSH 8+ | Host key retrieval | Included with OpenSSH | `ssh-keyscan --help` |
+
+### Database Clients (RECOMMENDED)
+
+These are available via Docker containers, but local installation helps debugging:
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **psql** | 15+ | PostgreSQL client | [postgresql.org](https://www.postgresql.org/download/) | `psql --version` |
+| **mongosh** | 2.0+ | MongoDB shell | [mongodb.com](https://www.mongodb.com/try/download/shell) | `mongosh --version` |
+| **redis-cli** | 7+ | Redis client | [redis.io](https://redis.io/docs/install/) (or use Docker) | `redis-cli --version` |
+
+### JSON & Text Processing (RECOMMENDED)
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **jq** | 1.6+ | JSON parsing in scripts | [jqlang.github.io](https://jqlang.github.io/jq/download/) | `jq --version` |
+| **curl** | 7.80+ | HTTP requests, health checks | Built-in (most systems) | `curl --version` |
+
+### Testing Tools (OPTIONAL)
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **oathtool** | 2.6+ | TOTP code generation for E2E tests | [nongnu.org](https://www.nongnu.org/oath-toolkit/) or `apt install oathtool` | `oathtool --version` |
+| **k6** | 0.45+ | Performance/load testing | [k6.io](https://k6.io/docs/get-started/installation/) | `k6 version` |
+
+### Python (OPTIONAL - Admin Scripts)
+
+| Executable | Version | Purpose | Download | Verify Command |
+|------------|---------|---------|----------|----------------|
+| **python3** | 3.8+ | Admin utility scripts | [python.org](https://www.python.org/downloads/) | `python3 --version` |
+
+---
+
+## Platform-Specific Setup
+
+### Windows
+
+Windows requires additional configuration for shell scripts:
+
+1. **Enable WSL2** (recommended):
+   ```powershell
+   wsl --install
+   ```
+   Then install dependencies inside WSL2 Ubuntu.
+
+2. **Alternative: Git Bash**
+   - Installed with Git for Windows
+   - Provides bash, curl, ssh, and POSIX utilities
+   - Set as default terminal in VS Code
+
+3. **Docker Desktop WSL2 Backend**:
+   ```powershell
+   # In Docker Desktop settings:
+   # Settings → General → Use the WSL 2 based engine ✓
+   ```
+
+4. **Add to PATH** (PowerShell as Admin):
+   ```powershell
+   # Example: Add gcloud to PATH
+   [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Users\<USER>\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin", "User")
+   ```
+
+### macOS
+
+```bash
+# Install Homebrew first
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install all dependencies
+brew install git gh docker node terraform jq mongosh postgresql redis oath-toolkit k6
+
+# Install Flutter
+brew install --cask flutter
+
+# Install gcloud
+brew install --cask google-cloud-sdk
+```
+
+### Linux (Ubuntu/Debian)
+
+```bash
+# Update package list
+sudo apt update
+
+# Core tools
+sudo apt install -y git curl jq
+
+# Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Node.js 20 LTS
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Terraform
+wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install -y terraform
+
+# GitHub CLI
+type -p curl >/dev/null || sudo apt install curl -y
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list
+sudo apt update && sudo apt install -y gh
+
+# Database clients
+sudo apt install -y postgresql-client redis-tools
+# MongoDB shell: https://www.mongodb.com/try/download/shell
+
+# Testing tools
+sudo apt install -y oathtool
+
+# Flutter: https://docs.flutter.dev/get-started/install/linux
+```
+
+---
+
+## Verify All Dependencies
+
+Run this script to verify all required tools are installed:
+
+```bash
+#!/bin/bash
+# Save as verify-dependencies.sh
+
+echo "=== Core Infrastructure ==="
+git --version || echo "❌ git NOT FOUND"
+docker --version || echo "❌ docker NOT FOUND"
+docker compose version || echo "❌ docker compose NOT FOUND"
+node --version || echo "❌ node NOT FOUND"
+npm --version || echo "❌ npm NOT FOUND"
+
+echo ""
+echo "=== Cloud & GitHub Tools ==="
+gh --version 2>/dev/null || echo "⚠️ gh (GitHub CLI) not found - needed for CI/CD"
+terraform --version 2>/dev/null || echo "⚠️ terraform not found - needed for VPS/GCP deploy"
+gcloud --version 2>/dev/null | head -1 || echo "⚠️ gcloud not found - needed for GCP production"
+
+echo ""
+echo "=== Flutter Development ==="
+flutter --version 2>/dev/null | head -1 || echo "⚠️ flutter not found - needed for desktop client"
+
+echo ""
+echo "=== SSH Tools ==="
+ssh -V 2>&1 || echo "❌ ssh NOT FOUND"
+
+echo ""
+echo "=== Database Clients ==="
+psql --version 2>/dev/null || echo "⚠️ psql not found (can use Docker)"
+mongosh --version 2>/dev/null || echo "⚠️ mongosh not found (can use Docker)"
+redis-cli --version 2>/dev/null || echo "⚠️ redis-cli not found (can use Docker)"
+
+echo ""
+echo "=== Utilities ==="
+jq --version 2>/dev/null || echo "⚠️ jq not found - install for JSON parsing"
+curl --version | head -1 || echo "❌ curl NOT FOUND"
+
+echo ""
+echo "=== Testing Tools ==="
+oathtool --version 2>/dev/null || echo "⚠️ oathtool not found - needed for E2E TOTP tests"
+k6 version 2>/dev/null || echo "⚠️ k6 not found - needed for performance tests"
+
+echo ""
+echo "=== Python ==="
+python3 --version 2>/dev/null || python --version 2>/dev/null || echo "⚠️ python not found - needed for admin scripts"
+
+echo ""
+echo "Verification complete. ❌ = Required, ⚠️ = Recommended"
+```
+
+Or use the npm script:
+```bash
+cd services/mcp-gateway
+npm run verify:deps  # If available
+```
+
+---
+
+## Quick Dependency Install (Copy-Paste)
+
+### Windows (via winget)
+
+```powershell
+# Run in PowerShell as Administrator
+winget install Git.Git
+winget install GitHub.cli
+winget install Docker.DockerDesktop
+winget install OpenJS.NodeJS.LTS
+winget install Hashicorp.Terraform
+winget install Google.CloudSDK
+winget install jqlang.jq
+winget install stedolan.jq  # Alternative
+# Flutter: Download from https://flutter.dev
+```
+
+### macOS (via Homebrew)
+
+```bash
+brew install git gh node terraform jq mongosh postgresql redis oath-toolkit k6
+brew install --cask docker flutter google-cloud-sdk
+```
+
+### Linux (Quick Script)
+
+```bash
+# Save and run: curl -fsSL https://your-repo/install-deps.sh | bash
+# Or manually run commands from Linux section above
+```
+
+---
+
+## Common PATH Issues
+
+### Symptom: "command not found" Errors
+
+**Windows Solutions:**
+```powershell
+# Check current PATH
+echo $env:Path -split ';'
+
+# Add to PATH permanently (PowerShell as Admin)
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\path\to\executable", "User")
+
+# Refresh PATH in current session
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+```
+
+**Common Windows PATH Locations:**
+| Tool | Typical PATH |
+|------|--------------|
+| gcloud | `C:\Users\<USER>\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin` |
+| terraform | `C:\Users\<USER>\AppData\Local\Programs\Terraform` |
+| flutter | `C:\Users\<USER>\flutter\bin` |
+| node/npm | `C:\Program Files\nodejs` |
+| docker | `C:\Program Files\Docker\Docker\resources\bin` |
+
+**macOS/Linux Solutions:**
+```bash
+# Check current PATH
+echo $PATH | tr ':' '\n'
+
+# Add to PATH (add to ~/.bashrc or ~/.zshrc)
+export PATH="$PATH:/path/to/executable"
+
+# Reload shell
+source ~/.bashrc  # or ~/.zshrc
+```
+
+---
+
+## Docker Container Alternatives
+
+If you can't install tools locally, use Docker containers:
+
+```bash
+# PostgreSQL client
+docker run -it --rm postgres:15-alpine psql -h host.docker.internal -U tamshai
+
+# MongoDB shell
+docker run -it --rm mongo:7 mongosh mongodb://host.docker.internal:27018
+
+# Redis CLI
+docker run -it --rm redis:7-alpine redis-cli -h host.docker.internal -p 6380
+
+# jq for JSON processing
+docker run -it --rm ghcr.io/jqlang/jq --help
+
+# Terraform
+docker run -it --rm -v $(pwd):/workspace -w /workspace hashicorp/terraform:latest plan
+```
 
 ---
 
@@ -747,6 +1047,6 @@ Then add corresponding A records in Cloudflare for each subdomain.
 
 ---
 
-*Last Updated: December 27, 2025*
-*Architecture Version: 1.4.1*
+*Last Updated: January 13, 2026*
+*Architecture Version: 1.4.2*
 *All services operational and ready for deployment ✅*
