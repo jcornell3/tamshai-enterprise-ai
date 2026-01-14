@@ -82,7 +82,7 @@ configure_environment() {
 # =============================================================================
 
 # Use KEYCLOAK_HOME if set (GitHub Actions), otherwise default to Docker container path
-if [ -n "$KEYCLOAK_HOME" ] && [ -f "$KEYCLOAK_HOME/bin/kcadm.sh" ]; then
+if [ -n "${KEYCLOAK_HOME:-}" ] && [ -f "${KEYCLOAK_HOME:-}/bin/kcadm.sh" ]; then
     KCADM="$KEYCLOAK_HOME/bin/kcadm.sh"
 elif command -v kcadm.sh &> /dev/null; then
     KCADM="kcadm.sh"
