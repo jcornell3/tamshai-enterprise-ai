@@ -249,6 +249,43 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
+      - name: Delete Realm for Fresh Import
+        env:
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+        run: |
+          # Delete the existing realm so Keycloak imports fresh with new TOTP credentials
+          # This is required because Keycloak's --import-realm doesn't update OTP credentials
+          # for existing users, only during initial realm creation.
+          # See docs/testing/TEST_USER_JOURNEY.md for details.
+
+          echo "Attempting to delete tamshai-corp realm for fresh import..."
+
+          # Get admin token
+          TOKEN=$(curl -sf -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" | jq -r '.access_token' || echo "")
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Warning: Could not get admin token (Keycloak may be unavailable). Continuing..."
+            exit 0
+          fi
+
+          # Delete the realm
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" -X DELETE \
+            "https://auth.tamshai.com/auth/admin/realms/tamshai-corp" \
+            -H "Authorization: Bearer $TOKEN" || echo "000")
+
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "Realm tamshai-corp deleted successfully"
+          elif [ "$HTTP_CODE" = "404" ]; then
+            echo "Realm tamshai-corp does not exist (first deployment or already deleted)"
+          else
+            echo "Warning: Unexpected response code $HTTP_CODE when deleting realm. Continuing..."
+          fi
+
       - name: Inject TOTP Secret into Realm Export
         env:
           TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
