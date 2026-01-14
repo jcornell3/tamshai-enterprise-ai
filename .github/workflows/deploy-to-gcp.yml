@@ -249,6 +249,19 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
+      - name: Inject TOTP Secret into Realm Export
+        env:
+          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
+        run: |
+          # Substitute placeholder with actual secret for test-user.journey TOTP
+          # The secret is the RAW value (not BASE32) that Keycloak stores internally
+          # See docs/testing/TEST_USER_JOURNEY.md for details on raw vs BASE32 secrets
+          if [ -z "$TEST_USER_TOTP_SECRET_RAW" ]; then
+            echo "ERROR: TEST_USER_TOTP_SECRET_RAW secret not set"
+            exit 1
+          fi
+          sed -i "s/__TEST_USER_TOTP_SECRET__/${TEST_USER_TOTP_SECRET_RAW}/g" keycloak/realm-export.json
+
       - name: Build and Push
         run: |
           docker build -t ${{ env.AR_REPO }}/keycloak:${{ github.sha }} \

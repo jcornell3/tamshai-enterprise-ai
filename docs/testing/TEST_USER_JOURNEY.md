@@ -11,10 +11,61 @@ This document describes the **test-user.journey** account, a dedicated test acco
 | **Username** | `test-user.journey` | Unique identifier |
 | **Password** | `***REDACTED_PASSWORD***` | Strong password for security |
 | **Email** | `test-user@tamshai.local` | Test email address |
-| **TOTP Secret** | `JBSWY3DPEHPK3PXP` | Base32 encoded for automated TOTP generation |
+| **TOTP Secret** | Stored in GitHub Secrets | See [TOTP Secret Management](#totp-secret-management) below |
 | **Employee ID** | `TEST001` | Attribute for tracking |
 | **Department** | `Testing` | Attribute for identification |
 | **Title** | `Journey Test Account` | Descriptive title |
+
+## TOTP Secret Management
+
+### Raw vs BASE32 Encoding
+
+**IMPORTANT**: Keycloak stores TOTP secrets in **raw (plaintext) format**, not BASE32. Understanding this distinction is critical for correct configuration.
+
+| Context | Format | Example | Where Used |
+|---------|--------|---------|------------|
+| **Keycloak Internal Storage** | Raw (plaintext) | `Hello!` | `secretData` field in realm-export.json |
+| **QR Code Display** | BASE32-encoded | `JBSWY3DPEHPK3PXP` | What users see when scanning QR code |
+| **oathtool / TOTP Apps** | BASE32-encoded | `JBSWY3DPEHPK3PXP` | Input for TOTP code generation |
+
+**Why this matters**: If you put a BASE32 value directly in Keycloak's `secretData`, Keycloak will double-encode it when displaying QR codes, causing TOTP validation to fail with a `NullPointerException`.
+
+### Correct Flow
+
+1. **Choose a raw secret**: A simple string like `TamshaiTestKey123`
+2. **Store raw in Keycloak**: Put the raw string in `realm-export.json` → `secretData.value`
+3. **Convert to BASE32 for testing**: Use `echo -n "TamshaiTestKey123" | base32` to get the BASE32 version
+4. **Use BASE32 in E2E tests**: E2E tests use the BASE32 version with oathtool/otplib
+
+### GitHub Secrets Configuration
+
+The TOTP secrets are stored securely in GitHub Secrets, **not in the codebase**.
+
+| Secret Name | Format | Purpose |
+|-------------|--------|---------|
+| `TEST_USER_TOTP_SECRET_RAW` | Raw/plaintext | Injected into `realm-export.json` during GCP deployment |
+| `TEST_USER_TOTP_SECRET` | BASE32-encoded | Used by E2E tests for TOTP code generation |
+
+**Setting up the secrets**:
+```bash
+# 1. Choose your raw secret (keep this secure)
+RAW_SECRET="YourSecretKeyHere"
+
+# 2. Convert to BASE32 for E2E tests
+BASE32_SECRET=$(echo -n "$RAW_SECRET" | base32)
+
+# 3. Add both to GitHub Secrets
+gh secret set TEST_USER_TOTP_SECRET_RAW --body "$RAW_SECRET"
+gh secret set TEST_USER_TOTP_SECRET --body "$BASE32_SECRET"
+```
+
+### Environment-Specific Behavior
+
+| Environment | TOTP Source | Notes |
+|-------------|-------------|-------|
+| **Dev** | E2E test captures during setup | User created via Admin API without TOTP; test captures QR code |
+| **Stage** | E2E test captures during setup | Same as dev |
+| **Prod** | Pre-configured in realm-export.json | Secret injected from GitHub Secrets during deployment |
 
 ## Access Privileges
 
@@ -117,6 +168,10 @@ npx playwright test login-journey.ui.spec.ts --debug
 **Example Test Case**:
 ```typescript
 test('test-user.journey can login and access app', async ({ page }) => {
+  // TOTP secret from environment variable (BASE32-encoded)
+  const totpSecret = process.env.TEST_TOTP_SECRET;
+  if (!totpSecret) throw new Error('TEST_TOTP_SECRET environment variable required');
+
   // Navigate to login
   await page.goto('https://prod.tamshai.com');
 
@@ -125,11 +180,11 @@ test('test-user.journey can login and access app', async ({ page }) => {
 
   // Enter credentials
   await page.fill('input[name="username"]', 'test-user.journey');
-  await page.fill('input[name="password"]', '***REDACTED_PASSWORD***');
+  await page.fill('input[name="password"]', process.env.TEST_PASSWORD || '***REDACTED_PASSWORD***');
   await page.click('input[type="submit"]');
 
-  // Generate and enter TOTP
-  const totp = generateTOTP('JBSWY3DPEHPK3PXP');
+  // Generate and enter TOTP (using BASE32 secret)
+  const totp = generateTOTP(totpSecret);
   await page.fill('input[name="otp"]', totp);
   await page.click('input[type="submit"]');
 
@@ -149,10 +204,11 @@ test('test-user.journey can login and access app', async ({ page }) => {
 
 ### Manual Generation (for debugging)
 
-Use `oathtool` to generate TOTP codes manually:
+Use `oathtool` to generate TOTP codes manually with your BASE32-encoded secret:
 
 ```bash
-oathtool --totp --base32 JBSWY3DPEHPK3PXP
+# Get the BASE32 secret from environment or GitHub Secrets
+oathtool --totp --base32 "$TEST_TOTP_SECRET"
 ```
 
 **Output**: 6-digit code (e.g., `123456`) valid for 30 seconds
@@ -161,7 +217,8 @@ oathtool --totp --base32 JBSWY3DPEHPK3PXP
 
 **Bash**:
 ```bash
-TOTP_SECRET="JBSWY3DPEHPK3PXP"
+# Get BASE32 secret from environment variable (set in CI or local .env)
+TOTP_SECRET="${TEST_TOTP_SECRET:?TEST_TOTP_SECRET environment variable required}"
 TOTP_CODE=$(oathtool --totp --base32 "$TOTP_SECRET")
 echo "Current TOTP: $TOTP_CODE"
 ```
@@ -170,9 +227,13 @@ echo "Current TOTP: $TOTP_CODE"
 ```typescript
 import * as OTPAuth from 'otpauth';
 
+// Get BASE32 secret from environment
+const secret = process.env.TEST_TOTP_SECRET;
+if (!secret) throw new Error('TEST_TOTP_SECRET environment variable required');
+
 const totp = new OTPAuth.TOTP({
-  secret: 'JBSWY3DPEHPK3PXP',
-  algorithm: 'SHA256',
+  secret: secret,
+  algorithm: 'SHA1',  // Must match Keycloak configuration
   digits: 6,
   period: 30
 });
@@ -183,9 +244,15 @@ console.log('Current TOTP:', code);
 
 **Python**:
 ```python
+import os
 import pyotp
 
-totp = pyotp.TOTP('JBSWY3DPEHPK3PXP')
+# Get BASE32 secret from environment
+secret = os.environ.get('TEST_TOTP_SECRET')
+if not secret:
+    raise ValueError('TEST_TOTP_SECRET environment variable required')
+
+totp = pyotp.TOTP(secret)
 code = totp.now()
 print(f'Current TOTP: {code}')
 ```
@@ -245,12 +312,18 @@ jobs:
         env:
           TEST_USERNAME: test-user.journey
           TEST_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-          TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
+          TEST_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
 ```
 
-**GitHub Secrets to Add**:
-- `TEST_USER_PASSWORD`: `***REDACTED_PASSWORD***`
-- `TEST_USER_TOTP_SECRET`: `JBSWY3DPEHPK3PXP`
+**Required GitHub Secrets** (see [TOTP Secret Management](#totp-secret-management)):
+
+| Secret | Format | Purpose |
+|--------|--------|---------|
+| `TEST_USER_PASSWORD` | Plaintext | User password for test-user.journey |
+| `TEST_USER_TOTP_SECRET_RAW` | Raw/plaintext | Keycloak realm-export.json injection |
+| `TEST_USER_TOTP_SECRET` | BASE32-encoded | E2E test TOTP code generation |
+
+**⚠️ SECURITY NOTE**: Never commit secrets to version control. Always use environment variables or secrets managers.
 
 ### Running Tests Manually
 
@@ -325,18 +398,23 @@ cd keycloak/scripts
 
 ### Issue: "Invalid TOTP code"
 
-**Cause**: Time drift or incorrect secret
+**Cause**: Time drift, incorrect secret, or wrong format (raw vs BASE32)
 
 **Fix**:
 ```bash
 # Verify system time is correct
 date
 
-# Generate code manually to test
-oathtool --totp --base32 JBSWY3DPEHPK3PXP
+# Generate code manually to test (use BASE32 secret from environment)
+oathtool --totp --base32 "$TEST_TOTP_SECRET"
 
 # Try the generated code in the browser
 ```
+
+**Common Mistakes**:
+- Using raw secret with oathtool (must be BASE32)
+- Using BASE32 secret in Keycloak secretData (must be raw)
+- Algorithm mismatch (Keycloak uses SHA1 by default)
 
 ### Issue: "Mobile Authenticator Setup" page appears (TOTP not configured)
 
@@ -473,6 +551,14 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 
 ---
 
-**Last Updated**: January 12, 2026
+**Last Updated**: January 14, 2026
 **Maintainer**: QA Team
 **Status**: ✅ Active - Ready for use in automated testing
+
+## Change Log
+
+| Date | Change | Reason |
+|------|--------|--------|
+| 2026-01-14 | Removed hardcoded TOTP secrets | Security risk - secrets now stored in GitHub Secrets |
+| 2026-01-14 | Added TOTP Secret Management section | Document raw vs BASE32 encoding requirements |
+| 2026-01-12 | Initial documentation | Created test-user.journey documentation |
