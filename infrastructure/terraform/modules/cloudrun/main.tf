@@ -11,6 +11,7 @@
 # ARTIFACT REGISTRY REPOSITORY
 # =============================================================================
 
+#checkov:skip=CKV_GCP_84:Google-managed encryption sufficient for container images. CSEK adds operational complexity without significant security benefit.
 resource "google_artifact_registry_repository" "tamshai" {
   location      = var.region
   repository_id = "tamshai"
@@ -173,6 +174,7 @@ resource "google_cloud_run_service" "mcp_gateway" {
 }
 
 # Make MCP Gateway publicly accessible
+#checkov:skip=CKV_GCP_102:MCP Gateway API must be publicly accessible for client applications. Auth handled by Keycloak JWT validation.
 resource "google_cloud_run_service_iam_member" "mcp_gateway_public" {
   service  = google_cloud_run_service.mcp_gateway.name
   location = google_cloud_run_service.mcp_gateway.location
@@ -510,6 +512,7 @@ resource "google_cloud_run_service" "keycloak" {
 }
 
 # Make Keycloak publicly accessible
+#checkov:skip=CKV_GCP_102:Keycloak IdP must be publicly accessible for SSO authentication. Protected by its own auth mechanisms.
 resource "google_cloud_run_service_iam_member" "keycloak_public" {
   service  = google_cloud_run_service.keycloak.name
   location = google_cloud_run_service.keycloak.location
@@ -615,6 +618,7 @@ resource "google_cloud_run_service" "web_portal" {
 }
 
 # Make Web Portal publicly accessible
+#checkov:skip=CKV_GCP_102:Web Portal must be publicly accessible for end users. Static SPA with client-side auth.
 resource "google_cloud_run_service_iam_member" "web_portal_public" {
   count = var.enable_web_portal ? 1 : 0
 
