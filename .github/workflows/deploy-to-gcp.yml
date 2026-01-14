@@ -404,11 +404,12 @@ jobs:
           done
 
           # Create new OTP credential with raw secret
-          # The secret data must contain the raw value, not BASE32
+          # IMPORTANT: secretData must ONLY contain "value" field - other fields go in credentialData
+          # (Keycloak OTPSecretData class doesn't recognize period/digits/algorithm)
           OTP_CREDENTIAL=$(cat <<EOFCRED
           {
             "type": "otp",
-            "secretData": "{\"value\":\"${TEST_USER_TOTP_SECRET_RAW}\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}",
+            "secretData": "{\"value\":\"${TEST_USER_TOTP_SECRET_RAW}\"}",
             "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
           }
           EOFCRED
