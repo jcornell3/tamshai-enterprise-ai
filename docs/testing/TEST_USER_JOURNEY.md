@@ -227,19 +227,70 @@ The test user is configured in **all environments**:
 
 **Location**: `tests/e2e/specs/login-journey.ui.spec.ts`
 
-**Usage**:
+**Prerequisites**:
 ```bash
 cd tests/e2e
 
-# Run all E2E tests with test user
-npx playwright test login-journey.ui.spec.ts
+# Install dependencies (first time only)
+npm install
+npx playwright install chromium
+```
+
+**Getting Test Credentials from GitHub Secrets**:
+
+Use the `read-github-secrets.sh` script to retrieve E2E test credentials:
+
+```bash
+# Trigger workflow and download secrets
+./scripts/secrets/read-github-secrets.sh --e2e
+
+# Or output as environment variables for eval
+eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)
+```
+
+This retrieves:
+- `TEST_PASSWORD` - Password for test-user.journey
+- `TEST_TOTP_SECRET` - BASE32 TOTP secret for code generation
+
+**Running E2E Tests**:
+
+**IMPORTANT**: Always use `--workers=1` to avoid session conflicts when multiple tests authenticate as the same user.
+
+```bash
+cd tests/e2e
+
+# Set environment variables (get from GitHub Secrets)
+export TEST_ENV=dev           # or stage, prod
+export TEST_PASSWORD="..."    # From GitHub Secrets
+export TEST_TOTP_SECRET="..." # From GitHub Secrets (BASE32)
+
+# Run login journey tests (MUST use --workers=1)
+npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 
 # Run with visible browser
-npx playwright test login-journey.ui.spec.ts --headed
+npx playwright test login-journey.ui.spec.ts --workers=1 --headed
 
-# Debug mode
-npx playwright test login-journey.ui.spec.ts --debug
+# Debug mode (step through)
+npx playwright test login-journey.ui.spec.ts --workers=1 --debug
+
+# Run all tests for a specific environment
+TEST_ENV=dev npx playwright test --workers=1
 ```
+
+**Quick Start (One-liner)**:
+```bash
+# Dev environment
+cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env) && TEST_ENV=dev npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+
+# Stage environment
+cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env) && TEST_ENV=stage npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```
+
+**TOTP Auto-Capture**: If test-user.journey doesn't have TOTP configured, the test framework will automatically:
+1. Detect the TOTP setup page
+2. Click "Unable to scan?" to reveal the secret
+3. Capture and save the secret to `.totp-secrets/`
+4. Complete TOTP setup
 
 **Example Test Case**:
 ```typescript

@@ -146,6 +146,12 @@ write_files:
           reverse_proxy keycloak:8080
         }
 
+        # Keycloak Admin Console also needs /admin/* routed to Keycloak
+        # (Keycloak 24+ serves some admin resources at /admin/ paths)
+        handle /admin/* {
+          reverse_proxy keycloak:8080
+        }
+
         # API Gateway (Kong handles rate limiting, CORS, security headers)
         # Route /api/* through Kong instead of directly to MCP Gateway
         handle /api/* {
