@@ -400,24 +400,33 @@ test.describe('Employee Login Journey', () => {
     await page.waitForTimeout(1000);
 
     // TOTP secret priority:
-    // 1) Environment variable (TEST_TOTP_SECRET) - always takes precedence when set
-    // 2) Cached file from previous run - enables test resilience
-    // 3) Auto-capture during TOTP setup (handled by handleTotpSetupIfRequired below)
-    let effectiveTotpSecret = TEST_USER.totpSecret || loadTotpSecret(TEST_USER.username, ENV);
-    console.log(`Using TOTP secret: ${effectiveTotpSecret.substring(0, 4)}****`);
+    // 1) Auto-capture during TOTP setup (if setup page appears)
+    // 2) Environment variable (TEST_TOTP_SECRET) - always takes precedence when set
+    // 3) Cached file from previous run - enables test resilience
 
-    // Check if TOTP setup is required (first time login or forced reconfiguration)
+    // Check if TOTP setup is required FIRST (handles first-time login)
     const capturedSecret = await handleTotpSetupIfRequired(page);
 
-    if (capturedSecret) {
-      console.log('TOTP setup completed, captured new secret');
-      effectiveTotpSecret = capturedSecret;
+    // Determine effective TOTP secret
+    let effectiveTotpSecret: string | null = capturedSecret;
+
+    if (!effectiveTotpSecret) {
+      // Fall back to env var or cached secret
+      effectiveTotpSecret = TEST_USER.totpSecret || loadTotpSecret(TEST_USER.username, ENV);
+    } else {
       // Save the captured secret for use in subsequent test runs
       saveTotpSecret(TEST_USER.username, ENV, capturedSecret);
+      console.log('TOTP setup completed, captured new secret');
+    }
+
+    if (effectiveTotpSecret) {
+      console.log(`Using TOTP secret: ${effectiveTotpSecret.substring(0, 4)}****`);
+    } else {
+      console.log('No TOTP secret available - TOTP may not be required or test will fail');
     }
 
     // Handle TOTP if required (subsequent logins after setup)
-    const totpHandled = await handleTotpIfRequired(page, effectiveTotpSecret);
+    const totpHandled = await handleTotpIfRequired(page, effectiveTotpSecret || '');
     if (totpHandled) {
       console.log('TOTP authentication completed');
     }
