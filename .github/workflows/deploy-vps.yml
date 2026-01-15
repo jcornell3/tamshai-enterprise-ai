@@ -346,21 +346,31 @@ jobs:
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
 
+      # =========================================================================
+      # Configure test-user.journey credentials (aligned with deploy-to-gcp.yml)
+      # See docs/testing/TEST_USER_JOURNEY.md for details
+      # =========================================================================
       - name: Configure test-user.journey credentials
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD_STAGE || secrets.TEST_PASSWORD }}
-          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW_STAGE || secrets.TEST_USER_TOTP_SECRET_RAW }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
         run: |
           echo "Configuring test-user.journey credentials..."
 
-          # Skip if TEST_PASSWORD not set (optional for E2E testing)
+          # Validate required secrets (aligned with prod - fail if missing)
           if [ -z "$TEST_PASSWORD" ]; then
-            echo "[WARN] TEST_PASSWORD secret not set - skipping test user configuration"
-            echo "Set TEST_PASSWORD_STAGE or TEST_PASSWORD secret for E2E testing"
-            exit 0
+            echo "ERROR: TEST_PASSWORD secret not set"
+            echo "See docs/testing/TEST_USER_JOURNEY.md for setup instructions"
+            exit 1
+          fi
+
+          if [ -z "$TEST_USER_TOTP_SECRET_RAW" ]; then
+            echo "ERROR: TEST_USER_TOTP_SECRET_RAW secret not set"
+            echo "See docs/testing/TEST_USER_JOURNEY.md for setup instructions"
+            exit 1
           fi
 
           ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << CONFIGURE_SCRIPT
@@ -381,8 +391,8 @@ jobs:
           done
 
           if [ "\$KEYCLOAK_READY" = "false" ]; then
-            echo "[WARN] Keycloak not ready after 90 seconds - skipping test user configuration"
-            exit 0
+            echo "ERROR: Keycloak not ready after 90 seconds"
+            exit 1
           fi
 
           # Get admin token
@@ -394,19 +404,20 @@ jobs:
             -d "grant_type=password" | jq -r '.access_token')
 
           if [ -z "\$TOKEN" ] || [ "\$TOKEN" = "null" ]; then
-            echo "[WARN] Could not get admin token - test user configuration skipped"
-            exit 0
+            echo "ERROR: Could not get admin token - check KEYCLOAK_ADMIN_PASSWORD secret"
+            exit 1
           fi
+          echo "[OK] Admin token obtained"
 
           # Get test-user.journey ID
           USER_ID=\$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users?username=test-user.journey" \
             -H "Authorization: Bearer \$TOKEN" | jq -r '.[0].id')
 
           if [ -z "\$USER_ID" ] || [ "\$USER_ID" = "null" ]; then
-            echo "[WARN] test-user.journey not found - skipping credential configuration"
-            exit 0
+            echo "ERROR: test-user.journey not found in Keycloak"
+            exit 1
           fi
-          echo "Found test-user.journey (ID: \$USER_ID)"
+          echo "[OK] Found test-user.journey (ID: \$USER_ID)"
 
           # Reset password
           echo "Resetting password for test-user.journey..."
@@ -419,10 +430,26 @@ jobs:
           if [ "\$RESET_CODE" = "204" ]; then
             echo "[OK] Password reset successful"
           else
-            echo "[WARN] Password reset returned HTTP \$RESET_CODE"
+            echo "ERROR: Password reset failed (HTTP \$RESET_CODE)"
+            exit 1
           fi
 
-          # Clear required actions (allow login without TOTP setup if not configured)
+          # Configure TOTP credentials (aligned with prod approach)
+          echo "Configuring TOTP credentials..."
+
+          # Remove existing OTP credentials
+          EXISTING_CREDS=\$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users/\${USER_ID}/credentials" \
+            -H "Authorization: Bearer \$TOKEN")
+          echo "Existing credentials: \$(echo \$EXISTING_CREDS | jq -r '[.[].type]')"
+
+          # Delete existing OTP credentials
+          for CRED_ID in \$(echo \$EXISTING_CREDS | jq -r '.[] | select(.type=="otp") | .id'); do
+            echo "Deleting OTP credential: \$CRED_ID"
+            curl -sf -X DELETE "http://localhost/auth/admin/realms/tamshai-corp/users/\${USER_ID}/credentials/\${CRED_ID}" \
+              -H "Authorization: Bearer \$TOKEN"
+          done
+
+          # Clear required actions so user doesn't see TOTP setup page
           echo "Clearing required actions..."
           curl -sf -X PUT \
             "http://localhost/auth/admin/realms/tamshai-corp/users/\${USER_ID}" \
