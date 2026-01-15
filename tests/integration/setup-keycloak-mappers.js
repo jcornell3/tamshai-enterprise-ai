@@ -144,9 +144,9 @@ async function main() {
       new URLSearchParams({
         grant_type: 'password',
         client_id: 'mcp-gateway',
-        client_secret: '[REDACTED-DEV-SECRET]',
+        client_secret: process.env.KEYCLOAK_CLIENT_SECRET || '[DEV-SECRET-NOT-SET]',
         username: 'alice.chen',
-        password: '[REDACTED-DEV-PASSWORD]',
+        password: process.env.DEV_USER_PASSWORD || '[DEV-PASSWORD-NOT-SET]',
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );

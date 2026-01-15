@@ -10,7 +10,7 @@
 #   KEYCLOAK_VPS_ADMIN_PASSWORD - Keycloak admin password for VPS/stage realm management
 #
 # Optional Secrets (for E2E testing):
-#   TEST_PASSWORD_STAGE        - Password for test-user.journey on stage (falls back to TEST_PASSWORD)
+#   TEST_USER_PASSWORD         - Password for test-user.journey (E2E test service account)
 #   TEST_USER_TOTP_SECRET_RAW_STAGE - Raw TOTP secret for stage (falls back to TEST_USER_TOTP_SECRET_RAW)
 #   SLACK_WEBHOOK_URL          - For deployment notifications
 #   VAULT_ADDR                 - (Future) Vault address for SSH certificate auth
@@ -355,14 +355,14 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_VPS_ADMIN_PASSWORD }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+          TEST_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
         run: |
           echo "Configuring test-user.journey credentials..."
 
           # Validate required secrets (aligned with prod - fail if missing)
           if [ -z "$TEST_PASSWORD" ]; then
-            echo "ERROR: TEST_PASSWORD secret not set"
+            echo "ERROR: TEST_USER_PASSWORD secret not set"
             echo "See docs/testing/TEST_USER_JOURNEY.md for setup instructions"
             exit 1
           fi

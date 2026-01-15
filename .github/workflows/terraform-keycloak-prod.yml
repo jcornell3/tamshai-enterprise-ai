@@ -84,7 +84,7 @@ jobs:
         working-directory: infrastructure/terraform/keycloak
         env:
           TF_VAR_environment: prod
-          TF_VAR_test_user_password: ***REDACTED_PASSWORD***
+          TF_VAR_test_user_password: ${{ secrets.TEST_USER_PASSWORD }}
           TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
           TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
         run: |
@@ -96,7 +96,7 @@ jobs:
         working-directory: infrastructure/terraform/keycloak
         env:
           TF_VAR_environment: prod
-          TF_VAR_test_user_password: ***REDACTED_PASSWORD***
+          TF_VAR_test_user_password: ${{ secrets.TEST_USER_PASSWORD }}
           TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
           TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
         run: |
@@ -107,7 +107,7 @@ jobs:
         working-directory: infrastructure/terraform/keycloak
         env:
           TF_VAR_environment: prod
-          TF_VAR_test_user_password: ***REDACTED_PASSWORD***
+          TF_VAR_test_user_password: ${{ secrets.TEST_USER_PASSWORD }}
           TF_VAR_keycloak_url: ${{ env.KEYCLOAK_URL }}
           TF_VAR_keycloak_admin_password: ${{ steps.get-password.outputs.password }}
         run: |
@@ -166,7 +166,7 @@ jobs:
           # Try to authenticate as alice.chen (should fail with "Account not fully set up" - TOTP required)
           AUTH_RESPONSE=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/tamshai-corp/protocol/openid-connect/token" \
             -d "username=alice.chen" \
-            -d "password=***REDACTED_PASSWORD***" \
+            -d "password=${{ secrets.PROD_USER_PASSWORD }}" \
             -d "grant_type=password" \
             -d "client_id=admin-cli")
 
