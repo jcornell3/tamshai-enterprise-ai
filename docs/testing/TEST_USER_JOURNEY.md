@@ -100,11 +100,37 @@ gh secret set TEST_USER_TOTP_SECRET --body "$BASE32_SECRET"
 
 ### Environment-Specific Behavior
 
-| Environment | TOTP Source | Notes |
-|-------------|-------------|-------|
-| **Dev** | E2E test captures during setup OR pre-configured | Test auto-captures if setup page appears |
-| **Stage** | E2E test captures during setup | Same as dev |
-| **Prod** | Pre-configured in realm-export.json | Secret injected from GitHub Secrets during deployment; E2E test captures if setup page appears |
+| Environment | TOTP Source | Deployment Workflow | Notes |
+|-------------|-------------|---------------------|-------|
+| **Dev** | E2E test captures during setup OR pre-configured | N/A (local Docker) | Test auto-captures if setup page appears |
+| **Stage** | E2E test captures during setup | `deploy-vps.yml` | Aligned with prod; requires `TEST_PASSWORD` and `TEST_USER_TOTP_SECRET_RAW` secrets |
+| **Prod** | Pre-configured in realm-export.json | `deploy-to-gcp.yml` | Secret injected during deployment; E2E test captures if setup page appears |
+
+### CI/CD Workflow Alignment (January 2026)
+
+All deployment workflows now use a **consistent approach** for test-user.journey configuration:
+
+1. **Required Secrets** (fail if missing):
+   - `TEST_PASSWORD` - Password for test-user.journey
+   - `TEST_USER_TOTP_SECRET_RAW` - Raw TOTP secret for Keycloak
+   - `KEYCLOAK_ADMIN_PASSWORD` - Admin password for Keycloak API
+
+2. **Credential Configuration Steps**:
+   - Wait for Keycloak to be ready
+   - Get admin token via Keycloak Admin API
+   - Find test-user.journey by username
+   - Reset password from `TEST_PASSWORD` secret
+   - Remove existing OTP credentials
+   - Clear required actions
+
+3. **Strict Error Handling**: Workflows exit with error (not silent skip) if:
+   - Required secrets are missing
+   - Keycloak is not ready after timeout
+   - Admin token cannot be obtained
+   - User not found
+   - Password reset fails
+
+**Reference**: See `deploy-vps.yml` and `deploy-to-gcp.yml` for implementation details.
 
 ### E2E Test TOTP Auto-Capture
 
@@ -598,7 +624,7 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 
 ---
 
-**Last Updated**: January 14, 2026
+**Last Updated**: January 15, 2026
 **Maintainer**: QA Team
 **Status**: ✅ Active - Ready for use in automated testing
 
@@ -606,6 +632,9 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-01-15 | Aligned deploy-vps.yml with deploy-to-gcp.yml | Consistent test user configuration across environments |
+| 2026-01-15 | Added CI/CD Workflow Alignment section | Document unified approach for all environments |
+| 2026-01-15 | Updated Environment-Specific Behavior table | Added deployment workflow column |
 | 2026-01-14 | Added secretData format documentation | Keycloak only accepts `value` field in secretData |
 | 2026-01-14 | Added Keycloak --import-realm behavior section | Document when TOTP credentials are imported |
 | 2026-01-14 | Added E2E Test TOTP Auto-Capture section | Document automatic TOTP handling |
