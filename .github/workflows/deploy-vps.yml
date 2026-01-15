@@ -367,6 +367,24 @@ jobs:
           set -e
           set +H
 
+          # Wait for Keycloak to be ready (up to 90 seconds)
+          echo "Waiting for Keycloak to be ready..."
+          KEYCLOAK_READY=false
+          for i in {1..18}; do
+            if curl -sf -o /dev/null "http://localhost/auth/realms/master"; then
+              echo "[OK] Keycloak is ready"
+              KEYCLOAK_READY=true
+              break
+            fi
+            echo "   Attempt \$i/18: Keycloak not ready, waiting 5 seconds..."
+            sleep 5
+          done
+
+          if [ "\$KEYCLOAK_READY" = "false" ]; then
+            echo "[WARN] Keycloak not ready after 90 seconds - skipping test user configuration"
+            exit 0
+          fi
+
           # Get admin token
           echo "Getting Keycloak admin token..."
           TOKEN=\$(curl -sf -X POST "http://localhost/auth/realms/master/protocol/openid-connect/token" \
