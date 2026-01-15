@@ -113,7 +113,8 @@ All deployment workflows now use a **consistent approach** for test-user.journey
 1. **Required Secrets** (fail if missing):
    - `TEST_PASSWORD` - Password for test-user.journey
    - `TEST_USER_TOTP_SECRET_RAW` - Raw TOTP secret for Keycloak
-   - `KEYCLOAK_ADMIN_PASSWORD` - Admin password for Keycloak API
+   - `KEYCLOAK_VPS_ADMIN_PASSWORD` - Admin password for VPS/Stage Keycloak API
+   - `KEYCLOAK_ADMIN_PASSWORD` - Admin password for GCP/Prod Keycloak API (if applicable)
 
 2. **Credential Configuration Steps**:
    - Wait for Keycloak to be ready
