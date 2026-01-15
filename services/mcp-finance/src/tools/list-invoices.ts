@@ -68,7 +68,8 @@ export const ListInvoicesInputSchema = z.object({
   cursor: z.string().optional(), // Base64-encoded pagination cursor
 });
 
-export type ListInvoicesInput = z.infer<typeof ListInvoicesInputSchema>;
+// Use z.input to allow optional fields before parsing applies defaults
+export type ListInvoicesInput = z.input<typeof ListInvoicesInputSchema>;
 
 /**
  * Invoice data structure (matches actual schema)
