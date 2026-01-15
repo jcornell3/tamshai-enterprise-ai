@@ -4,13 +4,16 @@
 # It uses SSH keys stored in GitHub Secrets to connect and deploy.
 #
 # Required Secrets:
-#   VPS_HOST          - VPS IP address or hostname
-#   VPS_SSH_KEY       - Private SSH key for deployment (raw PEM format)
-#   VPS_SSH_USER      - SSH username (usually 'root' or 'tamshai')
+#   VPS_HOST               - VPS IP address or hostname
+#   VPS_SSH_KEY            - Private SSH key for deployment (raw PEM format)
+#   VPS_SSH_USER           - SSH username (usually 'root' or 'tamshai')
+#   KEYCLOAK_ADMIN_PASSWORD - Keycloak admin password for realm management
 #
-# Optional Secrets:
-#   SLACK_WEBHOOK_URL - For deployment notifications
-#   VAULT_ADDR        - (Future) Vault address for SSH certificate auth
+# Optional Secrets (for E2E testing):
+#   TEST_PASSWORD_STAGE        - Password for test-user.journey on stage (falls back to TEST_PASSWORD)
+#   TEST_USER_TOTP_SECRET_RAW_STAGE - Raw TOTP secret for stage (falls back to TEST_USER_TOTP_SECRET_RAW)
+#   SLACK_WEBHOOK_URL          - For deployment notifications
+#   VAULT_ADDR                 - (Future) Vault address for SSH certificate auth
 #
 # Triggers:
 #   - Push to main branch (auto-deploy)
@@ -342,6 +345,75 @@ jobs:
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
+
+      - name: Configure test-user.journey credentials
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD_STAGE || secrets.TEST_PASSWORD }}
+          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW_STAGE || secrets.TEST_USER_TOTP_SECRET_RAW }}
+        run: |
+          echo "Configuring test-user.journey credentials..."
+
+          # Skip if TEST_PASSWORD not set (optional for E2E testing)
+          if [ -z "$TEST_PASSWORD" ]; then
+            echo "[WARN] TEST_PASSWORD secret not set - skipping test user configuration"
+            echo "Set TEST_PASSWORD_STAGE or TEST_PASSWORD secret for E2E testing"
+            exit 0
+          fi
+
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << CONFIGURE_SCRIPT
+          set -e
+          set +H
+
+          # Get admin token
+          echo "Getting Keycloak admin token..."
+          TOKEN=\$(curl -sf -X POST "http://localhost/auth/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "username=admin" \
+            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            -d "grant_type=password" | jq -r '.access_token')
+
+          if [ -z "\$TOKEN" ] || [ "\$TOKEN" = "null" ]; then
+            echo "[WARN] Could not get admin token - test user configuration skipped"
+            exit 0
+          fi
+
+          # Get test-user.journey ID
+          USER_ID=\$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users?username=test-user.journey" \
+            -H "Authorization: Bearer \$TOKEN" | jq -r '.[0].id')
+
+          if [ -z "\$USER_ID" ] || [ "\$USER_ID" = "null" ]; then
+            echo "[WARN] test-user.journey not found - skipping credential configuration"
+            exit 0
+          fi
+          echo "Found test-user.journey (ID: \$USER_ID)"
+
+          # Reset password
+          echo "Resetting password for test-user.journey..."
+          RESET_CODE=\$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+            "http://localhost/auth/admin/realms/tamshai-corp/users/\${USER_ID}/reset-password" \
+            -H "Authorization: Bearer \$TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"type":"password","value":"${TEST_PASSWORD}","temporary":false}')
+
+          if [ "\$RESET_CODE" = "204" ]; then
+            echo "[OK] Password reset successful"
+          else
+            echo "[WARN] Password reset returned HTTP \$RESET_CODE"
+          fi
+
+          # Clear required actions (allow login without TOTP setup if not configured)
+          echo "Clearing required actions..."
+          curl -sf -X PUT \
+            "http://localhost/auth/admin/realms/tamshai-corp/users/\${USER_ID}" \
+            -H "Authorization: Bearer \$TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"requiredActions":[]}' > /dev/null || true
+
+          echo "[OK] test-user.journey configured successfully"
+          CONFIGURE_SCRIPT
 
       - name: Verify deployment
         run: |
