@@ -775,6 +775,7 @@ jobs:
       - name: Debug Keycloak and Authentication
         env:
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
+          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
         run: |
           echo "=== Environment Variables ==="
           echo "KEYCLOAK_CLIENT_SECRET is set: ${KEYCLOAK_CLIENT_SECRET:+YES}"
@@ -825,8 +826,6 @@ jobs:
 
           echo ""
           echo "=== All pre-test checks passed ==="
-        env:
-          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
 
       - name: Run integration tests
         working-directory: tests/integration
