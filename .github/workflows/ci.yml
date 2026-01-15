@@ -773,10 +773,13 @@ jobs:
           sleep 2  # Grace period for full initialization
 
       - name: Debug Keycloak and Authentication
+        env:
+          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
         run: |
           echo "=== Environment Variables ==="
           echo "KEYCLOAK_CLIENT_SECRET is set: ${KEYCLOAK_CLIENT_SECRET:+YES}"
           echo "KEYCLOAK_CLIENT_SECRET length: $(echo -n "${KEYCLOAK_CLIENT_SECRET}" | wc -c)"
+          echo "DEV_USER_PASSWORD is set: ${DEV_USER_PASSWORD:+YES}"
           echo ""
 
           echo "=== Keycloak Health Check ==="
@@ -793,7 +796,7 @@ jobs:
             -d "client_id=mcp-gateway" \
             -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
             -d "username=alice.chen" \
-            -d "password=password123" \
+            -d "password=${DEV_USER_PASSWORD}" \
             -d "scope=openid profile email")
 
           HTTP_CODE=$(echo "$TOKEN_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
@@ -1110,7 +1113,7 @@ jobs:
           GATEWAY_URL: http://localhost:3100
           KEYCLOAK_URL: http://localhost:8180/auth
           KEYCLOAK_REALM: tamshai-corp
-          TEST_PASSWORD: password123
+          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
         continue-on-error: true
 
       - name: Upload k6 results

@@ -278,15 +278,15 @@ jobs:
             --platform=managed \
             --service-account=tamshai-prod-keycloak@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
-            --min-instances=0 \
-            --max-instances=4 \
+            --min-instances=1 \
+            --max-instances=2 \
             --memory=1Gi \
             --cpu=1 \
             --timeout=600 \
             --vpc-connector=tamshai-prod-connector \
             --vpc-egress=private-ranges-only \
             --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
-            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth"
+            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.180.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth,KC_DB_POOL_MAX_SIZE=10,KC_DB_POOL_MIN_SIZE=2"
 
   sync-keycloak-realm:
     needs: deploy-keycloak
@@ -341,7 +341,7 @@ jobs:
       - name: Configure credentials for test-user.journey
         env:
           TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+          TEST_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
         run: |
           # Configure password and TOTP credentials for test-user.journey via Admin API
           # This is necessary because Keycloak's --import-realm doesn't update
@@ -395,7 +395,7 @@ jobs:
           # Reset password for test-user.journey
           echo "Resetting password for test-user.journey..."
           if [ -z "$TEST_PASSWORD" ]; then
-            echo "ERROR: TEST_PASSWORD secret not set"
+            echo "ERROR: TEST_USER_PASSWORD secret not set"
             exit 1
           fi
           RESET_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/reset-password" \

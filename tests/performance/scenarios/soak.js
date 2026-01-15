@@ -89,7 +89,7 @@ function getAccessToken() {
       grant_type: 'password',
       client_id: 'mcp-gateway',
       username: 'alice.chen',
-      password: __ENV.TEST_PASSWORD || 'password123',
+      password: __ENV.DEV_USER_PASSWORD || 'dev-password-not-set',
       scope: 'openid',
     },
     {
