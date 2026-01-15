@@ -28,7 +28,8 @@ export const ListBudgetsInputSchema = z.object({
   cursor: z.string().optional(),
 });
 
-export type ListBudgetsInput = z.infer<typeof ListBudgetsInputSchema>;
+// Use z.input to allow optional fields before parsing applies defaults
+export type ListBudgetsInput = z.input<typeof ListBudgetsInputSchema>;
 
 /**
  * Budget summary structure (matches vw_budget_summary view)

@@ -25,7 +25,8 @@ export const GetBudgetInputSchema = z.object({
   year: z.number().int().optional().default(2024),
 });
 
-export type GetBudgetInput = z.infer<typeof GetBudgetInputSchema>;
+// Use z.input to allow optional fields before parsing applies defaults
+export type GetBudgetInput = z.input<typeof GetBudgetInputSchema>;
 
 /**
  * Budget data structure (matches actual schema)
@@ -44,6 +45,17 @@ export interface Budget {
 }
 
 /**
+ * Budget summary response structure
+ */
+export interface BudgetSummary {
+  department: string;
+  fiscal_year: number;
+  budgets: (Budget & { department: string })[];
+  total_budgeted: number;
+  total_actual: number;
+}
+
+/**
  * Get department budgets by department name and fiscal year
  *
  * Uses actual v1.3 table: finance.department_budgets (not finance.budgets)
@@ -56,7 +68,7 @@ export interface Budget {
 export async function getBudget(
   input: GetBudgetInput,
   userContext: UserContext
-): Promise<MCPToolResponse<Budget[]>> {
+): Promise<MCPToolResponse<BudgetSummary>> {
   return withErrorHandling('get_budget', async () => {
     // Validate input
     const { department, year } = GetBudgetInputSchema.parse(input);
@@ -130,5 +142,5 @@ export async function getBudget(
     } catch (error) {
       return handleDatabaseError(error as Error, 'get_budget');
     }
-  }) as Promise<MCPToolResponse<Budget[]>>;
+  }) as Promise<MCPToolResponse<BudgetSummary>>;
 }
