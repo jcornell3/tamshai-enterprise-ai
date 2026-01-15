@@ -227,7 +227,7 @@ services:
       KEYCLOAK_REALM: tamshai-corp
       KEYCLOAK_CLIENT_ID: mcp-hr-service
       MCP_HR_SERVICE_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-}
-      STAGE_TESTING_PASSWORD: ${STAGE_TESTING_PASSWORD:-}
+      USER_PASSWORD: ${USER_PASSWORD:-password123}
     ports:
       - "${MCP_HR_PORT:-3101}:3101"
     depends_on:
@@ -642,7 +642,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       # Password for all provisioned users (stage/prod only)
-      STAGE_TESTING_PASSWORD: ${STAGE_TESTING_PASSWORD:-}
+      USER_PASSWORD: ${USER_PASSWORD:-password123}
       ENVIRONMENT: ${ENVIRONMENT:-dev}
     depends_on:
       postgres:

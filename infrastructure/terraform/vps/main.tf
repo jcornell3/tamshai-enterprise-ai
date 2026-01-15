@@ -127,8 +127,8 @@ variable "mcp_hr_service_client_secret" {
   default     = "" # If empty, a random secret will be generated
 }
 
-variable "stage_testing_password" {
-  description = "Fixed password for identity sync in stage/dev (leave empty for production)"
+variable "stage_user_password" {
+  description = "Fixed password for synced users in stage/dev (leave empty for production)"
   type        = string
   sensitive   = true
   default     = "" # Empty = use random password (production)
@@ -338,7 +338,7 @@ locals {
     jwt_secret                   = random_password.jwt_secret.result
     root_password                = random_password.root_password.result
     mcp_hr_service_client_secret = local.mcp_hr_service_secret
-    stage_testing_password       = var.stage_testing_password
+    stage_user_password          = var.stage_user_password
   })
 }
 

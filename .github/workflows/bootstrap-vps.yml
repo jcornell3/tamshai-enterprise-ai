@@ -82,7 +82,7 @@ jobs:
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
           MCP_GATEWAY_CLIENT_SECRET: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
           MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
-          STAGE_TESTING_PASSWORD: ${{ secrets.STAGE_TESTING_PASSWORD }}
+          USER_PASSWORD: ${{ secrets.STAGE_USER_PASSWORD }}
         run: |
           echo "Creating .env file on VPS..."
           ssh $VPS_USER@$VPS_HOST "cat > /opt/tamshai/.env << ENVEOF
@@ -119,8 +119,8 @@ jobs:
           VITE_KEYCLOAK_URL=https://www.tamshai.com/auth/realms/tamshai-corp
           VITE_KEYCLOAK_CLIENT_ID=web-portal
           VITE_MCP_GATEWAY_URL=https://www.tamshai.com/api
-          # Stage Testing - Fixed password for synced users (NOT for production!)
-          STAGE_TESTING_PASSWORD=$STAGE_TESTING_PASSWORD
+          # User Password - Fixed password for synced users (from STAGE_USER_PASSWORD secret)
+          USER_PASSWORD=$USER_PASSWORD
           # Environment
           NODE_ENV=production
           LOG_LEVEL=info

@@ -224,8 +224,8 @@ docker compose exec -T postgres psql -U tamshai -d tamshai_hr -c \
 Credentials are managed via environment variables and should never be committed to version control:
 
 - `KEYCLOAK_ADMIN_PASSWORD` - Keycloak admin password
-- `SYNC_USER_PASSWORD` - Default password for HR-synced users
-- Test user credentials are in `.env.example` (dev) or secrets manager (stage/prod)
+- `USER_PASSWORD` - Default password for HR-synced users (mapped from DEV/STAGE/PROD_USER_PASSWORD)
+- Test user credentials are in `.env.example` (dev) or GitHub Secrets (stage/prod)
 
 **Note**: Bootstrap users (from realm export) have TOTP configured. HR-synced users do not require TOTP by default.
 

@@ -352,7 +352,7 @@ This means:
 - Identity reconciliation creates all users from HR database
 - Emails use `@tamshai.com` directly (no transformation in stage/prod)
 - All code paths (create user, assign roles) are exercised
-- Uses `STAGE_TESTING_PASSWORD` for predictable test credentials
+- Uses environment-specific `USER_PASSWORD` for predictable test credentials
 
 ---
 
@@ -408,9 +408,14 @@ The original implementation used client roles, which required looking up the `mc
 | `KEYCLOAK_CLIENT_SECRET` | Service account secret | `MCP_HR_SERVICE_CLIENT_SECRET` |
 | `POSTGRES_HOST` | PostgreSQL host | `postgres` |
 | `POSTGRES_DB` | Database name | `tamshai_hr` |
-| `STAGE_TESTING_PASSWORD` | Fixed password for synced users (stage/dev only) | `TamshaiTemp123!` |
+| `USER_PASSWORD` | Fixed password for synced users (mapped from environment-specific secrets) | Set from DEV/STAGE/PROD_USER_PASSWORD |
 
-**Note on STAGE_TESTING_PASSWORD:** In stage/dev environments, all synced users are given this fixed password for testing. In production, this should be left empty and users will receive cryptographically random passwords (requiring password reset on first login).
+**Note on USER_PASSWORD:** Each environment uses its own password secret:
+- **Dev**: `DEV_USER_PASSWORD` (password123 - hardcoded for local dev)
+- **Stage**: `STAGE_USER_PASSWORD` (GitHub Secret)
+- **Prod**: `PROD_USER_PASSWORD` (GitHub Secret)
+
+In production, if `PROD_USER_PASSWORD` is not set, users will receive cryptographically random passwords (requiring password reset on first login).
 
 ### Keycloak Client Requirements
 

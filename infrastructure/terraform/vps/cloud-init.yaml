@@ -110,8 +110,8 @@ write_files:
       ENABLE_AUDIT_LOGGING=true
       ENABLE_RATE_LIMITING=true
 
-      # Stage Testing - Fixed password for all synced users (NOT for production!)
-      STAGE_TESTING_PASSWORD=${stage_testing_password}
+      # User Password - Fixed password for synced users (from STAGE_USER_PASSWORD secret)
+      USER_PASSWORD=${stage_user_password}
 
   # Caddyfile for reverse proxy behind Cloudflare
   - path: /opt/tamshai/Caddyfile

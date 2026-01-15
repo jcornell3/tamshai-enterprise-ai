@@ -89,9 +89,9 @@ When recreating an environment from scratch:
 
 | Environment | Test Users | Corporate Users | Password |
 |-------------|------------|-----------------|----------|
-| **Dev** | Pre-seeded in realm-export-dev.json | identity-sync from PostgreSQL | `STAGE_TESTING_PASSWORD` |
-| **Stage** | identity-sync provisions | identity-sync from PostgreSQL | `STAGE_TESTING_PASSWORD` (TamshaiTemp123!) |
-| **Prod** | `test-user.journey` only (in realm-export.json) | **Manual provisioning only** | Random (unknown) |
+| **Dev** | Pre-seeded in realm-export-dev.json | identity-sync from PostgreSQL | `DEV_USER_PASSWORD` (password123) |
+| **Stage** | identity-sync provisions | identity-sync from PostgreSQL | `STAGE_USER_PASSWORD` (GitHub Secret) |
+| **Prod** | `test-user.journey` (realm-export.json) | identity-sync from PostgreSQL | `PROD_USER_PASSWORD` (GitHub Secret) |
 
 **Prod-Specific Rules:**
 

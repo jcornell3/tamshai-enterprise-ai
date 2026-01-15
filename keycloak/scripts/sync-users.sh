@@ -50,8 +50,8 @@ configure_environment() {
             POSTGRES_PORT="5433"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
-            # Default dev password for synced users
-            DEFAULT_PASSWORD="${SYNC_USER_PASSWORD:-TamshaiDev2025!}"
+            # Default dev password for synced users (DEV_USER_PASSWORD)
+            DEFAULT_PASSWORD="${USER_PASSWORD:-password123}"
             ;;
         stage)
             KEYCLOAK_URL="http://localhost:8080/auth"  # Inside container
@@ -59,7 +59,8 @@ configure_environment() {
             POSTGRES_PORT="5432"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}"
-            DEFAULT_PASSWORD="${SYNC_USER_PASSWORD:?SYNC_USER_PASSWORD required for stage}"
+            # Stage uses USER_PASSWORD (from STAGE_USER_PASSWORD GitHub Secret)
+            DEFAULT_PASSWORD="${USER_PASSWORD:?USER_PASSWORD required for stage}"
             ;;
         *)
             log_error "Unknown environment: $ENV"

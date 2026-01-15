@@ -46,6 +46,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
+
 COMMAND="${1:-status}"
 ENV="${2:-dev}"
 REALM="tamshai-corp"
@@ -63,6 +69,17 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_header() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
 
+# Validate VPS_HOST is set for stage operations
+require_vps_host() {
+    if [ -z "${VPS_HOST:-}" ]; then
+        log_error "VPS_HOST not set. Either:"
+        log_info "  1. Create .env.local with VPS_HOST=<ip>"
+        log_info "  2. Export VPS_HOST environment variable"
+        log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+        exit 1
+    fi
+}
+
 # Configure kcadm based on environment
 setup_kcadm() {
     local admin_user="${KEYCLOAK_ADMIN:-admin}"
@@ -78,7 +95,8 @@ setup_kcadm() {
         if [ "$ENV" = "dev" ]; then
             MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh "$@"
         else
-            ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+            require_vps_host
+            ssh "${VPS_SSH_USER:-root}@${VPS_HOST}" \
                 "docker exec -e KEYCLOAK_ADMIN_PASSWORD=\"\$KEYCLOAK_ADMIN_PASSWORD\" $CONTAINER /opt/keycloak/bin/kcadm.sh $*"
         fi
     }
@@ -99,7 +117,8 @@ cmd_sync() {
         docker exec -u 0 "$CONTAINER" bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
         MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /tmp/sync-realm.sh dev
     else
-        local vps_host="${VPS_HOST:-5.78.159.29}"
+        require_vps_host
+        local vps_host="${VPS_HOST}"
         local vps_user="${VPS_SSH_USER:-root}"
 
         ssh "$vps_user@$vps_host" << 'SYNC'
@@ -121,7 +140,7 @@ cmd_sync_users() {
 
     if [ "$ENV" = "dev" ]; then
         cd "$compose_dir"
-        local default_password="${SYNC_USER_PASSWORD:-TamshaiDev2025!}"
+        local default_password="${USER_PASSWORD:-password123}"
 
         # Authenticate kcadm
         log_info "Authenticating to Keycloak..."
@@ -213,7 +232,8 @@ cmd_sync_users() {
         done
 
     else
-        local vps_host="${VPS_HOST:-5.78.159.29}"
+        require_vps_host
+        local vps_host="${VPS_HOST}"
         local vps_user="${VPS_SSH_USER:-root}"
 
         log_info "Running user sync on VPS..."
@@ -224,7 +244,7 @@ export $(cat .env | grep -v '^#' | xargs)
 
 REALM="tamshai-corp"
 CONTAINER="tamshai-keycloak"
-DEFAULT_PASSWORD="${SYNC_USER_PASSWORD:-TamshaiProd2025!}"
+DEFAULT_PASSWORD="${USER_PASSWORD:?USER_PASSWORD required for stage/prod sync}"
 
 echo "[INFO] Authenticating to Keycloak..."
 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
@@ -331,7 +351,8 @@ cmd_reimport() {
     if [ "$ENV" = "dev" ]; then
         keycloak_url="http://localhost:8180"
     else
-        keycloak_url="https://${VPS_HOST:-5.78.159.29}"
+        require_vps_host
+        keycloak_url="https://${VPS_HOST}"
         insecure="-k"
     fi
 
@@ -485,7 +506,8 @@ cmd_reset() {
         done
 
     else
-        local vps_host="${VPS_HOST:-5.78.159.29}"
+        require_vps_host
+        local vps_host="${VPS_HOST}"
         local vps_user="${VPS_SSH_USER:-root}"
 
         ssh "$vps_user@$vps_host" << 'RESET'
@@ -530,7 +552,8 @@ cmd_status() {
     if [ "$ENV" = "dev" ]; then
         docker ps --filter "name=$CONTAINER" --format "  {{.Names}}: {{.Status}}"
     else
-        ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+        require_vps_host
+        ssh "${VPS_SSH_USER:-root}@${VPS_HOST}" \
             "docker ps --filter 'name=$CONTAINER' --format '  {{.Names}}: {{.Status}}'"
     fi
 
@@ -541,7 +564,8 @@ cmd_status() {
     if [ "$ENV" = "dev" ]; then
         health_url="http://localhost:8180/health/ready"
     else
-        health_url="https://${VPS_HOST:-5.78.159.29}/auth/health/ready"
+        require_vps_host
+        health_url="https://${VPS_HOST}/auth/health/ready"
     fi
 
     if curl -sf "$health_url" >/dev/null 2>&1; then
@@ -563,7 +587,8 @@ cmd_clients() {
         MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get clients -r "$REALM" \
             --fields clientId,enabled,publicClient,defaultClientScopes
     else
-        ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+        require_vps_host
+        ssh "${VPS_SSH_USER:-root}@${VPS_HOST}" \
             "docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh get clients -r $REALM --fields clientId,enabled,publicClient,defaultClientScopes"
     fi
 }
@@ -576,7 +601,8 @@ cmd_users() {
         MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get users -r "$REALM" \
             --fields username,email,enabled,emailVerified
     else
-        ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+        require_vps_host
+        ssh "${VPS_SSH_USER:-root}@${VPS_HOST}" \
             "docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh get users -r $REALM --fields username,email,enabled,emailVerified"
     fi
 }
@@ -589,7 +615,8 @@ cmd_scopes() {
         MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh get client-scopes -r "$REALM" \
             --fields name,protocol,description
     else
-        ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+        require_vps_host
+        ssh "${VPS_SSH_USER:-root}@${VPS_HOST}" \
             "docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh get client-scopes -r $REALM --fields name,protocol,description"
     fi
 }
@@ -600,7 +627,8 @@ cmd_logs() {
     if [ "$ENV" = "dev" ]; then
         docker logs --tail 100 "$CONTAINER"
     else
-        ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+        require_vps_host
+        ssh "${VPS_SSH_USER:-root}@${VPS_HOST}" \
             "docker logs --tail 100 $CONTAINER"
     fi
 }
