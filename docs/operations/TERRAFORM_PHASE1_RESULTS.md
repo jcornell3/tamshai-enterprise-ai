@@ -38,7 +38,7 @@ docker compose up -d keycloak
 **Environment Variables**:
 ```bash
 export TF_VAR_environment="dev"
-export TF_VAR_test_user_password="password123"
+export TF_VAR_test_user_password="[REDACTED-DEV-PASSWORD]"
 export TF_VAR_keycloak_url="http://127.0.0.1:8180/auth"  # IPv4 to avoid IPv6 connection issues
 export TF_VAR_keycloak_admin_password="admin"
 ```
@@ -91,7 +91,7 @@ terraform apply -auto-approve
 ```bash
 curl -X POST "http://tamshai-keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/token" \
   -d "username=eve.thompson" \
-  -d "password=password123" \
+  -d "password=[REDACTED-DEV-PASSWORD]" \
   -d "grant_type=password" \
   -d "client_id=admin-cli"
 ```
@@ -137,7 +137,7 @@ curl -X POST "http://tamshai-keycloak:8080/auth/realms/tamshai-corp/protocol/ope
 **Prod (recreate-realm-prod.sh)**:
 - Uses Admin REST API: `DELETE /admin/realms/tamshai-corp` → `POST /admin/realms`
 - Admin API expects pre-hashed credentials in specific format
-- Plaintext `"value": "password123"` in JSON is IGNORED
+- Plaintext `"value": "[REDACTED-DEV-PASSWORD]"` in JSON is IGNORED
 - Users created but passwords invalid
 
 **Solution**: Remove users from realm exports, use Terraform exclusively
@@ -168,7 +168,7 @@ Error: read tcp [::1]:64267->[::1]:8180: wsarecv: An existing connection was for
 ```bash
 cd tests/e2e
 export TEST_USERNAME="alice.chen"
-export TEST_PASSWORD="password123"
+export TEST_PASSWORD="[REDACTED-DEV-PASSWORD]"
 export TEST_TOTP_SECRET=""
 export CI=true
 npx playwright test login-journey --project=chromium

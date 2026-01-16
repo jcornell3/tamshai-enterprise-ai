@@ -44,7 +44,7 @@ Failing Line: 67 (axios.post to token endpoint)
   client_id: 'mcp-gateway',
   client_secret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
   username: 'alice.chen',  // Example test user
-  password: 'password123',
+  password: '[REDACTED-DEV-PASSWORD]',
   scope: 'openid profile email roles'
 }
 ```
@@ -104,7 +104,7 @@ Outputs:
          -d "client_id=mcp-gateway" \
          -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
          -d "username=alice.chen" \
-         -d "password=password123" \
+         -d "password=[REDACTED-DEV-PASSWORD]" \
          -d "scope=openid profile email roles" | jq .
    ```
 
@@ -130,7 +130,7 @@ If missing, add this property to the client resource.
 **Likelihood**: MEDIUM
 **Evidence**: Terraform creates users with passwords from variables, may not match test expectations
 
-**Expected**: Tests expect password `password123` for all users
+**Expected**: Tests expect password `[REDACTED-DEV-PASSWORD]` for all users
 **Actual**: Terraform uses `var.test_user_password` from `environments/ci.tfvars`
 
 **Verification**:
@@ -141,7 +141,7 @@ grep test_user_password infrastructure/terraform/keycloak/environments/ci.tfvars
 
 **Expected Output**:
 ```hcl
-test_user_password = "password123"
+test_user_password = "[REDACTED-DEV-PASSWORD]"
 ```
 
 ### Hypothesis 4: Realm Not Fully Initialized
@@ -198,7 +198,7 @@ Add debug step to CI workflow:
       -d "client_id=mcp-gateway" \
       -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
       -d "username=alice.chen" \
-      -d "password=password123" | jq .
+      -d "password=[REDACTED-DEV-PASSWORD]" | jq .
 ```
 
 ### Step 2: Verify Terraform Configuration
@@ -213,7 +213,7 @@ Ensure `keycloak_openid_client.mcp_gateway` has:
 **Check**: `infrastructure/terraform/keycloak/environments/ci.tfvars`
 
 Ensure:
-- `test_user_password = "password123"`
+- `test_user_password = "[REDACTED-DEV-PASSWORD]"`
 - `mcp_gateway_client_secret` matches test expectations
 
 ### Step 3: Test Token Acquisition Outside Tests
@@ -228,7 +228,7 @@ Ensure:
       -d "client_id=mcp-gateway" \
       -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
       -d "username=alice.chen" \
-      -d "password=password123")
+      -d "password=[REDACTED-DEV-PASSWORD]")
 
     if echo "$TOKEN_RESPONSE" | jq -e '.access_token' > /dev/null; then
       echo "✅ Token acquisition successful"
@@ -275,7 +275,7 @@ Current implementation in `.github/workflows/ci.yml` (lines ~410-415):
 Tests expect these credentials:
 - **Client ID**: `mcp-gateway`
 - **Client Secret**: `test-client-secret` (default) or `$KEYCLOAK_CLIENT_SECRET` (from env)
-- **Test Users**: All use password `password123`
+- **Test Users**: All use password `[REDACTED-DEV-PASSWORD]`
 
 ### Expected Keycloak Client Configuration
 

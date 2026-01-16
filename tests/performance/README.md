@@ -161,7 +161,7 @@ SOAK_DURATION=2h k6 run scenarios/soak.js
 | `GATEWAY_URL` | `http://localhost:3100` | MCP Gateway URL |
 | `KEYCLOAK_URL` | `http://localhost:8180` | Keycloak URL |
 | `KEYCLOAK_REALM` | `tamshai-corp` | Keycloak realm |
-| `TEST_PASSWORD` | `password123` | Test user password |
+| `TEST_PASSWORD` | `[REDACTED-DEV-PASSWORD]` | Test user password |
 | `SOAK_DURATION` | `4h` | Soak test duration |
 | `ENVIRONMENT` | `local` | Environment tag |
 

@@ -136,7 +136,7 @@ cmd_sync_users() {
 
     if [ "$ENV" = "dev" ]; then
         cd "$compose_dir"
-        local default_password="${USER_PASSWORD:-password123}"
+        local default_password="${USER_PASSWORD:?USER_PASSWORD required - set DEV_USER_PASSWORD in environment}"
 
         # Authenticate kcadm
         log_info "Authenticating to Keycloak..."

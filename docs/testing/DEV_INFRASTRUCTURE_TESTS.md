@@ -30,7 +30,7 @@
 ```bash
 curl -s -X POST "http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&client_id=mcp-gateway&client_secret=test-client-secret&username=alice.chen&password=password123&scope=openid profile email"
+  -d "grant_type=password&client_id=mcp-gateway&client_secret=test-client-secret&username=alice.chen&password=[REDACTED-DEV-PASSWORD]&scope=openid profile email"
 ```
 
 **Result**: ✅ **Success**
@@ -65,7 +65,7 @@ curl -s -X POST "http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-
 ```bash
 curl -s -X POST "http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&client_id=mcp-gateway&client_secret=test-client-secret&username=bob.martinez&password=password123&scope=openid profile email"
+  -d "grant_type=password&client_id=mcp-gateway&client_secret=test-client-secret&username=bob.martinez&password=[REDACTED-DEV-PASSWORD]&scope=openid profile email"
 ```
 
 **Result**: ✅ **Success**
@@ -81,7 +81,7 @@ curl -s -X POST "http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-
 ```bash
 curl -s -X POST "http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&client_id=mcp-gateway&client_secret=test-client-secret&username=eve.thompson&password=password123&scope=openid profile email"
+  -d "grant_type=password&client_id=mcp-gateway&client_secret=test-client-secret&username=eve.thompson&password=[REDACTED-DEV-PASSWORD]&scope=openid profile email"
 ```
 
 **Result**: ✅ **Success**

@@ -6,6 +6,7 @@ KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180}"
 REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
+TEST_USER_PASSWORD="${DEV_USER_PASSWORD:?DEV_USER_PASSWORD required - set via environment variable}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -169,44 +170,44 @@ main() {
   log_info "Creating test users..."
 
   # alice.chen - HR Manager
-  alice_id=$(create_user "alice.chen" "alice@tamshai.com" "password123")
+  alice_id=$(create_user "alice.chen" "alice@tamshai.com" "$TEST_USER_PASSWORD")
   assign_role "$alice_id" "hr-read"
   assign_role "$alice_id" "hr-write"
 
   # bob.martinez - Finance Director
-  bob_id=$(create_user "bob.martinez" "bob@tamshai.com" "password123")
+  bob_id=$(create_user "bob.martinez" "bob@tamshai.com" "$TEST_USER_PASSWORD")
   assign_role "$bob_id" "finance-read"
   assign_role "$bob_id" "finance-write"
 
   # carol.johnson - Sales VP
-  carol_id=$(create_user "carol.johnson" "carol@tamshai.com" "password123")
+  carol_id=$(create_user "carol.johnson" "carol@tamshai.com" "$TEST_USER_PASSWORD")
   assign_role "$carol_id" "sales-read"
   assign_role "$carol_id" "sales-write"
 
   # dan.williams - Support Director
-  dan_id=$(create_user "dan.williams" "dan@tamshai.com" "password123")
+  dan_id=$(create_user "dan.williams" "dan@tamshai.com" "$TEST_USER_PASSWORD")
   assign_role "$dan_id" "support-read"
   assign_role "$dan_id" "support-write"
 
   # eve.thompson - Executive
-  eve_id=$(create_user "eve.thompson" "eve@tamshai.com" "password123")
+  eve_id=$(create_user "eve.thompson" "eve@tamshai.com" "$TEST_USER_PASSWORD")
   assign_role "$eve_id" "executive"
 
   # frank.davis - Intern (no roles)
-  frank_id=$(create_user "frank.davis" "frank@tamshai.com" "password123")
+  frank_id=$(create_user "frank.davis" "frank@tamshai.com" "$TEST_USER_PASSWORD")
 
   # nina.patel - Manager
-  nina_id=$(create_user "nina.patel" "nina@tamshai.com" "password123")
+  nina_id=$(create_user "nina.patel" "nina@tamshai.com" "$TEST_USER_PASSWORD")
   # Note: manager role behavior depends on application logic
 
   # marcus.johnson - Engineer
-  marcus_id=$(create_user "marcus.johnson" "marcus@tamshai.com" "password123")
+  marcus_id=$(create_user "marcus.johnson" "marcus@tamshai.com" "$TEST_USER_PASSWORD")
 
   log_info "Keycloak realm setup complete!"
   log_info "Realm: $REALM"
   log_info "Users: alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson"
   log_info "Client: mcp-gateway (secret: test-client-secret)"
-  log_info "Password for all users: password123"
+  log_info "Password for all users: (set via DEV_USER_PASSWORD)"
 }
 
 # Run main function

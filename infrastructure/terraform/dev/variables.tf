@@ -64,10 +64,10 @@ variable "keycloak_admin_password" {
 }
 
 variable "test_user_password" {
-  description = "Test user password (for dev test users)"
+  description = "Test user password (set via TF_VAR_test_user_password or -var)"
   type        = string
   sensitive   = true
-  default     = "password123"
+  # No default - must be provided via environment variable or tfvars
 }
 
 variable "mcp_gateway_client_secret" {

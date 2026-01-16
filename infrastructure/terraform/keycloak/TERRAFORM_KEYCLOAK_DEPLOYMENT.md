@@ -142,7 +142,7 @@ curl -X POST http://localhost:8180/realms/tamshai-corp/protocol/openid-connect/t
   -d "client_id=mcp-gateway" \
   -d "client_secret=test-client-secret" \
   -d "username=alice.chen" \
-  -d "password=password123" \
+  -d "password=[REDACTED-DEV-PASSWORD]" \
   -d "grant_type=password" \
   -d "scope=openid" | jq .
 
@@ -249,7 +249,7 @@ terraform apply -var-file=environments/stage.tfvars
 | nina.patel | Nina Patel | nina@tamshai.com | (none) | Engineering Manager |
 | marcus.johnson | Marcus Johnson | marcus@tamshai.com | (none) | Software Engineer |
 
-**Password** (dev/ci): `password123`
+**Password** (dev/ci): `[REDACTED-DEV-PASSWORD]`
 
 ### 4. Client: `mcp-gateway`
 
@@ -575,7 +575,7 @@ curl -X POST http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-conn
   -d "client_id=mcp-gateway" \
   -d "client_secret=test-client-secret" \
   -d "username=alice.chen" \
-  -d "password=password123" \
+  -d "password=[REDACTED-DEV-PASSWORD]" \
   -d "grant_type=password" \
   -d "scope=openid"
 

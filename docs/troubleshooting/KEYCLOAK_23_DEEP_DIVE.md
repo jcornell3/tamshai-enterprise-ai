@@ -85,7 +85,7 @@ curl -X POST http://localhost:8180/admin/realms/tamshai-corp/users \
   -d '{
     "username":"alice.chen",
     "enabled":true,
-    "credentials":[{"type":"password","value":"password123","temporary":false}]
+    "credentials":[{"type":"password","value":"[REDACTED-DEV-PASSWORD]","temporary":false}]
   }'
 
 # 4. Assign roles
@@ -198,7 +198,7 @@ curl -X POST http://localhost:8180/realms/tamshai-corp/protocol/openid-connect/t
   -d "client_id=mcp-gateway" \
   -d "client_secret=test-client-secret" \
   -d "username=alice.chen" \
-  -d "password=password123" \
+  -d "password=[REDACTED-DEV-PASSWORD]" \
   -d "grant_type=password"
 ```
 
@@ -280,14 +280,14 @@ curl -X GET "http://localhost:8180/admin/realms/tamshai-corp/clients?clientId=mc
 **Users**:
 | Username | Email | Roles | Password |
 |----------|-------|-------|----------|
-| alice.chen | alice@tamshai.com | hr-read, hr-write | password123 |
-| bob.martinez | bob@tamshai.com | finance-read, finance-write | password123 |
-| carol.johnson | carol@tamshai.com | sales-read, sales-write | password123 |
-| dan.williams | dan@tamshai.com | support-read, support-write | password123 |
-| eve.thompson | eve@tamshai.com | executive | password123 |
-| frank.davis | frank@tamshai.com | (none - intern) | password123 |
-| nina.patel | nina@tamshai.com | (none - manager) | password123 |
-| marcus.johnson | marcus@tamshai.com | (none - engineer) | password123 |
+| alice.chen | alice@tamshai.com | hr-read, hr-write | [REDACTED-DEV-PASSWORD] |
+| bob.martinez | bob@tamshai.com | finance-read, finance-write | [REDACTED-DEV-PASSWORD] |
+| carol.johnson | carol@tamshai.com | sales-read, sales-write | [REDACTED-DEV-PASSWORD] |
+| dan.williams | dan@tamshai.com | support-read, support-write | [REDACTED-DEV-PASSWORD] |
+| eve.thompson | eve@tamshai.com | executive | [REDACTED-DEV-PASSWORD] |
+| frank.davis | frank@tamshai.com | (none - intern) | [REDACTED-DEV-PASSWORD] |
+| nina.patel | nina@tamshai.com | (none - manager) | [REDACTED-DEV-PASSWORD] |
+| marcus.johnson | marcus@tamshai.com | (none - engineer) | [REDACTED-DEV-PASSWORD] |
 
 **Client**:
 - Client ID: `mcp-gateway`
@@ -394,7 +394,7 @@ This is acceptable overhead for the benefit of 100% integration test coverage.
 
 ⚠️ **IMPORTANT**: The credentials in the setup script are **ONLY FOR CI/TESTING**
 
-- Password: `password123` (weak, predictable)
+- Password: `[REDACTED-DEV-PASSWORD]` (weak, predictable)
 - Client secret: `test-client-secret` (hardcoded)
 - Admin password: `admin` (default)
 

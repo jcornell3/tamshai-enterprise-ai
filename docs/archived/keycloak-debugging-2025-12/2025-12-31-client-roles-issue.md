@@ -115,7 +115,7 @@ curl -X POST http://127.0.0.1:8180/realms/tamshai-corp/protocol/openid-connect/t
   -d "client_id=mcp-gateway" \
   -d "client_secret=test-client-secret" \
   -d "username=alice.chen" \
-  -d "password=password123" \
+  -d "password=[REDACTED-DEV-PASSWORD]" \
   -d "grant_type=password" \
   -d "scope=openid profile email"
 ```

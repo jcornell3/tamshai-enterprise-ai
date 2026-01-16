@@ -76,12 +76,17 @@ Set-TerraformVar `
     -Required $true `
     -Sensitive $true
 
-Set-TerraformVar `
-    -Name "TF_VAR_test_user_password" `
-    -Value "password123" `
-    -Description "Password for test users" `
-    -Required $true `
-    -Sensitive $true
+# test_user_password must be set via DEV_USER_PASSWORD environment variable
+if ($env:DEV_USER_PASSWORD) {
+    Set-TerraformVar `
+        -Name "TF_VAR_test_user_password" `
+        -Value $env:DEV_USER_PASSWORD `
+        -Description "Password for test users" `
+        -Required $true `
+        -Sensitive $true
+} else {
+    Write-Host "WARNING: DEV_USER_PASSWORD not set - TF_VAR_test_user_password will not be configured" -ForegroundColor Yellow
+}
 
 Set-TerraformVar `
     -Name "TF_VAR_mcp_gateway_client_secret" `

@@ -26,11 +26,17 @@ const CONFIG = {
   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
 };
 
+// Test user password from environment variable
+const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
+if (!TEST_PASSWORD) {
+  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
+}
+
 // Test users
 const TEST_USERS = {
-  executive: { username: 'eve.thompson', password: 'password123' },
-  hrUser: { username: 'alice.chen', password: 'password123' },
-  intern: { username: 'frank.davis', password: 'password123' },
+  executive: { username: 'eve.thompson', password: TEST_PASSWORD },
+  hrUser: { username: 'alice.chen', password: TEST_PASSWORD },
+  intern: { username: 'frank.davis', password: TEST_PASSWORD },
 };
 
 interface TokenResponse {
