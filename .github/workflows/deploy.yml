@@ -122,7 +122,10 @@ jobs:
       
       - name: Build Docker images
         working-directory: ./infrastructure/docker
-        run: docker compose build
+        # Use --no-cache --pull to ensure:
+        # 1. apk upgrade runs fresh and applies latest security patches
+        # 2. Latest node:20-alpine base image is pulled
+        run: docker compose build --no-cache --pull
       
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
