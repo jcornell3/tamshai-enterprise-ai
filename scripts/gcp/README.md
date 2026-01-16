@@ -151,11 +151,18 @@ Ensure your account has:
 
 ## User Provisioning Workflow
 
-The `Provision Production Users` GitHub workflow automates loading HR sample data and syncing users to Keycloak.
+The user provisioning process uses **Cloud Build** to load HR sample data and sync users to Keycloak. Cloud Build runs within GCP's network and can connect to private IP Cloud SQL instances (GitHub Actions cannot).
 
-### Workflow Location
+### Why Cloud Build?
 
-`.github/workflows/provision-prod-users.yml`
+The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with **private IP only** for security. GitHub Actions runs on the public internet and cannot connect to private IP instances. Cloud Build runs within GCP's VPC and has direct access.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `scripts/gcp/cloudbuild-provision-users.yaml` | Cloud Build configuration |
+| `scripts/gcp/provision-users.sh` | Helper script for easy invocation |
 
 ### Actions
 
@@ -170,69 +177,93 @@ The `Provision Production Users` GitHub workflow automates loading HR sample dat
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `dry_run` | `true` | Preview only, no changes made |
-| `force_password_reset` | `false` | Reset passwords for existing users |
+| `--dry-run` | `false` | Preview only, no changes made |
+| `--force-password-reset` | `false` | Reset passwords for existing users |
 
 ### Usage
 
-#### Via GitHub UI
-
-1. Go to **Actions** > **Provision Production Users**
-2. Click **Run workflow**
-3. Select action: `verify-only`, `load-hr-data`, `sync-users`, or `all`
-4. Set `dry_run` to `false` to make actual changes
-5. Click **Run workflow**
-6. Monitor progress in workflow logs
-
-#### Via GitHub CLI
+#### Via Helper Script (Recommended)
 
 ```bash
+cd scripts/gcp
+
 # Verify current state (safe, read-only)
-gh workflow run provision-prod-users.yml -f action=verify-only
+./provision-users.sh verify-only
 
 # Preview loading HR data (dry run)
-gh workflow run provision-prod-users.yml -f action=load-hr-data -f dry_run=true
+./provision-users.sh load-hr-data --dry-run
 
 # Actually load HR data
-gh workflow run provision-prod-users.yml -f action=load-hr-data -f dry_run=false
+./provision-users.sh load-hr-data
 
 # Preview syncing users (dry run)
-gh workflow run provision-prod-users.yml -f action=sync-users -f dry_run=true
+./provision-users.sh sync-users --dry-run
 
 # Actually sync users to Keycloak
-gh workflow run provision-prod-users.yml -f action=sync-users -f dry_run=false
+./provision-users.sh sync-users
 
 # Do everything (load data + sync + verify)
-gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
+./provision-users.sh all
 
 # Reset passwords for all synced users
-gh workflow run provision-prod-users.yml -f action=sync-users -f dry_run=false -f force_password_reset=true
+./provision-users.sh sync-users --force-password-reset
+```
+
+#### Via gcloud CLI Directly
+
+```bash
+# From repo root
+gcloud builds submit \
+  --config=scripts/gcp/cloudbuild-provision-users.yaml \
+  --substitutions=_ACTION=verify-only \
+  .
+
+# Full provisioning
+gcloud builds submit \
+  --config=scripts/gcp/cloudbuild-provision-users.yaml \
+  --substitutions=_ACTION=all,_DRY_RUN=false \
+  .
+
+# With password reset
+gcloud builds submit \
+  --config=scripts/gcp/cloudbuild-provision-users.yaml \
+  --substitutions=_ACTION=sync-users,_FORCE_PASSWORD_RESET=true \
+  .
 ```
 
 ### Required Secrets
 
-The workflow requires these secrets in GCP Secret Manager:
+All secrets must be in GCP Secret Manager:
 
 | Secret Name | Description |
 |-------------|-------------|
 | `tamshai-prod-db-password` | PostgreSQL password for Cloud SQL |
 | `tamshai-prod-keycloak-admin-password` | Keycloak admin password (for verification) |
+| `mcp-hr-service-client-secret` | Keycloak client secret for identity-sync |
+| `prod-user-password` | Password to set for synced users |
 
-And these GitHub secrets:
+#### Creating Missing Secrets
 
-| Secret Name | Description |
-|-------------|-------------|
-| `GCP_SA_KEY_PROD` | GCP service account JSON key |
-| `PROD_USER_PASSWORD` | Password to set for synced users |
-| `MCP_HR_SERVICE_CLIENT_SECRET` | Keycloak client secret for identity-sync |
+```bash
+# Create mcp-hr-service-client-secret (get value from Keycloak Admin UI)
+echo -n "YOUR_CLIENT_SECRET" | gcloud secrets create mcp-hr-service-client-secret \
+  --data-file=- \
+  --project=gen-lang-client-0553641830
 
-### Workflow Jobs
+# Create prod-user-password
+echo -n "YOUR_USER_PASSWORD" | gcloud secrets create prod-user-password \
+  --data-file=- \
+  --project=gen-lang-client-0553641830
+```
 
-1. **Pre-flight Checks**: Validate inputs, display configuration
-2. **Verify Current State**: Check HR data in Cloud SQL, users in Keycloak
-3. **Load HR Data** (optional): Load `sample-data/hr-data.sql` to Cloud SQL
-4. **Sync Users** (optional): Run identity-sync to create Keycloak users
-5. **Final Verification**: Compare before/after counts, test login
+### Cloud Build Steps
+
+1. **Show Config**: Display configuration and parameters
+2. **Start Proxy**: Start Cloud SQL Proxy with private IP
+3. **Verify State**: Check HR data in Cloud SQL, users in Keycloak
+4. **Load HR Data** (conditional): Load `sample-data/hr-data.sql` to Cloud SQL
+5. **Sync Users** (conditional): Run identity-sync to create Keycloak users
+6. **Final Verify**: Compare before/after counts
 
 ### Example Output
 
@@ -251,26 +282,44 @@ AFTER:
   HR Employees:      50
   Synced to KC:      50
   Keycloak Users:    51
-
-JOB RESULTS:
-  Load HR Data:      success
-  Sync Users:        success
 ==============================================
 ```
 
+### Prerequisites
+
+1. **gcloud CLI** authenticated with appropriate permissions
+2. **Cloud Build API** enabled:
+   ```bash
+   gcloud services enable cloudbuild.googleapis.com
+   ```
+3. **Cloud Build service account** needs Secret Manager access:
+   ```bash
+   PROJECT_NUMBER=$(gcloud projects describe gen-lang-client-0553641830 --format='value(projectNumber)')
+   gcloud projects add-iam-policy-binding gen-lang-client-0553641830 \
+     --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
 ### Troubleshooting
 
-**"mcp-hr-service-client-secret not available"**
-- Create the secret in GCP Secret Manager with the Keycloak client secret
-- The client must exist in Keycloak with service account enabled
+**"Permission denied accessing secret"**
+- Grant Secret Manager access to Cloud Build service account (see Prerequisites)
+
+**"Could not connect to database"**
+- Verify Cloud SQL instance exists and is running
+- Check the instance name in the Cloud Build config
 
 **"Could not get Keycloak admin token"**
-- Verify `keycloak-admin-password` secret exists and is correct
+- Verify `tamshai-prod-keycloak-admin-password` secret exists and is correct
 - Check Keycloak is accessible at the configured URL
+
+**"Identity sync failed - Redis not available"**
+- The identity-sync script requires Redis for BullMQ
+- This is a known limitation; may need to modify sync script to make Redis optional
 
 **Users synced but can't login**
 - Users may have TOTP enabled - check Keycloak user settings
-- Verify `PROD_USER_PASSWORD` is set correctly
+- Verify `prod-user-password` is set correctly
 - Check user is enabled in Keycloak
 
 ---

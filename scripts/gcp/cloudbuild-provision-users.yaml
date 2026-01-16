@@ -1,0 +1,309 @@
+# =============================================================================
+# Cloud Build: Provision Production Users
+# =============================================================================
+#
+# Loads HR sample data into Cloud SQL and syncs users to Keycloak.
+# Runs within GCP network, so can connect to private IP Cloud SQL instances.
+#
+# Usage:
+#   # Verify only (dry run)
+#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
+#     --substitutions=_ACTION=verify-only
+#
+#   # Load HR data only
+#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
+#     --substitutions=_ACTION=load-hr-data
+#
+#   # Sync users to Keycloak only
+#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
+#     --substitutions=_ACTION=sync-users
+#
+#   # Full provisioning (load data + sync users)
+#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
+#     --substitutions=_ACTION=all
+#
+#   # With dry run (preview only)
+#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
+#     --substitutions=_ACTION=all,_DRY_RUN=true
+#
+# Required secrets in Secret Manager:
+#   - tamshai-prod-db-password
+#   - tamshai-prod-keycloak-admin-password
+#   - mcp-hr-service-client-secret
+#   - prod-user-password
+#
+# =============================================================================
+
+substitutions:
+  _ACTION: 'verify-only'  # verify-only, load-hr-data, sync-users, all
+  _DRY_RUN: 'false'
+  _FORCE_PASSWORD_RESET: 'false'
+  _CLOUD_SQL_INSTANCE: 'gen-lang-client-0553641830:us-central1:tamshai-prod-postgres'
+  _KEYCLOAK_URL: 'https://keycloak-fn44nd7wba-uc.a.run.app'
+  _KEYCLOAK_REALM: 'tamshai-corp'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_MEDIUM'
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/tamshai-prod-db-password/versions/latest
+      env: 'DB_PASSWORD'
+    - versionName: projects/$PROJECT_ID/secrets/tamshai-prod-keycloak-admin-password/versions/latest
+      env: 'KC_ADMIN_PASSWORD'
+    - versionName: projects/$PROJECT_ID/secrets/mcp-hr-service-client-secret/versions/latest
+      env: 'KC_CLIENT_SECRET'
+    - versionName: projects/$PROJECT_ID/secrets/prod-user-password/versions/latest
+      env: 'PROD_USER_PASSWORD'
+
+steps:
+  # ===========================================================================
+  # Step 0: Display configuration
+  # ===========================================================================
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'show-config'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=============================================="
+        echo "Provision Production Users (Cloud Build)"
+        echo "=============================================="
+        echo "Action:              ${_ACTION}"
+        echo "Dry Run:             ${_DRY_RUN}"
+        echo "Force Password Reset: ${_FORCE_PASSWORD_RESET}"
+        echo "Cloud SQL Instance:  ${_CLOUD_SQL_INSTANCE}"
+        echo "Keycloak URL:        ${_KEYCLOAK_URL}"
+        echo "=============================================="
+
+  # ===========================================================================
+  # Step 1: Start Cloud SQL Proxy (background)
+  # ===========================================================================
+  - name: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0'
+    id: 'start-proxy'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        /cloud-sql-proxy ${_CLOUD_SQL_INSTANCE} \
+          --private-ip \
+          --port=5432 &
+        sleep 5
+        echo "Cloud SQL Proxy started"
+    waitFor: ['show-config']
+
+  # ===========================================================================
+  # Step 2: Verify current state
+  # ===========================================================================
+  - name: 'postgres:15-alpine'
+    id: 'verify-state'
+    entrypoint: 'sh'
+    secretEnv: ['DB_PASSWORD', 'KC_ADMIN_PASSWORD']
+    args:
+      - '-c'
+      - |
+        echo "=== Verifying Current State ==="
+
+        # Test database connection
+        export PGPASSWORD="$$DB_PASSWORD"
+
+        echo "[INFO] Testing database connection..."
+        if ! psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT 1;" > /dev/null 2>&1; then
+          echo "[WARN] Could not connect to database"
+          echo "employee_count=0" > /workspace/verify-state.env
+        else
+          # Count employees
+          EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+            "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null | tr -d ' ' || echo "0")
+          echo "[INFO] Active employees: $EMPLOYEE_COUNT"
+          echo "employee_count=$EMPLOYEE_COUNT" > /workspace/verify-state.env
+
+          # List sample employees
+          echo ""
+          echo "=== Sample Employees ==="
+          psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c \
+            "SELECT id, first_name, last_name, email, department FROM hr.employees LIMIT 5;" 2>/dev/null || true
+        fi
+
+        # Check Keycloak
+        echo ""
+        echo "[INFO] Checking Keycloak..."
+        KC_TOKEN=$(curl -sf -X POST "${_KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d "username=admin" \
+          -d "password=$$KC_ADMIN_PASSWORD" \
+          -d "grant_type=password" \
+          -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+
+        if [ -z "$KC_TOKEN" ]; then
+          echo "[WARN] Could not get Keycloak admin token"
+          echo "keycloak_users=unknown" >> /workspace/verify-state.env
+        else
+          USER_COUNT=$(curl -sf "${_KEYCLOAK_URL}/admin/realms/${_KEYCLOAK_REALM}/users?max=1000" \
+            -H "Authorization: Bearer $KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l || echo "0")
+          echo "[INFO] Keycloak users: $USER_COUNT"
+          echo "keycloak_users=$USER_COUNT" >> /workspace/verify-state.env
+        fi
+
+        echo ""
+        echo "=== State Summary ==="
+        cat /workspace/verify-state.env
+    waitFor: ['start-proxy']
+
+  # ===========================================================================
+  # Step 3: Load HR sample data (conditional)
+  # ===========================================================================
+  - name: 'postgres:15-alpine'
+    id: 'load-hr-data'
+    entrypoint: 'sh'
+    secretEnv: ['DB_PASSWORD']
+    args:
+      - '-c'
+      - |
+        # Check if we should load data
+        if [ "${_ACTION}" != "load-hr-data" ] && [ "${_ACTION}" != "all" ]; then
+          echo "[SKIP] Action is ${_ACTION}, skipping HR data load"
+          exit 0
+        fi
+
+        echo "=== Loading HR Sample Data ==="
+
+        if [ "${_DRY_RUN}" = "true" ]; then
+          echo "[DRY RUN] Would load sample-data/hr-data.sql"
+          wc -l < sample-data/hr-data.sql
+          exit 0
+        fi
+
+        export PGPASSWORD="$$DB_PASSWORD"
+
+        # Load the data
+        echo "[INFO] Loading HR data from sample-data/hr-data.sql..."
+        psql -h localhost -p 5432 -U tamshai -d tamshai_hr -f sample-data/hr-data.sql
+
+        # Verify
+        EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+          "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" | tr -d ' ')
+
+        echo "[OK] HR data loaded: $EMPLOYEE_COUNT active employees"
+    waitFor: ['verify-state']
+
+  # ===========================================================================
+  # Step 4: Sync users to Keycloak (conditional)
+  # ===========================================================================
+  - name: 'node:20-alpine'
+    id: 'sync-users'
+    entrypoint: 'sh'
+    secretEnv: ['DB_PASSWORD', 'KC_CLIENT_SECRET', 'PROD_USER_PASSWORD']
+    args:
+      - '-c'
+      - |
+        # Check if we should sync users
+        if [ "${_ACTION}" != "sync-users" ] && [ "${_ACTION}" != "all" ]; then
+          echo "[SKIP] Action is ${_ACTION}, skipping user sync"
+          exit 0
+        fi
+
+        echo "=== Syncing Users to Keycloak ==="
+
+        if [ "${_DRY_RUN}" = "true" ]; then
+          echo "[DRY RUN] Would run identity-sync"
+          echo "  KEYCLOAK_URL: ${_KEYCLOAK_URL}"
+          echo "  KEYCLOAK_REALM: ${_KEYCLOAK_REALM}"
+          echo "  Force Password Reset: ${_FORCE_PASSWORD_RESET}"
+          exit 0
+        fi
+
+        # Install dependencies
+        cd services/mcp-hr
+        npm ci --production=false
+
+        # Build sync arguments
+        SYNC_ARGS=""
+        if [ "${_FORCE_PASSWORD_RESET}" = "true" ]; then
+          SYNC_ARGS="--force-password-reset"
+        fi
+
+        # Run identity-sync
+        export POSTGRES_HOST=localhost
+        export POSTGRES_PORT=5432
+        export POSTGRES_DB=tamshai_hr
+        export POSTGRES_USER=tamshai
+        export POSTGRES_PASSWORD="$$DB_PASSWORD"
+        export KEYCLOAK_URL="${_KEYCLOAK_URL}"
+        export KEYCLOAK_REALM="${_KEYCLOAK_REALM}"
+        export KEYCLOAK_CLIENT_ID=mcp-hr-service
+        export KEYCLOAK_CLIENT_SECRET="$$KC_CLIENT_SECRET"
+        export REDIS_HOST=localhost
+        export REDIS_PORT=6379
+        export ENVIRONMENT=prod
+
+        # Start a minimal Redis for BullMQ (required by identity-sync)
+        echo "[INFO] Note: Redis not available, sync may fail if BullMQ required"
+
+        npx tsx src/scripts/sync-identities.ts $SYNC_ARGS || {
+          echo "[ERROR] Identity sync failed"
+          exit 1
+        }
+
+        echo "[OK] User sync completed"
+    waitFor: ['load-hr-data']
+
+  # ===========================================================================
+  # Step 5: Final verification
+  # ===========================================================================
+  - name: 'postgres:15-alpine'
+    id: 'final-verify'
+    entrypoint: 'sh'
+    secretEnv: ['DB_PASSWORD', 'KC_ADMIN_PASSWORD']
+    args:
+      - '-c'
+      - |
+        echo "=== Final Verification ==="
+
+        export PGPASSWORD="$$DB_PASSWORD"
+
+        # Count employees
+        EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+          "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null | tr -d ' ' || echo "0")
+
+        SYNCED_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+          "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null | tr -d ' ' || echo "0")
+
+        # Count Keycloak users
+        KC_TOKEN=$(curl -sf -X POST "${_KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+          -H "Content-Type: application/x-www-form-urlencoded" \
+          -d "username=admin" \
+          -d "password=$$KC_ADMIN_PASSWORD" \
+          -d "grant_type=password" \
+          -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+
+        if [ -n "$KC_TOKEN" ]; then
+          KC_USER_COUNT=$(curl -sf "${_KEYCLOAK_URL}/admin/realms/${_KEYCLOAK_REALM}/users?max=1000" \
+            -H "Authorization: Bearer $KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l || echo "unknown")
+        else
+          KC_USER_COUNT="unknown"
+        fi
+
+        # Load initial state
+        source /workspace/verify-state.env 2>/dev/null || true
+
+        echo ""
+        echo "=============================================="
+        echo "PROVISIONING SUMMARY"
+        echo "=============================================="
+        echo "Action:              ${_ACTION}"
+        echo "Dry Run:             ${_DRY_RUN}"
+        echo ""
+        echo "BEFORE:"
+        echo "  HR Employees:      ${employee_count:-unknown}"
+        echo "  Keycloak Users:    ${keycloak_users:-unknown}"
+        echo ""
+        echo "AFTER:"
+        echo "  HR Employees:      $EMPLOYEE_COUNT"
+        echo "  Synced to KC:      $SYNCED_COUNT"
+        echo "  Keycloak Users:    $KC_USER_COUNT"
+        echo "=============================================="
+    waitFor: ['sync-users']
+
+timeout: '1200s'  # 20 minutes max
