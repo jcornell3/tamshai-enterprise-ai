@@ -570,6 +570,9 @@ jobs:
 
       - name: Setup Keycloak Realm with Terraform
         working-directory: infrastructure/terraform/keycloak
+        env:
+          KEYCLOAK_DEV_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
+          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
         run: |
           # Initialize Terraform (download providers) with retry logic for network issues
           echo "Initializing Terraform..."
@@ -585,8 +588,12 @@ jobs:
           fi
 
           # Apply Terraform configuration
+          # Override ci.tfvars passwords with GitHub secrets for security
           echo "Creating Keycloak realm, roles, users, and client with Terraform..."
-          terraform apply -auto-approve -var-file=environments/ci.tfvars
+          terraform apply -auto-approve \
+            -var-file=environments/ci.tfvars \
+            -var="keycloak_admin_password=${KEYCLOAK_DEV_ADMIN_PASSWORD}" \
+            -var="test_user_password=${DEV_USER_PASSWORD}"
 
           # Export client secret for integration tests
           echo "KEYCLOAK_CLIENT_SECRET=$(terraform output -raw mcp_gateway_client_secret)" >> $GITHUB_ENV
