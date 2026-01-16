@@ -809,7 +809,7 @@ export class IdentityService {
     console.log(`[DEBUG] Checking if user exists: ${email}`);
     let existingUsers: KcUserRepresentation[];
     try {
-      existingUsers = await this.kcAdmin.users.find({ email });
+      existingUsers = (await this.kcAdmin.users.find({ email })) || [];
       console.log(`[DEBUG] Found ${existingUsers.length} existing users for ${email}`);
     } catch (findError) {
       console.error(`[DEBUG] users.find() failed for ${employee.email}:`, {
@@ -827,7 +827,7 @@ export class IdentityService {
     if (existingUsers.length === 0) {
       console.log(`[DEBUG] Not found by email, checking by username: ${username}`);
       try {
-        existingUsers = await this.kcAdmin.users.find({ username });
+        existingUsers = (await this.kcAdmin.users.find({ username })) || [];
         console.log(`[DEBUG] Found ${existingUsers.length} existing users for username ${username}`);
       } catch (findError) {
         console.error(`[DEBUG] users.find(username) failed for ${username}:`, findError);

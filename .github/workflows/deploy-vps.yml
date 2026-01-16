@@ -438,72 +438,65 @@ jobs:
           DEPLOY_SCRIPT
 
       # =========================================================================
-      # Configure test-user.journey credentials (aligned with deploy-to-gcp.yml)
+      # Configure test-user.journey credentials (runs via SSH to use internal URL)
       # See docs/testing/TEST_USER_JOURNEY.md for details
       # =========================================================================
       - name: Configure test-user.journey credentials
         env:
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_VPS_ADMIN_PASSWORD }}
-          TEST_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
-          VPS_DOMAIN: ${{ secrets.VPS_DOMAIN || secrets.VPS_HOST }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
         run: |
-          # Aligned with GCP approach: run curl commands directly from GitHub runner
-          # This avoids shell expansion issues with heredocs and special characters
-          echo "Configuring test-user.journey credentials..."
+          echo "Configuring test-user.journey credentials via SSH..."
 
-          # Validate required secrets (aligned with prod - fail if missing)
-          if [ -z "$TEST_PASSWORD" ]; then
+          # Validate required secrets
+          if [ -z "${{ secrets.TEST_USER_PASSWORD }}" ]; then
             echo "ERROR: TEST_USER_PASSWORD secret not set"
             echo "See docs/testing/TEST_USER_JOURNEY.md for setup instructions"
             exit 1
           fi
 
-          if [ -z "$TEST_USER_TOTP_SECRET_RAW" ]; then
-            echo "ERROR: TEST_USER_TOTP_SECRET_RAW secret not set"
-            echo "See docs/testing/TEST_USER_JOURNEY.md for setup instructions"
-            exit 1
-          fi
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'CONFIGURE_USER_SCRIPT'
+          set -e
+          set +H  # Disable history expansion for passwords with special characters
 
-          KEYCLOAK_URL="https://${VPS_DOMAIN}/auth"
-          echo "Using Keycloak URL: $KEYCLOAK_URL"
+          KEYCLOAK_URL="http://localhost/auth"
+          KEYCLOAK_ADMIN_PASSWORD='${{ secrets.KEYCLOAK_VPS_ADMIN_PASSWORD }}'
+          TEST_PASSWORD='${{ secrets.TEST_USER_PASSWORD }}'
 
-          # Wait for Keycloak to be ready (up to 90 seconds)
+          echo "Using Keycloak URL: $KEYCLOAK_URL (internal)"
+
+          # Wait for Keycloak to be ready (up to 60 seconds)
           echo "Waiting for Keycloak to be ready..."
           KEYCLOAK_READY=false
-          for i in {1..18}; do
+          for i in {1..12}; do
             if curl -sf -o /dev/null "${KEYCLOAK_URL}/realms/master"; then
               echo "[OK] Keycloak is ready"
               KEYCLOAK_READY=true
               break
             fi
-            echo "   Attempt $i/18: Keycloak not ready, waiting 5 seconds..."
+            echo "   Attempt $i/12: Keycloak not ready, waiting 5 seconds..."
             sleep 5
           done
 
           if [ "$KEYCLOAK_READY" = "false" ]; then
-            echo "ERROR: Keycloak not ready after 90 seconds"
+            echo "ERROR: Keycloak not ready after 60 seconds"
             exit 1
           fi
 
-          # Get admin token (using --data-urlencode for safe password handling, like GCP)
+          # Get admin token
           echo "Getting Keycloak admin token..."
           TOKEN_RESPONSE=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "username=admin" \
-            --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            -d "username=admin" \
+            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
             -d "grant_type=password" \
             -d "client_id=admin-cli")
 
           TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
-          ERROR=$(echo "$TOKEN_RESPONSE" | jq -r '.error_description // .error // empty')
 
           if [ -z "$TOKEN" ]; then
             echo "ERROR: Could not get admin token"
             echo "Response: $TOKEN_RESPONSE"
-            if [ -n "$ERROR" ]; then
-              echo "Error details: $ERROR"
-            fi
             exit 1
           fi
           echo "[OK] Admin token obtained"
@@ -518,7 +511,7 @@ jobs:
           fi
           echo "[OK] Found test-user.journey (ID: $USER_ID)"
 
-          # Reset password (using jq for safe JSON construction, like GCP)
+          # Reset password
           echo "Resetting password for test-user.journey..."
           PASSWORD_JSON=$(jq -n --arg pass "$TEST_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
           RESET_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
@@ -536,10 +529,8 @@ jobs:
             exit 1
           fi
 
-          # Configure TOTP credentials (aligned with prod approach)
-          echo "Configuring TOTP credentials..."
-
           # Remove existing OTP credentials
+          echo "Checking existing credentials..."
           EXISTING_CREDS=$(curl -sf "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users/${USER_ID}/credentials" \
             -H "Authorization: Bearer $TOKEN")
           echo "Existing credentials: $(echo $EXISTING_CREDS | jq -r '[.[].type]')"
@@ -551,7 +542,7 @@ jobs:
               -H "Authorization: Bearer $TOKEN"
           done
 
-          # Clear required actions so user doesn't see TOTP setup page
+          # Clear required actions
           echo "Clearing required actions..."
           curl -sf -X PUT \
             "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users/${USER_ID}" \
@@ -560,6 +551,7 @@ jobs:
             -d '{"requiredActions":[]}' > /dev/null || true
 
           echo "[OK] test-user.journey configured successfully"
+          CONFIGURE_USER_SCRIPT
 
       - name: Verify deployment
         run: |
