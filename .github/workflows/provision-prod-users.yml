@@ -180,7 +180,7 @@ jobs:
         id: get-kc-token
         run: |
           # Get admin password from Secret Manager
-          KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="keycloak-admin-password" 2>/dev/null || echo "")
+          KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-keycloak-admin-password" 2>/dev/null || echo "")
 
           if [ -z "$KC_ADMIN_PASSWORD" ]; then
             echo "[WARN] Could not retrieve Keycloak admin password"
@@ -368,13 +368,10 @@ jobs:
         id: get-secrets
         run: |
           DB_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-db-password")
-          KC_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="mcp-hr-service-client-secret" 2>/dev/null || echo "")
 
           echo "::add-mask::$DB_PASSWORD"
-          echo "::add-mask::$KC_CLIENT_SECRET"
 
           echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
-          echo "kc_client_secret=$KC_CLIENT_SECRET" >> $GITHUB_OUTPUT
 
       - name: Install identity-sync dependencies
         working-directory: services/mcp-hr
@@ -391,7 +388,7 @@ jobs:
           KEYCLOAK_URL: ${{ env.KEYCLOAK_URL }}
           KEYCLOAK_REALM: ${{ env.KEYCLOAK_REALM }}
           KEYCLOAK_CLIENT_ID: mcp-hr-service
-          KEYCLOAK_CLIENT_SECRET: ${{ steps.get-secrets.outputs.kc_client_secret }}
+          KEYCLOAK_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           ENVIRONMENT: prod
@@ -410,8 +407,8 @@ jobs:
 
           # Check if client secret is available
           if [ -z "$KEYCLOAK_CLIENT_SECRET" ]; then
-            echo "[ERROR] MCP_HR_SERVICE_CLIENT_SECRET not available in GCP Secret Manager"
-            echo "[ERROR] Create secret 'mcp-hr-service-client-secret' with the Keycloak client secret"
+            echo "[ERROR] MCP_HR_SERVICE_CLIENT_SECRET not set in GitHub secrets"
+            echo "[ERROR] Add the Keycloak mcp-hr-service client secret to GitHub secrets"
             exit 1
           fi
 
@@ -467,7 +464,7 @@ jobs:
         id: get-secrets
         run: |
           DB_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-db-password")
-          KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="keycloak-admin-password" 2>/dev/null || echo "")
+          KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-keycloak-admin-password" 2>/dev/null || echo "")
 
           echo "::add-mask::$DB_PASSWORD"
           echo "::add-mask::$KC_ADMIN_PASSWORD"
