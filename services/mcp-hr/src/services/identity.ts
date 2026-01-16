@@ -790,16 +790,24 @@ export class IdentityService {
   /**
    * Sync a single employee to Keycloak.
    *
+   * Handles both new users and existing users (from realm-export):
+   * - New users: Creates in Keycloak with temporary password
+   * - Existing users: Updates password to USER_PASSWORD (from GitHub secret)
+   *
+   * This ensures password rotation works for pre-existing users after
+   * secrets are updated (e.g., after password exposure incidents).
+   *
    * @param employee - Employee data to sync
    * @returns true if user was created, false if skipped (already exists)
    */
   private async syncEmployee(employee: EmployeeData): Promise<boolean> {
     // Transform email domain based on environment before checking Keycloak
     const email = transformEmailForEnvironment(employee.email);
+    const username = `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}`;
 
     // Check if user already exists in Keycloak by email
     console.log(`[DEBUG] Checking if user exists: ${email}`);
-    let existingUsers;
+    let existingUsers: KcUserRepresentation[];
     try {
       existingUsers = await this.kcAdmin.users.find({ email });
       console.log(`[DEBUG] Found ${existingUsers.length} existing users for ${email}`);
@@ -814,6 +822,19 @@ export class IdentityService {
       throw findError;
     }
 
+    // If not found by email, also check by username (handles realm-export users
+    // where email format may differ, e.g., bob.martinez@tamshai.com vs bob@tamshai.com)
+    if (existingUsers.length === 0) {
+      console.log(`[DEBUG] Not found by email, checking by username: ${username}`);
+      try {
+        existingUsers = await this.kcAdmin.users.find({ username });
+        console.log(`[DEBUG] Found ${existingUsers.length} existing users for username ${username}`);
+      } catch (findError) {
+        console.error(`[DEBUG] users.find(username) failed for ${username}:`, findError);
+        throw findError;
+      }
+    }
+
     if (existingUsers.length > 0) {
       // User exists in Keycloak - update employee record with keycloak_user_id
       const keycloakUserId = existingUsers[0].id!;
@@ -821,7 +842,39 @@ export class IdentityService {
         keycloakUserId,
         employee.id,
       ]);
-      return false; // Skipped, already exists
+
+      // Reset password to environment-specific secret
+      // This ensures password rotation works for pre-existing realm-export users
+      // Each environment uses its own GitHub secret:
+      //   - DEV_USER_PASSWORD (dev/CI)
+      //   - STAGE_USER_PASSWORD (stage/VPS)
+      //   - PROD_USER_PASSWORD (prod/GCP)
+      const environment = (process.env.ENVIRONMENT || 'dev').toUpperCase();
+      const envPasswordVar = `${environment}_USER_PASSWORD`;
+      const password = process.env[envPasswordVar];
+
+      if (password) {
+        console.log(`[DEBUG] Resetting password for existing user: ${username} (using ${envPasswordVar})`);
+        await this.kcAdmin.users.resetPassword({
+          id: keycloakUserId,
+          credential: {
+            type: 'password',
+            value: password,
+            temporary: false, // Not temporary - user already exists and knows the password
+          },
+        });
+        console.log(`[OK] Password updated for ${username}`);
+      } else {
+        // In prod, identity-sync is typically disabled (no MCP_HR_SERVICE_CLIENT_SECRET)
+        // In dev/stage, password should be set - warn if missing
+        if (environment === 'PROD') {
+          console.log(`[INFO] Skipping password reset for ${username} (prod environment)`);
+        } else {
+          console.log(`[WARN] ${envPasswordVar} not set - skipping password reset for ${username}`);
+        }
+      }
+
+      return false; // Skipped creation, but password was updated
     }
 
     // User doesn't exist - create in transaction

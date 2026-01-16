@@ -660,8 +660,16 @@ services:
       # Redis for BullMQ cleanup queue
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      # Stage/Dev testing - fixed password for all synced users (NOT for production!)
-      USER_PASSWORD: ${USER_PASSWORD:-password123}
+      # Environment identifier (dev, stage, prod)
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      # Environment-specific passwords for synced users (NOT for production!)
+      # Each environment uses its own GitHub secret:
+      #   - DEV_USER_PASSWORD: For local dev and CI testing
+      #   - STAGE_USER_PASSWORD: For VPS staging environment
+      #   - PROD_USER_PASSWORD: Not used (identity-sync disabled in prod)
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
+      STAGE_USER_PASSWORD: ${STAGE_USER_PASSWORD:-}
+      PROD_USER_PASSWORD: ${PROD_USER_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy

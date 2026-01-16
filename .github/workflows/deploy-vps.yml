@@ -403,7 +403,11 @@ jobs:
           # Use --build to ensure latest code is used (image may be cached)
           # Use -T to disable TTY allocation (prevents consuming heredoc stdin)
           # PHOENIX: Identity-sync is REQUIRED for stage - fail deployment if it fails
-          if ! docker compose run -T --rm --build identity-sync; then
+          # Pass environment variables for password rotation (Phoenix: align all user passwords)
+          if ! docker compose run -T --rm --build \
+            -e ENVIRONMENT=stage \
+            -e STAGE_USER_PASSWORD='${{ secrets.STAGE_USER_PASSWORD }}' \
+            identity-sync; then
             echo "[ERROR] Identity sync FAILED - deployment aborted"
             echo "Check logs: docker compose logs identity-sync"
             echo "This is fatal for stage environment (Phoenix principle: all users must exist)"
