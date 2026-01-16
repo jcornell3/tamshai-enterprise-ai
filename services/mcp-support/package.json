@@ -3,6 +3,9 @@
   "version": "1.4.0",
   "description": "MCP Support Server - Architecture v1.4 with truncation warnings and confirmations",
   "main": "dist/index.js",
+  "overrides": {
+    "undici": ">=6.23.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
