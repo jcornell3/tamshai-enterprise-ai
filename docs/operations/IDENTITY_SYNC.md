@@ -408,14 +408,24 @@ The original implementation used client roles, which required looking up the `mc
 | `KEYCLOAK_CLIENT_SECRET` | Service account secret | `MCP_HR_SERVICE_CLIENT_SECRET` |
 | `POSTGRES_HOST` | PostgreSQL host | `postgres` |
 | `POSTGRES_DB` | Database name | `tamshai_hr` |
-| `USER_PASSWORD` | Fixed password for synced users (mapped from environment-specific secrets) | Set from DEV/STAGE/PROD_USER_PASSWORD |
+| `ENVIRONMENT` | Environment identifier | `dev`, `stage`, or `prod` |
+| `DEV_USER_PASSWORD` | Password for synced users (dev) | Set via environment |
+| `STAGE_USER_PASSWORD` | Password for synced users (stage) | GitHub Secret |
+| `PROD_USER_PASSWORD` | Password for synced users (prod) | GitHub Secret |
 
-**Note on USER_PASSWORD:** Each environment uses its own password secret:
-- **Dev**: `DEV_USER_PASSWORD` (password123 - hardcoded for local dev)
-- **Stage**: `STAGE_USER_PASSWORD` (GitHub Secret)
-- **Prod**: `PROD_USER_PASSWORD` (GitHub Secret)
+**Password Configuration:**
 
-In production, if `PROD_USER_PASSWORD` is not set, users will receive cryptographically random passwords (requiring password reset on first login).
+The identity-sync service uses environment-specific password variables:
+
+```
+ENVIRONMENT=dev   → reads DEV_USER_PASSWORD
+ENVIRONMENT=stage → reads STAGE_USER_PASSWORD
+ENVIRONMENT=prod  → reads PROD_USER_PASSWORD
+```
+
+- **Dev**: Must be set via `DEV_USER_PASSWORD` environment variable (no default)
+- **Stage/Prod**: Must be set via GitHub Secrets, no defaults
+- **Fallback**: If password variable is not set, generates a cryptographically random password (user must reset on first login)
 
 ### Keycloak Client Requirements
 
@@ -464,6 +474,60 @@ docker compose run --rm --build identity-sync
 cd /opt/tamshai
 docker compose run --rm --build identity-sync
 ```
+
+### Force Password Reset
+
+Use the `--force-password-reset` flag to reset passwords for **all synced users**. This is useful when:
+
+- Password secrets have been rotated
+- Users were synced with incorrect passwords
+- Emergency password reset is required after a security incident
+
+```bash
+# In development
+cd infrastructure/docker
+docker compose run --rm --build \
+  -e ENVIRONMENT=dev \
+  -e DEV_USER_PASSWORD='<your-dev-password>' \
+  identity-sync --force-password-reset
+
+# In stage (SSH to VPS)
+cd /opt/tamshai
+docker compose run --rm --build \
+  -e ENVIRONMENT=stage \
+  -e STAGE_USER_PASSWORD='<your-stage-password>' \
+  identity-sync --force-password-reset
+
+# In production (if identity-sync is enabled)
+docker compose run --rm --build \
+  -e ENVIRONMENT=prod \
+  -e PROD_USER_PASSWORD='<your-prod-password>' \
+  identity-sync --force-password-reset
+```
+
+**What it does:**
+
+1. Queries all active employees with `keycloak_user_id` (already synced)
+2. Resets each user's password to the environment-specific secret
+3. Reports success/failure counts for each user
+
+**Output example:**
+
+```
+[INFO] Force password reset using STAGE_USER_PASSWORD
+[INFO] Found 8 active employees with Keycloak accounts
+[OK] Password reset for eve.thompson
+[OK] Password reset for alice.chen
+[OK] Password reset for bob.martinez
+...
+[INFO] Force password reset complete: 8 reset, 0 skipped, 0 errors
+```
+
+**Important notes:**
+
+- The password secret (`DEV_USER_PASSWORD`, `STAGE_USER_PASSWORD`, or `PROD_USER_PASSWORD`) must be set
+- Passwords are set as non-temporary (users don't need to change on next login)
+- This does NOT affect users who haven't been synced yet (no `keycloak_user_id`)
 
 ---
 

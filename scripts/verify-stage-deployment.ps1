@@ -106,12 +106,17 @@ try {
     # VPS staging uses realm-export-dev.json with test users and fixed client secret
     $clientSecret = "mcp-gateway-secret"
 
+    $testPassword = $env:STAGE_USER_PASSWORD
+    if (-not $testPassword) {
+        Write-Host "  [SKIP] STAGE_USER_PASSWORD not set" -ForegroundColor Yellow
+        return
+    }
     $body = @{
         grant_type = "password"
         client_id = "mcp-gateway"
         client_secret = $clientSecret
         username = "alice.chen"
-        password = "password123"
+        password = $testPassword
     }
 
     $tokenResponse = Invoke-RestMethod -Uri "$STAGE_URL/auth/realms/tamshai-corp/protocol/openid-connect/token" `

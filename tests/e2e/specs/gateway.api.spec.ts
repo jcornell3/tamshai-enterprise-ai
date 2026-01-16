@@ -11,21 +11,27 @@ const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8180';
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:3100';
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tamshai-corp';
 
+// Test user password from environment variable
+const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
+if (!TEST_PASSWORD) {
+  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
+}
+
 // Test user credentials (from Keycloak setup)
 const TEST_USERS = {
   hr: {
     username: 'alice.chen',
-    password: 'password123',
+    password: TEST_PASSWORD,
     expectedRoles: ['hr-read', 'hr-write'],
   },
   finance: {
     username: 'bob.martinez',
-    password: 'password123',
+    password: TEST_PASSWORD,
     expectedRoles: ['finance-read', 'finance-write'],
   },
   executive: {
     username: 'eve.thompson',
-    password: 'password123',
+    password: TEST_PASSWORD,
     expectedRoles: ['executive'],
   },
 };

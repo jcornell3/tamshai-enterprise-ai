@@ -89,7 +89,7 @@ When recreating an environment from scratch:
 
 | Environment | Test Users | Corporate Users | Password |
 |-------------|------------|-----------------|----------|
-| **Dev** | Pre-seeded in realm-export-dev.json | identity-sync from PostgreSQL | `DEV_USER_PASSWORD` (password123) |
+| **Dev** | Pre-seeded in realm-export-dev.json | identity-sync from PostgreSQL | `DEV_USER_PASSWORD` (set via env) |
 | **Stage** | identity-sync provisions | identity-sync from PostgreSQL | `STAGE_USER_PASSWORD` (GitHub Secret) |
 | **Prod** | `test-user.journey` (realm-export.json) | identity-sync from PostgreSQL | `PROD_USER_PASSWORD` (GitHub Secret) |
 

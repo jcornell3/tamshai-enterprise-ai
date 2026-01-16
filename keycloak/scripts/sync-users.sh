@@ -50,8 +50,8 @@ configure_environment() {
             POSTGRES_PORT="5433"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
-            # Default dev password for synced users (DEV_USER_PASSWORD)
-            DEFAULT_PASSWORD="${USER_PASSWORD:-password123}"
+            # Dev password for synced users (from DEV_USER_PASSWORD)
+            DEFAULT_PASSWORD="${USER_PASSWORD:?USER_PASSWORD required - set DEV_USER_PASSWORD in environment}"
             ;;
         stage)
             KEYCLOAK_URL="http://localhost:8080/auth"  # Inside container

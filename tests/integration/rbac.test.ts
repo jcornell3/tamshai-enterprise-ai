@@ -33,14 +33,20 @@ const CONFIG = {
   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
 };
 
+// Test user password from environment variable
+const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
+if (!TEST_PASSWORD) {
+  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
+}
+
 // Test users defined in Keycloak
 const TEST_USERS = {
-  hrUser: { username: 'alice.chen', password: 'password123', expectedRoles: ['hr-read', 'hr-write'] },
-  financeUser: { username: 'bob.martinez', password: 'password123', expectedRoles: ['finance-read', 'finance-write'] },
-  salesUser: { username: 'carol.johnson', password: 'password123', expectedRoles: ['sales-read'] },
-  supportUser: { username: 'dan.williams', password: 'password123', expectedRoles: ['support-read'] },
-  executive: { username: 'eve.thompson', password: 'password123', expectedRoles: ['executive'] },
-  intern: { username: 'frank.davis', password: 'password123', expectedRoles: [] },
+  hrUser: { username: 'alice.chen', password: TEST_PASSWORD, expectedRoles: ['hr-read', 'hr-write'] },
+  financeUser: { username: 'bob.martinez', password: TEST_PASSWORD, expectedRoles: ['finance-read', 'finance-write'] },
+  salesUser: { username: 'carol.johnson', password: TEST_PASSWORD, expectedRoles: ['sales-read'] },
+  supportUser: { username: 'dan.williams', password: TEST_PASSWORD, expectedRoles: ['support-read'] },
+  executive: { username: 'eve.thompson', password: TEST_PASSWORD, expectedRoles: ['executive'] },
+  intern: { username: 'frank.davis', password: TEST_PASSWORD, expectedRoles: [] },
 };
 
 interface TokenResponse {

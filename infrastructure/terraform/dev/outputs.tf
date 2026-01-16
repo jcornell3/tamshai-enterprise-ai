@@ -65,7 +65,7 @@ output "keycloak_realm_info" {
     Realm: tamshai
     Client ID: mcp-gateway
 
-    Test Users (password: password123):
+    Test Users (password: set via DEV_USER_PASSWORD):
       - alice.chen (HR)
       - bob.martinez (Finance)
       - carol.johnson (Sales)

@@ -576,7 +576,7 @@ entropy = 3.0
 allowlist:
   regexes = [
     '''mcp-gateway-secret''',
-    '''password123'''
+    '''[REDACTED-DEV-PASSWORD]'''
   ]
 ```
 

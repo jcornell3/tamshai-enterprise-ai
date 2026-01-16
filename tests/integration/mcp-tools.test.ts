@@ -27,47 +27,53 @@ const CONFIG = {
   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
 };
 
+// Test user password from environment variable
+const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
+if (!TEST_PASSWORD) {
+  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
+}
+
 // Test users with role assignments
 const TEST_USERS = {
   hrUser: {
     username: 'alice.chen',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: ['hr-read', 'hr-write'],
     userId: 'f104eddc-21ab-457c-a254-78051ad7ad67', // Alice Chen's UUID from sample data
   },
   financeUser: {
     username: 'bob.martinez',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: ['finance-read', 'finance-write'],
     userId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', // Bob Martinez's UUID
   },
   salesUser: {
     username: 'carol.johnson',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: ['sales-read', 'sales-write'],
     userId: 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', // Carol Johnson's UUID
   },
   supportUser: {
     username: 'dan.williams',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: ['support-read', 'support-write'],
     userId: 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', // Dan Williams's UUID
   },
   executive: {
     username: 'eve.thompson',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: ['executive'],
     userId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', // Eve Thompson's UUID
   },
   manager: {
     username: 'nina.patel',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: ['manager'],
     userId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', // Nina Patel's UUID
   },
   intern: {
     username: 'frank.davis',
-    password: 'password123',
+    password: TEST_PASSWORD,
     roles: [],
     userId: 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', // Frank Davis's UUID
   },

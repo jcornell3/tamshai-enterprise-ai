@@ -11,6 +11,10 @@
  * Usage:
  *   npm run sync-identities
  *   tsx src/scripts/sync-identities.ts
+ *   tsx src/scripts/sync-identities.ts --force-password-reset
+ *
+ * Options:
+ *   --force-password-reset  Reset passwords for ALL synced users (use after secret rotation)
  *
  * Environment Variables Required:
  *   POSTGRES_HOST      - PostgreSQL host (default: localhost)
@@ -206,14 +210,23 @@ function log(level: 'info' | 'error' | 'warn', message: string, data?: Record<st
 }
 
 // ============================================================================
+// CLI Arguments
+// ============================================================================
+
+const args = process.argv.slice(2);
+const forcePasswordReset = args.includes('--force-password-reset');
+
+// ============================================================================
 // Main
 // ============================================================================
 
 async function main(): Promise<void> {
-  log('info', 'Starting identity sync...', {
+  const mode = forcePasswordReset ? 'force-password-reset' : 'sync';
+  log('info', `Starting identity sync (mode: ${mode})...`, {
     keycloakUrl: config.keycloak.baseUrl,
     realm: config.keycloak.realmName,
     postgresHost: config.postgres.host,
+    forcePasswordReset,
   });
 
   // Create PostgreSQL connection pool
@@ -287,6 +300,40 @@ async function main(): Promise<void> {
     const kcAdminAdapter = createKcAdminClientAdapter(kcAdmin);
     const identityService = new IdentityService(pool, kcAdminAdapter, cleanupQueue);
 
+    // Handle --force-password-reset mode
+    if (forcePasswordReset) {
+      log('info', 'Running force password reset for all synced users...');
+      const resetResult = await identityService.forcePasswordReset();
+
+      log('info', 'Force password reset results', {
+        total: resetResult.total,
+        reset: resetResult.reset,
+        skipped: resetResult.skipped,
+        errors: resetResult.errors.length,
+      });
+
+      if (resetResult.errors.length > 0) {
+        for (const err of resetResult.errors) {
+          log('error', 'Password reset error', {
+            employeeId: err.employeeId,
+            email: err.email,
+            error: err.error,
+          });
+        }
+      }
+
+      await cleanup(pool, cleanupQueue);
+
+      if (resetResult.errors.length === 0) {
+        log('info', 'Force password reset completed successfully');
+        process.exit(0);
+      } else {
+        log('warn', 'Force password reset completed with errors');
+        process.exit(1);
+      }
+    }
+
+    // Standard sync mode
     // Get pending sync count
     const pendingCount = await identityService.getPendingSyncCount();
     log('info', `Found ${pendingCount} employees pending sync`);

@@ -37,7 +37,7 @@
 
 4. **Test User Passwords** (infrastructure/terraform/keycloak/environments/ci.tfvars:16)
    ```hcl
-   test_user_password = "password123"
+   test_user_password = "[REDACTED-DEV-PASSWORD]"
    ```
 
 5. **Client Configuration** (infrastructure/terraform/keycloak/main.tf:109-126)
@@ -211,7 +211,7 @@ Add this step IMMEDIATELY before "Run integration tests":
       -d "client_id=mcp-gateway" \
       -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
       -d "username=alice.chen" \
-      -d "password=password123" \
+      -d "password=[REDACTED-DEV-PASSWORD]" \
       -d "scope=openid profile email")
 
     if echo "$RESPONSE" | jq -e '.access_token' > /dev/null 2>&1; then

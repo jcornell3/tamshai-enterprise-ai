@@ -269,7 +269,10 @@ services:
       KEYCLOAK_REALM: tamshai-corp
       KEYCLOAK_CLIENT_ID: mcp-hr-service
       MCP_HR_SERVICE_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:-}
-      USER_PASSWORD: ${USER_PASSWORD:-password123}
+      # Environment-specific passwords for user provisioning
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
+      STAGE_USER_PASSWORD: ${STAGE_USER_PASSWORD:-}
+      PROD_USER_PASSWORD: ${PROD_USER_PASSWORD:-}
     ports:
       - "3101:3101"
     depends_on:

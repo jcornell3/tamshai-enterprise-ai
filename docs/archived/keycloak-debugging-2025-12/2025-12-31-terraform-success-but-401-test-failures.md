@@ -110,7 +110,7 @@ const response = await axios.post(
     client_id: 'mcp-gateway',
     client_secret: 'test-client-secret',
     username: 'alice.chen',
-    password: 'password123',
+    password: '[REDACTED-DEV-PASSWORD]',
     grant_type: 'password',
     scope: 'openid'
   })
@@ -177,9 +177,9 @@ grep -r "KEYCLOAK_URL" tests/integration/
 ### Hypothesis 4: Test User Credentials Issue
 
 **Terraform Created Users**:
-- alice.chen (password: password123) ✅
-- bob.martinez (password: password123) ✅
-- carol.johnson (password: password123) ✅
+- alice.chen (password: [REDACTED-DEV-PASSWORD]) ✅
+- bob.martinez (password: [REDACTED-DEV-PASSWORD]) ✅
+- carol.johnson (password: [REDACTED-DEV-PASSWORD]) ✅
 - etc.
 
 **Evidence Needed**: Verify users were created with correct passwords
@@ -191,7 +191,7 @@ curl -X POST http://localhost:8180/realms/tamshai-corp/protocol/openid-connect/t
   -d "client_id=mcp-gateway" \
   -d "client_secret=test-client-secret" \
   -d "username=alice.chen" \
-  -d "password=password123" \
+  -d "password=[REDACTED-DEV-PASSWORD]" \
   -d "grant_type=password" \
   -d "scope=openid"
 
@@ -269,7 +269,7 @@ Add to CI workflow before tests:
       -d "client_id=mcp-gateway" \
       -d "client_secret=${{ env.KEYCLOAK_CLIENT_SECRET }}" \
       -d "username=alice.chen" \
-      -d "password=password123" \
+      -d "password=[REDACTED-DEV-PASSWORD]" \
       -d "grant_type=password" \
       -d "scope=openid")
 

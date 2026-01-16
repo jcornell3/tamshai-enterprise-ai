@@ -451,9 +451,14 @@ export class IdentityService {
       keycloakUserId = createResult.id;
 
       // Step 2: Set temporary password (must be changed on first login)
-      // Each environment uses its own USER_PASSWORD secret (DEV/STAGE/PROD_USER_PASSWORD)
+      // Each environment uses its own password secret:
+      //   - DEV_USER_PASSWORD (dev/CI)
+      //   - STAGE_USER_PASSWORD (stage/VPS)
+      //   - PROD_USER_PASSWORD (prod/GCP)
       // If not set, generate cryptographically secure random password
-      const tempPassword = process.env.USER_PASSWORD || generateSecurePassword(20);
+      const environment = (process.env.ENVIRONMENT || 'dev').toUpperCase();
+      const envPasswordVar = `${environment}_USER_PASSWORD`;
+      const tempPassword = process.env[envPasswordVar] || generateSecurePassword(20);
       await this.kcAdmin.users.resetPassword({
         id: keycloakUserId,
         credential: {
@@ -900,5 +905,77 @@ export class IdentityService {
       `SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE' AND keycloak_user_id IS NULL`
     );
     return parseInt(result.rows[0].count, 10);
+  }
+
+  /**
+   * Force reset passwords for ALL active employees with keycloak_user_id.
+   *
+   * Use this when:
+   * - Password secrets have been rotated
+   * - Users were synced with wrong password
+   * - Emergency password reset is needed
+   *
+   * @returns Object with counts of reset, skipped, and errors
+   */
+  async forcePasswordReset(): Promise<{
+    total: number;
+    reset: number;
+    skipped: number;
+    errors: { employeeId: string; email: string; error: string }[];
+  }> {
+    const environment = (process.env.ENVIRONMENT || 'dev').toUpperCase();
+    const envPasswordVar = `${environment}_USER_PASSWORD`;
+    const password = process.env[envPasswordVar];
+
+    if (!password) {
+      throw new Error(`${envPasswordVar} not set - cannot reset passwords`);
+    }
+
+    console.log(`[INFO] Force password reset using ${envPasswordVar}`);
+
+    // Get ALL active employees with keycloak_user_id (already synced)
+    const result = await this.db.query(`
+      SELECT e.id, e.email, e.first_name AS "firstName", e.last_name AS "lastName",
+             e.keycloak_user_id AS "keycloakUserId"
+      FROM hr.employees e
+      WHERE UPPER(e.status) = 'ACTIVE' AND e.keycloak_user_id IS NOT NULL
+      ORDER BY e.id
+    `);
+
+    const employees = result.rows;
+    const total = employees.length;
+    let reset = 0;
+    let skipped = 0;
+    const errors: { employeeId: string; email: string; error: string }[] = [];
+
+    console.log(`[INFO] Found ${total} active employees with Keycloak accounts`);
+
+    for (const emp of employees) {
+      const username = `${emp.firstName.toLowerCase()}.${emp.lastName.toLowerCase()}`;
+      try {
+        await this.kcAdmin.users.resetPassword({
+          id: emp.keycloakUserId,
+          credential: {
+            type: 'password',
+            value: password,
+            temporary: false,
+          },
+        });
+        console.log(`[OK] Password reset for ${username}`);
+        reset++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[ERROR] Failed to reset password for ${username}: ${message}`);
+        errors.push({
+          employeeId: emp.id,
+          email: emp.email,
+          error: message,
+        });
+      }
+    }
+
+    console.log(`[INFO] Force password reset complete: ${reset} reset, ${skipped} skipped, ${errors.length} errors`);
+
+    return { total, reset, skipped, errors };
   }
 }

@@ -54,5 +54,5 @@ keywords = ["client_secret", "client-secret"]
 [rules.allowlist]
 regexes = [
   '''mcp-gateway-secret''',  # Known dev secret (documented)
-  '''password123''',          # Known dev password (documented)
+  # password123 removed - now using environment variables for passwords
 ]

@@ -114,7 +114,7 @@ Add this step to `.github/workflows/ci.yml` **IMMEDIATELY BEFORE** "Run integrat
             -d "client_id=mcp-gateway" \
             -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
             -d "username=alice.chen" \
-            -d "password=password123" \
+            -d "password=[REDACTED-DEV-PASSWORD]" \
             -d "scope=openid profile email")
 
           if echo "$RESPONSE_1" | jq -e '.access_token' > /dev/null 2>&1; then
@@ -140,7 +140,7 @@ Add this step to `.github/workflows/ci.yml` **IMMEDIATELY BEFORE** "Run integrat
             -d "client_id=mcp-gateway" \
             -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
             -d "username=alice.chen" \
-            -d "password=password123" \
+            -d "password=[REDACTED-DEV-PASSWORD]" \
             -d "scope=openid profile email roles")
 
           if echo "$RESPONSE_2" | jq -e '.access_token' > /dev/null 2>&1; then

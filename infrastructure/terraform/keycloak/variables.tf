@@ -29,10 +29,10 @@ variable "realm_display_name" {
 }
 
 variable "test_user_password" {
-  description = "Password for test users"
+  description = "Password for test users (set via TF_VAR_test_user_password or -var)"
   type        = string
   sensitive   = true
-  default     = "password123"
+  # No default - must be provided via environment variable or tfvars
 }
 
 variable "mcp_gateway_client_secret" {
