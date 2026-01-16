@@ -53,6 +53,11 @@ on:
         required: false
         type: boolean
         default: false
+      force_password_reset:
+        description: 'Reset all synced user passwords to STAGE_USER_PASSWORD'
+        required: false
+        type: boolean
+        default: false
       environment:
         description: 'Target environment'
         required: true
@@ -407,7 +412,7 @@ jobs:
           if ! docker compose run -T --rm --build \
             -e ENVIRONMENT=stage \
             -e STAGE_USER_PASSWORD='${{ secrets.STAGE_USER_PASSWORD }}' \
-            identity-sync; then
+            identity-sync ${{ github.event.inputs.force_password_reset == 'true' && '--force-password-reset' || '' }}; then
             echo "[ERROR] Identity sync FAILED - deployment aborted"
             echo "Check logs: docker compose logs identity-sync"
             echo "This is fatal for stage environment (Phoenix principle: all users must exist)"
