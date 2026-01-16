@@ -1,0 +1,100 @@
+# Docker Compose Override - Local Customizations
+#
+# Copy this file to docker-compose.override.yml to customize your local environment.
+# Changes in this file will automatically be applied when running `docker compose up`.
+#
+# NEVER commit docker-compose.override.yml to git (it's gitignored).
+#
+# Common customizations:
+# - Port changes (if defaults conflict with local services)
+# - Volume mounts (for local development)
+# - Environment variable overrides
+# - Debug/development settings
+
+services:
+  # =============================================================================
+  # EXAMPLE: Change Keycloak port if 8180 conflicts
+  # =============================================================================
+  # keycloak:
+  #   ports:
+  #     - "8280:8080"  # Change from 8180 to 8280
+
+  # =============================================================================
+  # EXAMPLE: Enable Keycloak debug logging
+  # =============================================================================
+  # keycloak:
+  #   environment:
+  #     KC_LOG_LEVEL: DEBUG
+  #     QUARKUS_LOG_CATEGORY__ORG_KEYCLOAK__LEVEL: DEBUG
+
+  # =============================================================================
+  # EXAMPLE: Change PostgreSQL port if 5433 conflicts
+  # =============================================================================
+  # postgres:
+  #   ports:
+  #     - "5434:5432"  # Change from 5433 to 5434
+
+  # =============================================================================
+  # EXAMPLE: Mount local MCP Gateway code for development
+  # =============================================================================
+  # mcp-gateway:
+  #   volumes:
+  #     - ../../services/mcp-gateway/src:/app/src:ro
+  #   environment:
+  #     NODE_ENV: development
+  #     LOG_LEVEL: debug
+
+  # =============================================================================
+  # EXAMPLE: Enable MCP Gateway mock mode (no real Claude API calls)
+  # =============================================================================
+  # mcp-gateway:
+  #   environment:
+  #     CLAUDE_MOCK_MODE: "true"
+
+  # =============================================================================
+  # EXAMPLE: Increase Elasticsearch memory for large datasets
+  # =============================================================================
+  # elasticsearch:
+  #   environment:
+  #     ES_JAVA_OPTS: "-Xms1g -Xmx1g"  # Increase from 512m to 1g
+
+  # =============================================================================
+  # EXAMPLE: Change Redis port if 6380 conflicts
+  # =============================================================================
+  # redis:
+  #   ports:
+  #     - "6381:6379"  # Change from 6380 to 6381
+
+  # =============================================================================
+  # EXAMPLE: Disable Vault for simpler local development
+  # =============================================================================
+  # vault:
+  #   profiles:
+  #     - disabled  # Won't start with regular `docker compose up`
+
+  # =============================================================================
+  # EXAMPLE: Override Claude API key for testing
+  # =============================================================================
+  # mcp-gateway:
+  #   environment:
+  #     CLAUDE_API_KEY: ${CLAUDE_API_KEY_OVERRIDE:-}
+
+  # =============================================================================
+  # EXAMPLE: Enable web app hot reload with local volumes
+  # =============================================================================
+  # web-portal:
+  #   volumes:
+  #     - ../../clients/web/apps/portal/src:/app/src:ro
+  #   environment:
+  #     VITE_HMR: "true"
+
+# =============================================================================
+# NOTES
+# =============================================================================
+#
+# 1. Uncomment only the services you need to customize
+# 2. Keep port changes documented in docs/development/PORT_ALLOCATION.md
+# 3. For environment variable overrides, prefer .env over this file
+# 4. Run `docker compose config` to see the merged configuration
+#
+# See: https://docs.docker.com/compose/extends/#adding-and-overriding-configuration
