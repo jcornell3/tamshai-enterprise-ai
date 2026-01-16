@@ -223,7 +223,7 @@ And these GitHub secrets:
 
 | Secret Name | Description |
 |-------------|-------------|
-| `GCP_SA_KEY` | GCP service account JSON key |
+| `GCP_SA_KEY_PROD` | GCP service account JSON key |
 | `PROD_USER_PASSWORD` | Password to set for synced users |
 
 ### Workflow Jobs
