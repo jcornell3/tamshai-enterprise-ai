@@ -104,7 +104,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
       - name: Setup Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -270,7 +270,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
       - name: Setup Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -340,7 +340,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
       - name: Setup Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -439,7 +439,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
       - name: Setup Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
