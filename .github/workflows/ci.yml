@@ -847,6 +847,7 @@ jobs:
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
           GATEWAY_URL: http://localhost:3100
           REDIS_HOST: localhost
           REDIS_PORT: 6379
@@ -862,6 +863,7 @@ jobs:
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5433
           POSTGRES_DB: tamshai_hr
