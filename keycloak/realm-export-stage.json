@@ -74,6 +74,10 @@
         "description": "Full access to support data (full ticket details)"
       },
       {
+        "name": "employee",
+        "description": "Base employee role - allows self-access to all MCP servers via RLS"
+      },
+      {
         "name": "manager",
         "description": "Manager role - can view direct reports data"
       },
