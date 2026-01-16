@@ -15,6 +15,8 @@ COPY apps/portal/ ./apps/portal/
 
 # Install dependencies from lockfile (faster and more reliable)
 RUN npm ci
+# Install platform-specific rollup binary (workaround for npm optional deps issue on Alpine/musl)
+RUN npm install @rollup/rollup-linux-x64-musl --save-optional || true
 
 # Build the portal app
 WORKDIR /app/apps/portal
