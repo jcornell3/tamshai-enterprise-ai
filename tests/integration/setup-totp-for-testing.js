@@ -27,7 +27,7 @@ async function getAdminToken() {
     new URLSearchParams({
       client_id: 'admin-cli',
       username: 'admin',
-      password: 'admin',
+      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
       grant_type: 'password',
     }),
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }

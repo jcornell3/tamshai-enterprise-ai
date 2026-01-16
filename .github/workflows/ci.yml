@@ -845,6 +845,7 @@ jobs:
           # This ensures tokens issued by Keycloak match Gateway's expected issuer
           KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
           GATEWAY_URL: http://localhost:3100
           REDIS_HOST: localhost
