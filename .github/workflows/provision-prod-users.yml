@@ -1,0 +1,579 @@
+# =============================================================================
+# Provision Production Users
+# =============================================================================
+#
+# This workflow loads HR sample data into Cloud SQL and syncs users to Keycloak.
+# It provides full testability with dry-run, verify-only, and test-login modes.
+#
+# Usage:
+#   1. Go to Actions > "Provision Production Users"
+#   2. Click "Run workflow"
+#   3. Select action and options
+#   4. Review results in workflow logs
+#
+# =============================================================================
+
+name: Provision Production Users
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - verify-only
+          - load-hr-data
+          - sync-users
+          - all
+        default: verify-only
+      dry_run:
+        description: 'Dry run (preview only, no changes)'
+        required: false
+        type: boolean
+        default: true
+      force_password_reset:
+        description: 'Reset passwords for existing users'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GCP_PROJECT: gen-lang-client-0553641830
+  GCP_REGION: us-central1
+  CLOUD_SQL_INSTANCE: tamshai-prod-postgres
+  KEYCLOAK_URL: https://keycloak-fn44nd7wba-uc.a.run.app
+  KEYCLOAK_REALM: tamshai-corp
+
+jobs:
+  # ===========================================================================
+  # Pre-flight Checks
+  # ===========================================================================
+  preflight:
+    name: Pre-flight Checks
+    runs-on: ubuntu-latest
+    outputs:
+      should_load_data: ${{ steps.check.outputs.should_load_data }}
+      should_sync_users: ${{ steps.check.outputs.should_sync_users }}
+    steps:
+      - name: Determine actions
+        id: check
+        run: |
+          ACTION="${{ github.event.inputs.action }}"
+
+          if [ "$ACTION" = "load-hr-data" ] || [ "$ACTION" = "all" ]; then
+            echo "should_load_data=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_load_data=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ "$ACTION" = "sync-users" ] || [ "$ACTION" = "all" ]; then
+            echo "should_sync_users=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_sync_users=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Display configuration
+        run: |
+          echo "=============================================="
+          echo "Provision Production Users"
+          echo "=============================================="
+          echo "Action:              ${{ github.event.inputs.action }}"
+          echo "Dry Run:             ${{ github.event.inputs.dry_run }}"
+          echo "Force Password Reset: ${{ github.event.inputs.force_password_reset }}"
+          echo "GCP Project:         ${{ env.GCP_PROJECT }}"
+          echo "Cloud SQL Instance:  ${{ env.CLOUD_SQL_INSTANCE }}"
+          echo "Keycloak URL:        ${{ env.KEYCLOAK_URL }}"
+          echo "=============================================="
+
+  # ===========================================================================
+  # Verify Current State
+  # ===========================================================================
+  verify-state:
+    name: Verify Current State
+    runs-on: ubuntu-latest
+    needs: preflight
+    outputs:
+      hr_employee_count: ${{ steps.verify-hr.outputs.employee_count }}
+      keycloak_user_count: ${{ steps.verify-keycloak.outputs.user_count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Install Cloud SQL Proxy
+        run: |
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          sudo mv cloud-sql-proxy /usr/local/bin/
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Start Cloud SQL Proxy
+        run: |
+          cloud-sql-proxy ${{ env.GCP_PROJECT }}:${{ env.GCP_REGION }}:${{ env.CLOUD_SQL_INSTANCE }} \
+            --port=5432 &
+          sleep 5
+          echo "Cloud SQL Proxy started"
+
+      - name: Get database password
+        id: get-db-password
+        run: |
+          DB_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-db-password")
+          echo "::add-mask::$DB_PASSWORD"
+          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Verify HR Data in Cloud SQL
+        id: verify-hr
+        env:
+          PGPASSWORD: ${{ steps.get-db-password.outputs.db_password }}
+        run: |
+          echo "=== Checking HR Database ==="
+
+          # Check if database exists
+          if ! psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT 1;" > /dev/null 2>&1; then
+            echo "[WARN] tamshai_hr database not accessible"
+            echo "employee_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if hr schema exists
+          SCHEMA_EXISTS=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+            "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = 'hr';" | tr -d ' ')
+
+          if [ "$SCHEMA_EXISTS" = "0" ]; then
+            echo "[WARN] hr schema does not exist"
+            echo "employee_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Count employees
+          EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+            "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" | tr -d ' ')
+
+          echo "[INFO] Active employees in HR database: $EMPLOYEE_COUNT"
+          echo "employee_count=$EMPLOYEE_COUNT" >> $GITHUB_OUTPUT
+
+          # List sample employees
+          echo ""
+          echo "=== Sample Employees ==="
+          psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c \
+            "SELECT id, first_name, last_name, email, department, status
+             FROM hr.employees
+             ORDER BY id
+             LIMIT 10;"
+
+      - name: Get Keycloak admin token
+        id: get-kc-token
+        run: |
+          # Get admin password from Secret Manager
+          KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="keycloak-admin-password" 2>/dev/null || echo "")
+
+          if [ -z "$KC_ADMIN_PASSWORD" ]; then
+            echo "[WARN] Could not retrieve Keycloak admin password"
+            echo "token=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "::add-mask::$KC_ADMIN_PASSWORD"
+
+          # Get admin token
+          TOKEN=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=$KC_ADMIN_PASSWORD" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" | jq -r '.access_token')
+
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "[WARN] Could not get Keycloak admin token"
+            echo "token=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Verify Keycloak Users
+        id: verify-keycloak
+        run: |
+          echo "=== Checking Keycloak Users ==="
+
+          TOKEN="${{ steps.get-kc-token.outputs.token }}"
+
+          if [ -z "$TOKEN" ]; then
+            echo "[WARN] No Keycloak token available - skipping verification"
+            echo "user_count=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Get user count
+          USERS=$(curl -s "${{ env.KEYCLOAK_URL }}/admin/realms/${{ env.KEYCLOAK_REALM }}/users?max=1000" \
+            -H "Authorization: Bearer $TOKEN")
+
+          USER_COUNT=$(echo "$USERS" | jq 'length')
+          echo "[INFO] Users in Keycloak: $USER_COUNT"
+          echo "user_count=$USER_COUNT" >> $GITHUB_OUTPUT
+
+          # List users
+          echo ""
+          echo "=== Keycloak Users ==="
+          echo "$USERS" | jq -r '.[] | "\(.username) - \(.email) - enabled: \(.enabled)"' | head -20
+
+          # Check for specific test users
+          echo ""
+          echo "=== Checking Key Users ==="
+          for user in "test-user.journey" "eve.thompson" "alice.chen" "bob.martinez"; do
+            EXISTS=$(echo "$USERS" | jq -r ".[] | select(.username == \"$user\") | .username")
+            if [ -n "$EXISTS" ]; then
+              echo "[OK] $user exists"
+            else
+              echo "[MISSING] $user not found"
+            fi
+          done
+
+      - name: Verification Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo "VERIFICATION SUMMARY"
+          echo "=============================================="
+          echo "HR Employees (Active): ${{ steps.verify-hr.outputs.employee_count }}"
+          echo "Keycloak Users:        ${{ steps.verify-keycloak.outputs.user_count }}"
+          echo "=============================================="
+
+  # ===========================================================================
+  # Load HR Data
+  # ===========================================================================
+  load-hr-data:
+    name: Load HR Data
+    runs-on: ubuntu-latest
+    needs: [preflight, verify-state]
+    if: needs.preflight.outputs.should_load_data == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Install Cloud SQL Proxy
+        run: |
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          sudo mv cloud-sql-proxy /usr/local/bin/
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Start Cloud SQL Proxy
+        run: |
+          cloud-sql-proxy ${{ env.GCP_PROJECT }}:${{ env.GCP_REGION }}:${{ env.CLOUD_SQL_INSTANCE }} \
+            --port=5432 &
+          sleep 5
+
+      - name: Get database password
+        id: get-db-password
+        run: |
+          DB_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-db-password")
+          echo "::add-mask::$DB_PASSWORD"
+          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Load HR Sample Data
+        env:
+          PGPASSWORD: ${{ steps.get-db-password.outputs.db_password }}
+        run: |
+          echo "=== Loading HR Sample Data ==="
+
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "[DRY RUN] Would load sample-data/hr-data.sql into tamshai_hr"
+            echo "[DRY RUN] File size: $(wc -l < sample-data/hr-data.sql) lines"
+            exit 0
+          fi
+
+          # Load the data
+          psql -h localhost -p 5432 -U tamshai -d tamshai_hr -f sample-data/hr-data.sql
+
+          # Verify
+          EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+            "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" | tr -d ' ')
+
+          echo "[OK] HR data loaded: $EMPLOYEE_COUNT active employees"
+
+  # ===========================================================================
+  # Sync Users to Keycloak
+  # ===========================================================================
+  sync-users:
+    name: Sync Users to Keycloak
+    runs-on: ubuntu-latest
+    needs: [preflight, verify-state, load-hr-data]
+    if: |
+      always() &&
+      needs.preflight.outputs.should_sync_users == 'true' &&
+      (needs.load-hr-data.result == 'success' || needs.load-hr-data.result == 'skipped')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Cloud SQL Proxy
+        run: |
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          sudo mv cloud-sql-proxy /usr/local/bin/
+
+      - name: Start Cloud SQL Proxy
+        run: |
+          cloud-sql-proxy ${{ env.GCP_PROJECT }}:${{ env.GCP_REGION }}:${{ env.CLOUD_SQL_INSTANCE }} \
+            --port=5432 &
+          sleep 5
+
+      - name: Get secrets
+        id: get-secrets
+        run: |
+          DB_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-db-password")
+          KC_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="mcp-hr-service-client-secret" 2>/dev/null || echo "")
+
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$KC_CLIENT_SECRET"
+
+          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+          echo "kc_client_secret=$KC_CLIENT_SECRET" >> $GITHUB_OUTPUT
+
+      - name: Install identity-sync dependencies
+        working-directory: services/mcp-hr
+        run: npm ci
+
+      - name: Run Identity Sync
+        working-directory: services/mcp-hr
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: tamshai_hr
+          POSTGRES_USER: tamshai
+          POSTGRES_PASSWORD: ${{ steps.get-secrets.outputs.db_password }}
+          KEYCLOAK_URL: ${{ env.KEYCLOAK_URL }}
+          KEYCLOAK_REALM: ${{ env.KEYCLOAK_REALM }}
+          KEYCLOAK_CLIENT_ID: mcp-hr-service
+          KEYCLOAK_CLIENT_SECRET: ${{ steps.get-secrets.outputs.kc_client_secret }}
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          ENVIRONMENT: prod
+          PROD_USER_PASSWORD: ${{ secrets.PROD_USER_PASSWORD }}
+        run: |
+          echo "=== Running Identity Sync ==="
+
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "[DRY RUN] Would run identity-sync with:"
+            echo "  - KEYCLOAK_URL: $KEYCLOAK_URL"
+            echo "  - KEYCLOAK_REALM: $KEYCLOAK_REALM"
+            echo "  - ENVIRONMENT: $ENVIRONMENT"
+            echo "  - Force Password Reset: ${{ github.event.inputs.force_password_reset }}"
+            exit 0
+          fi
+
+          # Check if client secret is available
+          if [ -z "$KEYCLOAK_CLIENT_SECRET" ]; then
+            echo "[ERROR] MCP_HR_SERVICE_CLIENT_SECRET not available in GCP Secret Manager"
+            echo "[ERROR] Create secret 'mcp-hr-service-client-secret' with the Keycloak client secret"
+            exit 1
+          fi
+
+          # Build the sync command
+          SYNC_ARGS=""
+          if [ "${{ github.event.inputs.force_password_reset }}" = "true" ]; then
+            SYNC_ARGS="--force-password-reset"
+          fi
+
+          # Run identity-sync
+          npx tsx src/scripts/sync-identities.ts $SYNC_ARGS
+
+  # ===========================================================================
+  # Final Verification
+  # ===========================================================================
+  final-verification:
+    name: Final Verification
+    runs-on: ubuntu-latest
+    needs: [preflight, verify-state, load-hr-data, sync-users]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Install Cloud SQL Proxy
+        run: |
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          sudo mv cloud-sql-proxy /usr/local/bin/
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Start Cloud SQL Proxy
+        run: |
+          cloud-sql-proxy ${{ env.GCP_PROJECT }}:${{ env.GCP_REGION }}:${{ env.CLOUD_SQL_INSTANCE }} \
+            --port=5432 &
+          sleep 5
+
+      - name: Get secrets
+        id: get-secrets
+        run: |
+          DB_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-db-password")
+          KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="keycloak-admin-password" 2>/dev/null || echo "")
+
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$KC_ADMIN_PASSWORD"
+
+          echo "db_password=$DB_PASSWORD" >> $GITHUB_OUTPUT
+          echo "kc_admin_password=$KC_ADMIN_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Verify HR Data
+        id: verify-hr
+        env:
+          PGPASSWORD: ${{ steps.get-secrets.outputs.db_password }}
+        run: |
+          echo "=== Final HR Data Verification ==="
+
+          EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+            "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null | tr -d ' ' || echo "0")
+
+          SYNCED_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+            "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null | tr -d ' ' || echo "0")
+
+          echo "Active employees: $EMPLOYEE_COUNT"
+          echo "Synced to Keycloak: $SYNCED_COUNT"
+
+          echo "employee_count=$EMPLOYEE_COUNT" >> $GITHUB_OUTPUT
+          echo "synced_count=$SYNCED_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Verify Keycloak Users
+        id: verify-keycloak
+        run: |
+          echo "=== Final Keycloak Verification ==="
+
+          KC_ADMIN_PASSWORD="${{ steps.get-secrets.outputs.kc_admin_password }}"
+
+          if [ -z "$KC_ADMIN_PASSWORD" ]; then
+            echo "[WARN] No Keycloak admin password - skipping"
+            echo "user_count=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Get admin token
+          TOKEN=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=$KC_ADMIN_PASSWORD" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" | jq -r '.access_token')
+
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "[WARN] Could not get Keycloak token"
+            echo "user_count=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Get user count
+          USER_COUNT=$(curl -s "${{ env.KEYCLOAK_URL }}/admin/realms/${{ env.KEYCLOAK_REALM }}/users?max=1000" \
+            -H "Authorization: Bearer $TOKEN" | jq 'length')
+
+          echo "Keycloak users: $USER_COUNT"
+          echo "user_count=$USER_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Test Login (Optional)
+        if: github.event.inputs.dry_run != 'true'
+        continue-on-error: true
+        run: |
+          echo "=== Testing Login ==="
+
+          # Test with test-user.journey if PROD_USER_PASSWORD is set
+          if [ -z "${{ secrets.PROD_USER_PASSWORD }}" ]; then
+            echo "[SKIP] PROD_USER_PASSWORD not set - skipping login test"
+            exit 0
+          fi
+
+          # Attempt password grant
+          RESPONSE=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/${{ env.KEYCLOAK_REALM }}/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=eve.thompson" \
+            -d "password=${{ secrets.PROD_USER_PASSWORD }}" \
+            -d "grant_type=password" \
+            -d "client_id=tamshai-portal")
+
+          if echo "$RESPONSE" | jq -e '.access_token' > /dev/null 2>&1; then
+            echo "[OK] Login test passed for eve.thompson"
+          else
+            echo "[WARN] Login test failed - user may need TOTP or password may be different"
+            echo "Response: $(echo "$RESPONSE" | jq -r '.error_description // .error // "unknown"')"
+          fi
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "=============================================="
+          echo "PROVISIONING SUMMARY"
+          echo "=============================================="
+          echo "Action:              ${{ github.event.inputs.action }}"
+          echo "Dry Run:             ${{ github.event.inputs.dry_run }}"
+          echo ""
+          echo "BEFORE:"
+          echo "  HR Employees:      ${{ needs.verify-state.outputs.hr_employee_count }}"
+          echo "  Keycloak Users:    ${{ needs.verify-state.outputs.keycloak_user_count }}"
+          echo ""
+          echo "AFTER:"
+          echo "  HR Employees:      ${{ steps.verify-hr.outputs.employee_count }}"
+          echo "  Synced to KC:      ${{ steps.verify-hr.outputs.synced_count }}"
+          echo "  Keycloak Users:    ${{ steps.verify-keycloak.outputs.user_count }}"
+          echo ""
+          echo "JOB RESULTS:"
+          echo "  Load HR Data:      ${{ needs.load-hr-data.result }}"
+          echo "  Sync Users:        ${{ needs.sync-users.result }}"
+          echo "=============================================="

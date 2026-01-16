@@ -149,8 +149,135 @@ Ensure your account has:
 - `roles/cloudsql.client` for Cloud SQL
 - `roles/run.admin` for Cloud Run (if restarting services)
 
+## User Provisioning Workflow
+
+The `Provision Production Users` GitHub workflow automates loading HR sample data and syncing users to Keycloak.
+
+### Workflow Location
+
+`.github/workflows/provision-prod-users.yml`
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| `verify-only` | Check current state without making changes (default) |
+| `load-hr-data` | Load HR sample data to Cloud SQL |
+| `sync-users` | Run identity-sync to create Keycloak users |
+| `all` | Load data + sync users + verify |
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `dry_run` | `true` | Preview only, no changes made |
+| `force_password_reset` | `false` | Reset passwords for existing users |
+
+### Usage
+
+#### Via GitHub UI
+
+1. Go to **Actions** > **Provision Production Users**
+2. Click **Run workflow**
+3. Select action: `verify-only`, `load-hr-data`, `sync-users`, or `all`
+4. Set `dry_run` to `false` to make actual changes
+5. Click **Run workflow**
+6. Monitor progress in workflow logs
+
+#### Via GitHub CLI
+
+```bash
+# Verify current state (safe, read-only)
+gh workflow run provision-prod-users.yml -f action=verify-only
+
+# Preview loading HR data (dry run)
+gh workflow run provision-prod-users.yml -f action=load-hr-data -f dry_run=true
+
+# Actually load HR data
+gh workflow run provision-prod-users.yml -f action=load-hr-data -f dry_run=false
+
+# Preview syncing users (dry run)
+gh workflow run provision-prod-users.yml -f action=sync-users -f dry_run=true
+
+# Actually sync users to Keycloak
+gh workflow run provision-prod-users.yml -f action=sync-users -f dry_run=false
+
+# Do everything (load data + sync + verify)
+gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
+
+# Reset passwords for all synced users
+gh workflow run provision-prod-users.yml -f action=sync-users -f dry_run=false -f force_password_reset=true
+```
+
+### Required Secrets
+
+The workflow requires these secrets in GCP Secret Manager:
+
+| Secret Name | Description |
+|-------------|-------------|
+| `tamshai-prod-db-password` | PostgreSQL password for Cloud SQL |
+| `keycloak-admin-password` | Keycloak admin password (for verification) |
+| `mcp-hr-service-client-secret` | Keycloak client secret for identity-sync |
+
+And these GitHub secrets:
+
+| Secret Name | Description |
+|-------------|-------------|
+| `GCP_SA_KEY` | GCP service account JSON key |
+| `PROD_USER_PASSWORD` | Password to set for synced users |
+
+### Workflow Jobs
+
+1. **Pre-flight Checks**: Validate inputs, display configuration
+2. **Verify Current State**: Check HR data in Cloud SQL, users in Keycloak
+3. **Load HR Data** (optional): Load `sample-data/hr-data.sql` to Cloud SQL
+4. **Sync Users** (optional): Run identity-sync to create Keycloak users
+5. **Final Verification**: Compare before/after counts, test login
+
+### Example Output
+
+```
+==============================================
+PROVISIONING SUMMARY
+==============================================
+Action:              all
+Dry Run:             false
+
+BEFORE:
+  HR Employees:      0
+  Keycloak Users:    1
+
+AFTER:
+  HR Employees:      50
+  Synced to KC:      50
+  Keycloak Users:    51
+
+JOB RESULTS:
+  Load HR Data:      success
+  Sync Users:        success
+==============================================
+```
+
+### Troubleshooting
+
+**"mcp-hr-service-client-secret not available"**
+- Create the secret in GCP Secret Manager with the Keycloak client secret
+- The client must exist in Keycloak with service account enabled
+
+**"Could not get Keycloak admin token"**
+- Verify `keycloak-admin-password` secret exists and is correct
+- Check Keycloak is accessible at the configured URL
+
+**Users synced but can't login**
+- Users may have TOTP enabled - check Keycloak user settings
+- Verify `PROD_USER_PASSWORD` is set correctly
+- Check user is enabled in Keycloak
+
+---
+
 ## See Also
 
 - [GCP Production Phase 1 Plan](../../docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md)
 - [Production Testing Methodology](../../docs/testing/PROD_TESTING_METHODOLOGY.md)
 - [403 Remediation Plan](../../docs/troubleshooting/PROD_403_REMEDIATION_PLAN.md)
+- [Identity Sync Operations](../../docs/operations/IDENTITY_SYNC.md)
