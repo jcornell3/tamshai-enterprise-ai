@@ -155,9 +155,11 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
     volumes:
-      # Use realm-export-dev.json for local development (includes test users)
-      # Use realm-export.json for production (no pre-configured users)
-      - ../../keycloak/realm-export-dev.json:/opt/keycloak/data/import/realm-export.json:ro
+      # KEYCLOAK_REALM env var allows environment-specific realm exports (Phoenix principle)
+      # Default: realm-export-dev.json (local development with test users)
+      # Stage: realm-export-stage.json (set via cloud-init.yaml)
+      # Prod: realm-export.json (set via deploy-to-gcp.yml)
+      - ${KEYCLOAK_REALM:-../../keycloak/realm-export-dev.json}:/opt/keycloak/data/import/realm-export.json:ro
       - ../keycloak/themes/tamshai:/opt/keycloak/themes/tamshai:ro
     ports:
       - "8180:8080"
