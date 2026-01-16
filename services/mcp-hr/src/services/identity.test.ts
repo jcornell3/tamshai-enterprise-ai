@@ -165,10 +165,13 @@ describe('IdentityService', () => {
         .mockResolvedValueOnce(createQueryResult(employees)) // SELECT employees
         .mockResolvedValueOnce(createQueryResult([])); // Audit log complete
 
-      // First employee: Keycloak error
+      // First employee (Alice): Keycloak error during create
+      // Second employee (Bob): Already exists in Keycloak
+      // Note: Each employee does 2 lookups (email + username fallback) if not found by email
       (kcAdmin.users.find as jest.Mock)
-        .mockResolvedValueOnce([]) // Alice not found
-        .mockResolvedValueOnce([{ id: 'bob-kc-id' }]); // Bob exists
+        .mockResolvedValueOnce([]) // Alice email lookup - not found
+        .mockResolvedValueOnce([]) // Alice username lookup - not found
+        .mockResolvedValueOnce([{ id: 'bob-kc-id' }]); // Bob email lookup - found (skips username lookup)
 
       (kcAdmin.users.create as jest.Mock).mockRejectedValueOnce(new Error('Keycloak connection failed'));
 
