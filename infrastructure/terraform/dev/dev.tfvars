@@ -92,7 +92,7 @@ keycloak_db_password  = "keycloak_password"
 mongodb_root_password = "tamshai_password"
 
 # Keycloak defaults
-keycloak_admin_password   = "admin"
+keycloak_admin_password = "admin"
 # test_user_password - Set via TF_VAR_test_user_password environment variable
 mcp_gateway_client_secret = "test-client-secret"
 
