@@ -13,8 +13,8 @@ COPY tsconfig.json ./
 COPY packages/ ./packages/
 COPY apps/finance/ ./apps/finance/
 
-# Install dependencies (remove lockfile to regenerate for Linux platform)
-RUN rm -f package-lock.json && npm install
+# Install dependencies from lockfile (faster and more reliable)
+RUN npm ci
 
 # Build the Finance app
 WORKDIR /app/apps/finance

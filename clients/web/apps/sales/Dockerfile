@@ -13,8 +13,8 @@ COPY tsconfig.json ./
 COPY packages/ ./packages/
 COPY apps/sales/ ./apps/sales/
 
-# Install dependencies (remove lockfile to regenerate for Linux platform)
-RUN rm -f package-lock.json && npm install
+# Install dependencies from lockfile (faster and more reliable)
+RUN npm ci
 
 # Build the Sales app
 WORKDIR /app/apps/sales
