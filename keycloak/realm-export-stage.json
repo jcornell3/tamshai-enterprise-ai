@@ -165,7 +165,34 @@
       ]
     }
   ],
-  "users": [],
+  "users": [
+    {
+      "username": "test-user.journey",
+      "email": "test-user@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Test",
+      "lastName": "User",
+      "attributes": {
+        "employeeId": ["TEST001"],
+        "department": ["Testing"],
+        "title": ["Journey Test Account"]
+      },
+      "groups": ["/All-Employees"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__TEST_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
+        }
+      ]
+    }
+  ],
   "clients": [
     {
       "clientId": "ai-desktop",
