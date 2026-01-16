@@ -138,11 +138,17 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Run Grype
-        uses: anchore/scan-action@v3
-        with:
-          image: 'mcp-gateway:latest'
-          severity-cutoff: high
-          fail-build: true
+        run: |
+          # Install Grype
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+          # Run Grype with config file (ignores fixed CVEs listed in .grype.yaml)
+          grype mcp-gateway:latest --config .grype.yaml --fail-on high -o sarif > grype-results.sarif || {
+            echo "Grype found vulnerabilities above threshold"
+            cat grype-results.sarif | jq '.runs[].results[] | {ruleId: .ruleId, message: .message.text}' 2>/dev/null || true
+            exit 1
+          }
+          echo "Grype scan passed"
 
   # =============================================================================
   # STAGE 2: INFRASTRUCTURE SECURITY
