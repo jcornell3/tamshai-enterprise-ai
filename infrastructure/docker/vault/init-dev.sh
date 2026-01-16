@@ -31,7 +31,7 @@ vault kv put tamshai/databases \
     keycloak_db_password="${KEYCLOAK_DB_PASSWORD:-keycloak_password}"
 
 vault kv put tamshai/keycloak \
-    admin_password="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+    admin_password="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}"
 
 # Create read-only policy for MCP services
 echo "Creating policies..."

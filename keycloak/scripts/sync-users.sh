@@ -49,7 +49,7 @@ configure_environment() {
             POSTGRES_HOST="localhost"
             POSTGRES_PORT="5433"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-            ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+            ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
             # Default dev password for synced users (DEV_USER_PASSWORD)
             DEFAULT_PASSWORD="${USER_PASSWORD:-password123}"
             ;;

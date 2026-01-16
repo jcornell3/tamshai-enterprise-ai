@@ -49,15 +49,17 @@ jobs:
 
       - name: Create minimal .env file
         working-directory: infrastructure/docker
+        env:
+          KEYCLOAK_DEV_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
         run: |
-          cat > .env << 'EOF'
+          cat > .env << EOF
           # CI Environment - Vault Integration Test
           POSTGRES_PASSWORD=postgres_password
           TAMSHAI_DB_PASSWORD=tamshai_password
           KEYCLOAK_DB_PASSWORD=keycloak_password
           MONGODB_ROOT_PASSWORD=tamshai_password
           KEYCLOAK_ADMIN=admin
-          KEYCLOAK_ADMIN_PASSWORD=admin
+          KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_DEV_ADMIN_PASSWORD}
           MINIO_ROOT_USER=minioadmin
           MINIO_ROOT_PASSWORD=minioadmin
           REDIS_PASSWORD=redis_password

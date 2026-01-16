@@ -83,12 +83,8 @@ require_vps_host() {
 # Configure kcadm based on environment
 setup_kcadm() {
     local admin_user="${KEYCLOAK_ADMIN:-admin}"
-    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
     local keycloak_url="http://localhost:8080/auth"
-
-    if [ "$ENV" = "stage" ]; then
-        admin_pass="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required for stage}"
-    fi
 
     # Run kcadm in container
     run_kcadm() {
@@ -146,7 +142,7 @@ cmd_sync_users() {
         log_info "Authenticating to Keycloak..."
         MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
             --server http://localhost:8080/auth --realm master \
-            --user "${KEYCLOAK_ADMIN:-admin}" --password "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+            --user "${KEYCLOAK_ADMIN:-admin}" --password "${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}"
 
         # Fetch employees from HR database
         log_info "Fetching employees from HR database..."
@@ -357,7 +353,7 @@ cmd_reimport() {
     fi
 
     local admin_user="${KEYCLOAK_ADMIN:-admin}"
-    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}"
 
     local token_response
     token_response=$(curl $insecure -sf -X POST "$keycloak_url/auth/realms/master/protocol/openid-connect/token" \

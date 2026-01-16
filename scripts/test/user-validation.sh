@@ -26,6 +26,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
+
 ENV="${1:-dev}"
 REALM="tamshai-corp"
 CONTAINER="tamshai-keycloak"
@@ -63,7 +69,15 @@ run_kcadm() {
     if [ "$ENV" = "dev" ]; then
         MSYS_NO_PATHCONV=1 docker exec "$CONTAINER" /opt/keycloak/bin/kcadm.sh "$@" 2>/dev/null
     else
-        ssh "${VPS_SSH_USER:-root}@${VPS_HOST:-5.78.159.29}" \
+        local vps_host="${VPS_HOST:-}"
+        if [ -z "$vps_host" ]; then
+            log_error "VPS_HOST not set. Either:"
+            log_step "  1. Create .env.local with VPS_HOST=<ip>"
+            log_step "  2. Export VPS_HOST environment variable"
+            log_step "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+            exit 1
+        fi
+        ssh "${VPS_SSH_USER:-root}@${vps_host}" \
             "docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh $*" 2>/dev/null
     fi
 }
@@ -72,11 +86,7 @@ setup_auth() {
     log_step "Authenticating to Keycloak..."
 
     local admin_user="${KEYCLOAK_ADMIN:-admin}"
-    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
-
-    if [ "$ENV" = "stage" ]; then
-        admin_pass="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required for stage}"
-    fi
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
 
     run_kcadm config credentials --server http://localhost:8080/auth \
         --realm master --user "$admin_user" --password "$admin_pass"
