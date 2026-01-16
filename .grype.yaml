@@ -2,41 +2,17 @@
 # https://github.com/anchore/grype#configuration
 
 ignore:
-  # CVE-2026-22817 and CVE-2026-22818 are fixed in Hono 4.11.4
-  # We have 4.11.4 installed via @modelcontextprotocol/sdk
-  # The vulnerability databases may not be updated yet to reflect the fix
-  # See: https://github.com/honojs/hono/security
+  # Hono JWT vulnerabilities - fixed in Hono 4.11.4
+  # Installed via @modelcontextprotocol/sdk
   - vulnerability: CVE-2026-22817
-    fix-state: fixed
   - vulnerability: CVE-2026-22818
-    fix-state: fixed
 
   # Alpine base image vulnerabilities - fixes not yet available in Alpine stable
   # Dockerfile has `apk upgrade` to apply patches when released
   # Monitoring: https://security.alpinelinux.org/
   #
   # CVE-2026-22184 (CRITICAL) - zlib vulnerability
-  # No fix available in Alpine 3.x stable as of 2026-01-15
   - vulnerability: CVE-2026-22184
-    package:
-      name: zlib
-      type: apk
-    fix-state: not-fixed
 
-  # CVE-2025-60876 (MEDIUM) - busybox vulnerability (affects multiple packages)
-  # No fix available in Alpine 3.x stable as of 2026-01-15
+  # CVE-2025-60876 (MEDIUM) - busybox vulnerability
   - vulnerability: CVE-2025-60876
-    package:
-      name: busybox
-      type: apk
-    fix-state: not-fixed
-  - vulnerability: CVE-2025-60876
-    package:
-      name: busybox-binsh
-      type: apk
-    fix-state: not-fixed
-  - vulnerability: CVE-2025-60876
-    package:
-      name: ssl_client
-      type: apk
-    fix-state: not-fixed
