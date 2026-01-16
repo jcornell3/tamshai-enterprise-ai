@@ -190,16 +190,39 @@ jobs:
 
           echo "::add-mask::$KC_ADMIN_PASSWORD"
 
-          # Get admin token
-          TOKEN=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
+          # Test Keycloak connectivity first
+          echo "[INFO] Testing Keycloak connectivity..."
+          if ! curl -sf "${{ env.KEYCLOAK_URL }}/health/ready" > /dev/null 2>&1; then
+            echo "[WARN] Keycloak health check failed - service may be starting"
+          fi
+
+          # Get admin token (save response to file to avoid jq parse errors)
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
+            -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=admin" \
             -d "password=$KC_ADMIN_PASSWORD" \
             -d "grant_type=password" \
-            -d "client_id=admin-cli" | jq -r '.access_token')
+            -d "client_id=admin-cli")
+
+          echo "[INFO] Keycloak auth response code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "[WARN] Keycloak auth failed with HTTP $HTTP_CODE"
+            # Show response for debugging (first 200 chars, masked)
+            RESPONSE_PREVIEW=$(head -c 200 "$RESPONSE_FILE" | tr '\n' ' ')
+            echo "[DEBUG] Response preview: ${RESPONSE_PREVIEW:0:100}..."
+            echo "token=" >> $GITHUB_OUTPUT
+            rm -f "$RESPONSE_FILE"
+            exit 0
+          fi
+
+          TOKEN=$(jq -r '.access_token' "$RESPONSE_FILE" 2>/dev/null || echo "")
+          rm -f "$RESPONSE_FILE"
 
           if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
-            echo "[WARN] Could not get Keycloak admin token"
+            echo "[WARN] Could not extract token from response"
             echo "token=" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -262,7 +285,9 @@ jobs:
     name: Load HR Data
     runs-on: ubuntu-latest
     needs: [preflight, verify-state]
-    if: needs.preflight.outputs.should_load_data == 'true'
+    if: |
+      always() &&
+      needs.preflight.outputs.should_load_data == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -333,6 +358,16 @@ jobs:
       always() &&
       needs.preflight.outputs.should_sync_users == 'true' &&
       (needs.load-hr-data.result == 'success' || needs.load-hr-data.result == 'skipped')
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -504,16 +539,28 @@ jobs:
             exit 0
           fi
 
-          # Get admin token
-          TOKEN=$(curl -s -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
+          # Get admin token (save response to file to avoid jq parse errors)
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
+            -X POST "${{ env.KEYCLOAK_URL }}/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=admin" \
             -d "password=$KC_ADMIN_PASSWORD" \
             -d "grant_type=password" \
-            -d "client_id=admin-cli" | jq -r '.access_token')
+            -d "client_id=admin-cli")
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "[WARN] Keycloak auth failed with HTTP $HTTP_CODE"
+            echo "user_count=unknown" >> $GITHUB_OUTPUT
+            rm -f "$RESPONSE_FILE"
+            exit 0
+          fi
+
+          TOKEN=$(jq -r '.access_token' "$RESPONSE_FILE" 2>/dev/null || echo "")
+          rm -f "$RESPONSE_FILE"
 
           if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
-            echo "[WARN] Could not get Keycloak token"
+            echo "[WARN] Could not extract token from response"
             echo "user_count=unknown" >> $GITHUB_OUTPUT
             exit 0
           fi
