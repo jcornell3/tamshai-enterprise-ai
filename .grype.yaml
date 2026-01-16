@@ -10,3 +10,17 @@ ignore:
     fix-state: fixed
   - vulnerability: CVE-2026-22818
     fix-state: fixed
+
+  # Alpine base image vulnerabilities - fixes not yet available in Alpine stable
+  # Dockerfile has `apk upgrade` to apply patches when released
+  # Monitoring: https://security.alpinelinux.org/
+  #
+  # CVE-2026-22184 (CRITICAL) - zlib vulnerability
+  # No fix available in Alpine 3.x stable as of 2026-01-15
+  - vulnerability: CVE-2026-22184
+    fix-state: not-fixed
+
+  # CVE-2025-60876 (MEDIUM) - busybox vulnerability
+  # No fix available in Alpine 3.x stable as of 2026-01-15
+  - vulnerability: CVE-2025-60876
+    fix-state: not-fixed
