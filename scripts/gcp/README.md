@@ -216,8 +216,7 @@ The workflow requires these secrets in GCP Secret Manager:
 | Secret Name | Description |
 |-------------|-------------|
 | `tamshai-prod-db-password` | PostgreSQL password for Cloud SQL |
-| `keycloak-admin-password` | Keycloak admin password (for verification) |
-| `mcp-hr-service-client-secret` | Keycloak client secret for identity-sync |
+| `tamshai-prod-keycloak-admin-password` | Keycloak admin password (for verification) |
 
 And these GitHub secrets:
 
@@ -225,6 +224,7 @@ And these GitHub secrets:
 |-------------|-------------|
 | `GCP_SA_KEY_PROD` | GCP service account JSON key |
 | `PROD_USER_PASSWORD` | Password to set for synced users |
+| `MCP_HR_SERVICE_CLIENT_SECRET` | Keycloak client secret for identity-sync |
 
 ### Workflow Jobs
 
