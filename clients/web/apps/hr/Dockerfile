@@ -13,8 +13,8 @@ COPY tsconfig.json ./
 COPY packages/ ./packages/
 COPY apps/hr/ ./apps/hr/
 
-# Install dependencies (remove lockfile to regenerate for Linux platform)
-RUN rm -f package-lock.json && npm install
+# Install dependencies from lockfile (faster and more reliable)
+RUN npm ci
 
 # Build the HR app
 WORKDIR /app/apps/hr

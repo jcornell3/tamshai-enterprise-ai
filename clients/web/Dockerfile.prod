@@ -30,8 +30,8 @@ COPY clients/web/tsconfig.json ./
 COPY clients/web/packages/ ./packages/
 COPY clients/web/apps/ ./apps/
 
-# Install dependencies
-RUN rm -f package-lock.json && npm install
+# Install dependencies from lockfile (faster and more reliable)
+RUN npm ci
 
 # Build all apps
 WORKDIR /app/apps/portal
