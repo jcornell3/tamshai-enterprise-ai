@@ -2,7 +2,7 @@
 
 This document describes the end-to-end testing approach for user login flows in Tamshai Enterprise AI, including handling TOTP (Time-based One-Time Password) authentication.
 
-**Last Updated**: January 14, 2026
+**Last Updated**: January 16, 2026
 
 ## Overview
 
@@ -72,6 +72,13 @@ The test framework looks for TOTP secrets in this order:
 2. **Environment variable**: `TEST_TOTP_SECRET`
 3. **Auto-capture**: If setup page appears, extract and save
 
+**⚠️ IMPORTANT (January 2026)**: After a fresh deployment that clears TOTP credentials (like `deploy-vps.yml` on stage), do NOT pass `TEST_TOTP_SECRET` as an environment variable. The cached file will be stale, and the env var will have the old secret. Instead:
+
+1. Delete cached secrets: `rm -rf tests/e2e/.totp-secrets/`
+2. Run test WITHOUT `TEST_TOTP_SECRET` env var
+3. Test will auto-capture the new secret and cache it
+4. Subsequent runs will use the cached secret
+
 ### Important: Single Worker Mode
 
 **Always run login tests with `--workers=1`** to avoid session conflicts:
@@ -129,6 +136,20 @@ TEST_ENV=dev npm run test:login:dev
 # Run login tests on prod (single worker required)
 TEST_ENV=prod npx playwright test login-journey.ui.spec.ts --workers=1
 ```
+
+### Windows-Specific: Use cross-env
+
+On Windows, environment variables set with `set` don't properly propagate to child processes. Always use `cross-env`:
+
+```bash
+# WRONG (Windows) - env vars won't propagate
+set TEST_ENV=stage && npx playwright test ...
+
+# CORRECT (Windows) - use cross-env
+npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```
+
+**Note**: `cross-env` is already a dev dependency in `tests/e2e/package.json`.
 
 ### Environment Variables
 
@@ -210,12 +231,20 @@ Tamshai uses browser authentication with OTP:
 
 ### "Invalid authenticator code"
 
-**Cause**: Usually timing or parallel worker issues
+**Cause**: Usually timing, parallel worker issues, or **TOTP secret mismatch after deployment**
 
 **Solutions**:
 1. Run with `--workers=1`
 2. Verify system clock is synchronized
 3. Wait for new 30-second window before retrying
+4. **After fresh deployment**: Delete cached secrets and run WITHOUT `TEST_TOTP_SECRET` env var:
+   ```bash
+   rm -rf tests/e2e/.totp-secrets/
+   cd tests/e2e && npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+   ```
+   The test will auto-capture the new secret.
+
+**Common Cause (Stage)**: The `deploy-vps.yml` workflow clears TOTP credentials on each deployment. If you pass an old `TEST_TOTP_SECRET` from GitHub Secrets, it won't match the newly captured TOTP in Keycloak.
 
 ### TOTP Setup Page Appears Unexpectedly
 
@@ -304,7 +333,52 @@ tests/e2e/
 - [TOTP_FIX_STATUS.md](./TOTP_FIX_STATUS.md) - TOTP issue resolution
 - [PROD_TESTING_METHODOLOGY.md](./PROD_TESTING_METHODOLOGY.md) - Production debugging
 
+### Stage Environment: TOTP Cleared on Each Deployment
+
+**Status**: ✅ **Verified** (January 16, 2026)
+
+The `deploy-vps.yml` workflow clears TOTP credentials for test-user.journey on each deployment:
+
+```yaml
+# From deploy-vps.yml - removes OTP credentials
+for CRED_ID in $(echo $EXISTING_CREDS | jq -r '.[] | select(.type=="otp") | .id'); do
+  curl -sf -X DELETE ".../users/${USER_ID}/credentials/${CRED_ID}" ...
+done
+```
+
+**Consequence**: After each stage deployment:
+1. test-user.journey has password authentication only (no TOTP configured)
+2. First E2E test run will see TOTP setup page
+3. Test auto-captures new TOTP secret and saves to cache
+4. Subsequent tests use cached secret
+
+**Verified Working Command** (January 16, 2026):
+```bash
+# After fresh deployment - let test auto-capture TOTP
+cd tests/e2e
+rm -rf .totp-secrets/test-user.journey-stage.secret
+npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```
+
+### Prod Environment: E2E Verified
+
+**Status**: ✅ **Verified** (January 16, 2026)
+
+E2E tests verified working on prod with all 6 tests passing:
+- Employee login page displays correctly
+- Keycloak redirect works
+- Full login journey with TOTP auto-capture
+- Invalid credentials handled gracefully
+- Portal SPA loads without JS errors
+- No 404 errors for assets
+
+**Verified Working Command** (January 16, 2026):
+```bash
+cd tests/e2e
+npx cross-env TEST_ENV=prod TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```
+
 ---
 
-*Last Updated: January 14, 2026*
-*Status: ✅ Active*
+*Last Updated: January 16, 2026*
+*Status: ✅ Active - Verified on stage and prod*

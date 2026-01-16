@@ -526,7 +526,7 @@ cd keycloak/scripts
 
 ### Issue: "Invalid TOTP code"
 
-**Cause**: Time drift, incorrect secret, or wrong format (raw vs BASE32)
+**Cause**: Time drift, incorrect secret, wrong format (raw vs BASE32), or **TOTP secret mismatch after deployment**
 
 **Fix**:
 ```bash
@@ -543,6 +543,44 @@ oathtool --totp --base32 "$TEST_TOTP_SECRET"
 - Using raw secret with oathtool (must be BASE32)
 - Using BASE32 secret in Keycloak secretData (must be raw)
 - Algorithm mismatch (Keycloak uses SHA1 by default)
+- **Passing old TEST_TOTP_SECRET after deployment** - See below
+
+**⚠️ TOTP Mismatch After Deployment (January 2026)**:
+
+The `deploy-vps.yml` workflow clears TOTP credentials on each stage deployment. If you run E2E tests with an old `TEST_TOTP_SECRET` env var, you'll get "Invalid authenticator code" because:
+
+1. Keycloak no longer has the old TOTP secret
+2. TOTP setup page appears, test auto-captures NEW secret
+3. But env var overrides cached file, using OLD secret
+
+**Solution**: After fresh deployment, run WITHOUT `TEST_TOTP_SECRET` env var:
+```bash
+# Clear cached secret and let test auto-capture
+rm -rf tests/e2e/.totp-secrets/test-user.journey-stage.secret
+cd tests/e2e && npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```
+
+### Issue: Windows Environment Variables Not Working
+
+**Status**: ✅ **RESOLVED** (January 16, 2026)
+
+**Cause**: On Windows, `set VAR=value && command` doesn't properly propagate env vars to child processes (like npx/playwright).
+
+**Symptoms**:
+- TEST_ENV shows as 'dev' even when you set it to 'stage'
+- Test loads wrong cached TOTP secret file
+- Test targets wrong environment URLs
+
+**Solution**: Use `cross-env` package:
+```bash
+# WRONG (Windows)
+set TEST_ENV=stage && set TEST_PASSWORD=xxx && npx playwright test ...
+
+# CORRECT (Windows) - use cross-env
+npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```
+
+**Note**: `cross-env` is already a dev dependency in `tests/e2e/package.json`.
 
 ### Issue: "Mobile Authenticator Setup" page appears (TOTP not configured)
 
@@ -676,14 +714,17 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 
 ---
 
-**Last Updated**: January 15, 2026
+**Last Updated**: January 16, 2026
 **Maintainer**: QA Team
-**Status**: ✅ Active - Ready for use in automated testing
+**Status**: ✅ Active - Verified on stage and prod (January 16, 2026)
 
 ## Change Log
 
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-01-16 | Verified E2E tests on stage and prod | All 6 tests passing on both environments |
+| 2026-01-16 | Added Windows cross-env requirement | Windows env vars don't propagate to child processes |
+| 2026-01-16 | Documented TOTP secret mismatch after deployment | Stage clears TOTP on each deploy - use auto-capture |
 | 2026-01-15 | Aligned deploy-vps.yml with deploy-to-gcp.yml | Consistent test user configuration across environments |
 | 2026-01-15 | Added CI/CD Workflow Alignment section | Document unified approach for all environments |
 | 2026-01-15 | Updated Environment-Specific Behavior table | Added deployment workflow column |

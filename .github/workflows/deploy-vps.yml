@@ -232,6 +232,32 @@ jobs:
           echo "=== Loading environment ==="
           export $(cat .env | grep -v '^#' | xargs)
 
+          # =========================================================================
+          # PHOENIX: Substitute secrets in realm-export-stage.json
+          # This ensures test-user.journey has correct credentials after fresh deploy
+          # Placeholders: __TEST_USER_PASSWORD__, __TEST_USER_TOTP_SECRET__
+          # =========================================================================
+          echo "=== Substituting secrets in realm-export-stage.json ==="
+          if [ -n "${TEST_USER_PASSWORD}" ]; then
+            sed -i "s/__TEST_USER_PASSWORD__/${TEST_USER_PASSWORD}/g" keycloak/realm-export-stage.json
+            echo "[OK] Password placeholder substituted"
+          else
+            echo "[WARN] TEST_USER_PASSWORD not set - using placeholder"
+          fi
+
+          if [ -n "${TEST_USER_TOTP_SECRET_RAW}" ]; then
+            sed -i "s/__TEST_USER_TOTP_SECRET__/${TEST_USER_TOTP_SECRET_RAW}/g" keycloak/realm-export-stage.json
+            echo "[OK] TOTP secret placeholder substituted"
+          else
+            echo "[WARN] TEST_USER_TOTP_SECRET_RAW not set - using placeholder"
+          fi
+
+          # Use realm-export-stage.json for stage deployment (not dev)
+          # Create symlink so docker-compose mounts the correct file
+          echo "=== Configuring realm export for stage ==="
+          ln -sf ../../../keycloak/realm-export-stage.json infrastructure/docker/realm-export.json
+          echo "[OK] Linked realm-export-stage.json for stage deployment"
+
           echo "=== Building and deploying services ==="
           # Build images on VPS (no container registry configured yet)
           # Uses root docker-compose.yml with VPS environment variables
@@ -275,24 +301,31 @@ jobs:
           if [ "${{ env.RESEED_DATA }}" = "true" ]; then
             echo "=== Re-seeding sample data (clean reload) ==="
 
-            echo "  [1/4] Stopping MCP services..."
-            docker stop tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support || true
+            echo "  [1/5] Stopping MCP services..."
+            docker stop tamshai-mcp-hr tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support || true
 
-            echo "  [2/4] Reloading Finance data (PostgreSQL)..."
+            echo "  [2/5] Reloading HR data (PostgreSQL)..."
+            docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_hr;" && \
+            docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_hr OWNER tamshai;" && \
+            docker exec -i tamshai-postgres psql -U tamshai -d tamshai_hr < sample-data/hr-data.sql && \
+              echo "  [OK] HR database dropped and reloaded" || \
+              echo "  [ERROR] HR data reload failed"
+
+            echo "  [3/5] Reloading Finance data (PostgreSQL)..."
             docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
             docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
             docker exec -i tamshai-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql && \
               echo "  [OK] Finance database dropped and reloaded" || \
               echo "  [ERROR] Finance data reload failed"
 
-            echo "  [3/4] Reloading Sales data (MongoDB)..."
+            echo "  [4/5] Reloading Sales data (MongoDB)..."
             # Get MongoDB password from environment
             MONGODB_PASSWORD=$(grep '^MONGODB_PASSWORD=' .env | cut -d= -f2)
             docker exec -i tamshai-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js && \
               echo "  [OK] Sales data reloaded (MongoDB script handles drop/recreate)" || \
               echo "  [ERROR] Sales data reload failed"
 
-            echo "  [4/4] Reloading Support data (Elasticsearch)..."
+            echo "  [5/5] Reloading Support data (Elasticsearch)..."
             # Delete existing indexes
             docker exec tamshai-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
             # Bulk load fresh data
@@ -302,11 +335,13 @@ jobs:
               echo "  [ERROR] Support data reload failed"
 
             echo "=== Restarting MCP services ==="
-            docker start tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support
+            docker start tamshai-mcp-hr tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support
             docker restart tamshai-mcp-gateway
             sleep 10
 
             echo "=== Verifying data counts ==="
+            echo "  HR employees:"
+            docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" || true
             echo "  Finance budgets (FY2025):"
             docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" || true
             echo "  Sales deals:"
@@ -317,6 +352,35 @@ jobs:
             docker exec tamshai-elasticsearch curl -s "http://localhost:9200/knowledge_base/_count" | grep -o '"count":[0-9]*' || true
           else
             echo "=== Skipping sample data re-seed (use reseed_data=true to enable) ==="
+          fi
+
+          # =========================================================================
+          # PHOENIX: Ensure HR sample data exists for identity-sync
+          # The HR database is created by PostgreSQL init, but sample employees
+          # may not exist if this is a fresh deployment. Load if needed.
+          # =========================================================================
+          echo "=== Ensuring HR sample data exists (Phoenix principle) ==="
+          HR_COUNT=\$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
+
+          if [ "\$HR_COUNT" = "0" ] || [ -z "\$HR_COUNT" ]; then
+            echo "[INFO] No HR employees found - loading sample data..."
+            # Check if hr schema exists, if not load the full HR data file
+            if ! docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -c "\\dt hr.*" 2>/dev/null | grep -q employees; then
+              echo "[INFO] HR schema not found - initializing from sample-data/hr-data.sql"
+              docker exec -i tamshai-postgres psql -U tamshai -d tamshai_hr < /opt/tamshai/sample-data/hr-data.sql && \
+                echo "[OK] HR sample data loaded successfully" || \
+                echo "[ERROR] Failed to load HR sample data"
+            else
+              echo "[INFO] HR schema exists but no employees - data may need reseeding"
+              echo "[WARN] Run deployment with reseed_data=true to reload HR employees"
+            fi
+            # Verify again
+            HR_COUNT=\$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
+          fi
+
+          echo "[INFO] HR employees in database: \$HR_COUNT"
+          if [ "\$HR_COUNT" -lt 1 ]; then
+            echo "[WARN] No HR employees found - identity-sync may not create any users"
           fi
 
           echo "=== Syncing Keycloak configuration ==="
@@ -338,10 +402,33 @@ jobs:
           # This must run AFTER realm sync to ensure mcp-hr-service client exists
           # Use --build to ensure latest code is used (image may be cached)
           # Use -T to disable TTY allocation (prevents consuming heredoc stdin)
-          docker compose run -T --rm --build identity-sync || {
-            echo "[WARN] Identity sync failed - users may need manual provisioning"
-            echo "Check logs: docker logs tamshai-identity-sync"
-          }
+          # PHOENIX: Identity-sync is REQUIRED for stage - fail deployment if it fails
+          if ! docker compose run -T --rm --build identity-sync; then
+            echo "[ERROR] Identity sync FAILED - deployment aborted"
+            echo "Check logs: docker compose logs identity-sync"
+            echo "This is fatal for stage environment (Phoenix principle: all users must exist)"
+            exit 1
+          fi
+
+          # PHOENIX: Verify minimum users exist in Keycloak
+          echo "=== Verifying user provisioning ==="
+          TOKEN=\$(curl -sf -X POST "http://localhost/auth/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "username=admin" \
+            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            -d "grant_type=password" | jq -r '.access_token')
+
+          USER_COUNT=\$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users?briefRepresentation=true" \
+            -H "Authorization: Bearer \$TOKEN" | jq 'length')
+
+          echo "Users in Keycloak: \$USER_COUNT"
+
+          if [ "\$USER_COUNT" -lt 2 ]; then
+            echo "[ERROR] Expected at least 2 users (test-user.journey + HR employees)"
+            echo "Identity-sync may have failed silently"
+            exit 1
+          fi
+          echo "[OK] User provisioning verified (\$USER_COUNT users)"
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
