@@ -279,6 +279,8 @@ jobs:
 
       - name: Terraform Init & Plan (Keycloak)
         id: plan
+        env:
+          TF_VAR_test_user_password: ${{ secrets.DEV_USER_PASSWORD }}
         run: |
           terraform -chdir=./infrastructure/terraform/keycloak init -input=false -backend=false
           terraform -chdir=./infrastructure/terraform/keycloak validate

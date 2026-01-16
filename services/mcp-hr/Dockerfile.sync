@@ -48,5 +48,7 @@ COPY --from=builder /app/tsconfig.json ./
 # Set environment
 ENV NODE_ENV=production
 
-# Default command runs the sync script
-CMD ["npx", "tsx", "src/scripts/sync-identities.ts"]
+# Use ENTRYPOINT so docker compose run can append arguments (e.g., --force-password-reset)
+# CMD would be replaced entirely by arguments, ENTRYPOINT appends them
+ENTRYPOINT ["npx", "tsx", "src/scripts/sync-identities.ts"]
+CMD []
