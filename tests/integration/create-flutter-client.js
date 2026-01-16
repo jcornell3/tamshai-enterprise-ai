@@ -17,7 +17,7 @@ async function getAdminToken() {
     const postData = querystring.stringify({
       client_id: 'admin-cli',
       username: 'admin',
-      password: 'admin',
+      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
       grant_type: 'password',
     });
 
