@@ -360,9 +360,9 @@ jobs:
           # may not exist if this is a fresh deployment. Load if needed.
           # =========================================================================
           echo "=== Ensuring HR sample data exists (Phoenix principle) ==="
-          HR_COUNT=\$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
+          HR_COUNT=$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
 
-          if [ "\$HR_COUNT" = "0" ] || [ -z "\$HR_COUNT" ]; then
+          if [ "$HR_COUNT" = "0" ] || [ -z "$HR_COUNT" ]; then
             echo "[INFO] No HR employees found - loading sample data..."
             # Check if hr schema exists, if not load the full HR data file
             if ! docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -c "\\dt hr.*" 2>/dev/null | grep -q employees; then
@@ -375,11 +375,11 @@ jobs:
               echo "[WARN] Run deployment with reseed_data=true to reload HR employees"
             fi
             # Verify again
-            HR_COUNT=\$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
+            HR_COUNT=$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
           fi
 
-          echo "[INFO] HR employees in database: \$HR_COUNT"
-          if [ "\$HR_COUNT" -lt 1 ]; then
+          echo "[INFO] HR employees in database: $HR_COUNT"
+          if [ "$HR_COUNT" -lt 1 ]; then
             echo "[WARN] No HR employees found - identity-sync may not create any users"
           fi
 
@@ -412,23 +412,23 @@ jobs:
 
           # PHOENIX: Verify minimum users exist in Keycloak
           echo "=== Verifying user provisioning ==="
-          TOKEN=\$(curl -sf -X POST "http://localhost/auth/realms/master/protocol/openid-connect/token" \
+          TOKEN=$(curl -sf -X POST "http://localhost/auth/realms/master/protocol/openid-connect/token" \
             -d "client_id=admin-cli" \
             -d "username=admin" \
             -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
             -d "grant_type=password" | jq -r '.access_token')
 
-          USER_COUNT=\$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users?briefRepresentation=true" \
-            -H "Authorization: Bearer \$TOKEN" | jq 'length')
+          USER_COUNT=$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users?briefRepresentation=true" \
+            -H "Authorization: Bearer $TOKEN" | jq 'length')
 
-          echo "Users in Keycloak: \$USER_COUNT"
+          echo "Users in Keycloak: $USER_COUNT"
 
-          if [ "\$USER_COUNT" -lt 2 ]; then
+          if [ "$USER_COUNT" -lt 2 ]; then
             echo "[ERROR] Expected at least 2 users (test-user.journey + HR employees)"
             echo "Identity-sync may have failed silently"
             exit 1
           fi
-          echo "[OK] User provisioning verified (\$USER_COUNT users)"
+          echo "[OK] User provisioning verified ($USER_COUNT users)"
 
           echo "=== Deployment complete ==="
           DEPLOY_SCRIPT
