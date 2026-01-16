@@ -305,15 +305,32 @@ async function main(): Promise<void> {
       log('info', 'Running force password reset for all synced users...');
       const resetResult = await identityService.forcePasswordReset();
 
+      // Separate "user not found" (stale keycloak_user_id) from real errors
+      const userNotFoundErrors = resetResult.errors.filter(
+        (err) => err.error.toLowerCase().includes('not found') || err.error.includes('404')
+      );
+      const realErrors = resetResult.errors.filter(
+        (err) => !err.error.toLowerCase().includes('not found') && !err.error.includes('404')
+      );
+
       log('info', 'Force password reset results', {
         total: resetResult.total,
         reset: resetResult.reset,
         skipped: resetResult.skipped,
-        errors: resetResult.errors.length,
+        userNotFound: userNotFoundErrors.length,
+        errors: realErrors.length,
       });
 
-      if (resetResult.errors.length > 0) {
-        for (const err of resetResult.errors) {
+      // Log user-not-found as warnings (stale keycloak_user_id in DB)
+      if (userNotFoundErrors.length > 0) {
+        log('warn', `${userNotFoundErrors.length} users not found in Keycloak (stale keycloak_user_id)`, {
+          users: userNotFoundErrors.map((e) => e.email),
+        });
+      }
+
+      // Log real errors
+      if (realErrors.length > 0) {
+        for (const err of realErrors) {
           log('error', 'Password reset error', {
             employeeId: err.employeeId,
             email: err.email,
@@ -324,7 +341,8 @@ async function main(): Promise<void> {
 
       await cleanup(pool, cleanupQueue);
 
-      if (resetResult.errors.length === 0) {
+      // Only fail on real errors, not "user not found" (which just means stale data)
+      if (realErrors.length === 0) {
         log('info', 'Force password reset completed successfully');
         process.exit(0);
       } else {
