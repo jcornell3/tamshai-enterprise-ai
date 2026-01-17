@@ -29,6 +29,13 @@ RUN npm prune --production
 # =============================================================================
 FROM node:20-alpine AS production
 
+# Security: Apply Alpine security patches
+RUN apk update && apk upgrade --no-cache
+
+# Security: Update npm bundled tar to fix CVE-2026-23745 (Arbitrary File Overwrite)
+RUN npm install -g npm@latest && \
+    cd /usr/local/lib/node_modules/npm && npm install tar@7.5.3
+
 # Security: Run as non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
