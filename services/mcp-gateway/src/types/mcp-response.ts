@@ -85,29 +85,32 @@ export type MCPToolResponse<T = unknown> =
 
 /**
  * Type guard to check if response is a success response
+ * Handles null/undefined responses gracefully (returns false)
  */
 export function isSuccessResponse<T>(
-  response: MCPToolResponse<T>
+  response: MCPToolResponse<T> | null | undefined
 ): response is MCPSuccessResponse<T> {
-  return response.status === 'success';
+  return response != null && response.status === 'success';
 }
 
 /**
  * Type guard to check if response is an error response
+ * Handles null/undefined responses gracefully (returns false)
  */
 export function isErrorResponse<T>(
-  response: MCPToolResponse<T>
+  response: MCPToolResponse<T> | null | undefined
 ): response is MCPErrorResponse {
-  return response.status === 'error';
+  return response != null && response.status === 'error';
 }
 
 /**
  * Type guard to check if response is a pending confirmation response
+ * Handles null/undefined responses gracefully (returns false)
  */
 export function isPendingConfirmationResponse<T>(
-  response: MCPToolResponse<T>
+  response: MCPToolResponse<T> | null | undefined
 ): response is MCPPendingConfirmationResponse {
-  return response.status === 'pending_confirmation';
+  return response != null && response.status === 'pending_confirmation';
 }
 
 /**

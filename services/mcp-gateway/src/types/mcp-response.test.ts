@@ -76,6 +76,14 @@ describe('Type Guards', () => {
 
       expect(isSuccessResponse(response)).toBe(false);
     });
+
+    test('returns false for null response', () => {
+      expect(isSuccessResponse(null)).toBe(false);
+    });
+
+    test('returns false for undefined response', () => {
+      expect(isSuccessResponse(undefined)).toBe(false);
+    });
   });
 
   describe('isErrorResponse', () => {
@@ -138,6 +146,14 @@ describe('Type Guards', () => {
       };
 
       expect(isErrorResponse(response)).toBe(false);
+    });
+
+    test('returns false for null response', () => {
+      expect(isErrorResponse(null)).toBe(false);
+    });
+
+    test('returns false for undefined response', () => {
+      expect(isErrorResponse(undefined)).toBe(false);
     });
   });
 
@@ -205,6 +221,14 @@ describe('Type Guards', () => {
       };
 
       expect(isPendingConfirmationResponse(response)).toBe(false);
+    });
+
+    test('returns false for null response', () => {
+      expect(isPendingConfirmationResponse(null)).toBe(false);
+    });
+
+    test('returns false for undefined response', () => {
+      expect(isPendingConfirmationResponse(undefined)).toBe(false);
     });
   });
 });
