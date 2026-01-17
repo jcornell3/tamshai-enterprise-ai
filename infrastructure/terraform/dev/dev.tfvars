@@ -98,8 +98,8 @@ keycloak_admin_password = "admin"
 # User passwords - from GitHub Secrets via TF_VAR_* environment variables
 # DEV_USER_PASSWORD: Corporate users (eve.thompson, etc.)
 # TEST_USER_PASSWORD: test-user.journey E2E account
-dev_user_password  = ""
-test_user_password = ""
+# NOTE: Do NOT set values here - use TF_VAR_* environment variables
+#       Setting empty values here overrides env vars due to terraform precedence
 
 mcp_gateway_client_secret = "test-client-secret"
 
