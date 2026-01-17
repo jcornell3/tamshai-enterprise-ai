@@ -372,7 +372,7 @@ resource "null_resource" "keycloak_set_passwords" {
 
     environment = {
       TEST_USER_PASSWORD = var.test_user_password
-      MSYS_NO_PATHCONV   = "1"  # Prevent Git Bash from converting Unix paths to Windows paths
+      MSYS_NO_PATHCONV   = "1" # Prevent Git Bash from converting Unix paths to Windows paths
     }
   }
 }
