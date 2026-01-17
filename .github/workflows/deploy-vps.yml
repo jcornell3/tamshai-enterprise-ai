@@ -560,6 +560,44 @@ jobs:
             -d '{"requiredActions":[]}' > /dev/null || true
 
           echo "[OK] test-user.journey configured successfully"
+
+          # Set corporate user passwords from STAGE_USER_PASSWORD (matches dev terraform logic)
+          STAGE_PASSWORD='${{ secrets.STAGE_USER_PASSWORD }}'
+          if [ -n "$STAGE_PASSWORD" ]; then
+            echo ""
+            echo "=== Setting corporate user passwords ==="
+
+            # Get all users (excluding test-user.journey)
+            ALL_USERS=$(curl -sf "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users?max=500" \
+              -H "Authorization: Bearer $TOKEN")
+
+            CORP_COUNT=0
+            for row in $(echo "$ALL_USERS" | jq -r '.[] | @base64'); do
+              _jq() {
+                echo "$row" | base64 -d | jq -r "$1"
+              }
+              USERNAME=$(_jq '.username')
+              USERID=$(_jq '.id')
+
+              # Skip test-user.journey (uses TEST_USER_PASSWORD)
+              if [ "$USERNAME" != "test-user.journey" ] && [ -n "$USERID" ]; then
+                PASSWORD_JSON=$(jq -n --arg pass "$STAGE_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+                  "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users/${USERID}/reset-password" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d "$PASSWORD_JSON")
+
+                if [ "$HTTP_CODE" = "204" ]; then
+                  CORP_COUNT=$((CORP_COUNT + 1))
+                fi
+              fi
+            done
+
+            echo "[OK] $CORP_COUNT corporate user passwords set"
+          else
+            echo "[WARN] STAGE_USER_PASSWORD not set - corporate users have placeholder passwords"
+          fi
           CONFIGURE_USER_SCRIPT
 
       - name: Verify deployment

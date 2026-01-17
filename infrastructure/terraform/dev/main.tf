@@ -367,11 +367,50 @@ resource "null_resource" "keycloak_set_passwords" {
         echo "WARNING: TEST_USER_PASSWORD not set - E2E tests will fail"
       fi
 
+      # Set corporate user passwords from DEV_USER_PASSWORD
+      if [ -n "$DEV_USER_PASSWORD" ]; then
+        echo "Setting corporate user passwords..."
+
+        # Get all users except test-user.journey
+        USERS=$(docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh get users \
+          -r tamshai-corp \
+          --fields username,id 2>/dev/null)
+
+        # Parse and iterate through users
+        CORP_COUNT=0
+        while IFS= read -r line; do
+          # Extract username and id from JSON lines
+          if echo "$line" | grep -q '"username"'; then
+            USERNAME=$(echo "$line" | grep -o '"username" : "[^"]*"' | cut -d'"' -f4)
+          fi
+          if echo "$line" | grep -q '"id"'; then
+            USER_ID=$(echo "$line" | grep -o '"id" : "[^"]*"' | cut -d'"' -f4)
+
+            # Skip test-user.journey (uses TEST_USER_PASSWORD)
+            if [ "$USERNAME" != "test-user.journey" ] && [ -n "$USER_ID" ]; then
+              docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh set-password \
+                -r tamshai-corp \
+                --userid "$USER_ID" \
+                --new-password "$DEV_USER_PASSWORD" 2>/dev/null
+
+              if [ $? -eq 0 ]; then
+                CORP_COUNT=$((CORP_COUNT + 1))
+              fi
+            fi
+          fi
+        done <<< "$USERS"
+
+        echo "✓ $CORP_COUNT corporate user passwords set successfully"
+      else
+        echo "WARNING: DEV_USER_PASSWORD not set - corporate users will have placeholder passwords"
+      fi
+
       echo "Keycloak password configuration complete!"
     EOT
 
     environment = {
       TEST_USER_PASSWORD = var.test_user_password
+      DEV_USER_PASSWORD  = var.dev_user_password
       MSYS_NO_PATHCONV   = "1" # Prevent Git Bash from converting Unix paths to Windows paths
     }
   }

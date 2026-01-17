@@ -76,16 +76,32 @@ Set-TerraformVar `
     -Required $true `
     -Sensitive $true
 
-# test_user_password must be set via DEV_USER_PASSWORD environment variable
-if ($env:DEV_USER_PASSWORD) {
+# test_user_password must be set via TEST_USER_PASSWORD environment variable
+# This is used for test-user.journey E2E account
+if ($env:TEST_USER_PASSWORD) {
     Set-TerraformVar `
         -Name "TF_VAR_test_user_password" `
-        -Value $env:DEV_USER_PASSWORD `
-        -Description "Password for test users" `
+        -Value $env:TEST_USER_PASSWORD `
+        -Description "Password for test-user.journey E2E account" `
         -Required $true `
         -Sensitive $true
 } else {
-    Write-Host "WARNING: DEV_USER_PASSWORD not set - TF_VAR_test_user_password will not be configured" -ForegroundColor Yellow
+    Write-Host "WARNING: TEST_USER_PASSWORD not set - TF_VAR_test_user_password will not be configured" -ForegroundColor Yellow
+    Write-Host "  E2E tests will fail without this password" -ForegroundColor Gray
+}
+
+# dev_user_password must be set via DEV_USER_PASSWORD environment variable
+# This is used for corporate users (eve.thompson, alice.chen, etc.)
+if ($env:DEV_USER_PASSWORD) {
+    Set-TerraformVar `
+        -Name "TF_VAR_dev_user_password" `
+        -Value $env:DEV_USER_PASSWORD `
+        -Description "Password for corporate users (eve.thompson, etc.)" `
+        -Required $true `
+        -Sensitive $true
+} else {
+    Write-Host "WARNING: DEV_USER_PASSWORD not set - TF_VAR_dev_user_password will not be configured" -ForegroundColor Yellow
+    Write-Host "  Corporate users will have placeholder passwords" -ForegroundColor Gray
 }
 
 Set-TerraformVar `
