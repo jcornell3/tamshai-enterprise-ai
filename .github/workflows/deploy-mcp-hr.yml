@@ -97,12 +97,13 @@ jobs:
           # Fix git ownership check (running as root but repo may be owned by another user)
           git config --global --add safe.directory /opt/tamshai
 
-          # Tag current version for rollback
+          # Tag current version for rollback (only if image exists)
           echo "🏷️  Tagging current version..."
-          docker tag tamshai/mcp-hr:latest tamshai/mcp-hr:rollback || true
+          docker images -q tamshai/mcp-hr:latest | grep -q . && docker tag tamshai/mcp-hr:latest tamshai/mcp-hr:rollback || echo "No existing image to tag for rollback"
 
-          # Pull latest code (use fetch+reset to avoid git lock race conditions)
+          # Pull latest code (cleanup stale refs first, then force fetch)
           echo "📥 Pulling latest code..."
+          rm -f .git/refs/remotes/origin/main
           git fetch -f origin main
           git reset --hard origin/main
 
