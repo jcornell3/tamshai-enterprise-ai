@@ -6,6 +6,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
+import { GoogleAuth, IdTokenClient } from 'google-auth-library';
 import { Logger } from 'winston';
 import { MCPServerConfig } from './role-mapper';
 import { UserContext } from '../test-utils/mock-user-context';
@@ -18,6 +19,7 @@ export interface MCPClientConfig {
   readTimeout: number;   // Timeout for read operations (ms)
   writeTimeout: number;  // Timeout for write operations (ms)
   maxPages?: number;      // Maximum pages to fetch during pagination (default: 10)
+  useGcpAuth?: boolean;  // Enable GCP service-to-service authentication (default: false in dev, auto-detected in GCP)
 }
 
 export interface MCPQueryResult {
@@ -36,19 +38,67 @@ export interface MCPQueryResult {
  * - Automatic pagination
  * - Error handling and timeout detection
  * - User context propagation
+ * - GCP Cloud Run service-to-service authentication
  */
 export class MCPClient {
   private axios: AxiosInstance;
   private config: Required<MCPClientConfig>;
   private logger: Logger;
+  private googleAuth: GoogleAuth | null = null;
+  private idTokenClients: Map<string, IdTokenClient> = new Map();
 
   constructor(config: MCPClientConfig, logger: Logger, axiosInstance?: AxiosInstance) {
+    // Auto-detect GCP environment if not explicitly set
+    const isGcp = process.env.K_SERVICE !== undefined || process.env.GOOGLE_CLOUD_PROJECT !== undefined;
+
     this.config = {
       ...config,
       maxPages: config.maxPages ?? 10,
+      useGcpAuth: config.useGcpAuth ?? isGcp,
     };
     this.logger = logger;
     this.axios = axiosInstance || axios;
+
+    // Initialize GoogleAuth if running in GCP
+    if (this.config.useGcpAuth) {
+      this.googleAuth = new GoogleAuth();
+      this.logger.info('GCP service-to-service authentication enabled');
+    }
+  }
+
+  /**
+   * Get an ID token for the target URL (cached per audience)
+   * Required for Cloud Run service-to-service authentication
+   */
+  private async getIdToken(targetUrl: string): Promise<string | null> {
+    if (!this.googleAuth) {
+      return null;
+    }
+
+    try {
+      // Extract the base URL (audience) from the full URL
+      const url = new URL(targetUrl);
+      const audience = `${url.protocol}//${url.host}`;
+
+      // Get or create IdTokenClient for this audience
+      let client = this.idTokenClients.get(audience);
+      if (!client) {
+        client = await this.googleAuth.getIdTokenClient(audience);
+        this.idTokenClients.set(audience, client);
+        this.logger.debug(`Created ID token client for audience: ${audience}`);
+      }
+
+      // Get the ID token
+      const headers = await client.getRequestHeaders();
+      const authHeader = headers['Authorization'] || headers['authorization'];
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+      }
+      return null;
+    } catch (error) {
+      this.logger.warn('Failed to get GCP ID token, proceeding without auth:', error);
+      return null;
+    }
   }
 
   /**
@@ -85,10 +135,14 @@ export class MCPClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+      // Get GCP ID token for service-to-service auth (if enabled)
+      const targetUrl = `${server.url}/query`;
+      const idToken = await this.getIdToken(targetUrl);
+
       try {
         do {
           const response = await this.axios.post(
-            `${server.url}/query`,
+            targetUrl,
             {
               query,
               userContext: {
@@ -106,6 +160,8 @@ export class MCPClient {
                 'Content-Type': 'application/json',
                 'X-User-ID': userContext.userId,
                 'X-User-Roles': userContext.roles.join(','),
+                // Add GCP ID token for Cloud Run service-to-service auth
+                ...(idToken && { 'Authorization': `Bearer ${idToken}` }),
               },
             }
           );
