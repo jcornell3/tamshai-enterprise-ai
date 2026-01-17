@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as dotenv from 'dotenv';
+
+// Load environment variables from .env file (for local development)
+// quiet: true suppresses the verbose dotenv log messages
+dotenv.config({ quiet: true });
 
 // Determine environment from TEST_ENV
 const testEnv = process.env.TEST_ENV || 'dev';

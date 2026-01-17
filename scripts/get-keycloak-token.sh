@@ -13,10 +13,11 @@ set -e
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180}"
 REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 CLIENT_ID="${KEYCLOAK_CLIENT_ID:-mcp-gateway}"
-CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-[REDACTED-DEV-SECRET]}"
+CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-}"
 
-# Default password for all test users (from CLAUDE.md)
-DEFAULT_PASSWORD="${KEYCLOAK_PASSWORD:-[REDACTED-DEV-PASSWORD]}"
+# Default password from environment (GitHub Secret: DEV_USER_PASSWORD or TEST_USER_PASSWORD)
+# Falls back to DEV_USER_PASSWORD for corporate users, TEST_PASSWORD for test-user.journey
+DEFAULT_PASSWORD="${KEYCLOAK_PASSWORD:-${DEV_USER_PASSWORD:-${TEST_PASSWORD:-}}}"
 
 # Color codes
 RED='\033[0;31m'
@@ -35,7 +36,7 @@ OPTIONS:
   -h, --help              Show this help message
   -r, --realm REALM       Keycloak realm (default: tamshai)
   -c, --client CLIENT     Client ID (default: mcp-gateway)
-  -p, --password PASS     User password (default: [REDACTED-DEV-PASSWORD])
+  -p, --password PASS     User password (default: from DEV_USER_PASSWORD or TEST_PASSWORD env var)
   -u, --url URL           Keycloak URL (default: http://localhost:8180)
   -j, --json              Output full JSON response (default: token only)
   -v, --verbose           Show detailed information
@@ -142,6 +143,13 @@ if $VERBOSE; then
   echo -e "${YELLOW}Requesting token for $USERNAME...${NC}" >&2
 fi
 
+# Validate password is set
+if [ -z "$DEFAULT_PASSWORD" ]; then
+  echo -e "${RED}Error: No password configured${NC}" >&2
+  echo -e "${YELLOW}Set one of: KEYCLOAK_PASSWORD, DEV_USER_PASSWORD, or TEST_PASSWORD${NC}" >&2
+  exit 1
+fi
+
 # Request token
 TOKEN_ENDPOINT="$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token"
 
@@ -164,7 +172,7 @@ if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
   if [ "$ERROR" = "invalid_grant" ]; then
     echo -e "${YELLOW}Hints:${NC}" >&2
     echo "  - Check if username '$USERNAME' exists in Keycloak" >&2
-    echo "  - Verify password is correct (default: [REDACTED-DEV-PASSWORD])" >&2
+    echo "  - Verify password is correct (set via DEV_USER_PASSWORD or TEST_PASSWORD env var)" >&2
     echo "  - Check if user account is enabled" >&2
   elif [ "$ERROR" = "unauthorized_client" ]; then
     echo -e "${YELLOW}Hints:${NC}" >&2

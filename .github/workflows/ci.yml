@@ -394,6 +394,11 @@ jobs:
     permissions:
       contents: read
 
+    # Database passwords - use secrets or fall back to dev defaults
+    env:
+      DB_PASSWORD: ${{ secrets.TAMSHAI_DB_PASSWORD || 'tamshai_password' }}
+      MONGODB_PASSWORD: ${{ secrets.MONGODB_PASSWORD || 'tamshai_password' }}
+
     services:
       redis:
         image: redis:7-alpine
@@ -411,7 +416,7 @@ jobs:
           - 5433:5432
         env:
           POSTGRES_USER: tamshai
-          POSTGRES_PASSWORD: changeme
+          POSTGRES_PASSWORD: tamshai_password
           POSTGRES_DB: tamshai
         options: >-
           --health-cmd "pg_isready -U tamshai"
@@ -425,7 +430,7 @@ jobs:
           - 27018:27017
         env:
           MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: changeme
+          MONGO_INITDB_ROOT_PASSWORD: tamshai_password
         options: >-
           --health-cmd "mongosh --eval 'db.adminCommand({ping:1})' --quiet"
           --health-interval 10s
@@ -476,28 +481,28 @@ jobs:
           timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai -d tamshai; do sleep 1; done'
 
           # Create tamshai_hr database (for HR sample data)
-          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_hr OWNER tamshai;"
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_hr OWNER tamshai;"
           echo "✅ Created tamshai_hr database"
 
           # Create tamshai_finance database
-          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_finance;"
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_finance;"
           echo "✅ Created tamshai_finance database"
 
       - name: Load sample data
         run: |
           # Load HR sample data (23 employees)
-          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_hr < sample-data/hr-data.sql
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai_hr < sample-data/hr-data.sql
           echo "✅ Loaded HR sample data"
 
           # Load Finance sample data
-          PGPASSWORD=changeme psql -h localhost -p 5433 -U tamshai -d tamshai_finance < sample-data/finance-data.sql
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai_finance < sample-data/finance-data.sql
           echo "✅ Loaded Finance sample data"
 
           # Load Sales sample data (MongoDB) using Docker
           docker run --rm --network host \
             -v "$(pwd)/sample-data:/data" \
             mongo:7 \
-            mongosh "mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin" /data/sales-data.js
+            mongosh "mongodb://root:$MONGODB_PASSWORD@localhost:27018/tamshai_sales?authSource=admin" /data/sales-data.js
           echo "✅ Loaded Sales sample data"
 
           # Load Support sample data (Elasticsearch - already started in earlier step)
@@ -727,7 +732,7 @@ jobs:
           PORT: 3103
           KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
-          MONGODB_URL: mongodb://root:changeme@localhost:27018/tamshai_sales?authSource=admin
+          MONGODB_URL: mongodb://root:$MONGODB_PASSWORD@localhost:27018/tamshai_sales?authSource=admin
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           NODE_ENV: test

@@ -103,8 +103,8 @@ npx playwright test login-journey.ui.spec.ts  # Uses default workers
 | Field | Value |
 |-------|-------|
 | Username | `test-user.journey` |
-| Password | `[STORED IN GITHUB SECRETS]` (see `TEST_PASSWORD`) |
-| TOTP Secret (BASE32) | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET`) |
+| Password | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_PASSWORD` secret, env var: `TEST_PASSWORD`) |
+| TOTP Secret (BASE32) | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET` secret) |
 | Roles | None (tests authentication flow only) |
 
 This account exists in all environments (dev, stage, prod) with identical credentials.
@@ -115,9 +115,14 @@ These users exist only in development and have data access roles:
 
 | Username | Password | TOTP | Role |
 |----------|----------|------|------|
-| eve.thompson | [dev-password] | Enabled | Executive |
-| alice.chen | [dev-password] | Enabled | HR |
-| bob.martinez | [dev-password] | Enabled | Finance |
+| eve.thompson | From `DEV_USER_PASSWORD` | Enabled | Executive |
+| alice.chen | From `DEV_USER_PASSWORD` | Enabled | HR |
+| bob.martinez | From `DEV_USER_PASSWORD` | Enabled | Finance |
+
+**Note**: Corporate user passwords come from environment-specific GitHub Secrets:
+- Dev: `DEV_USER_PASSWORD`
+- Stage: `STAGE_USER_PASSWORD`
+- Prod: `PROD_USER_PASSWORD`
 
 ## Running E2E Tests
 
@@ -137,28 +142,41 @@ TEST_ENV=dev npm run test:login:dev
 TEST_ENV=prod npx playwright test login-journey.ui.spec.ts --workers=1
 ```
 
-### Windows-Specific: Use cross-env
+### Windows-Specific: Use .env file or cross-env
 
-On Windows, environment variables set with `set` don't properly propagate to child processes. Always use `cross-env`:
+On Windows, environment variables set with `set` don't properly propagate to child processes. Two solutions:
 
+**Option 1: Use .env file (Recommended)**
+
+Create a `tests/e2e/.env` file with your credentials:
 ```bash
-# WRONG (Windows) - env vars won't propagate
-set TEST_ENV=stage && npx playwright test ...
+TEST_ENV=dev
+TEST_PASSWORD=your-password-here
+```
 
-# CORRECT (Windows) - use cross-env
+The playwright config loads this automatically via `dotenv`.
+
+**Option 2: Use cross-env**
+```bash
+# Install cross-env first
+npm install -D cross-env
+
+# Then use it to run tests
 npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
-**Note**: `cross-env` is already a dev dependency in `tests/e2e/package.json`.
+**Note**: The `.env` file is gitignored - never commit credentials to version control.
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TEST_ENV` | Yes | Environment: `dev`, `stage`, or `prod` |
-| `TEST_TOTP_SECRET` | No | BASE32 TOTP secret (auto-captured if not set) |
-| `TEST_USERNAME` | No | Override username (default: `test-user.journey`) |
-| `TEST_PASSWORD` | No | Override password (required - get from GitHub Secrets) |
+| Variable | Required | GitHub Secret | Description |
+|----------|----------|---------------|-------------|
+| `TEST_ENV` | Yes | N/A | Environment: `dev`, `stage`, or `prod` |
+| `TEST_PASSWORD` | Yes* | `TEST_USER_PASSWORD` | Password for test-user.journey |
+| `TEST_TOTP_SECRET` | No | `TEST_USER_TOTP_SECRET` | BASE32 TOTP secret (auto-captured if not set) |
+| `TEST_USERNAME` | No | N/A | Override username (default: `test-user.journey`) |
+
+*Required for full login journey test. Without it, the test is skipped.
 
 ### npm Scripts
 

@@ -652,6 +652,12 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       # Use Docker network hostname for internal communication
       KEYCLOAK_URL: http://keycloak:8080/auth
+      # Environment identifier for password variable selection
+      ENV: ${ENVIRONMENT:-dev}
+      # Test user passwords from GitHub secrets (environment-specific)
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
+      STAGE_USER_PASSWORD: ${STAGE_USER_PASSWORD:-}
+      PROD_USER_PASSWORD: ${PROD_USER_PASSWORD:-}
     volumes:
       - ../../keycloak/scripts/sync-realm.sh:/scripts/sync-realm.sh:ro
       - ../../keycloak/scripts/lib:/scripts/lib:ro

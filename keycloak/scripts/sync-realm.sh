@@ -93,6 +93,10 @@ main() {
     # Provision test user (for E2E testing)
     provision_test_user
 
+    # Set test user password from environment variable
+    # This updates password for users imported from realm export
+    set_test_user_password
+
     # Sync C-Suite group (ensures executive and manager roles are assigned)
     sync_c_suite_group
 

@@ -51,7 +51,7 @@ auto_stop_services  = false # Keep services running on destroy (manual cleanup)
 # Note: Set these via TF_VAR_* environment variables
 #
 # keycloak_admin_password   - Set via TF_VAR_keycloak_admin_password (REQUIRED NOW)
-# test_user_password        - Set via TF_VAR_test_user_password (REQUIRED NOW)
+# dev_user_password         - Set via TF_VAR_dev_user_password or DEV_USER_PASSWORD GitHub secret
 # mcp_gateway_client_secret - Set via TF_VAR_mcp_gateway_client_secret (REQUIRED NOW)
 
 # =============================================================================
@@ -93,7 +93,9 @@ mongodb_root_password = "tamshai_password"
 
 # Keycloak defaults
 keycloak_admin_password = "admin"
-# test_user_password - Set via TF_VAR_test_user_password environment variable
+# dev_user_password - Set via TF_VAR_dev_user_password environment variable
+# Leave empty to skip (E2E tests will warn about missing password)
+dev_user_password = ""
 mcp_gateway_client_secret = "test-client-secret"
 
 # Storage defaults (match docker-compose.yml defaults)

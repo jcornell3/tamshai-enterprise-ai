@@ -72,15 +72,29 @@ provision_test_user() {
             user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
 
             if [ -n "$user_id" ]; then
-                # Set password (non-temporary)
-                log_info "  Setting password..."
-                local password_json='{"type":"password","value":"Test123!Journey","temporary":false}'
-                echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f -
+                # Set password from environment-specific variable (non-temporary)
+                local test_password
+                test_password=$(get_test_user_password)
+                local env_var_name
+                case "${ENV:-dev}" in
+                    prod|production) env_var_name="PROD_USER_PASSWORD" ;;
+                    stage|staging) env_var_name="STAGE_USER_PASSWORD" ;;
+                    *) env_var_name="DEV_USER_PASSWORD" ;;
+                esac
 
-                if [ $? -eq 0 ]; then
-                    log_info "  Password set successfully"
+                if [ -n "$test_password" ]; then
+                    log_info "  Setting password from $env_var_name..."
+                    local password_json="{\"type\":\"password\",\"value\":\"$test_password\",\"temporary\":false}"
+                    echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f -
+
+                    if [ $? -eq 0 ]; then
+                        log_info "  Password set successfully"
+                    else
+                        log_warn "  Failed to set password"
+                    fi
                 else
-                    log_warn "  Failed to set password"
+                    log_warn "  $env_var_name not set - test-user.journey will have no password"
+                    log_warn "  Set $env_var_name environment variable to enable E2E tests"
                 fi
 
                 # Note: TOTP credentials cannot be pre-configured via Admin API
@@ -163,4 +177,65 @@ assign_critical_prod_users() {
     done
 
     log_info "Critical production user assignment complete"
+}
+
+# =============================================================================
+# Test User Password Management
+# =============================================================================
+
+# Get the appropriate password environment variable for the current environment
+# Each environment uses its own GitHub secret:
+#   - DEV_USER_PASSWORD: For local dev and CI testing
+#   - STAGE_USER_PASSWORD: For VPS staging environment
+#   - PROD_USER_PASSWORD: For production (rarely used - prod imports with TOTP)
+get_test_user_password() {
+    case "${ENV:-dev}" in
+        prod|production)
+            echo "${PROD_USER_PASSWORD:-}"
+            ;;
+        stage|staging)
+            echo "${STAGE_USER_PASSWORD:-}"
+            ;;
+        *)
+            echo "${DEV_USER_PASSWORD:-}"
+            ;;
+    esac
+}
+
+# Set test-user.journey password from environment-specific password variable
+# This is called separately to update password for users imported from realm export
+set_test_user_password() {
+    local test_password
+    test_password=$(get_test_user_password)
+
+    local env_var_name
+    case "${ENV:-dev}" in
+        prod|production) env_var_name="PROD_USER_PASSWORD" ;;
+        stage|staging) env_var_name="STAGE_USER_PASSWORD" ;;
+        *) env_var_name="DEV_USER_PASSWORD" ;;
+    esac
+
+    if [ -z "$test_password" ]; then
+        log_warn "$env_var_name not set - cannot set test-user.journey password"
+        log_warn "E2E tests requiring authentication will fail"
+        return 0
+    fi
+
+    log_info "Setting test-user.journey password from $env_var_name..."
+
+    # Get user ID
+    local user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+    if [ -z "$user_id" ]; then
+        log_warn "test-user.journey not found in Keycloak - skipping password update"
+        return 0
+    fi
+
+    # Set password
+    local password_json="{\"type\":\"password\",\"value\":\"$test_password\",\"temporary\":false}"
+    if echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f - 2>/dev/null; then
+        log_info "  test-user.journey password updated successfully"
+    else
+        log_warn "  Failed to update test-user.journey password"
+    fi
 }

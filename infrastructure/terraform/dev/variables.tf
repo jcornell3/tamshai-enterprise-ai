@@ -63,11 +63,11 @@ variable "keycloak_admin_password" {
   default     = "admin"
 }
 
-variable "test_user_password" {
-  description = "Test user password (set via TF_VAR_test_user_password or -var)"
+variable "dev_user_password" {
+  description = "Dev environment test user password (set via TF_VAR_dev_user_password or GitHub secret DEV_USER_PASSWORD)"
   type        = string
   sensitive   = true
-  # No default - must be provided via environment variable or tfvars
+  default     = "" # Optional - E2E tests will warn if not set
 }
 
 variable "mcp_gateway_client_secret" {

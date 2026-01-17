@@ -16,8 +16,12 @@
 #
 # Test User Credentials:
 #   Username: test-user.journey
-#   Password: ***REDACTED_PASSWORD***
-#   TOTP Secret: JBSWY3DPEHPK3PXP (base32 encoded)
+#   Password: From TEST_PASSWORD env var (GitHub Secret: TEST_USER_PASSWORD)
+#   TOTP Secret: From TEST_TOTP_SECRET env var (GitHub Secret: TEST_USER_TOTP_SECRET)
+#
+# Required Environment Variables:
+#   TEST_PASSWORD      - Password for test-user.journey
+#   TEST_TOTP_SECRET   - BASE32 TOTP secret for code generation (optional - auto-captured)
 #
 # Features:
 #   - Fully automated login with TOTP
@@ -49,8 +53,18 @@ log_step() { echo -e "${BLUE}[TEST]${NC} $1"; }
 # =============================================================================
 
 TEST_USERNAME="test-user.journey"
-TEST_PASSWORD="***REDACTED_PASSWORD***"
-TOTP_SECRET="JBSWY3DPEHPK3PXP"
+
+# Password must come from environment variable (GitHub Secret: TEST_USER_PASSWORD)
+TEST_PASSWORD="${TEST_PASSWORD:-}"
+if [ -z "$TEST_PASSWORD" ]; then
+    log_error "TEST_PASSWORD environment variable is required"
+    log_error "Set via: export TEST_PASSWORD=\$(gh secret get TEST_USER_PASSWORD)"
+    exit 1
+fi
+
+# TOTP secret from environment (GitHub Secret: TEST_USER_TOTP_SECRET)
+# Optional - tests can auto-capture during TOTP setup
+TOTP_SECRET="${TEST_TOTP_SECRET:-}"
 
 # =============================================================================
 # Environment Configuration

@@ -50,9 +50,16 @@ const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 // - Prod: Set TEST_TOTP_SECRET env var with BASE32-encoded secret from GitHub Secrets
 const TEST_USER = {
   username: process.env.TEST_USERNAME || 'test-user.journey',
-  // TEST_USER_PASSWORD is the canonical name (matches GitHub Secret and deploy workflows)
-  // TEST_PASSWORD is also accepted for backwards compatibility
-  password: process.env.TEST_USER_PASSWORD || process.env.TEST_PASSWORD || '***REDACTED_PASSWORD***',
+  // Password environment variables (checked in order of preference):
+  // 1. TEST_PASSWORD - canonical name for E2E test account (per docs)
+  // 2. TEST_USER_PASSWORD - alias (GitHub Secret name)
+  // 3. DEV_USER_PASSWORD / STAGE_USER_PASSWORD - fallback if same password used
+  password:
+    process.env.TEST_PASSWORD ||
+    process.env.TEST_USER_PASSWORD ||
+    process.env.DEV_USER_PASSWORD ||
+    process.env.STAGE_USER_PASSWORD ||
+    '',
   // TOTP secret must be BASE32-encoded (not raw) - used with oathtool/otplib
   // For prod, this comes from GitHub Secret TEST_USER_TOTP_SECRET
   // For dev/stage, tests capture the secret during TOTP setup flow

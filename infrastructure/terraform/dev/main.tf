@@ -174,6 +174,9 @@ resource "local_file" "docker_env" {
 
     # Environment
     environment = var.environment
+
+    # Test user password (for E2E tests and synced users)
+    dev_user_password = var.dev_user_password
   })
 
   file_permission = "0600"

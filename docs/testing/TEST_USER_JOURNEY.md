@@ -9,7 +9,7 @@ This document describes the **test-user.journey** account, a dedicated test acco
 | Field | Value | Notes |
 |-------|-------|-------|
 | **Username** | `test-user.journey` | Unique identifier |
-| **Password** | `[STORED IN GITHUB SECRETS]` | See `TEST_PASSWORD` secret |
+| **Password** | `[STORED IN GITHUB SECRETS]` | See `TEST_USER_PASSWORD` secret |
 | **Email** | `test-user@tamshai.local` | Test email address |
 | **TOTP Secret** | Stored in GitHub Secrets | See [TOTP Secret Management](#totp-secret-management) below |
 | **Employee ID** | `TEST001` | Attribute for tracking |
@@ -60,7 +60,20 @@ The `secretData` field in realm-export.json **ONLY accepts the `value` field**. 
 
 ### GitHub Secrets Configuration
 
-The TOTP secrets are stored securely in GitHub Secrets, **not in the codebase**.
+All credentials are stored securely in GitHub Secrets, **not in the codebase**.
+
+#### Password Secrets
+
+| Secret Name | Environment | Purpose | Env Var Name |
+|-------------|-------------|---------|--------------|
+| `TEST_USER_PASSWORD` | All | Password for test-user.journey E2E account | `TEST_PASSWORD` |
+| `DEV_USER_PASSWORD` | Dev | Password for identity-synced corporate users | `DEV_USER_PASSWORD` |
+| `STAGE_USER_PASSWORD` | Stage | Password for identity-synced corporate users | `STAGE_USER_PASSWORD` |
+| `PROD_USER_PASSWORD` | Prod | Password for identity-synced corporate users | `PROD_USER_PASSWORD` |
+
+**Note**: `TEST_USER_PASSWORD` is for the dedicated E2E test account (test-user.journey), while `{ENV}_USER_PASSWORD` secrets are for corporate employees provisioned via identity-sync.
+
+#### TOTP Secrets
 
 | Secret Name | Format | Purpose |
 |-------------|--------|---------|
@@ -103,7 +116,7 @@ gh secret set TEST_USER_TOTP_SECRET --body "$BASE32_SECRET"
 | Environment | TOTP Source | Deployment Workflow | Notes |
 |-------------|-------------|---------------------|-------|
 | **Dev** | E2E test captures during setup OR pre-configured | N/A (local Docker) | Test auto-captures if setup page appears |
-| **Stage** | E2E test captures during setup | `deploy-vps.yml` | Aligned with prod; requires `TEST_PASSWORD` and `TEST_USER_TOTP_SECRET_RAW` secrets |
+| **Stage** | E2E test captures during setup | `deploy-vps.yml` | Aligned with prod; requires `TEST_USER_PASSWORD` and `TEST_USER_TOTP_SECRET_RAW` secrets |
 | **Prod** | Pre-configured in realm-export.json | `deploy-to-gcp.yml` | Secret injected during deployment; E2E test captures if setup page appears |
 
 ### CI/CD Workflow Alignment (January 2026)
@@ -111,7 +124,7 @@ gh secret set TEST_USER_TOTP_SECRET --body "$BASE32_SECRET"
 All deployment workflows now use a **consistent approach** for test-user.journey configuration:
 
 1. **Required Secrets** (fail if missing):
-   - `TEST_PASSWORD` - Password for test-user.journey
+   - `TEST_USER_PASSWORD` - Password for test-user.journey (env var: `TEST_PASSWORD`)
    - `TEST_USER_TOTP_SECRET_RAW` - Raw TOTP secret for Keycloak
    - `KEYCLOAK_VPS_ADMIN_PASSWORD` - Admin password for VPS/Stage Keycloak API
    - `KEYCLOAK_ADMIN_PASSWORD` - Admin password for GCP/Prod Keycloak API (if applicable)
@@ -250,8 +263,8 @@ eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)
 ```
 
 This retrieves:
-- `TEST_PASSWORD` - Password for test-user.journey
-- `TEST_TOTP_SECRET` - BASE32 TOTP secret for code generation
+- `TEST_PASSWORD` - Password for test-user.journey (from `TEST_USER_PASSWORD` GitHub Secret)
+- `TEST_TOTP_SECRET` - BASE32 TOTP secret for code generation (from `TEST_USER_TOTP_SECRET` GitHub Secret)
 
 **Running E2E Tests**:
 
