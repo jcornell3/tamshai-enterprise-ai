@@ -16,3 +16,19 @@ ignore:
 
   # CVE-2025-60876 (MEDIUM) - busybox vulnerability
   - vulnerability: CVE-2025-60876
+
+  # npm bundled dependencies - npm is NOT used at runtime in production containers
+  # We only run `node dist/index.js` - npm is only needed during build phase
+  # These packages are in /usr/local/lib/node_modules/npm/node_modules/
+  #
+  # GHSA-3xgq-45jj-v275 (HIGH) - cross-spawn RegExp DoS
+  - vulnerability: GHSA-3xgq-45jj-v275
+  #
+  # GHSA-5j98-mcp5-4vw2 (HIGH) - glob ReDoS vulnerability
+  - vulnerability: GHSA-5j98-mcp5-4vw2
+  #
+  # GHSA-v6h2-p8h4-qcjw (LOW) - brace-expansion ReDoS
+  - vulnerability: GHSA-v6h2-p8h4-qcjw
+  #
+  # GHSA-73rr-hh4g-fpgx (LOW) - diff ReDoS vulnerability
+  - vulnerability: GHSA-73rr-hh4g-fpgx
