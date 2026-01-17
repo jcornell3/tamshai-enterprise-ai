@@ -394,10 +394,10 @@ jobs:
     permissions:
       contents: read
 
-    # Database passwords - use secrets or fall back to dev defaults
+    # Database passwords - hardcoded for CI ephemeral containers (no secrets needed)
     env:
-      DB_PASSWORD: ${{ secrets.TAMSHAI_DB_PASSWORD || 'tamshai_password' }}
-      MONGODB_PASSWORD: ${{ secrets.MONGODB_PASSWORD || 'tamshai_password' }}
+      DB_PASSWORD: tamshai_password
+      MONGODB_PASSWORD: tamshai_password
 
     services:
       redis:
@@ -416,7 +416,7 @@ jobs:
           - 5433:5432
         env:
           POSTGRES_USER: tamshai
-          POSTGRES_PASSWORD: ${{ secrets.TAMSHAI_DB_PASSWORD || 'tamshai_password' }}
+          POSTGRES_PASSWORD: tamshai_password
           POSTGRES_DB: tamshai
         options: >-
           --health-cmd "pg_isready -U tamshai"
@@ -430,7 +430,7 @@ jobs:
           - 27018:27017
         env:
           MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGODB_PASSWORD || 'tamshai_password' }}
+          MONGO_INITDB_ROOT_PASSWORD: tamshai_password
         options: >-
           --health-cmd "mongosh --eval 'db.adminCommand({ping:1})' --quiet"
           --health-interval 10s
