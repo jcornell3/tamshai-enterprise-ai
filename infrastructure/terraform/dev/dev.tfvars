@@ -32,8 +32,8 @@ docker_compose_project = "tamshai-dev"
 # AUTOMATION SETTINGS
 # =============================================================================
 
-auto_start_services = true  # Start Docker services on apply
-auto_stop_services  = true  # Stop Docker services on destroy (Phoenix recovery)
+auto_start_services = true # Start Docker services on apply
+auto_stop_services  = true # Stop Docker services on destroy (Phoenix recovery)
 
 # =============================================================================
 # DATABASE CREDENTIALS
