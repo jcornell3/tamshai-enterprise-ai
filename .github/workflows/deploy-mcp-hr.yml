@@ -103,7 +103,7 @@ jobs:
 
           # Pull latest code (use fetch+reset to avoid git lock race conditions)
           echo "📥 Pulling latest code..."
-          git fetch origin main
+          git fetch -f origin main
           git reset --hard origin/main
 
           # Build new version

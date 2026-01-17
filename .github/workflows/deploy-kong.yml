@@ -87,7 +87,7 @@ jobs:
           docker tag kong:3.4 kong:rollback 2>/dev/null || true
 
           # Pull latest code (use fetch+reset to avoid git lock race conditions)
-          git fetch origin main
+          git fetch -f origin main
           git reset --hard origin/main
 
           # Restart Kong with updated config (no build needed - using official image)

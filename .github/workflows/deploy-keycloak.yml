@@ -87,7 +87,7 @@ jobs:
           # Note: Keycloak uses official image (quay.io/keycloak/keycloak:24.0)
           # Rollback is handled by docker compose pulling the pinned version
           # Use fetch+reset to avoid git lock race conditions
-          git fetch origin main
+          git fetch -f origin main
           git reset --hard origin/main
           docker compose pull keycloak
           docker compose up -d --no-deps keycloak
