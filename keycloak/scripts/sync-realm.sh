@@ -93,6 +93,9 @@ main() {
     # Provision test user (for E2E testing)
     provision_test_user
 
+    # Sync C-Suite group (ensures executive and manager roles are assigned)
+    sync_c_suite_group
+
     # Sync All-Employees group (for self-access via RLS)
     sync_all_employees_group
 

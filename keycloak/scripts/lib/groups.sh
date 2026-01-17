@@ -89,6 +89,72 @@ assign_user_to_group() {
 }
 
 # =============================================================================
+# C-Suite Group Sync
+# =============================================================================
+
+# Sync the C-Suite group with executive and manager roles
+# This group grants full access to all departments
+sync_c_suite_group() {
+    log_info "Syncing C-Suite group..."
+
+    # Ensure the 'executive' realm role exists
+    local exec_role_exists=$(_kcadm get roles -r "$REALM" 2>/dev/null | grep -oE '"name"[[:space:]]*:[[:space:]]*"executive"')
+    if [ -z "$exec_role_exists" ]; then
+        log_info "  Creating 'executive' realm role..."
+        _kcadm create roles -r "$REALM" \
+            -s name=executive \
+            -s 'description=Executive role - full access to all departments' 2>/dev/null || {
+            log_info "    Role may already exist"
+        }
+    else
+        log_info "  'executive' role already exists"
+    fi
+
+    # Ensure the 'manager' realm role exists
+    local mgr_role_exists=$(_kcadm get roles -r "$REALM" 2>/dev/null | grep -oE '"name"[[:space:]]*:[[:space:]]*"manager"')
+    if [ -z "$mgr_role_exists" ]; then
+        log_info "  Creating 'manager' realm role..."
+        _kcadm create roles -r "$REALM" \
+            -s name=manager \
+            -s 'description=Manager role - team management access' 2>/dev/null || {
+            log_info "    Role may already exist"
+        }
+    else
+        log_info "  'manager' role already exists"
+    fi
+
+    # Check if C-Suite group exists
+    local group_id=$(get_group_id "C-Suite")
+
+    if [ -z "$group_id" ]; then
+        log_info "  Creating C-Suite group..."
+        _kcadm create groups -r "$REALM" -s name=C-Suite 2>/dev/null
+        group_id=$(get_group_id "C-Suite")
+    else
+        log_info "  C-Suite group already exists"
+    fi
+
+    # Assign executive role to the group
+    if [ -n "$group_id" ]; then
+        log_info "  Assigning 'executive' realm role to C-Suite group..."
+        _kcadm add-roles -r "$REALM" \
+            --gid "$group_id" \
+            --rolename executive 2>/dev/null || {
+            log_info "    Role may already be assigned"
+        }
+
+        log_info "  Assigning 'manager' realm role to C-Suite group..."
+        _kcadm add-roles -r "$REALM" \
+            --gid "$group_id" \
+            --rolename manager 2>/dev/null || {
+            log_info "    Role may already be assigned"
+        }
+    fi
+
+    log_info "  C-Suite group sync complete"
+}
+
+# =============================================================================
 # All-Employees Group Sync
 # =============================================================================
 
