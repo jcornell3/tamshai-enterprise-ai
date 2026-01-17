@@ -151,18 +151,43 @@ Ensure your account has:
 
 ## User Provisioning Workflow
 
-The user provisioning process uses **Cloud Build** to load HR sample data and sync users to Keycloak. Cloud Build runs within GCP's network and can connect to private IP Cloud SQL instances (GitHub Actions cannot).
+The user provisioning process uses **Cloud Run Jobs** to load HR sample data and sync users to Keycloak. Cloud Run Jobs have VPC connector access and can connect to private IP Cloud SQL instances.
 
-### Why Cloud Build?
+### Why Cloud Run Jobs?
 
-The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with **private IP only** for security. GitHub Actions runs on the public internet and cannot connect to private IP instances. Cloud Build runs within GCP's VPC and has direct access.
+The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with **private IP only** for security:
+- GitHub Actions runs on the public internet and cannot connect to private IP instances
+- Cloud Build also runs on shared infrastructure outside the VPC (despite documentation)
+- **Cloud Run Jobs** have native VPC connector support via `tamshai-prod-connector`
+
+### Architecture
+
+```
+┌──────────────────┐      ┌─────────────────┐      ┌──────────────────┐
+│ Cloud Run Job    │──────│ VPC Connector   │──────│ Private Cloud SQL│
+│ provision-users  │      │ tamshai-prod-   │      │ 10.x.x.x:5432    │
+│                  │      │ connector       │      │                  │
+└──────────────────┘      └─────────────────┘      └──────────────────┘
+         │
+         │ Cloud SQL Proxy (localhost:5432)
+         ▼
+    ┌──────────────────┐
+    │ entrypoint.sh    │
+    │ - load HR data   │
+    │ - identity-sync  │
+    │   (--no-redis)   │
+    └──────────────────┘
+```
 
 ### Files
 
 | File | Purpose |
 |------|---------|
-| `scripts/gcp/cloudbuild-provision-users.yaml` | Cloud Build configuration |
-| `scripts/gcp/provision-users.sh` | Helper script for easy invocation |
+| `scripts/gcp/provision-job/Dockerfile` | Container image for provisioning |
+| `scripts/gcp/provision-job/entrypoint.sh` | Entrypoint script with actions |
+| `scripts/gcp/provision-job/cloudbuild.yaml` | Cloud Build config for building image |
+| `scripts/gcp/provision-users-job.sh` | Helper script for building/running job |
+| `infrastructure/terraform/modules/security/main.tf` | Terraform for Cloud Run Job |
 
 ### Actions
 
@@ -178,7 +203,59 @@ The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with *
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--dry-run` | `false` | Preview only, no changes made |
-| `--force-password-reset` | `false` | Reset passwords for existing users |
+| `--force-password-reset` | `false` | Reset passwords, assign department roles, AND add to All-Employees group |
+
+### The `--force-password-reset` Flag
+
+This flag does more than just reset passwords. It:
+
+1. **Resets passwords** for all active employees with Keycloak accounts
+2. **Assigns department roles** based on the employee's HR department code
+3. **Adds users to All-Employees group** for self-access via RLS policies
+
+This is useful when:
+- Users were synced before role assignment was working correctly
+- Roles were accidentally removed or not assigned during initial sync
+- Users are missing from the All-Employees group
+- Password rotation is needed after a security incident
+- You need to ensure all users have correct department-based roles and group membership
+
+**Department to Role Mapping:**
+
+| Department Code | Keycloak Realm Role |
+|-----------------|---------------------|
+| HR | hr-read |
+| FIN | finance-read |
+| SALES | sales-read |
+| SUPPORT | support-read |
+| ENG | engineering-read |
+| EXEC | executive (composite role) |
+
+**Example:**
+```bash
+# Reset passwords and assign roles for all synced users
+gcloud run jobs execute provision-users \
+  --region=us-central1 \
+  --project=gen-lang-client-0553641830 \
+  --update-env-vars="ACTION=sync-users,FORCE_PASSWORD_RESET=true" \
+  --wait
+```
+
+### The `--no-redis` Flag
+
+The identity-sync script normally uses Redis (via BullMQ) for async cleanup job scheduling. However, Cloud Run Jobs don't have Redis available. The `--no-redis` flag provides a no-op queue implementation:
+
+```typescript
+// In sync-identities.ts
+const noOpQueue: CleanupQueue = {
+  add: async () => ({ id: 'no-op' }),
+};
+```
+
+The entrypoint.sh automatically passes `--no-redis` to identity-sync. This is safe because:
+- The sync operation doesn't queue any jobs
+- Only `terminateEmployee()` uses the queue (72-hour delayed deletion)
+- User provisioning only calls `syncAllEmployees()` and `forcePasswordReset()`
 
 ### Usage
 
@@ -187,49 +264,89 @@ The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with *
 ```bash
 cd scripts/gcp
 
-# Verify current state (safe, read-only)
-./provision-users.sh verify-only
+# Build and push the container image
+./provision-users-job.sh build
 
-# Preview loading HR data (dry run)
-./provision-users.sh load-hr-data --dry-run
+# Run the job (image must exist)
+./provision-users-job.sh run verify-only
 
-# Actually load HR data
-./provision-users.sh load-hr-data
+# Run with specific action
+./provision-users-job.sh run load-hr
+./provision-users-job.sh run sync-users
 
-# Preview syncing users (dry run)
-./provision-users.sh sync-users --dry-run
+# Build + run in one command
+./provision-users-job.sh all
 
-# Actually sync users to Keycloak
-./provision-users.sh sync-users
-
-# Do everything (load data + sync + verify)
-./provision-users.sh all
-
-# Reset passwords for all synced users
-./provision-users.sh sync-users --force-password-reset
+# With options
+./provision-users-job.sh run sync-users --force-password-reset
+./provision-users-job.sh all --dry-run
 ```
 
 #### Via gcloud CLI Directly
 
 ```bash
-# From repo root
+# Build the container image (from repo root)
 gcloud builds submit \
-  --config=scripts/gcp/cloudbuild-provision-users.yaml \
-  --substitutions=_ACTION=verify-only \
-  .
+  --config=scripts/gcp/provision-job/cloudbuild.yaml \
+  --project=gen-lang-client-0553641830
 
-# Full provisioning
-gcloud builds submit \
-  --config=scripts/gcp/cloudbuild-provision-users.yaml \
-  --substitutions=_ACTION=all,_DRY_RUN=false \
-  .
+# Execute the Cloud Run Job
+gcloud run jobs execute provision-users \
+  --region=us-central1 \
+  --project=gen-lang-client-0553641830 \
+  --wait
 
-# With password reset
-gcloud builds submit \
-  --config=scripts/gcp/cloudbuild-provision-users.yaml \
-  --substitutions=_ACTION=sync-users,_FORCE_PASSWORD_RESET=true \
-  .
+# Execute with specific action (override env vars)
+gcloud run jobs execute provision-users \
+  --region=us-central1 \
+  --project=gen-lang-client-0553641830 \
+  --update-env-vars=ACTION=load-hr-data \
+  --wait
+
+# Execute all steps with force password reset
+gcloud run jobs execute provision-users \
+  --region=us-central1 \
+  --project=gen-lang-client-0553641830 \
+  --update-env-vars=ACTION=all,FORCE_PASSWORD_RESET=true \
+  --wait
 ```
+
+### Setting the Production User Password
+
+The production user password can be configured in two ways:
+
+**Option 1: Via Terraform Variable (Recommended for Phoenix Principle)**
+
+Set the password in your `terraform.tfvars` or via environment variable:
+
+```hcl
+# terraform.tfvars
+prod_user_password = "YourSecurePassword123!"
+```
+
+Or via environment variable:
+```bash
+export TF_VAR_prod_user_password="YourSecurePassword123!"
+terraform apply
+```
+
+**Option 2: Update Secret Manager Directly**
+
+If you need to change the password without running Terraform:
+
+```bash
+echo -n 'YourNewPassword123!' | gcloud secrets versions add prod-user-password \
+  --data-file=- --project=gen-lang-client-0553641830
+
+# Then run the provisioning job with force password reset
+gcloud run jobs execute provision-users \
+  --region=us-central1 \
+  --project=gen-lang-client-0553641830 \
+  --update-env-vars="ACTION=sync-users,FORCE_PASSWORD_RESET=true" \
+  --wait
+```
+
+**Note:** The Terraform configuration uses `ignore_changes` on the secret data to prevent accidental overwrites of manually set passwords.
 
 ### Required Secrets
 
@@ -256,14 +373,15 @@ echo -n "YOUR_USER_PASSWORD" | gcloud secrets create prod-user-password \
   --project=gen-lang-client-0553641830
 ```
 
-### Cloud Build Steps
+### Cloud Run Job Steps
 
-1. **Show Config**: Display configuration and parameters
-2. **Start Proxy**: Start Cloud SQL Proxy with private IP
-3. **Verify State**: Check HR data in Cloud SQL, users in Keycloak
-4. **Load HR Data** (conditional): Load `sample-data/hr-data.sql` to Cloud SQL
-5. **Sync Users** (conditional): Run identity-sync to create Keycloak users
-6. **Final Verify**: Compare before/after counts
+The entrypoint.sh script runs these steps:
+
+1. **Start Cloud SQL Proxy**: Connect to private IP Cloud SQL via VPC connector
+2. **Verify State**: Check HR data in Cloud SQL, users in Keycloak
+3. **Load HR Data** (if action includes): Load `sample-data/hr-data.sql` to Cloud SQL
+4. **Sync Users** (if action includes): Run identity-sync with `--no-redis` flag
+5. **Final Verify**: Compare before/after counts
 
 ### Example Output
 
@@ -288,39 +406,69 @@ AFTER:
 ### Prerequisites
 
 1. **gcloud CLI** authenticated with appropriate permissions
-2. **Cloud Build API** enabled:
-   ```bash
-   gcloud services enable cloudbuild.googleapis.com
-   ```
-3. **Cloud Build service account** needs Secret Manager access:
-   ```bash
-   PROJECT_NUMBER=$(gcloud projects describe gen-lang-client-0553641830 --format='value(projectNumber)')
-   gcloud projects add-iam-policy-binding gen-lang-client-0553641830 \
-     --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
-     --role="roles/secretmanager.secretAccessor"
-   ```
+2. **Terraform applied** - Cloud Run Job and IAM permissions are managed in Terraform:
+   - `infrastructure/terraform/modules/security/main.tf` creates the Cloud Run Job
+   - Grants `provision-job` service account access to required secrets
+   - Grants Cloud SQL Client role for database connectivity
+   - Configures VPC connector for private IP access
+
+**Note:** All IAM and API configurations are in Terraform (Phoenix principle). Manual `gcloud` commands are only needed for initial bootstrap or troubleshooting.
+
+### Phoenix Principle Compliance
+
+All resources for user provisioning are managed in Terraform:
+
+| Resource | Location | Purpose |
+|----------|----------|---------|
+| `google_cloud_run_v2_job.provision_users` | security/main.tf | Cloud Run Job definition |
+| `google_service_account.provision_job` | security/main.tf | Service account with minimal permissions |
+| `google_secret_manager_secret.mcp_hr_service_client_secret` | security/main.tf | Keycloak client secret |
+| `google_secret_manager_secret.prod_user_password` | security/main.tf | User password for provisioning |
+| IAM bindings | security/main.tf | Secret accessor, SQL client roles |
+| VPC connector | networking/main.tf | Private IP connectivity |
+
+The container image is built via Cloud Build (`scripts/gcp/provision-job/cloudbuild.yaml`) and stored in Artifact Registry.
 
 ### Troubleshooting
 
 **"Permission denied accessing secret"**
-- Grant Secret Manager access to Cloud Build service account (see Prerequisites)
+- Verify Terraform has been applied (`terraform apply`)
+- Check `infrastructure/terraform/modules/security/main.tf` for IAM bindings
+- Wait a few minutes for IAM propagation after Terraform apply
 
 **"Could not connect to database"**
 - Verify Cloud SQL instance exists and is running
-- Check the instance name in the Cloud Build config
+- Check VPC connector is configured: `gcloud compute networks vpc-access connectors list`
+- Check Cloud SQL Proxy logs in job execution
 
 **"Could not get Keycloak admin token"**
 - Verify `tamshai-prod-keycloak-admin-password` secret exists and is correct
 - Check Keycloak is accessible at the configured URL
 
-**"Identity sync failed - Redis not available"**
-- The identity-sync script requires Redis for BullMQ
-- This is a known limitation; may need to modify sync script to make Redis optional
+**"Identity sync failed - Redis not available" (ECONNREFUSED 127.0.0.1:6379)**
+- This is solved by the `--no-redis` flag in entrypoint.sh
+- Verify the container image includes the updated sync-identities.ts
+- Rebuild with `./provision-users-job.sh build` if needed
 
 **Users synced but can't login**
 - Users may have TOTP enabled - check Keycloak user settings
 - Verify `prod-user-password` is set correctly
 - Check user is enabled in Keycloak
+
+**Job keeps failing after Terraform changes**
+- Cloud Run Job may be using old revision
+- Force update: `gcloud run jobs update provision-users --region=us-central1 --image=...`
+- Or destroy and recreate the job via Terraform
+
+**View job logs**
+```bash
+# Get recent executions
+gcloud run jobs executions list --job=provision-users --region=us-central1 --limit=5
+
+# View logs for specific execution
+gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=provision-users" \
+  --project=gen-lang-client-0553641830 --limit=100 --format="table(timestamp,textPayload)"
+```
 
 ---
 

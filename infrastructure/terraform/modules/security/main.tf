@@ -359,3 +359,289 @@ resource "random_password" "jwt_secret" {
   length  = 64
   special = false
 }
+
+# =============================================================================
+# CLOUD BUILD CONFIGURATION (User Provisioning)
+# =============================================================================
+# Required for running user provisioning via Cloud Build which can access
+# private IP Cloud SQL instances from within GCP's network.
+
+# Enable Cloud Build API
+resource "google_project_service" "cloudbuild" {
+  project            = var.project_id
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
+}
+
+# --- User Provisioning Secrets ---
+# These secrets are used by Cloud Build to provision users
+
+resource "google_secret_manager_secret" "mcp_hr_service_client_secret" {
+  secret_id = "mcp-hr-service-client-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    service     = "mcp-hr"
+    purpose     = "user-provisioning"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+# Note: The actual secret value must be set manually after Keycloak is configured
+# with the mcp-hr-service client. Use:
+# echo -n "CLIENT_SECRET" | gcloud secrets versions add mcp-hr-service-client-secret --data-file=-
+
+resource "google_secret_manager_secret" "prod_user_password" {
+  secret_id = "prod-user-password"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    environment = var.environment
+    purpose     = "user-provisioning"
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "prod_user_password" {
+  secret      = google_secret_manager_secret.prod_user_password.id
+  secret_data = var.prod_user_password != "" ? var.prod_user_password : random_password.prod_user_password.result
+
+  lifecycle {
+    # Prevent Terraform from overwriting manually updated secrets
+    ignore_changes = [secret_data]
+  }
+}
+
+resource "random_password" "prod_user_password" {
+  length           = 16
+  special          = true
+  override_special = "!@#$%^&*"
+
+  # Only used if var.prod_user_password is not set
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+# --- Cloud Build IAM for User Provisioning ---
+# Cloud Build uses the Compute Engine default service account by default.
+# Grant it access to the secrets needed for user provisioning.
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+locals {
+  cloudbuild_sa = "${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
+  compute_sa    = "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+# Cloud Build SA - Database password access
+resource "google_secret_manager_secret_iam_member" "cloudbuild_db_password" {
+  secret_id = google_secret_manager_secret.tamshai_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.compute_sa}"
+  project   = var.project_id
+}
+
+# Cloud Build SA - Keycloak admin password access
+resource "google_secret_manager_secret_iam_member" "cloudbuild_keycloak_admin" {
+  secret_id = google_secret_manager_secret.keycloak_admin_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.compute_sa}"
+  project   = var.project_id
+}
+
+# Cloud Build SA - MCP HR service client secret access
+resource "google_secret_manager_secret_iam_member" "cloudbuild_mcp_hr_client" {
+  secret_id = google_secret_manager_secret.mcp_hr_service_client_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.compute_sa}"
+  project   = var.project_id
+}
+
+# Cloud Build SA - Prod user password access
+resource "google_secret_manager_secret_iam_member" "cloudbuild_prod_user_password" {
+  secret_id = google_secret_manager_secret.prod_user_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.compute_sa}"
+  project   = var.project_id
+}
+
+# Grant Cloud Build SA the Cloud SQL Client role (for proxy connections)
+resource "google_project_iam_member" "cloudbuild_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${local.compute_sa}"
+}
+
+# =============================================================================
+# CLOUD RUN JOB FOR USER PROVISIONING
+# =============================================================================
+# Runs as a Cloud Run Job with VPC connector for private IP Cloud SQL access.
+# This is the Phoenix-compliant solution for user provisioning.
+
+# Enable Cloud Run API (may already be enabled by cloudrun module)
+resource "google_project_service" "cloudrun" {
+  project            = var.project_id
+  service            = "run.googleapis.com"
+  disable_on_destroy = false
+}
+
+# Service account for the provisioning job
+resource "google_service_account" "provision_job" {
+  account_id   = "tamshai-${var.environment}-provision"
+  display_name = "Tamshai Provisioning Job Service Account"
+  description  = "Service account for user provisioning Cloud Run job"
+  project      = var.project_id
+}
+
+# Grant provisioning job access to secrets
+resource "google_secret_manager_secret_iam_member" "provision_job_db_password" {
+  secret_id = google_secret_manager_secret.tamshai_db_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.provision_job.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "provision_job_keycloak_admin" {
+  secret_id = google_secret_manager_secret.keycloak_admin_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.provision_job.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "provision_job_mcp_hr_client" {
+  secret_id = google_secret_manager_secret.mcp_hr_service_client_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.provision_job.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "provision_job_prod_user_password" {
+  secret_id = google_secret_manager_secret.prod_user_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.provision_job.email}"
+  project   = var.project_id
+}
+
+# Grant Cloud SQL Client role
+resource "google_project_iam_member" "provision_job_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.provision_job.email}"
+}
+
+# The Cloud Run Job resource
+# Note: The image must be built and pushed before terraform apply
+# Only created if vpc_connector_id is provided (GCP environment)
+resource "google_cloud_run_v2_job" "provision_users" {
+  count = var.vpc_connector_id != "" ? 1 : 0
+
+  name     = "provision-users"
+  location = var.region
+  project  = var.project_id
+
+  template {
+    template {
+      service_account = google_service_account.provision_job.email
+      timeout         = "1200s" # 20 minutes max
+
+      vpc_access {
+        connector = var.vpc_connector_id
+        egress    = "ALL_TRAFFIC"
+      }
+
+      containers {
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai-${var.environment}/provision-job:latest"
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "1Gi"
+          }
+        }
+
+        env {
+          name  = "CLOUD_SQL_INSTANCE"
+          value = var.cloud_sql_connection_name
+        }
+
+        env {
+          name  = "KEYCLOAK_URL"
+          value = var.keycloak_url
+        }
+
+        env {
+          name  = "KEYCLOAK_REALM"
+          value = "tamshai-corp"
+        }
+
+        env {
+          name = "DB_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.tamshai_db_password.secret_id
+              version = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "KC_ADMIN_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.keycloak_admin_password.secret_id
+              version = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "KC_CLIENT_SECRET"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.mcp_hr_service_client_secret.secret_id
+              version = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "PROD_USER_PASSWORD"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.prod_user_password.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.cloudrun,
+    google_secret_manager_secret_version.tamshai_db_password,
+    google_secret_manager_secret_version.keycloak_admin_password,
+    google_secret_manager_secret_version.prod_user_password
+  ]
+
+  lifecycle {
+    # Ignore image changes - image is updated via CI/CD
+    ignore_changes = [
+      template[0].template[0].containers[0].image
+    ]
+  }
+}

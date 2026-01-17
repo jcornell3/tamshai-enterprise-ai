@@ -296,22 +296,46 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Required for Swagger UI
 }));
 app.use(cors({
-  origin: [
-    // Local development
-    'http://localhost:3100',     // MCP Gateway itself
-    'http://localhost:4000',     // Portal app
-    'http://localhost:4001',     // HR app
-    'http://localhost:4002',     // Finance app
-    // Dev environment
-    'https://www.tamshai.local',
-    // Stage environment
-    'https://www.tamshai.com',
-    // Production environment
-    'https://prod.tamshai.com',
-    'https://app.tamshai.com',
-    // Desktop app
-    'tamshai-ai://*'
-  ],
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      // Local development
+      'http://localhost:3100',     // MCP Gateway itself
+      'http://localhost:4000',     // Portal app
+      'http://localhost:4001',     // HR app
+      'http://localhost:4002',     // Finance app
+      // Dev environment
+      'https://www.tamshai.local',
+      // Stage environment
+      'https://www.tamshai.com',
+      // Production environment
+      'https://prod.tamshai.com',
+      'https://app.tamshai.com',
+    ];
+
+    // Allow requests with no origin (like mobile apps, curl, or same-origin)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Allow exact matches
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow Cloud Run URLs (format: https://*.a.run.app)
+    if (origin.endsWith('.a.run.app')) {
+      return callback(null, true);
+    }
+
+    // Allow desktop app custom scheme
+    if (origin.startsWith('tamshai-ai://')) {
+      return callback(null, true);
+    }
+
+    // Reject other origins
+    logger.warn('CORS blocked', { origin, path: 'cors-middleware' });
+    callback(new Error('CORS not allowed'));
+  },
   credentials: true,
   // Required for cross-origin requests with Authorization header
   // Without this, browser strips Authorization header from preflight requests

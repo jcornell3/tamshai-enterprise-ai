@@ -473,13 +473,16 @@ export class IdentityService {
       // Step 3: Assign department role (if applicable)
       await this.assignDepartmentRole(keycloakUserId, employeeData.department);
 
-      // Step 4: Update employee record with Keycloak user ID
+      // Step 4: Add to All-Employees group (for self-access via RLS)
+      await this.addToAllEmployeesGroup(keycloakUserId);
+
+      // Step 5: Update employee record with Keycloak user ID
       await client.query(SQL.UPDATE_EMPLOYEE_KEYCLOAK_ID, [
         keycloakUserId,
         employeeData.id,
       ]);
 
-      // Step 5: Write audit log
+      // Step 6: Write audit log
       // Params: user_email, action, resource, target_id, access_decision, access_justification
       await client.query(SQL.INSERT_AUDIT_LOG, [
         email, // Use transformed email for audit consistency
@@ -502,22 +505,64 @@ export class IdentityService {
   }
 
   /**
+   * Add user to All-Employees group.
+   * All employees should be in this group for self-access via RLS policies.
+   * The group has the 'employee' realm role which grants base access.
+   *
+   * @param keycloakUserId - Keycloak user ID
+   * @returns true if added, false if group not found
+   */
+  private async addToAllEmployeesGroup(keycloakUserId: string): Promise<boolean> {
+    try {
+      // Find the All-Employees group
+      const groups = await this.kcAdmin.groups.find({ search: 'All-Employees' });
+      const allEmployeesGroup = groups.find((g) => g.name === 'All-Employees');
+
+      if (!allEmployeesGroup || !allEmployeesGroup.id) {
+        console.log('[WARN] All-Employees group not found in Keycloak');
+        return false;
+      }
+
+      // Add user to group
+      await this.kcAdmin.users.addToGroup({
+        id: keycloakUserId,
+        groupId: allEmployeesGroup.id,
+      });
+
+      return true;
+    } catch (error) {
+      // 409 Conflict means user is already in the group - that's fine
+      if (error instanceof Error && error.message.includes('409')) {
+        return true;
+      }
+      console.log(`[WARN] Failed to add user to All-Employees group: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    }
+  }
+
+  /**
    * Assign department-specific role to user.
    * Uses realm roles (not client roles) as defined in realm-export.json.
-   * Implements compensating transaction: deletes user if role assignment fails.
+   *
+   * @param keycloakUserId - Keycloak user ID
+   * @param department - Department code from HR database
+   * @param deleteOnFailure - If true, delete user if role assignment fails (compensating transaction for new users)
+   * @returns Role name that was assigned, or null if no role mapping exists for department
    */
   private async assignDepartmentRole(
     keycloakUserId: string,
-    department: string
-  ): Promise<void> {
+    department: string,
+    deleteOnFailure = true
+  ): Promise<string | null> {
     const roleName = DEPARTMENT_ROLE_MAP[department];
-    if (!roleName) return;
+    if (!roleName) return null;
 
     // Find the realm role by name
     const realmRole = await this.kcAdmin.roles.findOneByName({ name: roleName });
     if (!realmRole || !realmRole.id) {
       // Role not found - skip assignment (non-fatal for sync)
-      return;
+      console.log(`[WARN] Role '${roleName}' not found in Keycloak - skipping assignment`);
+      return null;
     }
 
     try {
@@ -525,9 +570,12 @@ export class IdentityService {
         id: keycloakUserId,
         roles: [{ id: realmRole.id, name: realmRole.name! }],
       });
+      return roleName;
     } catch (roleError) {
-      // COMPENSATING TRANSACTION: Delete Keycloak user if role assignment fails
-      await this.kcAdmin.users.del({ id: keycloakUserId });
+      if (deleteOnFailure) {
+        // COMPENSATING TRANSACTION: Delete Keycloak user if role assignment fails (for new user creation only)
+        await this.kcAdmin.users.del({ id: keycloakUserId });
+      }
       throw roleError;
     }
   }
@@ -879,7 +927,20 @@ export class IdentityService {
         }
       }
 
-      return false; // Skipped creation, but password was updated
+      // Assign department role for existing users (may have been imported from realm-export without roles)
+      // Pass deleteOnFailure=false - don't delete existing users if role assignment fails
+      const assignedRole = await this.assignDepartmentRole(keycloakUserId, employee.department, false);
+      if (assignedRole) {
+        console.log(`[OK] Role '${assignedRole}' assigned to ${username}`);
+      }
+
+      // Add to All-Employees group (for self-access via RLS)
+      const addedToGroup = await this.addToAllEmployeesGroup(keycloakUserId);
+      if (addedToGroup) {
+        console.log(`[OK] Added ${username} to All-Employees group`);
+      }
+
+      return false; // Skipped creation, but password and role were updated
     }
 
     // User doesn't exist - create in transaction
@@ -936,8 +997,10 @@ export class IdentityService {
     // Get ALL active employees with keycloak_user_id (already synced)
     const result = await this.db.query(`
       SELECT e.id, e.email, e.first_name AS "firstName", e.last_name AS "lastName",
-             e.keycloak_user_id AS "keycloakUserId"
+             e.keycloak_user_id AS "keycloakUserId",
+             COALESCE(d.code, 'Unknown') AS department
       FROM hr.employees e
+      LEFT JOIN hr.departments d ON e.department_id = d.id
       WHERE UPPER(e.status) = 'ACTIVE' AND e.keycloak_user_id IS NOT NULL
       ORDER BY e.id
     `);
@@ -953,6 +1016,7 @@ export class IdentityService {
     for (const emp of employees) {
       const username = `${emp.firstName.toLowerCase()}.${emp.lastName.toLowerCase()}`;
       try {
+        // Reset password
         await this.kcAdmin.users.resetPassword({
           id: emp.keycloakUserId,
           credential: {
@@ -962,10 +1026,26 @@ export class IdentityService {
           },
         });
         console.log(`[OK] Password reset for ${username}`);
+
+        // Assign department role (may have been missing from initial sync)
+        // Pass deleteOnFailure=false - don't delete existing users if role assignment fails
+        const assignedRole = await this.assignDepartmentRole(emp.keycloakUserId, emp.department, false);
+        if (assignedRole) {
+          console.log(`[OK] Role '${assignedRole}' assigned to ${username} (dept: ${emp.department})`);
+        } else {
+          console.log(`[INFO] No role mapping for ${username} (dept: ${emp.department})`);
+        }
+
+        // Add to All-Employees group (for self-access via RLS)
+        const addedToGroup = await this.addToAllEmployeesGroup(emp.keycloakUserId);
+        if (addedToGroup) {
+          console.log(`[OK] Added ${username} to All-Employees group`);
+        }
+
         reset++;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[ERROR] Failed to reset password for ${username}: ${message}`);
+        console.error(`[ERROR] Failed to reset password/role for ${username}: ${message}`);
         errors.push({
           employeeId: emp.id,
           email: emp.email,
