@@ -164,8 +164,12 @@ export function getRoleBadges(userContext: UserContext | null): string[] {
     badges.push('Manager');
   }
 
-  // Department roles
-  const deptRoles = userContext.roles.filter(role => role.includes('-'));
+  // Department roles (filter out Keycloak internal roles)
+  const internalRolePrefixes = ['default-roles-', 'offline_', 'uma_'];
+  const deptRoles = userContext.roles.filter(role =>
+    role.includes('-') &&
+    !internalRolePrefixes.some(prefix => role.startsWith(prefix))
+  );
   deptRoles.forEach(role => {
     const [dept, access] = role.split('-');
     const deptName = dept.charAt(0).toUpperCase() + dept.slice(1);
