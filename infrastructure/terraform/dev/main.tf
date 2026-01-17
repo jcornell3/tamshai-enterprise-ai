@@ -316,7 +316,7 @@ resource "null_resource" "docker_compose_down" {
 
   provisioner "local-exec" {
     when        = destroy
-    command     = self.triggers.remove_volumes == "true" ? "docker compose down -v" : "docker compose down"
+    command     = try(self.triggers.remove_volumes, "true") == "true" ? "docker compose down -v" : "docker compose down"
     working_dir = self.triggers.compose_dir
     environment = {
       COMPOSE_PROJECT_NAME = self.triggers.project_name
