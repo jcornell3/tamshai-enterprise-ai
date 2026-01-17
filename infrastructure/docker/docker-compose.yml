@@ -637,11 +637,64 @@ services:
       - tamshai-network
 
   # =============================================================================
+  # KEYCLOAK SYNC (One-shot: Creates clients, mappers, groups)
+  # =============================================================================
+  # This service runs once after Keycloak starts to create/update:
+  # - OAuth clients (mcp-gateway, mcp-hr-service, web-portal, etc.)
+  # - Protocol mappers (audience, sub claim, client roles)
+  # - Groups and role assignments (C-Suite, All-Employees)
+  # Phoenix principle: All configuration is idempotent and recreatable from code.
+  keycloak-sync:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: tamshai-keycloak-sync
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Use Docker network hostname for internal communication
+      KEYCLOAK_URL: http://keycloak:8080/auth
+    volumes:
+      - ../../keycloak/scripts/sync-realm.sh:/scripts/sync-realm.sh:ro
+      - ../../keycloak/scripts/lib:/scripts/lib:ro
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "Waiting for Keycloak to be fully ready..."
+        for i in {1..30}; do
+          if /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://keycloak:8080/auth \
+            --realm master \
+            --user $${KEYCLOAK_ADMIN} \
+            --password $${KEYCLOAK_ADMIN_PASSWORD} 2>/dev/null; then
+            echo "Keycloak is ready, running sync..."
+            cd /scripts && bash sync-realm.sh dev
+            exit_code=$$?
+            if [ $$exit_code -eq 0 ]; then
+              echo "Keycloak sync completed successfully"
+              exit 0
+            else
+              echo "Keycloak sync failed with exit code $$exit_code"
+              exit $$exit_code
+            fi
+          fi
+          echo "Attempt $$i/30: Keycloak not ready, waiting 5s..."
+          sleep 5
+        done
+        echo "ERROR: Keycloak did not become ready in time"
+        exit 1
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - tamshai-network
+
+  # =============================================================================
   # IDENTITY SYNC (One-shot: Syncs HR employees to Keycloak)
   # =============================================================================
   # This service runs once after deployment to sync all HR database employees
   # to Keycloak. It's a one-shot container that exits after completion.
-  # NOTE: Requires Keycloak Terraform to be applied first (creates mcp-hr-service client)
+  # Depends on keycloak-sync to ensure clients (mcp-hr-service) exist first.
   identity-sync:
     build:
       context: ../../services/mcp-hr
@@ -678,6 +731,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      keycloak-sync:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     # One-shot container - runs sync and exits
