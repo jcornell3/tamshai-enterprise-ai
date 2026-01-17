@@ -91,6 +91,7 @@ services:
       VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN:-dev-root-token}
       # Pass through secrets for Vault initialization
       CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
     volumes:
       - ./vault/init-dev.sh:/vault/init-dev.sh:ro
     entrypoint: /bin/sh
