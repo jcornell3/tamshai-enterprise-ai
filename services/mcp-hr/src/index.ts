@@ -553,6 +553,15 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
       logout: async (query: { id: string }): Promise<void> => {
         await kcAdmin.users.logout(query);
       },
+      addToGroup: async (params: { id: string; groupId: string }): Promise<void> => {
+        await kcAdmin.users.addToGroup(params);
+      },
+    },
+    groups: {
+      find: async (params?: { search?: string }): Promise<{ id?: string; name?: string }[]> => {
+        const groups = await kcAdmin.groups.find(params);
+        return groups as { id?: string; name?: string }[];
+      },
     },
     clients: {
       find: async (query: { clientId: string }): Promise<KcClientRepresentation[]> => {

@@ -266,6 +266,14 @@ export interface KcClientRepresentation {
   clientId?: string;
 }
 
+/**
+ * Keycloak group representation
+ */
+export interface KcGroupRepresentation {
+  id?: string;
+  name?: string;
+}
+
 export interface KcAdminClient {
   users: {
     create(user: Partial<KcUserRepresentation>): Promise<{ id: string }>;
@@ -296,6 +304,10 @@ export interface KcAdminClient {
     }): Promise<void>;
     listSessions(query: { id: string }): Promise<KcSessionRepresentation[]>;
     logout(query: { id: string }): Promise<void>;
+    addToGroup(params: { id: string; groupId: string }): Promise<void>;
+  };
+  groups: {
+    find(params?: { search?: string }): Promise<KcGroupRepresentation[]>;
   };
   clients: {
     find(query: { clientId: string }): Promise<KcClientRepresentation[]>;
