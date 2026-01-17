@@ -302,6 +302,82 @@ resource "null_resource" "wait_for_services" {
 # =============================================================================
 
 # =============================================================================
+# KEYCLOAK USER PASSWORD CONFIGURATION
+# =============================================================================
+#
+# After Keycloak imports the realm from realm-export-dev.json, user passwords
+# are placeholders. This resource sets actual passwords from GitHub Secrets.
+#
+# =============================================================================
+
+resource "null_resource" "keycloak_set_passwords" {
+  count = var.auto_start_services ? 1 : 0
+
+  depends_on = [null_resource.wait_for_services]
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      echo "Setting Keycloak user passwords from environment variables..."
+
+      # Configure kcadm.sh (Keycloak uses /auth path in dev)
+      echo "Authenticating with Keycloak Admin API..."
+      docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080/auth \
+        --realm master \
+        --user admin \
+        --password admin
+
+      if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to authenticate with Keycloak"
+        exit 1
+      fi
+
+      # Set test-user.journey password from TEST_USER_PASSWORD
+      if [ -n "$TEST_USER_PASSWORD" ]; then
+        echo "Setting test-user.journey password..."
+
+        # Get user ID
+        USER_ID=$(docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh get users \
+          -r tamshai-corp \
+          -q username=test-user.journey \
+          --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+        if [ -n "$USER_ID" ]; then
+          # Set password (non-temporary)
+          docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh set-password \
+            -r tamshai-corp \
+            --userid "$USER_ID" \
+            --new-password "$TEST_USER_PASSWORD"
+
+          if [ $? -eq 0 ]; then
+            echo "✓ test-user.journey password set successfully"
+          else
+            echo "ERROR: Failed to set test-user.journey password"
+            exit 1
+          fi
+        else
+          echo "WARNING: test-user.journey not found in Keycloak"
+        fi
+      else
+        echo "WARNING: TEST_USER_PASSWORD not set - E2E tests will fail"
+      fi
+
+      echo "Keycloak password configuration complete!"
+    EOT
+
+    environment = {
+      TEST_USER_PASSWORD = var.test_user_password
+      MSYS_NO_PATHCONV   = "1"  # Prevent Git Bash from converting Unix paths to Windows paths
+    }
+  }
+}
+
+# =============================================================================
 # CLEANUP ON DESTROY
 # =============================================================================
 
