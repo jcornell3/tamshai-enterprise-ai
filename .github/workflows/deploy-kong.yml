@@ -83,10 +83,11 @@ jobs:
           echo "⚠️  WARNING: Kong downtime affects ALL API requests"
           git config --global --add safe.directory /opt/tamshai
 
-          # Tag current image for rollback
-          docker tag kong:3.4 kong:rollback 2>/dev/null || true
+          # Tag current image for rollback (only if image exists)
+          docker images -q kong:3.4 | grep -q . && docker tag kong:3.4 kong:rollback || echo "No existing image to tag for rollback"
 
-          # Pull latest code (use fetch+reset to avoid git lock race conditions)
+          # Pull latest code (cleanup stale refs first, then force fetch)
+          rm -f .git/refs/remotes/origin/main
           git fetch -f origin main
           git reset --hard origin/main
 
