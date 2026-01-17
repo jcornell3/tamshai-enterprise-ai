@@ -79,7 +79,7 @@ jobs:
           echo "📦 Deploying MCP Sales..."
           git config --global --add safe.directory /opt/tamshai
           docker images -q tamshai/mcp-sales:latest | grep -q . && docker tag tamshai/mcp-sales:latest tamshai/mcp-sales:rollback || echo "No existing image to tag for rollback"
-          rm -f .git/refs/remotes/origin/main
+          git update-ref -d refs/remotes/origin/main 2>/dev/null || true
           git fetch -f origin main
           git reset --hard origin/main
           docker compose build mcp-sales

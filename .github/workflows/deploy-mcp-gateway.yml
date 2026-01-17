@@ -107,7 +107,7 @@ jobs:
 
           # Pull latest code (cleanup stale refs first, then force fetch)
           echo "Pulling latest code..."
-          rm -f .git/refs/remotes/origin/main
+          git update-ref -d refs/remotes/origin/main 2>/dev/null || true
           git fetch -f origin main
           git reset --hard origin/main
 

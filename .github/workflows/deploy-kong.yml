@@ -87,7 +87,7 @@ jobs:
           docker images -q kong:3.4 | grep -q . && docker tag kong:3.4 kong:rollback || echo "No existing image to tag for rollback"
 
           # Pull latest code (cleanup stale refs first, then force fetch)
-          rm -f .git/refs/remotes/origin/main
+          git update-ref -d refs/remotes/origin/main 2>/dev/null || true
           git fetch -f origin main
           git reset --hard origin/main
 
