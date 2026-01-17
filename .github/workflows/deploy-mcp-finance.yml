@@ -79,7 +79,8 @@ jobs:
           echo "📦 Deploying MCP Finance..."
           git config --global --add safe.directory /opt/tamshai
           docker tag tamshai/mcp-finance:latest tamshai/mcp-finance:rollback || true
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
           docker compose build mcp-finance
           docker compose up -d --no-deps mcp-finance
           # Health check (use docker exec - ports not exposed to host)

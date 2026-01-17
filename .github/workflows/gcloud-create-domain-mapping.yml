@@ -1,0 +1,111 @@
+name: GCloud - Create Keycloak Domain Mapping
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "create" to confirm domain mapping creation'
+        required: true
+        type: string
+
+jobs:
+  create-domain-mapping:
+    name: Create auth.tamshai.com domain mapping
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Validate Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "create" ]; then
+            echo "❌ Confirmation failed. You must type 'create' to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmation received"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check existing domain mappings
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          echo "📋 Checking existing domain mappings..."
+          gcloud run domain-mappings list \
+            --region=us-central1 \
+            --platform=managed \
+            --project=$GCP_PROJECT_ID || echo "No existing mappings"
+
+      - name: Create domain mapping for auth.tamshai.com
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          echo "🔧 Creating domain mapping for auth.tamshai.com..."
+
+          # Check if mapping already exists
+          if gcloud run domain-mappings describe auth.tamshai.com \
+            --region=us-central1 \
+            --platform=managed \
+            --project=$GCP_PROJECT_ID 2>/dev/null; then
+            echo "⚠️ Domain mapping already exists for auth.tamshai.com"
+            exit 0
+          fi
+
+          # Create the domain mapping
+          gcloud run domain-mappings create \
+            --service=keycloak \
+            --domain=auth.tamshai.com \
+            --region=us-central1 \
+            --platform=managed \
+            --project=$GCP_PROJECT_ID
+
+          echo "✅ Domain mapping created successfully"
+
+      - name: Verify domain mapping status
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          echo "🔍 Checking domain mapping status..."
+          gcloud run domain-mappings describe auth.tamshai.com \
+            --region=us-central1 \
+            --platform=managed \
+            --project=$GCP_PROJECT_ID \
+            --format=yaml
+
+      - name: Wait for SSL certificate provisioning
+        run: |
+          echo "⏳ Waiting 30 seconds for SSL certificate provisioning..."
+          sleep 30
+
+      - name: Test Keycloak accessibility
+        run: |
+          echo "🧪 Testing Keycloak via custom domain..."
+
+          # Test HTTPS access (may take time for DNS/SSL propagation)
+          for i in {1..5}; do
+            echo "Attempt $i/5..."
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 10 \
+              https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration || echo "000")
+
+            echo "Status code: $STATUS_CODE"
+
+            if [ "$STATUS_CODE" = "200" ]; then
+              echo "✅ Keycloak accessible via auth.tamshai.com"
+              exit 0
+            fi
+
+            if [ $i -lt 5 ]; then
+              echo "Waiting 10 seconds before retry..."
+              sleep 10
+            fi
+          done
+
+          echo "⚠️ Keycloak returned status $STATUS_CODE"
+          echo "Note: DNS/SSL propagation may take up to 15 minutes"
+          echo "Check domain mapping status with: gcloud run domain-mappings describe auth.tamshai.com --region=us-central1"

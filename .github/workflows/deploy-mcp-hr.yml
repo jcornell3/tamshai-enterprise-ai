@@ -101,9 +101,10 @@ jobs:
           echo "🏷️  Tagging current version..."
           docker tag tamshai/mcp-hr:latest tamshai/mcp-hr:rollback || true
 
-          # Pull latest code
+          # Pull latest code (use fetch+reset to avoid git lock race conditions)
           echo "📥 Pulling latest code..."
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
 
           # Build new version
           echo "🔨 Building MCP HR..."

@@ -86,8 +86,9 @@ jobs:
           # Tag current image for rollback
           docker tag kong:3.4 kong:rollback 2>/dev/null || true
 
-          # Pull latest code
-          git pull origin main
+          # Pull latest code (use fetch+reset to avoid git lock race conditions)
+          git fetch origin main
+          git reset --hard origin/main
 
           # Restart Kong with updated config (no build needed - using official image)
           docker compose up -d --no-deps kong

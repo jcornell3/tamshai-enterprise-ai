@@ -1,0 +1,55 @@
+name: Unlock Terraform State
+
+on:
+  workflow_dispatch:
+    inputs:
+      lock_id:
+        description: 'Lock ID (leave empty to force unlock)'
+        required: false
+        type: string
+
+jobs:
+  unlock:
+    name: Force Unlock State
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/gcp
+        run: terraform init
+
+      - name: List Current Locks
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          echo "Attempting to identify lock..."
+          gsutil cat gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock 2>&1 || echo "No active lock found"
+
+      - name: Force Unlock
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          if [ -n "${{ github.event.inputs.lock_id }}" ]; then
+            echo "Unlocking with ID: ${{ github.event.inputs.lock_id }}"
+            terraform force-unlock -force "${{ github.event.inputs.lock_id }}"
+          else
+            echo "No lock ID provided. Attempting to remove lock file directly..."
+            gsutil rm gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock || echo "Lock file already removed or doesn't exist"
+          fi
+
+      - name: Verify Unlock
+        working-directory: infrastructure/terraform/gcp
+        run: |
+          echo "Testing if state is accessible..."
+          terraform plan -refresh=false || echo "State might still be locked"

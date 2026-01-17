@@ -86,7 +86,9 @@ jobs:
           git config --global --add safe.directory /opt/tamshai
           # Note: Keycloak uses official image (quay.io/keycloak/keycloak:24.0)
           # Rollback is handled by docker compose pulling the pinned version
-          git pull origin main
+          # Use fetch+reset to avoid git lock race conditions
+          git fetch origin main
+          git reset --hard origin/main
           docker compose pull keycloak
           docker compose up -d --no-deps keycloak
           # Health check (use docker exec - ports not exposed to host)

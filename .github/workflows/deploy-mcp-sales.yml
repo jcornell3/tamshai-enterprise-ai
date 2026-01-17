@@ -79,7 +79,8 @@ jobs:
           echo "📦 Deploying MCP Sales..."
           git config --global --add safe.directory /opt/tamshai
           docker tag tamshai/mcp-sales:latest tamshai/mcp-sales:rollback || true
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
           docker compose build mcp-sales
           docker compose up -d --no-deps mcp-sales
           # Health check (use docker exec - ports not exposed to host)

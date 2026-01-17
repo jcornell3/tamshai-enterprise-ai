@@ -79,7 +79,8 @@ jobs:
           echo "📦 Deploying MCP Support..."
           git config --global --add safe.directory /opt/tamshai
           docker tag tamshai/mcp-support:latest tamshai/mcp-support:rollback || true
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
           docker compose build mcp-support
           docker compose up -d --no-deps mcp-support
           # Health check (use docker exec - ports not exposed to host)
