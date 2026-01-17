@@ -193,7 +193,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "Tu97db27a50651@Tst",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
           "temporary": false
         },
         {

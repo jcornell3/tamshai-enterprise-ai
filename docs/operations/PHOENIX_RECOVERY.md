@@ -423,14 +423,24 @@ gcloud secrets list --filter="name:tamshai-prod"
 
 ### Dev Environment
 
-Dev uses `.env` file with defaults (no external secrets required):
+Dev uses GitHub Secrets injected via Terraform environment variables:
 
+| Secret Name | Description | How to Set |
+|-------------|-------------|------------|
+| `DEV_USER_PASSWORD` | Corporate users password | `gh secret set DEV_USER_PASSWORD` |
+| `TEST_USER_PASSWORD` | test-user.journey password | `gh secret set TEST_USER_PASSWORD` |
+| `CLAUDE_API_KEY_DEV` | Anthropic API key (dev) | `gh secret set CLAUDE_API_KEY_DEV` |
+
+**Local Dev Setup:**
 ```bash
-# Copy example and customize
-cp infrastructure/docker/.env.example infrastructure/docker/.env
+# Export secrets as TF_VAR_* environment variables
+# Use scripts/secrets/export-test-secrets.yml workflow to fetch from GitHub
+export TF_VAR_test_user_password=$(gh secret get TEST_USER_PASSWORD 2>/dev/null || echo "")
+export TF_VAR_dev_user_password=$(gh secret get DEV_USER_PASSWORD 2>/dev/null || echo "")
+export TF_VAR_claude_api_key=$(gh secret get CLAUDE_API_KEY_DEV 2>/dev/null || echo "")
 
-# Only CLAUDE_API_KEY is required from external source
-echo "CLAUDE_API_KEY=sk-ant-api03-..." >> infrastructure/docker/.env
+# Then run terraform
+terraform apply -var-file=dev.tfvars
 ```
 
 ### Secret Rotation

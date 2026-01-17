@@ -64,7 +64,14 @@ variable "keycloak_admin_password" {
 }
 
 variable "dev_user_password" {
-  description = "Dev environment test user password (set via TF_VAR_dev_user_password or GitHub secret DEV_USER_PASSWORD)"
+  description = "Password for corporate users in dev (eve.thompson, etc.) - GitHub secret DEV_USER_PASSWORD"
+  type        = string
+  sensitive   = true
+  default     = "" # Optional - identity-sync will warn if not set
+}
+
+variable "test_user_password" {
+  description = "Password for test-user.journey E2E account - GitHub secret TEST_USER_PASSWORD"
   type        = string
   sensitive   = true
   default     = "" # Optional - E2E tests will warn if not set
@@ -133,6 +140,12 @@ variable "auto_start_services" {
 
 variable "auto_stop_services" {
   description = "Automatically stop Docker services on destroy"
+  type        = bool
+  default     = true
+}
+
+variable "auto_remove_volumes" {
+  description = "Remove Docker volumes on destroy (Phoenix recovery - full data reset)"
   type        = bool
   default     = true
 }

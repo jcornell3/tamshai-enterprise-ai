@@ -72,18 +72,12 @@ provision_test_user() {
             user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
 
             if [ -n "$user_id" ]; then
-                # Set password from environment-specific variable (non-temporary)
+                # Set password from TEST_USER_PASSWORD GitHub secret (non-temporary)
                 local test_password
                 test_password=$(get_test_user_password)
-                local env_var_name
-                case "${ENV:-dev}" in
-                    prod|production) env_var_name="PROD_USER_PASSWORD" ;;
-                    stage|staging) env_var_name="STAGE_USER_PASSWORD" ;;
-                    *) env_var_name="DEV_USER_PASSWORD" ;;
-                esac
 
                 if [ -n "$test_password" ]; then
-                    log_info "  Setting password from $env_var_name..."
+                    log_info "  Setting password from TEST_USER_PASSWORD..."
                     local password_json="{\"type\":\"password\",\"value\":\"$test_password\",\"temporary\":false}"
                     echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f -
 
@@ -93,8 +87,8 @@ provision_test_user() {
                         log_warn "  Failed to set password"
                     fi
                 else
-                    log_warn "  $env_var_name not set - test-user.journey will have no password"
-                    log_warn "  Set $env_var_name environment variable to enable E2E tests"
+                    log_warn "  TEST_USER_PASSWORD not set - test-user.journey will have no password"
+                    log_warn "  Set TEST_USER_PASSWORD environment variable to enable E2E tests"
                 fi
 
                 # Note: TOTP credentials cannot be pre-configured via Admin API
@@ -183,45 +177,25 @@ assign_critical_prod_users() {
 # Test User Password Management
 # =============================================================================
 
-# Get the appropriate password environment variable for the current environment
-# Each environment uses its own GitHub secret:
-#   - DEV_USER_PASSWORD: For local dev and CI testing
-#   - STAGE_USER_PASSWORD: For VPS staging environment
-#   - PROD_USER_PASSWORD: For production (rarely used - prod imports with TOTP)
+# Get test-user.journey password from TEST_USER_PASSWORD GitHub secret
+# This is the dedicated E2E test account password, separate from corporate user passwords
 get_test_user_password() {
-    case "${ENV:-dev}" in
-        prod|production)
-            echo "${PROD_USER_PASSWORD:-}"
-            ;;
-        stage|staging)
-            echo "${STAGE_USER_PASSWORD:-}"
-            ;;
-        *)
-            echo "${DEV_USER_PASSWORD:-}"
-            ;;
-    esac
+    echo "${TEST_USER_PASSWORD:-}"
 }
 
-# Set test-user.journey password from environment-specific password variable
+# Set test-user.journey password from TEST_USER_PASSWORD GitHub secret
 # This is called separately to update password for users imported from realm export
 set_test_user_password() {
     local test_password
     test_password=$(get_test_user_password)
 
-    local env_var_name
-    case "${ENV:-dev}" in
-        prod|production) env_var_name="PROD_USER_PASSWORD" ;;
-        stage|staging) env_var_name="STAGE_USER_PASSWORD" ;;
-        *) env_var_name="DEV_USER_PASSWORD" ;;
-    esac
-
     if [ -z "$test_password" ]; then
-        log_warn "$env_var_name not set - cannot set test-user.journey password"
+        log_warn "TEST_USER_PASSWORD not set - cannot set test-user.journey password"
         log_warn "E2E tests requiring authentication will fail"
         return 0
     fi
 
-    log_info "Setting test-user.journey password from $env_var_name..."
+    log_info "Setting test-user.journey password from TEST_USER_PASSWORD..."
 
     # Get user ID
     local user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)

@@ -34,6 +34,7 @@ docker_compose_project = "tamshai-dev"
 
 auto_start_services = true # Start Docker services on apply
 auto_stop_services  = true # Stop Docker services on destroy (Phoenix recovery)
+auto_remove_volumes = true # Remove volumes on destroy (full data reset for Phoenix)
 
 # =============================================================================
 # DATABASE CREDENTIALS
@@ -93,9 +94,13 @@ mongodb_root_password = "tamshai_password"
 
 # Keycloak defaults
 keycloak_admin_password = "admin"
-# dev_user_password - Set via TF_VAR_dev_user_password environment variable
-# Leave empty to skip (E2E tests will warn about missing password)
-dev_user_password         = ""
+
+# User passwords - from GitHub Secrets via TF_VAR_* environment variables
+# DEV_USER_PASSWORD: Corporate users (eve.thompson, etc.)
+# TEST_USER_PASSWORD: test-user.journey E2E account
+dev_user_password  = ""
+test_user_password = ""
+
 mcp_gateway_client_secret = "test-client-secret"
 
 # Storage defaults (match docker-compose.yml defaults)

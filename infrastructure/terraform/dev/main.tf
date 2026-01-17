@@ -175,8 +175,9 @@ resource "local_file" "docker_env" {
     # Environment
     environment = var.environment
 
-    # Test user password (for E2E tests and synced users)
-    dev_user_password = var.dev_user_password
+    # User passwords (from GitHub Secrets via TF_VAR_*)
+    dev_user_password  = var.dev_user_password
+    test_user_password = var.test_user_password
   })
 
   file_permission = "0600"
@@ -308,13 +309,14 @@ resource "null_resource" "docker_compose_down" {
   count = var.auto_stop_services ? 1 : 0
 
   triggers = {
-    compose_dir  = local.compose_path
-    project_name = var.docker_compose_project
+    compose_dir    = local.compose_path
+    project_name   = var.docker_compose_project
+    remove_volumes = var.auto_remove_volumes
   }
 
   provisioner "local-exec" {
     when        = destroy
-    command     = "docker compose down"
+    command     = self.triggers.remove_volumes == "true" ? "docker compose down -v" : "docker compose down"
     working_dir = self.triggers.compose_dir
     environment = {
       COMPOSE_PROJECT_NAME = self.triggers.project_name
