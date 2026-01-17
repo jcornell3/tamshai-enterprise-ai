@@ -1,6 +1,9 @@
 {
   "name": "tamshai-ai-desktop",
   "version": "0.1.0",
+  "overrides": {
+    "tar": "7.5.3"
+  },
   "description": "Tamshai AI Assistant - Cross-platform Desktop Client",
   "main": "dist/main/index.js",
   "author": "Tamshai Corp",
