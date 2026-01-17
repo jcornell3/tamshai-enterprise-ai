@@ -29,14 +29,8 @@ RUN npm prune --production
 # =============================================================================
 FROM node:20-alpine AS production
 
-# Security: Apply Alpine security patches (CVE-2026-22184 zlib, CVE-2025-60876 busybox)
+# Security: Apply Alpine security patches
 RUN apk update && apk upgrade --no-cache
-
-# Security: Update npm to fix CVE-2025-64756 (glob), CVE-2024-21538 (cross-spawn),
-# CVE-2025-5889 (brace-expansion) in npm's bundled dependencies
-# Also update bundled tar to fix CVE-2026-23745 (Arbitrary File Overwrite)
-RUN npm install -g npm@latest && \
-    cd /usr/local/lib/node_modules/npm && npm install tar@7.5.3
 
 # Security: Run as non-root user
 RUN addgroup -g 1001 -S nodejs && \
