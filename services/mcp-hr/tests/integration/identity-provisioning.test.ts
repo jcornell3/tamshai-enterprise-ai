@@ -226,6 +226,17 @@ class TestKcAdminClient implements KcAdminClient {
     }): Promise<void> => {
       await this.request('POST', `/users/${params.id}/role-mappings/realm`, params.roles);
     },
+
+    addToGroup: async (params: { id: string; groupId: string }): Promise<void> => {
+      await this.request('PUT', `/users/${params.id}/groups/${params.groupId}`);
+    },
+  };
+
+  groups = {
+    find: async (params?: { search?: string }): Promise<Array<{ id?: string; name?: string }>> => {
+      const query = params?.search ? `?search=${encodeURIComponent(params.search)}` : '';
+      return this.request('GET', `/groups${query}`);
+    },
   };
 
   clients = {
