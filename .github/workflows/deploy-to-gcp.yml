@@ -107,7 +107,7 @@ jobs:
             --cpu=1 \
             --timeout=300 \
             --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
-            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://auth.tamshai.com/auth,KEYCLOAK_ISSUER=https://auth.tamshai.com/auth/realms/tamshai-corp,JWKS_URI=https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-fn44nd7wba-uc.a.run.app,MCP_FINANCE_URL=https://mcp-finance-fn44nd7wba-uc.a.run.app,MCP_SALES_URL=https://mcp-sales-fn44nd7wba-uc.a.run.app,MCP_SUPPORT_URL=https://mcp-support-fn44nd7wba-uc.a.run.app,TOKEN_REVOCATION_FAIL_OPEN=true"
+            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://auth.tamshai.com/auth,KEYCLOAK_ISSUER=https://auth.tamshai.com/auth/realms/tamshai-corp,JWKS_URI=https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-fn44nd7wba-uc.a.run.app,MCP_FINANCE_URL=https://mcp-finance-fn44nd7wba-uc.a.run.app,MCP_SALES_URL=https://mcp-sales-fn44nd7wba-uc.a.run.app,MCP_SUPPORT_URL=https://mcp-support-fn44nd7wba-uc.a.run.app,TOKEN_REVOCATION_FAIL_OPEN=true,MCP_READ_TIMEOUT_MS=30000,MCP_WRITE_TIMEOUT_MS=60000"
 
   deploy-mcp-postgres:
     needs: detect-changes
