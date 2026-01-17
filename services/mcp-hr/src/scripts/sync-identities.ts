@@ -12,9 +12,11 @@
  *   npm run sync-identities
  *   tsx src/scripts/sync-identities.ts
  *   tsx src/scripts/sync-identities.ts --force-password-reset
+ *   tsx src/scripts/sync-identities.ts --no-redis
  *
  * Options:
  *   --force-password-reset  Reset passwords for ALL synced users (use after secret rotation)
+ *   --no-redis              Run without Redis (uses no-op queue, for Cloud Run Jobs)
  *
  * Environment Variables Required:
  *   POSTGRES_HOST      - PostgreSQL host (default: localhost)
@@ -215,6 +217,12 @@ function log(level: 'info' | 'error' | 'warn', message: string, data?: Record<st
 
 const args = process.argv.slice(2);
 const forcePasswordReset = args.includes('--force-password-reset');
+const noRedis = args.includes('--no-redis');
+
+// No-op queue for environments without Redis (e.g., Cloud Run Jobs)
+const noOpQueue: CleanupQueue = {
+  add: async () => ({ id: 'no-op' }),
+};
 
 // ============================================================================
 // Main
@@ -227,6 +235,7 @@ async function main(): Promise<void> {
     realm: config.keycloak.realmName,
     postgresHost: config.postgres.host,
     forcePasswordReset,
+    noRedis,
   });
 
   // Create PostgreSQL connection pool
@@ -240,13 +249,19 @@ async function main(): Promise<void> {
     connectionTimeoutMillis: 10000,
   });
 
-  // Create BullMQ queue for cleanup jobs
-  const cleanupQueue = new Queue('identity-cleanup', {
-    connection: {
-      host: config.redis.host,
-      port: config.redis.port,
-    },
-  }) as CleanupQueue;
+  // Create BullMQ queue for cleanup jobs (or no-op queue if --no-redis)
+  let cleanupQueue: CleanupQueue;
+  if (noRedis) {
+    log('info', 'Using no-op queue (--no-redis mode)');
+    cleanupQueue = noOpQueue;
+  } else {
+    cleanupQueue = new Queue('identity-cleanup', {
+      connection: {
+        host: config.redis.host,
+        port: config.redis.port,
+      },
+    }) as CleanupQueue;
+  }
 
   // Create Keycloak Admin Client
   const kcAdmin = new KeycloakAdminClient({

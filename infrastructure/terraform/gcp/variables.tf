@@ -90,3 +90,20 @@ variable "static_website_domain" {
   type        = string
   default     = "" # Temporarily disabled - requires domain ownership verification
 }
+
+# =============================================================================
+# USER PROVISIONING
+# =============================================================================
+
+variable "keycloak_provisioning_url" {
+  description = "Keycloak URL for user provisioning job (with /auth suffix, e.g., https://keycloak-xxx-uc.a.run.app/auth)"
+  type        = string
+  default     = "https://keycloak-fn44nd7wba-uc.a.run.app/auth"
+}
+
+variable "prod_user_password" {
+  description = "Password for production users (used in user provisioning). If not set, a random password will be generated and stored in Secret Manager."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

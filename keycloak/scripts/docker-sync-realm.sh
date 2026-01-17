@@ -35,14 +35,19 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
     exit 1
 fi
 
-# Copy the sync script to the container
-echo "Copying sync script to container..."
+# Copy the sync script and library modules to the container
+echo "Copying sync scripts to container..."
 docker cp "$SCRIPT_DIR/sync-realm.sh" "$CONTAINER:/tmp/sync-realm.sh"
+docker cp "$SCRIPT_DIR/lib" "$CONTAINER:/tmp/lib"
 
 # Fix line endings (Windows -> Unix) and make executable
-echo "Preparing script..."
-docker exec "$CONTAINER" bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh 2>/dev/null || true'
-docker exec "$CONTAINER" chmod +x /tmp/sync-realm.sh
+echo "Preparing scripts..."
+docker exec "$CONTAINER" bash -c '
+    sed -i "s/\r$//" /tmp/sync-realm.sh 2>/dev/null || true
+    find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \; 2>/dev/null || true
+    chmod +x /tmp/sync-realm.sh
+    find /tmp/lib -name "*.sh" -exec chmod +x {} \;
+'
 
 # Run the sync script inside the container
 echo "Running realm sync..."

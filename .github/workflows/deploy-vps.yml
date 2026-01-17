@@ -389,9 +389,13 @@ jobs:
           fi
 
           echo "=== Syncing Keycloak configuration ==="
-          # Copy sync script and fix permissions using root user
+          # Copy sync script and library modules, then fix permissions
           docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
-          docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh' || true
+          docker cp /opt/tamshai/keycloak/scripts/lib tamshai-keycloak:/tmp/lib
+          docker exec -u 0 tamshai-keycloak bash -c '
+            sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh
+            find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \; -exec chmod 755 {} \;
+          ' || true
           # Run as keycloak user (non-fatal - deployment succeeds even if sync fails)
           # Pass both KEYCLOAK_ADMIN_PASSWORD and MCP_HR_SERVICE_CLIENT_SECRET to container
           docker exec \

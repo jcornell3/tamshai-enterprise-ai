@@ -1,0 +1,29 @@
+# Cloud Build configuration for building the provision-job image
+# This is used to build and push the image to Artifact Registry
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai-${_ENVIRONMENT}/provision-job:${_TAG}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai-${_ENVIRONMENT}/provision-job:latest'
+      - '-f'
+      - 'scripts/gcp/provision-job/Dockerfile'
+      - '.'
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai-${_ENVIRONMENT}/provision-job:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai-${_ENVIRONMENT}/provision-job:latest'
+
+substitutions:
+  _REGION: 'us-central1'
+  _ENVIRONMENT: 'prod'
+  _TAG: 'latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_MEDIUM'
+
+timeout: '1200s'

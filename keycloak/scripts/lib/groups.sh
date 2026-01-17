@@ -1,0 +1,248 @@
+#!/bin/bash
+# =============================================================================
+# Keycloak Group Management Functions
+# =============================================================================
+# Provides group and user assignment functions for Keycloak realm synchronization.
+#
+# Required Variables (set by caller):
+#   REALM - Keycloak realm name
+#   ENV - Environment name (dev, stage, prod)
+#   KCADM - Path to kcadm.sh
+#
+# Dependencies:
+#   - lib/common.sh (logging functions)
+#
+# =============================================================================
+
+# Source common utilities (always source to ensure _kcadm is defined)
+SCRIPT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_LIB_DIR/common.sh"
+
+# =============================================================================
+# Group Helper Functions
+# =============================================================================
+
+# Get the ID of a group by name
+# Arguments:
+#   $1 - Group name
+# Returns: Group ID (empty if not found)
+get_group_id() {
+    local group_name="$1"
+    # Handle both spaced ("id" : "xxx") and compact ("id":"xxx") JSON formats
+    _kcadm get groups -r "$REALM" -q "name=$group_name" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/'
+}
+
+# Ensure a group exists, create if missing
+# Arguments:
+#   $1 - Group name
+# Returns: Group ID
+ensure_group_exists() {
+    local group_name="$1"
+
+    local group_id=$(get_group_id "$group_name")
+
+    if [ -z "$group_id" ]; then
+        log_info "  Creating group '$group_name'..."
+        _kcadm create groups -r "$REALM" -s name="$group_name" 2>/dev/null
+        group_id=$(get_group_id "$group_name")
+    else
+        log_info "  Group '$group_name' already exists"
+    fi
+
+    echo "$group_id"
+}
+
+# =============================================================================
+# User Assignment Functions
+# =============================================================================
+
+# Assign a single user to a group
+# Arguments:
+#   $1 - Username
+#   $2 - Group name
+assign_user_to_group() {
+    local username="$1"
+    local group_name="$2"
+
+    # Find user by username - handle both JSON formats
+    local user_id=$(_kcadm get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+
+    if [ -z "$user_id" ]; then
+        log_warn "  User $username not found, skipping"
+        return 0
+    fi
+
+    # Find group by name
+    local group_id=$(get_group_id "$group_name")
+
+    if [ -z "$group_id" ]; then
+        log_warn "  Group $group_name not found, skipping for $username"
+        return 0
+    fi
+
+    # Add user to group (idempotent)
+    if _kcadm update "users/$user_id/groups/$group_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+        log_info "  $username: added to $group_name"
+    else
+        log_info "  $username: $group_name (already member or error)"
+    fi
+}
+
+# =============================================================================
+# All-Employees Group Sync
+# =============================================================================
+
+# Sync the All-Employees group with the employee role
+# This group grants access to all MCP servers, with data filtering via RLS
+sync_all_employees_group() {
+    log_info "Syncing All-Employees group..."
+
+    # First, ensure the 'employee' realm role exists
+    local role_exists=$(_kcadm get roles -r "$REALM" 2>/dev/null | grep -oE '"name"[[:space:]]*:[[:space:]]*"employee"')
+    if [ -z "$role_exists" ]; then
+        log_info "  Creating 'employee' realm role..."
+        _kcadm create roles -r "$REALM" \
+            -s name=employee \
+            -s 'description=Base employee role - allows self-access to all MCP servers via RLS' 2>/dev/null || {
+            log_info "    Role may already exist"
+        }
+    else
+        log_info "  'employee' role already exists"
+    fi
+
+    # Check if All-Employees group exists
+    local group_id=$(get_group_id "All-Employees")
+
+    if [ -z "$group_id" ]; then
+        log_info "  Creating All-Employees group..."
+        _kcadm create groups -r "$REALM" -s name=All-Employees 2>/dev/null
+        group_id=$(get_group_id "All-Employees")
+    else
+        log_info "  All-Employees group already exists"
+    fi
+
+    # Assign employee role to the group
+    if [ -n "$group_id" ]; then
+        log_info "  Assigning 'employee' realm role to All-Employees group..."
+        _kcadm add-roles -r "$REALM" \
+            --gid "$group_id" \
+            --rolename employee 2>/dev/null || {
+            log_info "    Role may already be assigned"
+        }
+    fi
+
+    log_info "  All-Employees group sync complete"
+}
+
+# =============================================================================
+# Bulk User Group Assignment
+# =============================================================================
+
+# Assign users to groups based on their department
+# Groups have realm roles assigned, so users inherit roles via group membership
+assign_user_groups() {
+    log_info "Assigning users to groups..."
+
+    # Skip in production (users managed by identity-sync only)
+    if [ "$ENV" = "prod" ]; then
+        log_info "Skipping user group assignment in production"
+        return 0
+    fi
+
+    # Define user-to-group mapping based on original realm-export-dev.json
+    # Format: username:group1,group2 (group names without leading /)
+    local -a user_groups=(
+        "eve.thompson:All-Employees,C-Suite"
+        "alice.chen:All-Employees,HR-Department,Managers"
+        "bob.martinez:All-Employees,Finance-Team,Managers"
+        "carol.johnson:All-Employees,Sales-Managers"
+        "dan.williams:All-Employees,Support-Team,Managers"
+        "frank.davis:All-Employees,IT-Team"
+        "ryan.garcia:All-Employees,Sales-Managers"
+        "nina.patel:All-Employees,Engineering-Managers"
+        "marcus.johnson:All-Employees,Engineering-Team"
+    )
+
+    for mapping in "${user_groups[@]}"; do
+        local username="${mapping%%:*}"
+        local groups="${mapping##*:}"
+
+        # Find user by username - handle both JSON formats
+        local user_id=$(_kcadm get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+
+        if [ -z "$user_id" ]; then
+            log_warn "  User $username not found, skipping"
+            continue
+        fi
+
+        # Split groups by comma and assign each
+        IFS=',' read -ra group_array <<< "$groups"
+        for group in "${group_array[@]}"; do
+            # Find group by path
+            local group_id=$(get_group_id "$group")
+
+            if [ -z "$group_id" ]; then
+                log_warn "  Group $group not found, skipping for $username"
+                continue
+            fi
+
+            # Add user to group (idempotent)
+            if _kcadm update "users/$user_id/groups/$group_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+                log_info "  $username: added to $group"
+            else
+                log_info "  $username: $group (already member or error)"
+            fi
+        done
+    done
+
+    log_info "User group assignment complete"
+}
+
+# =============================================================================
+# Critical Production User Assignment
+# =============================================================================
+
+# Assign critical production users to groups
+# Only runs in prod, handles users who need group membership for system access
+assign_critical_prod_users() {
+    # Only run in production
+    if [ "$ENV" != "prod" ]; then
+        return 0
+    fi
+
+    log_info "Assigning critical production users to groups..."
+
+    # Critical users who need group membership for system access
+    local -a critical_users=(
+        "eve.thompson:C-Suite"
+        "test-user.journey:All-Employees"
+    )
+
+    for mapping in "${critical_users[@]}"; do
+        local username="${mapping%%:*}"
+        local group="${mapping##*:}"
+
+        # Handle both JSON formats
+        local user_id=$(_kcadm get users -r "$REALM" -q "username=$username" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+
+        if [ -z "$user_id" ]; then
+            log_warn "  Critical user $username not found in Keycloak"
+            continue
+        fi
+
+        local group_id=$(get_group_id "$group")
+
+        if [ -z "$group_id" ]; then
+            log_warn "  Group $group not found"
+            continue
+        fi
+
+        if _kcadm update "users/$user_id/groups/$group_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+            log_info "  $username: added to $group"
+        else
+            log_info "  $username: already in $group or error"
+        fi
+    done
+
+    log_info "Critical production user assignment complete"
+}

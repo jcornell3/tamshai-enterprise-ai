@@ -83,6 +83,15 @@ module "security" {
   environment          = local.environment
   enable_cloud_run_iam = false # Service-specific IAM is handled in cloudrun module
   claude_api_key       = var.claude_api_key
+
+  # User Provisioning Job configuration
+  # Note: These use variables/constructed values to avoid circular dependencies
+  vpc_connector_id          = module.networking.serverless_connector_id
+  cloud_sql_connection_name = "${var.project_id}:${var.region}:tamshai-${local.environment}-postgres"
+  keycloak_url              = var.keycloak_provisioning_url
+  prod_user_password        = var.prod_user_password
+
+  depends_on = [module.networking]
 }
 
 # =============================================================================
