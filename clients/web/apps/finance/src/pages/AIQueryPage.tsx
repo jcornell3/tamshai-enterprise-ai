@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useAuth } from '@tamshai/auth';
+import { useAuth, apiConfig } from '@tamshai/auth';
 import { TruncationWarning, ApprovalCard } from '@tamshai/ui';
 import type { AIQueryMessage, AIQueryResponse } from '../types';
 
@@ -151,7 +151,12 @@ export function AIQueryPage() {
         token,  // DEPRECATED: Token in URL for EventSource compatibility (can't send custom headers)
       });
 
-      const eventSource = new EventSource(`/api/query?${params}`);
+      // Use absolute URL for GCP production (MCP Gateway on different domain)
+      // Falls back to relative path for dev/stage where proxy handles routing
+      const sseUrl = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/query?${params}`
+        : `/api/query?${params}`;
+      const eventSource = new EventSource(sseUrl);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
