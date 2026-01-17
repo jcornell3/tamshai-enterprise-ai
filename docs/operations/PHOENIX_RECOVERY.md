@@ -146,7 +146,7 @@ curl -sf https://www.tamshai.com/auth/health/ready && echo "OK"
 # Run E2E tests (verifies full login flow)
 cd tests/e2e
 rm -rf .totp-secrets/test-user.journey-stage.secret
-npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 ### What Gets Recreated
@@ -228,7 +228,7 @@ curl -sf https://auth.tamshai.com/auth/health/ready && echo "OK"
 
 # Run E2E tests
 cd tests/e2e
-npx cross-env TEST_ENV=prod TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+npx cross-env TEST_ENV=prod TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 ## Disaster Recovery Scenarios

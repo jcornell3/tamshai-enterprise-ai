@@ -66,7 +66,7 @@ All credentials are stored securely in GitHub Secrets, **not in the codebase**.
 
 | Secret Name | Environment | Purpose | Env Var Name |
 |-------------|-------------|---------|--------------|
-| `TEST_USER_PASSWORD` | All | Password for test-user.journey E2E account | `TEST_PASSWORD` |
+| `TEST_USER_PASSWORD` | All | Password for test-user.journey E2E account | `TEST_USER_PASSWORD` |
 | `DEV_USER_PASSWORD` | Dev | Password for identity-synced corporate users | `DEV_USER_PASSWORD` |
 | `STAGE_USER_PASSWORD` | Stage | Password for identity-synced corporate users | `STAGE_USER_PASSWORD` |
 | `PROD_USER_PASSWORD` | Prod | Password for identity-synced corporate users | `PROD_USER_PASSWORD` |
@@ -124,7 +124,7 @@ gh secret set TEST_USER_TOTP_SECRET --body "$BASE32_SECRET"
 All deployment workflows now use a **consistent approach** for test-user.journey configuration:
 
 1. **Required Secrets** (fail if missing):
-   - `TEST_USER_PASSWORD` - Password for test-user.journey (env var: `TEST_PASSWORD`)
+   - `TEST_USER_PASSWORD` - Password for test-user.journey (env var: `TEST_USER_PASSWORD`)
    - `TEST_USER_TOTP_SECRET_RAW` - Raw TOTP secret for Keycloak
    - `KEYCLOAK_VPS_ADMIN_PASSWORD` - Admin password for VPS/Stage Keycloak API
    - `KEYCLOAK_ADMIN_PASSWORD` - Admin password for GCP/Prod Keycloak API (if applicable)
@@ -133,7 +133,7 @@ All deployment workflows now use a **consistent approach** for test-user.journey
    - Wait for Keycloak to be ready
    - Get admin token via Keycloak Admin API
    - Find test-user.journey by username
-   - Reset password from `TEST_PASSWORD` secret
+   - Reset password from `TEST_USER_PASSWORD` secret
    - Remove existing OTP credentials
    - Clear required actions
 
@@ -263,8 +263,8 @@ eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)
 ```
 
 This retrieves:
-- `TEST_PASSWORD` - Password for test-user.journey (from `TEST_USER_PASSWORD` GitHub Secret)
-- `TEST_TOTP_SECRET` - BASE32 TOTP secret for code generation (from `TEST_USER_TOTP_SECRET` GitHub Secret)
+- `TEST_USER_PASSWORD` - Password for test-user.journey (from `TEST_USER_PASSWORD` GitHub Secret)
+- `TEST_USER_TOTP_SECRET` - BASE32 TOTP secret for code generation (from `TEST_USER_TOTP_SECRET` GitHub Secret)
 
 **Running E2E Tests**:
 
@@ -275,8 +275,8 @@ cd tests/e2e
 
 # Set environment variables (get from GitHub Secrets)
 export TEST_ENV=dev           # or stage, prod
-export TEST_PASSWORD="..."    # From GitHub Secrets
-export TEST_TOTP_SECRET="..." # From GitHub Secrets (BASE32)
+export TEST_USER_PASSWORD="..."    # From GitHub Secrets
+export TEST_USER_TOTP_SECRET="..." # From GitHub Secrets (BASE32)
 
 # Run login journey tests (MUST use --workers=1)
 npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
@@ -310,8 +310,8 @@ cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
 ```typescript
 test('test-user.journey can login and access app', async ({ page }) => {
   // TOTP secret from environment variable (BASE32-encoded)
-  const totpSecret = process.env.TEST_TOTP_SECRET;
-  if (!totpSecret) throw new Error('TEST_TOTP_SECRET environment variable required');
+  const totpSecret = process.env.TEST_USER_TOTP_SECRET;
+  if (!totpSecret) throw new Error('TEST_USER_TOTP_SECRET environment variable required');
 
   // Navigate to login
   await page.goto('https://prod.tamshai.com');
@@ -321,7 +321,7 @@ test('test-user.journey can login and access app', async ({ page }) => {
 
   // Enter credentials
   await page.fill('input[name="username"]', 'test-user.journey');
-  await page.fill('input[name="password"]', process.env.TEST_PASSWORD); // Required from environment
+  await page.fill('input[name="password"]', process.env.TEST_USER_PASSWORD); // Required from environment
   await page.click('input[type="submit"]');
 
   // Generate and enter TOTP (using BASE32 secret)
@@ -349,7 +349,7 @@ Use `oathtool` to generate TOTP codes manually with your BASE32-encoded secret:
 
 ```bash
 # Get the BASE32 secret from environment or GitHub Secrets
-oathtool --totp --base32 "$TEST_TOTP_SECRET"
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 ```
 
 **Output**: 6-digit code (e.g., `123456`) valid for 30 seconds
@@ -359,7 +359,7 @@ oathtool --totp --base32 "$TEST_TOTP_SECRET"
 **Bash**:
 ```bash
 # Get BASE32 secret from environment variable (set in CI or local .env)
-TOTP_SECRET="${TEST_TOTP_SECRET:?TEST_TOTP_SECRET environment variable required}"
+TOTP_SECRET="${TEST_USER_TOTP_SECRET:?TEST_USER_TOTP_SECRET environment variable required}"
 TOTP_CODE=$(oathtool --totp --base32 "$TOTP_SECRET")
 echo "Current TOTP: $TOTP_CODE"
 ```
@@ -369,8 +369,8 @@ echo "Current TOTP: $TOTP_CODE"
 import * as OTPAuth from 'otpauth';
 
 // Get BASE32 secret from environment
-const secret = process.env.TEST_TOTP_SECRET;
-if (!secret) throw new Error('TEST_TOTP_SECRET environment variable required');
+const secret = process.env.TEST_USER_TOTP_SECRET;
+if (!secret) throw new Error('TEST_USER_TOTP_SECRET environment variable required');
 
 const totp = new OTPAuth.TOTP({
   secret: secret,
@@ -389,9 +389,9 @@ import os
 import pyotp
 
 # Get BASE32 secret from environment
-secret = os.environ.get('TEST_TOTP_SECRET')
+secret = os.environ.get('TEST_USER_TOTP_SECRET')
 if not secret:
-    raise ValueError('TEST_TOTP_SECRET environment variable required')
+    raise ValueError('TEST_USER_TOTP_SECRET environment variable required')
 
 totp = pyotp.TOTP(secret)
 code = totp.now()
@@ -452,8 +452,8 @@ jobs:
         run: ./scripts/test/journey-e2e-automated.sh ${{ matrix.environment }}
         env:
           TEST_USERNAME: test-user.journey
-          TEST_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-          TEST_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
 ```
 
 **Required GitHub Secrets** (see [TOTP Secret Management](#totp-secret-management)):
@@ -516,7 +516,7 @@ Verify the test user exists in Keycloak:
 curl -s http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token \
   -d "client_id=tamshai-website" \
   -d "username=test-user.journey" \
-  -d "password=$TEST_PASSWORD" \
+  -d "password=$TEST_USER_PASSWORD" \
   -d "grant_type=password" \
   | jq -r '.access_token'
 
@@ -547,7 +547,7 @@ cd keycloak/scripts
 date
 
 # Generate code manually to test (use BASE32 secret from environment)
-oathtool --totp --base32 "$TEST_TOTP_SECRET"
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 
 # Try the generated code in the browser
 ```
@@ -556,21 +556,21 @@ oathtool --totp --base32 "$TEST_TOTP_SECRET"
 - Using raw secret with oathtool (must be BASE32)
 - Using BASE32 secret in Keycloak secretData (must be raw)
 - Algorithm mismatch (Keycloak uses SHA1 by default)
-- **Passing old TEST_TOTP_SECRET after deployment** - See below
+- **Passing old TEST_USER_TOTP_SECRET after deployment** - See below
 
 **⚠️ TOTP Mismatch After Deployment (January 2026)**:
 
-The `deploy-vps.yml` workflow clears TOTP credentials on each stage deployment. If you run E2E tests with an old `TEST_TOTP_SECRET` env var, you'll get "Invalid authenticator code" because:
+The `deploy-vps.yml` workflow clears TOTP credentials on each stage deployment. If you run E2E tests with an old `TEST_USER_TOTP_SECRET` env var, you'll get "Invalid authenticator code" because:
 
 1. Keycloak no longer has the old TOTP secret
 2. TOTP setup page appears, test auto-captures NEW secret
 3. But env var overrides cached file, using OLD secret
 
-**Solution**: After fresh deployment, run WITHOUT `TEST_TOTP_SECRET` env var:
+**Solution**: After fresh deployment, run WITHOUT `TEST_USER_TOTP_SECRET` env var:
 ```bash
 # Clear cached secret and let test auto-capture
 rm -rf tests/e2e/.totp-secrets/test-user.journey-stage.secret
-cd tests/e2e && npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+cd tests/e2e && npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 ### Issue: Windows Environment Variables Not Working
@@ -587,10 +587,10 @@ cd tests/e2e && npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test
 **Solution**: Use `cross-env` package:
 ```bash
 # WRONG (Windows)
-set TEST_ENV=stage && set TEST_PASSWORD=xxx && npx playwright test ...
+set TEST_ENV=stage && set TEST_USER_PASSWORD=xxx && npx playwright test ...
 
 # CORRECT (Windows) - use cross-env
-npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 **Note**: `cross-env` is already a dev dependency in `tests/e2e/package.json`.
@@ -693,6 +693,30 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 3. Deployed new Keycloak container with correct realm-export.json
 
 **Prevention**: See "Critical: Keycloak secretData Format" section above.
+
+### Issue: Password with `!` character not working
+
+**Status**: ✅ **RESOLVED** (January 17, 2026)
+
+**Cause**: The exclamation mark (`!`) character causes issues across multiple shell layers.
+
+**Symptoms**:
+- "Invalid username or password" error even with correct password
+- Password works when set manually in Keycloak Admin UI but fails when set via kcadm.sh
+- Password works with simple test password but fails with `!` character
+
+**Root Cause**: The `!` character triggers bash history expansion and gets corrupted when passing through:
+- Git Bash on Windows (escapes to `\!`)
+- Shell command lines via cross-env
+- kcadm.sh password setting
+
+**Resolution**: Changed `TEST_USER_PASSWORD` from `Tu97db27a50651!Tst` to `Tu97db27a50651@Tst` (replaced `!` with `@`).
+
+**Safe special characters for passwords**: `@`, `#`, `%`, `^`, `_`, `-`, `+`, `=`
+
+**Characters to avoid**: `!`, `$`, `` ` ``, `&`, `*`, `\`
+
+See [E2E_USER_TESTS.md](./E2E_USER_TESTS.md#special-characters-in-passwords) for detailed guidance.
 
 ## Future Enhancements
 

@@ -47,23 +47,14 @@ const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 //
 // IMPORTANT: TOTP secret handling varies by environment:
 // - Dev/Stage: Test captures TOTP during setup (no pre-configured secret needed)
-// - Prod: Set TEST_TOTP_SECRET env var with BASE32-encoded secret from GitHub Secrets
+// - Prod: Set TEST_USER_TOTP_SECRET env var with BASE32-encoded secret from GitHub Secrets
 const TEST_USER = {
   username: process.env.TEST_USERNAME || 'test-user.journey',
-  // Password environment variables (checked in order of preference):
-  // 1. TEST_PASSWORD - canonical name for E2E test account (per docs)
-  // 2. TEST_USER_PASSWORD - alias (GitHub Secret name)
-  // 3. DEV_USER_PASSWORD / STAGE_USER_PASSWORD - fallback if same password used
-  password:
-    process.env.TEST_PASSWORD ||
-    process.env.TEST_USER_PASSWORD ||
-    process.env.DEV_USER_PASSWORD ||
-    process.env.STAGE_USER_PASSWORD ||
-    '',
+  // Password from GitHub Secret TEST_USER_PASSWORD (env var: TEST_USER_PASSWORD)
+  password: process.env.TEST_USER_PASSWORD || '',
   // TOTP secret must be BASE32-encoded (not raw) - used with oathtool/otplib
-  // For prod, this comes from GitHub Secret TEST_USER_TOTP_SECRET
-  // For dev/stage, tests capture the secret during TOTP setup flow
-  totpSecret: process.env.TEST_TOTP_SECRET || '',
+  // From GitHub Secret TEST_USER_TOTP_SECRET (env var: TEST_USER_TOTP_SECRET)
+  totpSecret: process.env.TEST_USER_TOTP_SECRET || '',
 };
 
 /**
@@ -320,7 +311,7 @@ async function handleTotpIfRequired(
     if (otpInput) {
       if (!totpSecret) {
         throw new Error(
-          'TOTP is required but no secret provided. Set TEST_TOTP_SECRET environment variable.'
+          'TOTP is required but no secret provided. Set TEST_USER_TOTP_SECRET environment variable.'
         );
       }
 
@@ -410,7 +401,7 @@ test.describe('Employee Login Journey', () => {
 
     // TOTP secret priority:
     // 1) Auto-capture during TOTP setup (if setup page appears)
-    // 2) Environment variable (TEST_TOTP_SECRET) - always takes precedence when set
+    // 2) Environment variable (TEST_USER_TOTP_SECRET) - always takes precedence when set
     // 3) Cached file from previous run - enables test resilience
 
     // Check if TOTP setup is required FIRST (handles first-time login)
