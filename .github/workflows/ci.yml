@@ -732,7 +732,7 @@ jobs:
           PORT: 3103
           KEYCLOAK_URL: http://127.0.0.1:8180
           KEYCLOAK_REALM: tamshai-corp
-          MONGODB_URL: mongodb://root:$MONGODB_PASSWORD@localhost:27018/tamshai_sales?authSource=admin
+          MONGODB_URL: mongodb://root:${{ env.MONGODB_PASSWORD }}@localhost:27018/tamshai_sales?authSource=admin
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           NODE_ENV: test
