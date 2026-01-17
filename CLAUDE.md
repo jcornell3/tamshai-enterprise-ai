@@ -756,13 +756,13 @@ npm run test:report
 # Test user service account (exists in ALL environments: dev, stage, prod)
 # See docs/testing/TEST_USER_JOURNEY.md for details
 export TEST_USERNAME="test-user.journey"      # Default: test-user.journey
-export TEST_PASSWORD="***REDACTED_PASSWORD***"        # Default: ***REDACTED_PASSWORD***
-export TEST_TOTP_SECRET="JBSWY3DPEHPK3PXP"    # Default: JBSWY3DPEHPK3PXP
+export TEST_USER_PASSWORD="***REDACTED_PASSWORD***"        # Default: ***REDACTED_PASSWORD***
+export TEST_USER_TOTP_SECRET="JBSWY3DPEHPK3PXP"    # Default: JBSWY3DPEHPK3PXP
 
 # Optional: Override with custom credentials
 export TEST_USERNAME="<custom-username>"
-export TEST_PASSWORD="<custom-password>"
-export TEST_TOTP_SECRET="<custom-totp-secret>"
+export TEST_USER_PASSWORD="<custom-password>"
+export TEST_USER_TOTP_SECRET="<custom-totp-secret>"
 ```
 
 **Important**: The `test-user.journey` account is a dedicated service account for E2E testing that exists in all environments (dev, stage, prod). It has no data access privileges (safe for testing) and uses the same credentials across all environments.

@@ -10,7 +10,7 @@
 #   ./read-github-secrets.sh [options]
 #
 # Options:
-#   --e2e             Get E2E test secrets (TEST_PASSWORD, TEST_TOTP_SECRET)
+#   --e2e             Get E2E test secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET)
 #   --keycloak        Get Keycloak admin password
 #   --user-passwords  Get user passwords (DEV/STAGE/PROD_USER_PASSWORD)
 #   --all             Get all available secrets
@@ -142,7 +142,8 @@ download_and_output() {
                 if [ -f "$file" ]; then
                     local name=$(basename "$file")
                     local value=$(cat "$file" | tr -d '\n')
-                    echo "export $name=\"$value\""
+                    # Use single quotes to prevent shell expansion of special chars like !
+                    echo "export $name='$value'"
                 fi
             done
             ;;

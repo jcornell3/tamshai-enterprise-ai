@@ -69,13 +69,13 @@ async function handleTotpSetupIfRequired(page: Page): Promise<string | null> {
 The test framework looks for TOTP secrets in this order:
 
 1. **Cached file**: `.totp-secrets/test-user.journey-{env}.secret`
-2. **Environment variable**: `TEST_TOTP_SECRET`
+2. **Environment variable**: `TEST_USER_TOTP_SECRET`
 3. **Auto-capture**: If setup page appears, extract and save
 
-**⚠️ IMPORTANT (January 2026)**: After a fresh deployment that clears TOTP credentials (like `deploy-vps.yml` on stage), do NOT pass `TEST_TOTP_SECRET` as an environment variable. The cached file will be stale, and the env var will have the old secret. Instead:
+**⚠️ IMPORTANT (January 2026)**: After a fresh deployment that clears TOTP credentials (like `deploy-vps.yml` on stage), do NOT pass `TEST_USER_TOTP_SECRET` as an environment variable. The cached file will be stale, and the env var will have the old secret. Instead:
 
 1. Delete cached secrets: `rm -rf tests/e2e/.totp-secrets/`
-2. Run test WITHOUT `TEST_TOTP_SECRET` env var
+2. Run test WITHOUT `TEST_USER_TOTP_SECRET` env var
 3. Test will auto-capture the new secret and cache it
 4. Subsequent runs will use the cached secret
 
@@ -103,7 +103,7 @@ npx playwright test login-journey.ui.spec.ts  # Uses default workers
 | Field | Value |
 |-------|-------|
 | Username | `test-user.journey` |
-| Password | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_PASSWORD` secret, env var: `TEST_PASSWORD`) |
+| Password | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_PASSWORD` secret, env var: `TEST_USER_PASSWORD`) |
 | TOTP Secret (BASE32) | `[STORED IN GITHUB SECRETS]` (see `TEST_USER_TOTP_SECRET` secret) |
 | Roles | None (tests authentication flow only) |
 
@@ -151,7 +151,7 @@ On Windows, environment variables set with `set` don't properly propagate to chi
 Create a `tests/e2e/.env` file with your credentials:
 ```bash
 TEST_ENV=dev
-TEST_PASSWORD=your-password-here
+TEST_USER_PASSWORD=your-password-here
 ```
 
 The playwright config loads this automatically via `dotenv`.
@@ -162,7 +162,7 @@ The playwright config loads this automatically via `dotenv`.
 npm install -D cross-env
 
 # Then use it to run tests
-npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 **Note**: The `.env` file is gitignored - never commit credentials to version control.
@@ -172,8 +172,8 @@ npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.u
 | Variable | Required | GitHub Secret | Description |
 |----------|----------|---------------|-------------|
 | `TEST_ENV` | Yes | N/A | Environment: `dev`, `stage`, or `prod` |
-| `TEST_PASSWORD` | Yes* | `TEST_USER_PASSWORD` | Password for test-user.journey |
-| `TEST_TOTP_SECRET` | No | `TEST_USER_TOTP_SECRET` | BASE32 TOTP secret (auto-captured if not set) |
+| `TEST_USER_PASSWORD` | Yes* | `TEST_USER_PASSWORD` | Password for test-user.journey |
+| `TEST_USER_TOTP_SECRET` | No | `TEST_USER_TOTP_SECRET` | BASE32 TOTP secret (auto-captured if not set) |
 | `TEST_USERNAME` | No | N/A | Override username (default: `test-user.journey`) |
 
 *Required for full login journey test. Without it, the test is skipped.
@@ -217,10 +217,10 @@ oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 
 ```bash
 # Get current TOTP code
-oathtool --totp --base32 "$TEST_TOTP_SECRET"
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 
 # Copy to clipboard (macOS)
-oathtool --totp --base32 "$TEST_TOTP_SECRET" | pbcopy
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET" | pbcopy
 
 # Use in browser login
 ```
@@ -255,14 +255,14 @@ Tamshai uses browser authentication with OTP:
 1. Run with `--workers=1`
 2. Verify system clock is synchronized
 3. Wait for new 30-second window before retrying
-4. **After fresh deployment**: Delete cached secrets and run WITHOUT `TEST_TOTP_SECRET` env var:
+4. **After fresh deployment**: Delete cached secrets and run WITHOUT `TEST_USER_TOTP_SECRET` env var:
    ```bash
    rm -rf tests/e2e/.totp-secrets/
-   cd tests/e2e && npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+   cd tests/e2e && npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
    ```
    The test will auto-capture the new secret.
 
-**Common Cause (Stage)**: The `deploy-vps.yml` workflow clears TOTP credentials on each deployment. If you pass an old `TEST_TOTP_SECRET` from GitHub Secrets, it won't match the newly captured TOTP in Keycloak.
+**Common Cause (Stage)**: The `deploy-vps.yml` workflow clears TOTP credentials on each deployment. If you pass an old `TEST_USER_TOTP_SECRET` from GitHub Secrets, it won't match the newly captured TOTP in Keycloak.
 
 ### TOTP Setup Page Appears Unexpectedly
 
@@ -287,6 +287,51 @@ rm -rf tests/e2e/.totp-secrets/
 1. Verify Keycloak is healthy: `curl https://auth.tamshai.com/auth/health/ready`
 2. Check network connectivity
 3. Increase test timeout if needed
+
+### Special Characters in Passwords
+
+**⚠️ IMPORTANT: Avoid using `!` in passwords**
+
+The exclamation mark (`!`) character causes issues across multiple layers:
+
+| Layer | Issue |
+|-------|-------|
+| **Bash** | `!` triggers history expansion (e.g., `!$` expands to last argument) |
+| **Git Bash (Windows)** | Escapes `!` to `\!` even in quoted strings |
+| **cross-env** | May not properly escape `!` when passing to child processes |
+| **kcadm.sh** | Shell expansion can corrupt password when setting via CLI |
+
+**Safe special characters for passwords:**
+- `@` - Safe across all shells and environments
+- `#` - Generally safe in quoted strings
+- `%` - Safe
+- `^` - Safe
+- `_` - Safe
+- `-` - Safe
+- `+` - Safe
+- `=` - Safe
+
+**Problematic characters to avoid:**
+- `!` - History expansion in bash
+- `$` - Variable expansion
+- `` ` `` - Command substitution
+- `&` - Background process operator
+- `*` - Glob pattern
+- `\` - Escape character
+
+**Example:**
+```bash
+# BAD - ! will cause issues
+TEST_USER_PASSWORD="MyPass!123"
+
+# GOOD - @ is safe
+TEST_USER_PASSWORD="MyPass@123"
+```
+
+**If you must use `!`:**
+1. Use a `.env` file (dotenv handles it correctly)
+2. Never pass via command line environment variables
+3. Use single quotes in shell scripts: `'password!here'`
 
 ## CI/CD Integration
 
@@ -327,7 +372,7 @@ jobs:
           npx playwright test login-journey.ui.spec.ts --workers=1
         env:
           TEST_ENV: prod
-          TEST_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
+          TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
 ```
 
 ## File Structure
@@ -375,7 +420,7 @@ done
 # After fresh deployment - let test auto-capture TOTP
 cd tests/e2e
 rm -rf .totp-secrets/test-user.journey-stage.secret
-npx cross-env TEST_ENV=stage TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 ### Prod Environment: E2E Verified
@@ -393,7 +438,7 @@ E2E tests verified working on prod with all 6 tests passing:
 **Verified Working Command** (January 16, 2026):
 ```bash
 cd tests/e2e
-npx cross-env TEST_ENV=prod TEST_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+npx cross-env TEST_ENV=prod TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
 ```
 
 ---
