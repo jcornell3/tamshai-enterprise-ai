@@ -78,6 +78,7 @@ export interface MockKeycloakUsers {
   >;
   listSessions: jest.Mock<Promise<MockSessionRepresentation[]>, [{ id: string }]>;
   logout: jest.Mock<Promise<void>, [{ id: string }]>;
+  addToGroup: jest.Mock<Promise<void>, [{ id: string; groupId: string }]>;
 }
 
 /**
@@ -106,10 +107,26 @@ export interface MockKeycloakRoles {
 }
 
 /**
+ * Keycloak group representation
+ */
+export interface MockGroupRepresentation {
+  id?: string;
+  name?: string;
+}
+
+/**
+ * Typed mock for KcAdminClient.groups methods
+ */
+export interface MockKeycloakGroups {
+  find: jest.Mock<Promise<MockGroupRepresentation[]>, [{ search?: string }?]>;
+}
+
+/**
  * Typed mock for KcAdminClient
  */
 export interface MockKcAdminClient {
   users: MockKeycloakUsers;
+  groups: MockKeycloakGroups;
   clients: MockKeycloakClients;
   roles: MockKeycloakRoles;
   auth: jest.Mock<
@@ -138,6 +155,10 @@ export function createMockKcAdmin(): MockKcAdminClient {
       listClientRoleMappings: jest.fn().mockResolvedValue([]),
       listSessions: jest.fn().mockResolvedValue([]),
       logout: jest.fn().mockResolvedValue(undefined),
+      addToGroup: jest.fn().mockResolvedValue(undefined),
+    },
+    groups: {
+      find: jest.fn().mockResolvedValue([{ id: 'group-all-employees', name: 'All-Employees' }]),
     },
     clients: {
       find: jest.fn().mockResolvedValue([{ id: 'client-uuid-default', clientId: 'mcp-gateway' }]),
@@ -160,6 +181,7 @@ export function createMockKcAdmin(): MockKcAdminClient {
  */
 export function resetMockKcAdmin(mock: MockKcAdminClient): void {
   Object.values(mock.users).forEach((fn) => fn.mockReset());
+  Object.values(mock.groups).forEach((fn) => fn.mockReset());
   Object.values(mock.clients).forEach((fn) => fn.mockReset());
   Object.values(mock.roles).forEach((fn) => fn.mockReset());
   mock.auth.mockReset();
