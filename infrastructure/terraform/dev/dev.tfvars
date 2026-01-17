@@ -95,7 +95,7 @@ mongodb_root_password = "tamshai_password"
 keycloak_admin_password = "admin"
 # dev_user_password - Set via TF_VAR_dev_user_password environment variable
 # Leave empty to skip (E2E tests will warn about missing password)
-dev_user_password = ""
+dev_user_password         = ""
 mcp_gateway_client_secret = "test-client-secret"
 
 # Storage defaults (match docker-compose.yml defaults)

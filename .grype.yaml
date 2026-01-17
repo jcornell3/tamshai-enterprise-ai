@@ -32,3 +32,6 @@ ignore:
   #
   # GHSA-73rr-hh4g-fpgx (LOW) - diff ReDoS vulnerability
   - vulnerability: GHSA-73rr-hh4g-fpgx
+  #
+  # GHSA-8qq5-rm4j-mr97 (HIGH) - tar arbitrary file write vulnerability
+  - vulnerability: GHSA-8qq5-rm4j-mr97

@@ -416,7 +416,7 @@ jobs:
           - 5433:5432
         env:
           POSTGRES_USER: tamshai
-          POSTGRES_PASSWORD: tamshai_password
+          POSTGRES_PASSWORD: ${{ secrets.TAMSHAI_DB_PASSWORD || 'tamshai_password' }}
           POSTGRES_DB: tamshai
         options: >-
           --health-cmd "pg_isready -U tamshai"
@@ -430,7 +430,7 @@ jobs:
           - 27018:27017
         env:
           MONGO_INITDB_ROOT_USERNAME: root
-          MONGO_INITDB_ROOT_PASSWORD: tamshai_password
+          MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGODB_PASSWORD || 'tamshai_password' }}
         options: >-
           --health-cmd "mongosh --eval 'db.adminCommand({ping:1})' --quiet"
           --health-interval 10s
@@ -687,7 +687,7 @@ jobs:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5433
           POSTGRES_USER: tamshai
-          POSTGRES_PASSWORD: changeme
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
           POSTGRES_DB: tamshai_hr
           REDIS_HOST: localhost
           REDIS_PORT: 6379
@@ -711,7 +711,7 @@ jobs:
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 5433
           POSTGRES_USER: tamshai
-          POSTGRES_PASSWORD: changeme
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
           POSTGRES_DB: tamshai_finance
           REDIS_HOST: localhost
           REDIS_PORT: 6379
@@ -873,7 +873,7 @@ jobs:
           POSTGRES_PORT: 5433
           POSTGRES_DB: tamshai_hr
           POSTGRES_USER: tamshai
-          POSTGRES_PASSWORD: changeme
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
 
