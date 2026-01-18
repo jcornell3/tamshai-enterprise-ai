@@ -317,17 +317,18 @@ runcmd:
       sleep 30
     done
 
-  # Sync Keycloak realm configuration (creates clients, roles)
+  # Sync Keycloak realm configuration (creates clients, roles, mappers)
+  # Copy entire scripts directory to include lib/*.sh dependencies
   # Note: Use sed to extract values after first '=' to handle passwords with special chars
   - |
     cd /opt/tamshai
-    docker cp keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
-    docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
+    docker cp keycloak/scripts tamshai-keycloak:/tmp/keycloak-scripts
+    docker exec -u 0 tamshai-keycloak bash -c 'find /tmp/keycloak-scripts -name "*.sh" -exec sed -i "s/\r$//" {} \; && chmod -R 755 /tmp/keycloak-scripts'
     KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env)
     HR_SECRET=$(sed -n "s/^MCP_HR_SERVICE_CLIENT_SECRET=//p" .env)
     docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KC_PASS" \
       -e MCP_HR_SERVICE_CLIENT_SECRET="$HR_SECRET" \
-      tamshai-keycloak /tmp/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
+      tamshai-keycloak /tmp/keycloak-scripts/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
   # NOTE: Identity sync is now handled by mcp-hr on startup (Phoenix Architecture)
   # The mcp-hr service automatically reconciles HR employees to Keycloak users
