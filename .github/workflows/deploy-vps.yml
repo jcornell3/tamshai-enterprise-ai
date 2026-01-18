@@ -397,10 +397,11 @@ jobs:
             find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \; -exec chmod 755 {} \;
           ' || true
           # Run as keycloak user (non-fatal - deployment succeeds even if sync fails)
-          # Pass both KEYCLOAK_ADMIN_PASSWORD and MCP_HR_SERVICE_CLIENT_SECRET to container
+          # Pass KEYCLOAK_ADMIN_PASSWORD, MCP_HR_SERVICE_CLIENT_SECRET, and TEST_USER_PASSWORD
           docker exec \
             -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
             -e MCP_HR_SERVICE_CLIENT_SECRET="$MCP_HR_SERVICE_CLIENT_SECRET" \
+            -e TEST_USER_PASSWORD="${{ secrets.TEST_USER_PASSWORD }}" \
             tamshai-keycloak /tmp/sync-realm.sh stage || {
               echo "[WARN] Keycloak sync failed - clients may need manual configuration"
               echo "Run: ./keycloak/scripts/docker-sync-realm.sh stage tamshai-keycloak"
