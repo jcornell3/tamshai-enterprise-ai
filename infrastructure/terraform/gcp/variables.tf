@@ -109,17 +109,14 @@ variable "prod_user_password" {
 }
 
 # =============================================================================
-# GITHUB INTEGRATION (Phoenix Architecture)
+# NOTE: PROD_USER_PASSWORD FLOW
 # =============================================================================
-
-variable "github_repo" {
-  description = "GitHub repository (owner/repo format for gh CLI)"
-  type        = string
-  default     = "jcornell3/tamshai-enterprise-ai"
-}
-
-variable "auto_update_github_secrets" {
-  description = "Automatically update GitHub secrets after terraform apply. Requires gh CLI."
-  type        = bool
-  default     = true
-}
+# The PROD_USER_PASSWORD GitHub Secret is the source of truth for corporate
+# user passwords. It flows as follows:
+#
+# 1. PROD_USER_PASSWORD set in GitHub Secrets (one-time manual setup)
+# 2. provision-prod-users.yml passes it to identity-sync
+# 3. identity-sync sets this password for all provisioned corporate users
+#
+# This variable (prod_user_password) is optional - if provided, it will be
+# stored in GCP Secret Manager as a backup. The GitHub Secret is authoritative.

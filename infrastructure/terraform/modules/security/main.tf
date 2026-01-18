@@ -647,32 +647,16 @@ resource "google_cloud_run_v2_job" "provision_users" {
 }
 
 # =============================================================================
-# GITHUB SECRETS AUTOMATION (Phoenix Architecture)
+# NOTE: PROD_USER_PASSWORD FLOW
 # =============================================================================
-# Automatically updates GitHub Actions secrets with generated passwords.
-# Requires: gh CLI installed and authenticated (gh auth login)
+# The PROD_USER_PASSWORD GitHub Secret is the source of truth for corporate
+# user passwords. It is used by provision-prod-users.yml to set passwords
+# when running identity-sync.
 #
-# This ensures terraform destroy + apply produces a fully functional
-# environment without manual secret synchronization.
-
-# Auto-update PROD_USER_PASSWORD when it changes
-resource "null_resource" "update_github_prod_user_password" {
-  count = var.auto_update_github_secrets && var.github_repo != "" ? 1 : 0
-
-  triggers = {
-    # Re-run when the password changes
-    password_hash = sha256(random_password.prod_user_password.result)
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Updating GitHub secret PROD_USER_PASSWORD..."
-      echo "${random_password.prod_user_password.result}" | gh secret set PROD_USER_PASSWORD --repo "${var.github_repo}"
-      echo "GitHub secret updated successfully"
-    EOT
-
-    interpreter = ["bash", "-c"]
-  }
-
-  depends_on = [random_password.prod_user_password]
-}
+# Flow:
+# 1. PROD_USER_PASSWORD is set in GitHub Secrets (manual, one-time setup)
+# 2. provision-prod-users.yml passes it to identity-sync
+# 3. identity-sync sets this password for all provisioned corporate users
+#
+# The GCP Secret Manager prod-user-password secret is a backup/fallback
+# and can be synced manually if needed, but GitHub Secrets is authoritative.
