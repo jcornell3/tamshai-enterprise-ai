@@ -341,42 +341,47 @@ resource "null_resource" "keycloak_set_passwords" {
   provisioner "local-exec" {
     interpreter = ["bash", "-c"]
     command     = <<-EOT
-      echo "Setting Keycloak user passwords from environment variables..."
+      echo "Setting Keycloak user passwords via REST API..."
 
-      # Configure kcadm.sh (Keycloak uses /auth path in dev)
+      # Get admin token
       echo "Authenticating with Keycloak Admin API..."
-      docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080/auth \
-        --realm master \
-        --user admin \
-        --password admin
+      TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        -d "password=admin" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli")
 
-      if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to authenticate with Keycloak"
+      TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+
+      if [ -z "$TOKEN" ]; then
+        echo "ERROR: Failed to get admin token"
+        echo "Response: $TOKEN_RESPONSE"
         exit 1
       fi
+      echo "✓ Admin token obtained"
 
       # Set test-user.journey password from TEST_USER_PASSWORD
       if [ -n "$TEST_USER_PASSWORD" ]; then
         echo "Setting test-user.journey password..."
 
-        # Get user ID
-        USER_ID=$(docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh get users \
-          -r tamshai-corp \
-          -q username=test-user.journey \
-          --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+        # Get user ID via REST API
+        USER_ID=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
+          -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
 
         if [ -n "$USER_ID" ]; then
-          # Set password (non-temporary)
-          docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh set-password \
-            -r tamshai-corp \
-            --userid "$USER_ID" \
-            --new-password "$TEST_USER_PASSWORD"
+          # Set password via REST API with jq for proper JSON encoding (handles special chars like @)
+          PASSWORD_JSON=$(jq -n --arg pass "$TEST_USER_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
+          HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X PUT \
+            "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/reset-password" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PASSWORD_JSON")
 
-          if [ $? -eq 0 ]; then
+          if [ "$HTTP_CODE" = "204" ]; then
             echo "✓ test-user.journey password set successfully"
           else
-            echo "ERROR: Failed to set test-user.journey password"
+            echo "ERROR: Failed to set test-user.journey password (HTTP $HTTP_CODE)"
             exit 1
           fi
         else
@@ -390,34 +395,31 @@ resource "null_resource" "keycloak_set_passwords" {
       if [ -n "$DEV_USER_PASSWORD" ]; then
         echo "Setting corporate user passwords..."
 
-        # Get all users except test-user.journey
-        USERS=$(docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh get users \
-          -r tamshai-corp \
-          --fields username,id 2>/dev/null)
+        # Get all users via REST API
+        ALL_USERS=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users?max=500" \
+          -H "Authorization: Bearer $TOKEN")
 
-        # Parse and iterate through users
+        # Build password JSON once (same for all corporate users)
+        CORP_PASSWORD_JSON=$(jq -n --arg pass "$DEV_USER_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
+
         CORP_COUNT=0
-        while IFS= read -r line; do
-          # Extract username and id from JSON lines
-          if echo "$line" | grep -q '"username"'; then
-            USERNAME=$(echo "$line" | grep -o '"username" : "[^"]*"' | cut -d'"' -f4)
-          fi
-          if echo "$line" | grep -q '"id"'; then
-            USER_ID=$(echo "$line" | grep -o '"id" : "[^"]*"' | cut -d'"' -f4)
+        for row in $(echo "$ALL_USERS" | jq -r '.[] | @base64'); do
+          USERNAME=$(echo "$row" | base64 -d | jq -r '.username')
+          USERID=$(echo "$row" | base64 -d | jq -r '.id')
 
-            # Skip test-user.journey (uses TEST_USER_PASSWORD)
-            if [ "$USERNAME" != "test-user.journey" ] && [ -n "$USER_ID" ]; then
-              docker exec tamshai-keycloak /opt/keycloak/bin/kcadm.sh set-password \
-                -r tamshai-corp \
-                --userid "$USER_ID" \
-                --new-password "$DEV_USER_PASSWORD" 2>/dev/null
+          # Skip test-user.journey (uses TEST_USER_PASSWORD)
+          if [ "$USERNAME" != "test-user.journey" ] && [ -n "$USERID" ]; then
+            HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X PUT \
+              "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USERID/reset-password" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$CORP_PASSWORD_JSON")
 
-              if [ $? -eq 0 ]; then
-                CORP_COUNT=$((CORP_COUNT + 1))
-              fi
+            if [ "$HTTP_CODE" = "204" ]; then
+              CORP_COUNT=$((CORP_COUNT + 1))
             fi
           fi
-        done <<< "$USERS"
+        done
 
         echo "✓ $CORP_COUNT corporate user passwords set successfully"
       else
