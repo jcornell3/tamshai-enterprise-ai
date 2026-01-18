@@ -36,6 +36,10 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.0"
     }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -134,12 +138,46 @@ variable "stage_user_password" {
   default     = "" # Empty = use random password (production)
 }
 
+variable "test_user_password" {
+  description = "Password for test-user.journey E2E account (fetched from GitHub Secrets)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "test_user_totp_secret_raw" {
+  description = "TOTP secret for test-user.journey in raw format (fetched from GitHub Secrets)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # =============================================================================
 # PROVIDERS
 # =============================================================================
 
 provider "hcloud" {
   token = var.hcloud_token
+}
+
+# =============================================================================
+# GITHUB SECRETS (Phoenix Architecture)
+# =============================================================================
+# Fetch test user credentials from GitHub Secrets at apply time.
+# This ensures terraform apply brings up a fully functional environment
+# with correct E2E test credentials.
+#
+# Input: { "environment": "stage" }
+# Output: { "user_password", "test_user_password", "test_user_totp_secret_raw" }
+#
+# =============================================================================
+
+data "external" "github_secrets" {
+  program = ["powershell", "-ExecutionPolicy", "Bypass", "-File", "${path.module}/scripts/fetch-github-secrets.ps1"]
+
+  query = {
+    environment = "stage"
+  }
 }
 
 # =============================================================================
@@ -323,6 +361,24 @@ locals {
   # Use provided secret or generate one
   mcp_hr_service_secret = var.mcp_hr_service_client_secret != "" ? var.mcp_hr_service_client_secret : random_password.mcp_hr_service_secret.result
 
+  # Get test user credentials from GitHub Secrets or use variable overrides
+  test_user_password = coalesce(
+    var.test_user_password,
+    data.external.github_secrets.result.test_user_password,
+    ""
+  )
+  test_user_totp_secret_raw = coalesce(
+    var.test_user_totp_secret_raw,
+    data.external.github_secrets.result.test_user_totp_secret_raw,
+    ""
+  )
+  # Get stage user password (corporate users) from GitHub Secrets if not provided
+  stage_user_password_resolved = coalesce(
+    var.stage_user_password,
+    data.external.github_secrets.result.user_password,
+    ""
+  )
+
   cloud_init_config = templatefile("${path.module}/cloud-init.yaml", {
     domain                       = var.domain
     email                        = var.email
@@ -338,7 +394,9 @@ locals {
     jwt_secret                   = random_password.jwt_secret.result
     root_password                = random_password.root_password.result
     mcp_hr_service_client_secret = local.mcp_hr_service_secret
-    stage_user_password          = var.stage_user_password
+    stage_user_password          = local.stage_user_password_resolved
+    test_user_password           = local.test_user_password
+    test_user_totp_secret_raw    = local.test_user_totp_secret_raw
   })
 }
 

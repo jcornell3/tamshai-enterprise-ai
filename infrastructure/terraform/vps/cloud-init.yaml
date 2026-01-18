@@ -113,6 +113,11 @@ write_files:
       # User Password - Fixed password for synced users (from STAGE_USER_PASSWORD secret)
       USER_PASSWORD=${stage_user_password}
 
+      # Test User Credentials (from GitHub Secrets - Phoenix Architecture)
+      # Used by Keycloak Admin API to set test-user.journey password and TOTP
+      TEST_USER_PASSWORD=${test_user_password}
+      TEST_USER_TOTP_SECRET_RAW=${test_user_totp_secret_raw}
+
   # NOTE: Caddyfile is NOT embedded here (Phoenix principle: single source of truth)
   # Instead, it's copied from infrastructure/docker/Caddyfile.stage in runcmd section
   # See: https://github.com/jcornell3/tamshai-enterprise-ai/blob/main/infrastructure/docker/Caddyfile.stage
@@ -134,12 +139,14 @@ write_files:
 
       # Parse arguments
       BUILD_FLAG=""
+      NO_CACHE_FLAG=""
       PULL_ONLY=false
 
       while [[ $# -gt 0 ]]; do
         case $1 in
           --build)
             BUILD_FLAG="--build"
+            NO_CACHE_FLAG="--no-cache"
             shift
             ;;
           --pull)
@@ -172,7 +179,11 @@ write_files:
 
       # Deploy with optional build (uses root docker-compose.yml)
       echo "Deploying services..."
-      docker compose up -d $BUILD_FLAG
+      if [ -n "$BUILD_FLAG" ]; then
+        docker compose build $NO_CACHE_FLAG && docker compose up -d
+      else
+        docker compose up -d
+      fi
 
       # Cleanup old images
       echo "Cleaning up..."
@@ -288,9 +299,9 @@ runcmd:
   - chmod 600 /opt/tamshai/.webhook-secret
   - chown tamshai:tamshai /opt/tamshai/.webhook-secret
 
-  # Start services (build from source, pull base images)
+  # Start services (build from source with no cache, pull base images)
   # Uses root docker-compose.yml with VPS environment variables
-  - cd /opt/tamshai && docker compose up -d --build
+  - cd /opt/tamshai && docker compose build --no-cache && docker compose up -d
 
   # Wait for Keycloak to be healthy before syncing
   - |
@@ -322,6 +333,121 @@ runcmd:
   # The mcp-hr service automatically reconciles HR employees to Keycloak users
   # when it starts. This is self-healing and runs on every boot/restart.
   # See docs/operations/IDENTITY_SYNC.md for details.
+
+  # Configure test-user.journey password and TOTP (Phoenix Architecture)
+  # This uses the Keycloak Admin API to set credentials fetched from GitHub Secrets
+  - |
+    cd /opt/tamshai
+    echo "Configuring test-user.journey credentials..."
+
+    # Load credentials from .env
+    TEST_USER_PASSWORD=$(sed -n "s/^TEST_USER_PASSWORD=//p" .env)
+    TEST_USER_TOTP_SECRET_RAW=$(sed -n "s/^TEST_USER_TOTP_SECRET_RAW=//p" .env)
+    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env)
+
+    if [ -z "$TEST_USER_PASSWORD" ]; then
+      echo "WARNING: TEST_USER_PASSWORD not set - E2E tests may fail"
+    else
+      # Get admin token from Keycloak
+      echo "Getting admin token..."
+      TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8080/auth/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        -d "password=$KC_PASS" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli")
+
+      TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+
+      if [ -z "$TOKEN" ]; then
+        echo "ERROR: Failed to get admin token"
+        echo "Response: $TOKEN_RESPONSE"
+      else
+        echo "✓ Admin token obtained"
+
+        # Get test-user.journey user ID
+        echo "Finding test-user.journey..."
+        USER_RESPONSE=$(curl -s "http://localhost:8080/auth/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
+          -H "Authorization: Bearer $TOKEN")
+
+        USER_ID=$(echo "$USER_RESPONSE" | jq -r '.[0].id // empty')
+
+        if [ -z "$USER_ID" ]; then
+          echo "WARNING: test-user.journey not found in Keycloak"
+        else
+          echo "User ID: $USER_ID"
+
+          # Set password via REST API with jq for proper JSON encoding
+          echo "Setting test-user.journey password..."
+          PASSWORD_JSON=$(jq -n --arg pass "$TEST_USER_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
+          HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X PUT \
+            "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/reset-password" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PASSWORD_JSON")
+
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "✓ test-user.journey password set successfully"
+          else
+            echo "ERROR: Failed to set test-user.journey password (HTTP $HTTP_CODE)"
+          fi
+
+          # Configure TOTP if secret is provided
+          if [ -n "$TEST_USER_TOTP_SECRET_RAW" ]; then
+            echo "Configuring TOTP for test-user.journey..."
+
+            # Delete existing OTP credentials
+            EXISTING_CREDS=$(curl -s "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+              -H "Authorization: Bearer $TOKEN")
+
+            for CRED_ID in $(echo "$EXISTING_CREDS" | jq -r '.[] | select(.type=="otp") | .id'); do
+              echo "Deleting existing OTP credential: $CRED_ID"
+              curl -s -X DELETE "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials/$CRED_ID" \
+                -H "Authorization: Bearer $TOKEN"
+            done
+
+            # Create new OTP credential with the known secret
+            echo "Creating OTP credential..."
+            CREDENTIAL_JSON=$(cat <<EOF
+    {
+      "type": "otp",
+      "userLabel": "Terraform Provisioned",
+      "secretData": "{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}",
+      "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
+    }
+    EOF
+    )
+
+            HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X POST \
+              "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$CREDENTIAL_JSON")
+
+            if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+              echo "✓ OTP credential created successfully (HTTP $HTTP_CODE)"
+            else
+              echo "WARNING: OTP credential creation returned HTTP $HTTP_CODE"
+              echo "TOTP may need to be auto-captured by E2E tests"
+            fi
+
+            # Clear required actions to prevent TOTP setup prompt
+            echo "Clearing required actions..."
+            curl -s -X PUT \
+              "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"requiredActions":[]}' > /dev/null
+
+            echo "✓ TOTP configuration complete"
+          else
+            echo "WARNING: TEST_USER_TOTP_SECRET_RAW not set - TOTP will be auto-captured by E2E tests"
+          fi
+        fi
+      fi
+    fi
+
+    echo "test-user.journey credential configuration complete!"
 
   # Enable fail2ban
   - systemctl enable fail2ban
