@@ -645,20 +645,28 @@ jobs:
           done
 
       - name: Notify on success
-        if: success() && secrets.SLACK_WEBHOOK_URL != ''
+        if: success()
         continue-on-error: true
         run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data '{"text":"[SUCCESS] Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
-            ${{ secrets.SLACK_WEBHOOK_URL }}
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data '{"text":"[SUCCESS] Tamshai deployed successfully to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nCommit: ${{ github.sha }}"}' \
+              "$SLACK_WEBHOOK_URL"
+          fi
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify on failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure()
         continue-on-error: true
         run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data '{"text":"[FAILED] Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
-            ${{ secrets.SLACK_WEBHOOK_URL }}
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data '{"text":"[FAILED] Tamshai deployment FAILED to ${{ env.ENVIRONMENT }}\nBranch: ${{ env.DEPLOY_BRANCH }}\nSee: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
+              "$SLACK_WEBHOOK_URL"
+          fi
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # =============================================================================
   # POST-DEPLOYMENT
