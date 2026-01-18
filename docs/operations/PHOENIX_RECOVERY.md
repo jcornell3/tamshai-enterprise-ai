@@ -2,7 +2,7 @@
 
 This document describes how to recover Tamshai Enterprise AI environments from scratch following the **Phoenix Architecture** principle: any environment should be destroyable and recreatable without manual intervention.
 
-**Last Updated**: January 16, 2026
+**Last Updated**: January 18, 2026
 
 ## Overview
 
@@ -178,6 +178,21 @@ The `deploy-vps.yml` workflow implements Phoenix principles:
 - GCP project with billing enabled
 - Service account with required permissions
 - GitHub repository with GCP secrets configured
+- gcloud CLI authenticated
+
+### Complete Phoenix Rebuild Sequence
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    GCP PROD PHOENIX REBUILD SEQUENCE                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. terraform destroy + apply    │ Recreate GCP infrastructure          │
+│  2. gcloud builds submit         │ Rebuild Cloud Run Job image          │
+│  3. deploy-to-gcp.yml            │ Deploy all Cloud Run services        │
+│  4. provision-prod-users.yml     │ Load HR data, sync users to Keycloak │
+│  5. provision-prod-data.yml      │ Load Finance, Sales, Support data    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
 ### Full Recovery Procedure
 
@@ -192,16 +207,45 @@ terraform destroy -auto-approve
 
 # Step 3: Recreate infrastructure
 terraform apply -auto-approve
-# This creates: Cloud Run services, Cloud SQL, Secret Manager, etc.
+# This creates: Cloud Run services, Cloud SQL, Secret Manager, VPC connector, etc.
 # Takes ~10-15 minutes
 
-# Step 4: Trigger deployment workflow
-gh workflow run deploy-to-gcp.yml --ref main
+# Step 4: Rebuild Cloud Run Job image (required after entrypoint.sh changes)
+gcloud builds submit \
+  --config=scripts/gcp/provision-job/cloudbuild.yaml \
+  --project=gen-lang-client-0553641830
+# Takes ~2-3 minutes
 
-# Step 5: Monitor deployment
-gh run list --workflow=deploy-to-gcp.yml --limit 1
-gh run watch
+# Step 5: Deploy all services
+gh workflow run deploy-to-gcp.yml -f service=all
+# Monitor: gh run watch
+# Deploys: Keycloak, MCP Gateway, MCP Suite, Web Portal
+# Takes ~5-10 minutes
+
+# Step 6: Load HR data and sync users to Keycloak
+gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
+# Monitor: gh run watch
+# Loads: sample-data/hr-data.sql → Cloud SQL
+# Syncs: HR employees → Keycloak users
+# Takes ~2-3 minutes
+
+# Step 7: Load Finance, Sales, Support sample data
+gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
+# Monitor: gh run watch
+# Loads: Finance → Cloud SQL, Sales/Support → MongoDB Atlas
+# Takes ~2-3 minutes
 ```
+
+### Sample Data Targets
+
+| Data | Database | Loaded By | Connection Method |
+|------|----------|-----------|-------------------|
+| HR | Cloud SQL `tamshai_hr` | provision-prod-users.yml | Cloud SQL Proxy |
+| Finance | Cloud SQL `tamshai_finance` | provision-prod-data.yml | Cloud Run Job (VPC connector) |
+| Sales | MongoDB Atlas `tamshai_sales` | provision-prod-data.yml | Direct (public Atlas) |
+| Support | MongoDB Atlas `tamshai_support` | provision-prod-data.yml | Direct (public Atlas) |
+
+**Note:** Cloud SQL has private IP only. HR data uses Cloud SQL Proxy from GitHub Actions. Finance data uses the Cloud Run Job which has VPC connector access.
 
 ### Prod-Specific Considerations
 
@@ -221,10 +265,24 @@ gh run watch
 
 ```bash
 # Check Cloud Run services
-gcloud run services list
+gcloud run services list --region=us-central1
 
 # Verify Keycloak
 curl -sf https://auth.tamshai.com/auth/health/ready && echo "OK"
+
+# Verify HR data (via Cloud SQL Proxy)
+cloud-sql-proxy gen-lang-client-0553641830:us-central1:tamshai-prod-postgres --port=5432 &
+PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
+  psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT COUNT(*) FROM hr.employees;"
+
+# Verify Finance data
+PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
+  psql -h localhost -p 5432 -U tamshai -d tamshai_finance -c "SELECT COUNT(*) FROM finance.invoices;"
+
+# Verify Sales/Support data (MongoDB Atlas)
+MONGODB_URI=$(gcloud secrets versions access latest --secret=tamshai-prod-mongodb-uri)
+mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_sales').customers.countDocuments()"
+mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_support').tickets.countDocuments()"
 
 # Run E2E tests
 cd tests/e2e
@@ -470,5 +528,5 @@ gh workflow run deploy-to-gcp.yml --ref main
 
 ---
 
-*Last Updated: January 16, 2026*
+*Last Updated: January 18, 2026*
 *Status: Active - Aligned with Phoenix Architecture principles*
