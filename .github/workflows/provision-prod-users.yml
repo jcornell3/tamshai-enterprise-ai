@@ -53,7 +53,7 @@ env:
   GCP_PROJECT: gen-lang-client-0553641830
   GCP_REGION: us-central1
   CLOUD_SQL_INSTANCE: tamshai-prod-postgres
-  KEYCLOAK_URL: https://keycloak-1046947015464.us-central1.run.app
+  KEYCLOAK_URL: https://keycloak-1046947015464.us-central1.run.app/auth
   KEYCLOAK_REALM: tamshai-corp
 
 jobs:

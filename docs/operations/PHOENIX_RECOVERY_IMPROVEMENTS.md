@@ -819,6 +819,25 @@ gcloud iam service-accounts add-iam-policy-binding \
 
     **Anti-pattern**: Do NOT enable public IP on Cloud SQL just to allow GitHub Actions access. This creates a security vulnerability.
 
+18. **Cloud Run Job has outdated Keycloak URL**: After Phoenix rebuild, Cloud Run service URLs change (include project number). The `provision-users` Cloud Run Job's KEYCLOAK_URL environment variable still points to the old URL.
+
+    **Symptom**: Job fails with connection refused or 404 errors when trying to authenticate with Keycloak.
+
+    **Solution**: Update the Cloud Run Job after Phoenix rebuild:
+    ```bash
+    # Get the new Keycloak URL
+    NEW_KC_URL=$(gcloud run services describe keycloak --region=us-central1 --format="value(status.url)")/auth
+
+    # Update the provision-users job
+    gcloud run jobs update provision-users \
+      --region=us-central1 \
+      --update-env-vars="KEYCLOAK_URL=$NEW_KC_URL"
+    ```
+
+    **Also update**: The `provision-prod-users.yml` workflow's `KEYCLOAK_URL` environment variable.
+
+    **Future improvement**: Store Keycloak URL in Secret Manager or use service discovery instead of hardcoding.
+
 ### Commands Reference
 
 ```bash
