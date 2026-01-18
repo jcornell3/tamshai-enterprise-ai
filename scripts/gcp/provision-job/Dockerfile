@@ -34,8 +34,8 @@ RUN cd services/mcp-hr && npm ci --production=false --silent
 
 COPY services/mcp-hr/ ./services/mcp-hr/
 
-# Copy sample data
-COPY sample-data/hr-data.sql ./sample-data/
+# Copy sample data (all SQL files)
+COPY sample-data/*.sql ./sample-data/
 
 # Copy provisioning script
 COPY scripts/gcp/provision-job/entrypoint.sh /entrypoint.sh
