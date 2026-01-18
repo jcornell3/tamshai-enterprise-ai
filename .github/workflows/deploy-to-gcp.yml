@@ -469,15 +469,13 @@ jobs:
         env:
           KEYCLOAK_URL: https://auth.tamshai.com/auth
           KEYCLOAK_ADMIN: admin
-          # Pass MCP_HR_SERVICE_CLIENT_SECRET from GitHub Secrets
-          # This ensures the mcp-hr-service client uses the same secret for identity-sync
-          MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
         run: |
           echo "Running realm sync directly from GitHub Actions runner..."
           echo "This eliminates Cloud Run Job overhead (container pull + JVM startup)"
 
-          # Fetch admin password from GCP Secret Manager
+          # Fetch secrets from GCP Secret Manager (single source of truth for prod)
           export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
+          export MCP_HR_SERVICE_CLIENT_SECRET=$(gcloud secrets versions access latest --secret=mcp-hr-service-client-secret)
 
           # Make script executable and run it
           chmod +x keycloak/scripts/sync-realm.sh
