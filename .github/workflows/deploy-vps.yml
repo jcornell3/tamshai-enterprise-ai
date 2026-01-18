@@ -645,7 +645,7 @@ jobs:
           done
 
       - name: Notify on success
-        if: success()
+        if: success() && secrets.SLACK_WEBHOOK_URL != ''
         continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
@@ -653,7 +653,7 @@ jobs:
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify on failure
-        if: failure()
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
         continue-on-error: true
         run: |
           curl -X POST -H 'Content-type: application/json' \
