@@ -513,13 +513,18 @@ cd infrastructure/terraform/gcp
 terraform destroy -auto-approve
 terraform apply -auto-approve
 
-# 2. Deploy all services (triggers automatically on main, or manually)
+# 2. Build and push Cloud Run Job image (required after entrypoint.sh changes)
+gcloud builds submit \
+  --config=scripts/gcp/provision-job/cloudbuild.yaml \
+  --project=gen-lang-client-0553641830
+
+# 3. Deploy all services (triggers automatically on main, or manually)
 gh workflow run deploy-to-gcp.yml -f service=all
 
-# 3. Load HR data and sync users to Keycloak
+# 4. Load HR data and sync users to Keycloak
 gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
 
-# 4. Load Finance, Sales, Support sample data
+# 5. Load Finance, Sales, Support sample data
 gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
 ```
 
@@ -530,11 +535,13 @@ This workflow loads Finance, Sales, and Support sample data into production data
 **Workflow Location:** `.github/workflows/provision-prod-data.yml`
 
 **Data Targets:**
-| Data Set | Database | Target |
-|----------|----------|--------|
-| Finance | Cloud SQL PostgreSQL | `tamshai_finance` |
-| Sales | MongoDB Atlas | `tamshai_sales` |
-| Support | MongoDB Atlas | `tamshai_support` |
+| Data Set | Database | Target | Connection Method |
+|----------|----------|--------|-------------------|
+| Finance | Cloud SQL PostgreSQL | `tamshai_finance` | Cloud Run Job (VPC connector) |
+| Sales | MongoDB Atlas | `tamshai_sales` | Direct (public Atlas) |
+| Support | MongoDB Atlas | `tamshai_support` | Direct (public Atlas) |
+
+**Note:** Cloud SQL has private IP only, so Finance data must be loaded via the Cloud Run Job which has VPC connector access. Sales and Support use MongoDB Atlas (public internet) so they can be loaded directly from GitHub Actions.
 
 **Usage:**
 
