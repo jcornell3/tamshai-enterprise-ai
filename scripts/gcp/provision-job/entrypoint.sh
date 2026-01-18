@@ -24,6 +24,12 @@ DRY_RUN="${DRY_RUN:-false}"
 FORCE_PASSWORD_RESET="${FORCE_PASSWORD_RESET:-false}"
 PROXY_PID=""
 
+# URL-encode a string (handles special chars like &, *, etc.)
+urlencode() {
+    local string="$1"
+    python3 -c "import urllib.parse; print(urllib.parse.quote('$string', safe=''))"
+}
+
 echo "=============================================="
 echo "User Provisioning Job"
 echo "=============================================="
@@ -95,10 +101,11 @@ verify_state() {
     # Check Keycloak
     echo ""
     echo "[INFO] Checking Keycloak..."
+    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
     KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=$KC_ADMIN_PASSWORD" \
+        -d "password=${KC_PASS_ENCODED}" \
         -d "grant_type=password" \
         -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
 
@@ -155,11 +162,12 @@ ensure_service_account_permissions() {
     echo ""
     echo "=== Ensuring Service Account Permissions ==="
 
-    # Get admin token
+    # Get admin token (URL-encode password for special chars)
+    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
     KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=$KC_ADMIN_PASSWORD" \
+        -d "password=${KC_PASS_ENCODED}" \
         -d "grant_type=password" \
         -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
 
@@ -307,10 +315,11 @@ final_verify() {
     SYNCED_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
         "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null | tr -d ' \n' || echo "0")
 
+    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
     KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=$KC_ADMIN_PASSWORD" \
+        -d "password=${KC_PASS_ENCODED}" \
         -d "grant_type=password" \
         -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
 
