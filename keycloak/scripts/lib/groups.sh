@@ -279,8 +279,16 @@ assign_critical_prod_users() {
     log_info "Assigning critical production users to groups..."
 
     # Critical users who need group membership for system access
+    # C-Suite executives from hr-data.sql (EMP001-EMP004):
+    #   - eve.thompson (CEO)
+    #   - michael.roberts (CFO)
+    #   - sarah.kim (CTO)
+    #   - james.wilson (COO)
     local -a critical_users=(
         "eve.thompson:C-Suite"
+        "michael.roberts:C-Suite"
+        "sarah.kim:C-Suite"
+        "james.wilson:C-Suite"
         "test-user.journey:All-Employees"
     )
 
