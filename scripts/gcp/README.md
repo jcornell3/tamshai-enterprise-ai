@@ -229,6 +229,10 @@ This is useful when:
 | SALES | sales-read |
 | SUPPORT | support-read |
 | ENG | engineering-read |
+| IT | it-read |
+| MKT | marketing-read |
+| OPS | operations-read |
+| LEGAL | legal-read |
 | EXEC | executive (composite role) |
 
 **Example:**
@@ -313,28 +317,31 @@ gcloud run jobs execute provision-users \
 
 ### Setting the Production User Password
 
-The production user password can be configured in two ways:
+The production user password can be configured depending on how you run provisioning:
 
-**Option 1: Via Terraform Variable (Recommended for Phoenix Principle)**
+**Option 1: Via GitHub Actions Workflow (Recommended)**
 
-Set the password in your `terraform.tfvars` or via environment variable:
+The `PROD_USER_PASSWORD` GitHub Secret is the **source of truth** for the `provision-prod-users.yml` workflow:
 
-```hcl
-# terraform.tfvars
-prod_user_password = "YourSecurePassword123!"
-```
-
-Or via environment variable:
-```bash
-export TF_VAR_prod_user_password="YourSecurePassword123!"
-terraform apply
-```
-
-**Option 2: Update Secret Manager Directly**
-
-If you need to change the password without running Terraform:
+1. Set `PROD_USER_PASSWORD` in GitHub Secrets (one-time manual setup)
+2. Trigger the `provision-prod-users.yml` workflow
+3. The workflow passes the password to identity-sync
+4. All corporate users are created with this password
 
 ```bash
+# Set the GitHub Secret (one-time)
+echo "YourSecurePassword123!" | gh secret set PROD_USER_PASSWORD
+
+# Trigger the provisioning workflow
+gh workflow run provision-prod-users.yml -f action=all
+```
+
+**Option 2: Via Cloud Run Job (Direct GCP)**
+
+For running provisioning directly via Cloud Run Job (without GitHub Actions):
+
+```bash
+# Update password in GCP Secret Manager
 echo -n 'YourNewPassword123!' | gcloud secrets versions add prod-user-password \
   --data-file=- --project=gen-lang-client-0553641830
 
@@ -346,7 +353,16 @@ gcloud run jobs execute provision-users \
   --wait
 ```
 
-**Note:** The Terraform configuration uses `ignore_changes` on the secret data to prevent accidental overwrites of manually set passwords.
+**Option 3: Via Terraform Variable**
+
+For initial infrastructure setup, you can pass the password to Terraform:
+
+```bash
+export TF_VAR_prod_user_password="YourSecurePassword123!"
+terraform apply
+```
+
+**Note:** The Terraform configuration uses `ignore_changes` on the secret data to prevent accidental overwrites of manually set passwords. For ongoing user provisioning, use Option 1 (GitHub Actions) or Option 2 (Cloud Run Job).
 
 ### Required Secrets
 
@@ -468,6 +484,107 @@ gcloud run jobs executions list --job=provision-users --region=us-central1 --lim
 # View logs for specific execution
 gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=provision-users" \
   --project=gen-lang-client-0553641830 --limit=100 --format="table(timestamp,textPayload)"
+```
+
+---
+
+## Phoenix Rebuild Process
+
+The **Phoenix Rebuild** is a complete environment teardown and rebuild from scratch. This process ensures all environments can be recreated from Terraform + GitHub Actions without manual intervention.
+
+### Phoenix Rebuild Sequence
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       PHOENIX REBUILD SEQUENCE                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│  1. terraform destroy + apply    │ Recreate GCP infrastructure          │
+│  2. deploy-to-gcp.yml            │ Deploy all Cloud Run services        │
+│  3. provision-prod-users.yml     │ Load HR data, sync users to Keycloak │
+│  4. provision-prod-data.yml      │ Load Finance, Sales, Support data    │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Step-by-Step Phoenix Rebuild
+
+```bash
+# 1. Destroy and recreate infrastructure
+cd infrastructure/terraform/gcp
+terraform destroy -auto-approve
+terraform apply -auto-approve
+
+# 2. Deploy all services (triggers automatically on main, or manually)
+gh workflow run deploy-to-gcp.yml -f service=all
+
+# 3. Load HR data and sync users to Keycloak
+gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
+
+# 4. Load Finance, Sales, Support sample data
+gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
+```
+
+### provision-prod-data.yml Workflow
+
+This workflow loads Finance, Sales, and Support sample data into production databases.
+
+**Workflow Location:** `.github/workflows/provision-prod-data.yml`
+
+**Data Targets:**
+| Data Set | Database | Target |
+|----------|----------|--------|
+| Finance | Cloud SQL PostgreSQL | `tamshai_finance` |
+| Sales | MongoDB Atlas | `tamshai_sales` |
+| Support | MongoDB Atlas | `tamshai_support` |
+
+**Usage:**
+
+```bash
+# Load all sample data (Finance, Sales, Support)
+gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
+
+# Load specific data set
+gh workflow run provision-prod-data.yml -f data_set=finance -f dry_run=false
+gh workflow run provision-prod-data.yml -f data_set=sales -f dry_run=false
+gh workflow run provision-prod-data.yml -f data_set=support -f dry_run=false
+
+# Dry run (preview without making changes)
+gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=true
+```
+
+**Workflow Inputs:**
+| Input | Type | Default | Description |
+|-------|------|---------|-------------|
+| `data_set` | choice | `all` | Which data to load: `all`, `finance`, `sales`, `support` |
+| `dry_run` | boolean | `true` | Preview only, no changes made |
+
+### Sample Data Files
+
+| File | Database | Description |
+|------|----------|-------------|
+| `sample-data/hr-data.sql` | Cloud SQL `tamshai_hr` | Employee records (loaded by provision-prod-users.yml) |
+| `sample-data/finance-data.sql` | Cloud SQL `tamshai_finance` | Invoices, expense reports, budgets |
+| `sample-data/sales-data.js` | MongoDB Atlas `tamshai_sales` | Customers, opportunities, activities |
+| `sample-data/support-data.js` | MongoDB Atlas `tamshai_support` | Tickets, KB articles |
+
+### Post-Phoenix Verification
+
+After Phoenix rebuild, verify all data is loaded:
+
+```bash
+# Check HR data (via Cloud SQL Proxy)
+PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
+  psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT COUNT(*) FROM hr.employees;"
+
+# Check Finance data
+PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
+  psql -h localhost -p 5432 -U tamshai -d tamshai_finance -c "SELECT COUNT(*) FROM finance.invoices;"
+
+# Check Sales data
+MONGODB_URI=$(gcloud secrets versions access latest --secret=tamshai-prod-mongodb-uri)
+mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_sales').customers.countDocuments()"
+
+# Check Support data
+mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_support').tickets.countDocuments()"
 ```
 
 ---
