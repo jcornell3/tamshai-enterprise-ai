@@ -556,15 +556,10 @@ jobs:
           if [ -n "$TOTP_SECRET_RAW" ]; then
             echo "Creating OTP credential with secret: ${TOTP_SECRET_RAW:0:4}****"
 
-            CREDENTIAL_JSON=$(cat <<CRED_EOF
-{
-  "type": "otp",
-  "userLabel": "GitHub Actions Provisioned",
-  "secretData": "{\"value\":\"${TOTP_SECRET_RAW}\"}",
-  "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
-}
-CRED_EOF
-)
+            # Build JSON using jq to avoid YAML parsing issues with heredocs
+            CREDENTIAL_JSON=$(jq -n \
+              --arg secret "$TOTP_SECRET_RAW" \
+              '{"type":"otp","userLabel":"GitHub Actions Provisioned","secretData":("{\"value\":\"" + $secret + "\"}") ,"credentialData":"{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"}')
 
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
               "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users/${USER_ID}/credentials" \
