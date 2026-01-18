@@ -767,7 +767,12 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 12. **Secret Manager IAM bindings incomplete**: After Phoenix rebuild, service accounts may lack `secretmanager.secretAccessor` role on specific secrets. Terraform creates the secrets but IAM bindings may not be complete for all service account/secret combinations.
 
-13. **Static website bucket IAM missing for CICD**: The `tamshai-prod-cicd` service account needs `roles/storage.objectAdmin` on the static website bucket (`prod.tamshai.com`) but this may not be set by Terraform's storage module.
+13. **Static website bucket IAM missing for CICD**: The `tamshai-prod-cicd` service account needs `roles/storage.admin` (not just `objectAdmin`) to use `gcloud storage rsync`. The `storage.admin` role includes `storage.buckets.get` permission required for rsync operations. Grant at project level:
+    ```bash
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+      --member="serviceAccount:tamshai-prod-cicd@PROJECT_ID.iam.gserviceaccount.com" \
+      --role="roles/storage.admin"
+    ```
 
 14. **Cloud SQL private IP changes after Phoenix rebuild**: The Cloud SQL instance gets a new private IP after destroy/apply. Hardcoded IPs in deploy workflow (Keycloak KC_DB_URL) must be updated. **Solution**: After terraform apply, get the new IP and update deploy-to-gcp.yml:
     ```bash
