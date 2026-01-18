@@ -398,10 +398,12 @@ jobs:
             echo "ERROR: TEST_USER_PASSWORD secret not set"
             exit 1
           fi
+          # Use jq for proper JSON encoding (handles special chars like @)
+          PASSWORD_JSON=$(jq -n --arg pass "$TEST_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
           RESET_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"type\":\"password\",\"value\":\"${TEST_PASSWORD}\",\"temporary\":false}")
+            -d "$PASSWORD_JSON")
           HTTP_CODE=$(echo "$RESET_RESPONSE" | tail -n1)
           if [ "$HTTP_CODE" != "204" ]; then
             echo "ERROR: Failed to reset password (HTTP $HTTP_CODE)"
