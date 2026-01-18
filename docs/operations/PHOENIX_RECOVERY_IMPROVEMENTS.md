@@ -936,6 +936,24 @@ gcloud iam service-accounts add-iam-policy-binding \
 
     **Solution**: Run `terraform apply` to create the domain mapping. Ensure DNS is configured to point to `ghs.googlehosted.com` (CNAME record).
 
+24. **mcp-hr-service client secret mismatch**: The identity sync fails with Keycloak authentication error because the client secret in Keycloak doesn't match the secret in GCP Secret Manager.
+
+    **Symptom**: provision-users job shows:
+    ```
+    Authenticating with Keycloak...
+    Identity sync failed
+    ```
+
+    **Root cause**: The `sync-realm.sh` script was getting `MCP_HR_SERVICE_CLIENT_SECRET` from GitHub Secrets, but the Cloud Run Job uses the secret from GCP Secret Manager (`mcp-hr-service-client-secret`). These two sources had different values.
+
+    **Solution**: Updated `deploy-to-gcp.yml` to fetch `MCP_HR_SERVICE_CLIENT_SECRET` from GCP Secret Manager instead of GitHub Secrets:
+    ```yaml
+    # In sync-keycloak-realm job
+    export MCP_HR_SERVICE_CLIENT_SECRET=$(gcloud secrets versions access latest --secret=mcp-hr-service-client-secret)
+    ```
+
+    **Principle**: GCP Secret Manager is the single source of truth for production secrets. All components (Keycloak, Cloud Run Jobs, Cloud Run Services) should use the same secret from Secret Manager.
+
 ### Commands Reference
 
 ```bash
