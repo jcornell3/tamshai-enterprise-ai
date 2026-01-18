@@ -107,3 +107,19 @@ variable "prod_user_password" {
   sensitive   = true
   default     = ""
 }
+
+# =============================================================================
+# GITHUB INTEGRATION (Phoenix Architecture)
+# =============================================================================
+
+variable "github_repo" {
+  description = "GitHub repository (owner/repo format for gh CLI)"
+  type        = string
+  default     = "jcornell3/tamshai-enterprise-ai"
+}
+
+variable "auto_update_github_secrets" {
+  description = "Automatically update GitHub secrets after terraform apply. Requires gh CLI."
+  type        = bool
+  default     = true
+}

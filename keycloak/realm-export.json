@@ -74,6 +74,22 @@
         "description": "Full access to support data (full ticket details)"
       },
       {
+        "name": "it-read",
+        "description": "Read access to IT data (infrastructure, systems)"
+      },
+      {
+        "name": "marketing-read",
+        "description": "Read access to marketing data (campaigns, analytics)"
+      },
+      {
+        "name": "operations-read",
+        "description": "Read access to operations data (processes, metrics)"
+      },
+      {
+        "name": "legal-read",
+        "description": "Read access to legal data (contracts, compliance)"
+      },
+      {
         "name": "manager",
         "description": "Manager role - can view direct reports data"
       },
@@ -86,7 +102,11 @@
             "hr-read",
             "finance-read",
             "sales-read",
-            "support-read"
+            "support-read",
+            "it-read",
+            "marketing-read",
+            "operations-read",
+            "legal-read"
           ]
         }
       },

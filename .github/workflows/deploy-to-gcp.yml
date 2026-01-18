@@ -467,6 +467,9 @@ jobs:
         env:
           KEYCLOAK_URL: https://auth.tamshai.com/auth
           KEYCLOAK_ADMIN: admin
+          # Pass MCP_HR_SERVICE_CLIENT_SECRET from GitHub Secrets
+          # This ensures the mcp-hr-service client uses the same secret for identity-sync
+          MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
         run: |
           echo "Running realm sync directly from GitHub Actions runner..."
           echo "This eliminates Cloud Run Job overhead (container pull + JVM startup)"

@@ -53,3 +53,16 @@ variable "prod_user_password" {
   sensitive   = true
   default     = ""
 }
+
+# GitHub Integration (Phoenix Architecture)
+variable "github_repo" {
+  description = "GitHub repository (owner/repo format for gh CLI)"
+  type        = string
+  default     = ""
+}
+
+variable "auto_update_github_secrets" {
+  description = "Automatically update GitHub secrets after terraform apply. Requires gh CLI."
+  type        = bool
+  default     = false
+}

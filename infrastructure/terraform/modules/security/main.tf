@@ -645,3 +645,34 @@ resource "google_cloud_run_v2_job" "provision_users" {
     ]
   }
 }
+
+# =============================================================================
+# GITHUB SECRETS AUTOMATION (Phoenix Architecture)
+# =============================================================================
+# Automatically updates GitHub Actions secrets with generated passwords.
+# Requires: gh CLI installed and authenticated (gh auth login)
+#
+# This ensures terraform destroy + apply produces a fully functional
+# environment without manual secret synchronization.
+
+# Auto-update PROD_USER_PASSWORD when it changes
+resource "null_resource" "update_github_prod_user_password" {
+  count = var.auto_update_github_secrets && var.github_repo != "" ? 1 : 0
+
+  triggers = {
+    # Re-run when the password changes
+    password_hash = sha256(random_password.prod_user_password.result)
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Updating GitHub secret PROD_USER_PASSWORD..."
+      echo "${random_password.prod_user_password.result}" | gh secret set PROD_USER_PASSWORD --repo "${var.github_repo}"
+      echo "GitHub secret updated successfully"
+    EOT
+
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [random_password.prod_user_password]
+}

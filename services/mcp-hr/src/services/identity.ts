@@ -81,14 +81,23 @@ export const JobName = {
 /**
  * Department code to Keycloak role mapping
  * Maps department codes (from hr.departments.code) to Keycloak client roles
+ *
+ * Note: All departments in hr-data.sql must have a mapping here, otherwise
+ * employees in unmapped departments will have no department-specific roles
+ * and can only access their own data via RLS.
  */
 export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
+  // Primary department mappings (from hr.departments.code)
   HR: 'hr-read',
   FIN: 'finance-read',
   SALES: 'sales-read',
   SUPPORT: 'support-read',
   ENG: 'engineering-read',
   EXEC: 'executive', // Executive composite role (CEO, C-Suite)
+  IT: 'it-read',
+  MKT: 'marketing-read',
+  OPS: 'operations-read',
+  LEGAL: 'legal-read',
   // Legacy mappings for backwards compatibility with tests
   Finance: 'finance-read',
   Sales: 'sales-read',

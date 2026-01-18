@@ -91,6 +91,10 @@ module "security" {
   keycloak_url              = var.keycloak_provisioning_url
   prod_user_password        = var.prod_user_password
 
+  # GitHub Integration (Phoenix Architecture)
+  github_repo                = var.github_repo
+  auto_update_github_secrets = var.auto_update_github_secrets
+
   depends_on = [module.networking]
 }
 
