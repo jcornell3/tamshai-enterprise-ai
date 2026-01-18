@@ -782,6 +782,43 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 15. **Cloud Run service URLs change after Phoenix rebuild**: Cloud Run service URLs include the project number (e.g., `https://keycloak-1046947015464.us-central1.run.app`). After Phoenix rebuild, the MCP Gateway environment variables (KEYCLOAK_URL, JWKS_URI, MCP_*_URL) must be updated to reflect the new URLs. Custom domain mappings (auth.tamshai.com) also need to be reconfigured.
 
+16. **CICD service account missing Cloud SQL IAM**: After Phoenix rebuild, the `tamshai-prod-cicd` service account lacks `roles/cloudsql.client` permission needed for Cloud SQL Proxy connections. The provision-prod-users workflow fails with:
+    ```
+    googleapi: Error 403: boss::NOT_AUTHORIZED: Not authorized to access resource.
+    Possibly missing permission cloudsql.instances.get on resource instances/tamshai-prod-postgres
+    ```
+    **Solution**: Grant the role after terraform apply:
+    ```bash
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+      --member="serviceAccount:tamshai-prod-cicd@PROJECT_ID.iam.gserviceaccount.com" \
+      --role="roles/cloudsql.client"
+    ```
+
+17. **Cloud SQL private IP not accessible from GitHub Actions**: Cloud SQL only has private IP (no public IP for security). GitHub Actions runners run on the public internet and **cannot connect to private IPs** even with Cloud SQL Proxy and IAM authentication. The Cloud SQL Proxy fails with:
+    ```
+    instance does not have IP of type "PUBLIC"
+    (connection name = "gen-lang-client-0553641830:us-central1:tamshai-prod-postgres")
+    ```
+    **Solution**: Use Cloud Run Job instead of direct connection. The `provision-users` Cloud Run Job:
+    - Runs inside VPC via VPC connector
+    - Uses Cloud SQL Proxy with `--private-ip` flag
+    - Has access to all required secrets
+
+    **Architecture**:
+    ```
+    GitHub Actions -> gcloud run jobs execute -> Cloud Run Job (VPC) -> Cloud SQL (private IP)
+    ```
+
+    The `provision-prod-users.yml` workflow was refactored to execute the Cloud Run Job:
+    ```bash
+    gcloud run jobs execute provision-users \
+      --region=us-central1 \
+      --update-env-vars="ACTION=all,DRY_RUN=false" \
+      --async
+    ```
+
+    **Anti-pattern**: Do NOT enable public IP on Cloud SQL just to allow GitHub Actions access. This creates a security vulnerability.
+
 ### Commands Reference
 
 ```bash
@@ -853,4 +890,22 @@ done
 gcloud storage buckets add-iam-policy-binding gs://prod.tamshai.com \
   --member="serviceAccount:tamshai-prod-cicd@PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
+
+# Grant CICD access to Cloud SQL (for provision workflows using Cloud SQL Proxy)
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:tamshai-prod-cicd@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/cloudsql.client"
+
+# Execute provision-users Cloud Run Job (preferred method - uses VPC private IP)
+gcloud run jobs execute provision-users \
+  --region=us-central1 \
+  --update-env-vars="ACTION=all,DRY_RUN=false,FORCE_PASSWORD_RESET=false" \
+  --project=PROJECT_ID
+
+# Check provision job execution status
+gcloud run jobs executions list --job=provision-users --region=us-central1 --limit=5
+
+# Get provision job logs
+gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=provision-users" \
+  --limit=50 --format="value(textPayload)"
 ```
