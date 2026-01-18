@@ -838,6 +838,21 @@ gcloud iam service-accounts add-iam-policy-binding \
 
     **Future improvement**: Store Keycloak URL in Secret Manager or use service discovery instead of hardcoding.
 
+19. **Keycloak admin password with special characters fails auth**: The Keycloak admin password may contain special characters like `*`, `&`, `#` etc. that need URL-encoding when used in HTTP POST form data. Without encoding, curl sends malformed data and auth fails.
+
+    **Symptom**: "[WARN] Could not get Keycloak admin token" even though password is correct.
+
+    **Solution**: URL-encode the password before using in curl:
+    ```bash
+    urlencode() {
+        python3 -c "import urllib.parse; print(urllib.parse.quote('$1', safe=''))"
+    }
+    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
+    curl -d "password=${KC_PASS_ENCODED}" ...
+    ```
+
+    The entrypoint.sh has been updated to URL-encode all password fields.
+
 ### Commands Reference
 
 ```bash
