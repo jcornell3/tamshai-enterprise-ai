@@ -853,6 +853,89 @@ gcloud iam service-accounts add-iam-policy-binding \
 
     The entrypoint.sh has been updated to URL-encode all password fields.
 
+20. **Python3 not installed in provision-job image**: The URL encoding fix (Issue #19) uses `python3` for URL encoding, but the base image (`node:20-bookworm-slim`) does not include Python. The job fails with:
+    ```
+    /entrypoint.sh: line 30: python3: command not found
+    Container called exit(127).
+    ```
+
+    **Solution**: Update the Dockerfile to install python3:
+    ```dockerfile
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        postgresql-client \
+        curl \
+        ca-certificates \
+        netcat-openbsd \
+        bash \
+        python3 \
+        jq \
+        && rm -rf /var/lib/apt/lists/*
+    ```
+
+    Then rebuild and deploy the image:
+    ```bash
+    gcloud builds submit --config=scripts/gcp/provision-job/cloudbuild.yaml --project=PROJECT_ID
+    NEW_DIGEST=$(gcloud artifacts docker images describe \
+      us-central1-docker.pkg.dev/PROJECT_ID/tamshai-prod/provision-job:latest \
+      --format="value(image_summary.digest)")
+    gcloud run jobs update provision-users \
+      --region=us-central1 \
+      --image="us-central1-docker.pkg.dev/PROJECT_ID/tamshai-prod/provision-job@$NEW_DIGEST"
+    ```
+
+21. **Keycloak image tag mismatch**: Terraform references `keycloak:v2.0.0-postgres` but the deploy workflow only tags with `${{ github.sha }}` and `latest`. After Phoenix rebuild, terraform apply fails with:
+    ```
+    Image 'us-central1-docker.pkg.dev/.../keycloak:v2.0.0-postgres' not found.
+    ```
+
+    **Solution**: Update `.github/workflows/deploy-to-gcp.yml` to also tag with `v2.0.0-postgres`:
+    ```yaml
+    - name: Build and Push
+      run: |
+        docker build -t ${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
+                     -t ${{ env.AR_REPO }}/keycloak:latest \
+                     -t ${{ env.AR_REPO }}/keycloak:v2.0.0-postgres \
+                     keycloak
+        docker push ${{ env.AR_REPO }}/keycloak:${{ github.sha }}
+        docker push ${{ env.AR_REPO }}/keycloak:latest
+        docker push ${{ env.AR_REPO }}/keycloak:v2.0.0-postgres
+    ```
+
+    **Immediate fix**: Tag the existing `latest` image:
+    ```bash
+    gcloud artifacts docker tags add \
+      us-central1-docker.pkg.dev/PROJECT_ID/tamshai/keycloak:latest \
+      us-central1-docker.pkg.dev/PROJECT_ID/tamshai/keycloak:v2.0.0-postgres
+    ```
+
+22. **Cloud SQL private IP hardcoded in Terraform**: The Keycloak `KC_DB_URL` in `modules/cloudrun/main.tf` had a hardcoded IP (`10.180.0.3`) instead of using the dynamic IP from the database module. After Phoenix rebuild, Cloud SQL may get a different private IP.
+
+    **Symptom**: Keycloak fails to start with "container failed to start and listen on the port".
+
+    **Solution**: Update Terraform to use dynamic IP:
+    ```hcl
+    # In modules/cloudrun/variables.tf - add variable
+    variable "postgres_private_ip" {
+      description = "Cloud SQL PostgreSQL private IP address"
+      type        = string
+    }
+
+    # In modules/cloudrun/main.tf - use variable
+    env {
+      name  = "KC_DB_URL"
+      value = "jdbc:postgresql://${var.postgres_private_ip}:5432/keycloak"
+    }
+
+    # In gcp/main.tf - pass the value
+    postgres_private_ip = module.database.postgres_private_ip
+    ```
+
+23. **Domain mapping not created by Terraform**: After Phoenix rebuild, the `auth.tamshai.com` domain mapping for Keycloak was missing. The `google_cloud_run_domain_mapping.keycloak` resource exists in Terraform but wasn't being created.
+
+    **Root cause**: The `keycloak_domain` variable was set correctly (`auth.tamshai.com`) but the domain mapping wasn't in Terraform state after Phoenix rebuild.
+
+    **Solution**: Run `terraform apply` to create the domain mapping. Ensure DNS is configured to point to `ghs.googlehosted.com` (CNAME record).
+
 ### Commands Reference
 
 ```bash

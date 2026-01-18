@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     netcat-openbsd \
     bash \
+    python3 \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Cloud SQL Proxy

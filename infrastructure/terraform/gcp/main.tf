@@ -201,6 +201,7 @@ module "cloudrun" {
 
   # Database configuration
   postgres_connection_name = module.database.postgres_connection_name
+  postgres_private_ip      = module.database.postgres_private_ip
   keycloak_db_name         = "keycloak"
   keycloak_db_user         = "keycloak"
   tamshai_db_name          = "tamshai"

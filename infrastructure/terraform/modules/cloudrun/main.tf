@@ -412,8 +412,8 @@ resource "google_cloud_run_service" "keycloak" {
         env {
           name = "KC_DB_URL"
           # Standard TCP connection via VPC Connector to Cloud SQL private IP
-          # VPC Connector routes traffic through private network (10.180.0.3)
-          value = "jdbc:postgresql://10.180.0.3:5432/keycloak"
+          # VPC Connector routes traffic through private network
+          value = "jdbc:postgresql://${var.postgres_private_ip}:5432/keycloak"
         }
 
         env {

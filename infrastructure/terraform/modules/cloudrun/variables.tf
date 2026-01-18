@@ -105,6 +105,11 @@ variable "postgres_connection_name" {
   type        = string
 }
 
+variable "postgres_private_ip" {
+  description = "Cloud SQL PostgreSQL private IP address"
+  type        = string
+}
+
 variable "keycloak_db_name" {
   description = "Keycloak database name"
   type        = string

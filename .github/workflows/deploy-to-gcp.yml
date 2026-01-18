@@ -266,9 +266,11 @@ jobs:
         run: |
           docker build -t ${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
                        -t ${{ env.AR_REPO }}/keycloak:latest \
+                       -t ${{ env.AR_REPO }}/keycloak:v2.0.0-postgres \
                        keycloak
           docker push ${{ env.AR_REPO }}/keycloak:${{ github.sha }}
           docker push ${{ env.AR_REPO }}/keycloak:latest
+          docker push ${{ env.AR_REPO }}/keycloak:v2.0.0-postgres
 
       - name: Deploy to Cloud Run
         run: |
