@@ -954,6 +954,32 @@ gcloud iam service-accounts add-iam-policy-binding \
 
     **Principle**: GCP Secret Manager is the single source of truth for production secrets. All components (Keycloak, Cloud Run Jobs, Cloud Run Services) should use the same secret from Secret Manager.
 
+25. **Trailing whitespace in GCP Secret Manager secret**: The identity sync still failed after fixing Issue #24 because the secret in GCP Secret Manager contained trailing `\r\r\n` (Windows line endings).
+
+    **Symptom**: "Network response was not OK" during Keycloak client_credentials authentication. The log showed `secretLength: 46` but the actual secret should be 44 characters.
+
+    **Root cause**: The secret was created with trailing Windows line endings (`0d 0d 0a`). These extra characters caused the authentication to fail because the secret didn't match.
+
+    **Diagnosis**:
+    ```bash
+    # Check raw bytes of secret
+    gcloud secrets versions access latest --secret=mcp-hr-service-client-secret | xxd
+    # Output showed: ...qM6/PuSGilg=\r\r\n (trailing 0d 0d 0a)
+    ```
+
+    **Solution**: Create a new secret version without trailing whitespace:
+    ```bash
+    gcloud secrets versions access latest --secret=mcp-hr-service-client-secret \
+      | tr -d '\r\n' \
+      | gcloud secrets versions add mcp-hr-service-client-secret --data-file=-
+    ```
+
+    **Prevention**: When creating secrets, always strip trailing whitespace:
+    ```bash
+    echo -n "secret-value" | gcloud secrets versions add SECRET_NAME --data-file=-
+    # The -n flag prevents echo from adding a newline
+    ```
+
 ### Commands Reference
 
 ```bash
