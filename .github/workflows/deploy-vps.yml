@@ -551,6 +551,36 @@ jobs:
               -H "Authorization: Bearer $TOKEN"
           done
 
+          # Create new OTP credential with known secret (matches TEST_USER_TOTP_SECRET for E2E tests)
+          TOTP_SECRET_RAW='${{ secrets.TEST_USER_TOTP_SECRET_RAW }}'
+          if [ -n "$TOTP_SECRET_RAW" ]; then
+            echo "Creating OTP credential with secret: ${TOTP_SECRET_RAW:0:4}****"
+
+            CREDENTIAL_JSON=$(cat <<CRED_EOF
+{
+  "type": "otp",
+  "userLabel": "GitHub Actions Provisioned",
+  "secretData": "{\"value\":\"${TOTP_SECRET_RAW}\"}",
+  "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
+}
+CRED_EOF
+)
+
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users/${USER_ID}/credentials" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$CREDENTIAL_JSON")
+
+            if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+              echo "[OK] OTP credential created successfully (HTTP $HTTP_CODE)"
+            else
+              echo "[WARN] OTP credential creation returned HTTP $HTTP_CODE - E2E tests will auto-capture TOTP"
+            fi
+          else
+            echo "[WARN] TEST_USER_TOTP_SECRET_RAW not set - E2E tests will auto-capture TOTP"
+          fi
+
           # Clear required actions
           echo "Clearing required actions..."
           curl -sf -X PUT \

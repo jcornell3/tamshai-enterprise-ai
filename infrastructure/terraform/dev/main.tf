@@ -146,6 +146,25 @@ resource "null_resource" "hosts_file_check" {
 }
 
 # =============================================================================
+# GITHUB SECRETS FETCH (Environment-Specific)
+# =============================================================================
+#
+# Fetches user passwords from GitHub Secrets based on environment:
+#   - dev   -> DEV_USER_PASSWORD, TEST_USER_PASSWORD
+#   - stage -> STAGE_USER_PASSWORD, TEST_USER_PASSWORD
+#   - prod  -> PROD_USER_PASSWORD, TEST_USER_PASSWORD
+#
+# =============================================================================
+
+data "external" "github_secrets" {
+  program = ["powershell", "-ExecutionPolicy", "Bypass", "-File", "${path.module}/scripts/fetch-github-secrets.ps1"]
+
+  query = {
+    environment = var.environment
+  }
+}
+
+# =============================================================================
 # ENVIRONMENT FILE GENERATION
 # =============================================================================
 
@@ -175,9 +194,9 @@ resource "local_file" "docker_env" {
     # Environment
     environment = var.environment
 
-    # User passwords (from GitHub Secrets via TF_VAR_*)
-    dev_user_password  = var.dev_user_password
-    test_user_password = var.test_user_password
+    # User passwords (from GitHub Secrets - environment-specific)
+    dev_user_password  = data.external.github_secrets.result.user_password
+    test_user_password = data.external.github_secrets.result.test_user_password
   })
 
   file_permission = "0600"
@@ -201,7 +220,7 @@ resource "null_resource" "docker_compose_up" {
   }
 
   provisioner "local-exec" {
-    command     = "docker compose up -d"
+    command     = "docker compose build --no-cache && docker compose up -d"
     working_dir = local.compose_path
     environment = {
       COMPOSE_PROJECT_NAME = var.docker_compose_project
@@ -409,9 +428,127 @@ resource "null_resource" "keycloak_set_passwords" {
     EOT
 
     environment = {
-      TEST_USER_PASSWORD = var.test_user_password
-      DEV_USER_PASSWORD  = var.dev_user_password
+      TEST_USER_PASSWORD = data.external.github_secrets.result.test_user_password
+      DEV_USER_PASSWORD  = data.external.github_secrets.result.user_password
       MSYS_NO_PATHCONV   = "1" # Prevent Git Bash from converting Unix paths to Windows paths
+    }
+  }
+}
+
+# =============================================================================
+# KEYCLOAK TOTP CONFIGURATION
+# =============================================================================
+#
+# Sets up TOTP for test-user.journey using the raw secret from GitHub Secrets.
+# This ensures the TOTP matches the GitHub secret (TEST_USER_TOTP_SECRET_RAW)
+# and E2E tests can use the corresponding BASE32 secret (TEST_USER_TOTP_SECRET).
+#
+# Keycloak's --import-realm doesn't reliably import OTP credentials, so we
+# provision TOTP via the Admin API after Keycloak starts.
+#
+# =============================================================================
+
+resource "null_resource" "keycloak_set_totp" {
+  count = var.auto_start_services ? 1 : 0
+
+  depends_on = [null_resource.keycloak_set_passwords]
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      echo "Configuring TOTP for test-user.journey..."
+
+      if [ -z "$TEST_USER_TOTP_SECRET_RAW" ]; then
+        echo "WARNING: TEST_USER_TOTP_SECRET_RAW not set - TOTP will be auto-captured by E2E tests"
+        exit 0
+      fi
+
+      # Get admin token
+      echo "Getting admin token..."
+      TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        -d "password=admin" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli")
+
+      TOKEN=$(echo "$TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+      if [ -z "$TOKEN" ]; then
+        echo "ERROR: Failed to get admin token"
+        echo "Response: $TOKEN_RESPONSE"
+        exit 1
+      fi
+
+      # Get test-user.journey user ID
+      echo "Finding test-user.journey..."
+      USER_RESPONSE=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
+        -H "Authorization: Bearer $TOKEN")
+
+      USER_ID=$(echo "$USER_RESPONSE" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+
+      if [ -z "$USER_ID" ]; then
+        echo "WARNING: test-user.journey not found in Keycloak"
+        exit 0
+      fi
+
+      echo "User ID: $USER_ID"
+
+      # Delete existing OTP credentials
+      echo "Checking existing OTP credentials..."
+      EXISTING_CREDS=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+        -H "Authorization: Bearer $TOKEN")
+
+      for CRED_ID in $(echo "$EXISTING_CREDS" | grep -o '"id":"[^"]*"[^}]*"type":"otp"' | grep -o '"id":"[^"]*' | cut -d'"' -f4); do
+        echo "Deleting existing OTP credential: $CRED_ID"
+        curl -s -X DELETE "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials/$CRED_ID" \
+          -H "Authorization: Bearer $TOKEN"
+      done
+
+      # Create new OTP credential with the known secret
+      echo "Creating OTP credential with secret: $${TEST_USER_TOTP_SECRET_RAW:0:4}****"
+
+      CREDENTIAL_JSON=$(cat <<EOF
+{
+  "type": "otp",
+  "userLabel": "Terraform Provisioned",
+  "secretData": "{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}",
+  "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
+}
+EOF
+)
+
+      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X POST \
+        "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$CREDENTIAL_JSON")
+
+      if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+        echo "✓ OTP credential created successfully (HTTP $HTTP_CODE)"
+      else
+        echo "WARNING: Direct credential creation returned HTTP $HTTP_CODE"
+        echo "TOTP may need to be auto-captured by E2E tests"
+      fi
+
+      # Clear required actions to prevent TOTP setup prompt
+      echo "Clearing required actions..."
+      curl -s -X PUT \
+        "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"requiredActions":[]}' > /dev/null
+
+      echo "TOTP configuration complete!"
+    EOT
+
+    environment = {
+      TEST_USER_TOTP_SECRET_RAW = data.external.github_secrets.result.test_user_totp_secret_raw
+      MSYS_NO_PATHCONV          = "1"
     }
   }
 }
