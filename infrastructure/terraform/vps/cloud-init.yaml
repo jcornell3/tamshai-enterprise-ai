@@ -197,7 +197,7 @@ write_files:
       echo "Checking service health..."
       curl -sf http://localhost:3100/health > /dev/null && echo "✓ MCP Gateway: healthy" || echo "✗ MCP Gateway: unhealthy"
       # Keycloak health check (using nc since curl may not be in container)
-      echo "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" | nc localhost 8080 2>&1 | grep -q "200\|UP" && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
+      echo "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" | nc localhost 8180 2>&1 | grep -q "200\|UP" && echo "✓ Keycloak: healthy" || echo "✗ Keycloak: unhealthy"
 
       echo "=== Deployment complete ==="
 
@@ -307,7 +307,7 @@ runcmd:
   - |
     echo "Waiting for Keycloak to be ready..."
     for i in 1 2 3 4 5 6 7 8 9 10; do
-      if curl -sf http://localhost:8080/auth/health/ready >/dev/null 2>&1; then
+      if curl -sf http://localhost:8180/auth/health/ready >/dev/null 2>&1; then
         echo "Keycloak health check passed, waiting for admin API..."
         sleep 30
         echo "Keycloak is ready"
@@ -350,7 +350,7 @@ runcmd:
     else
       # Get admin token from Keycloak
       echo "Getting admin token..."
-      TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8080/auth/realms/master/protocol/openid-connect/token" \
+      TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
         -d "password=$KC_PASS" \
@@ -367,7 +367,7 @@ runcmd:
 
         # Get test-user.journey user ID
         echo "Finding test-user.journey..."
-        USER_RESPONSE=$(curl -s "http://localhost:8080/auth/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
+        USER_RESPONSE=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users?username=test-user.journey&exact=true" \
           -H "Authorization: Bearer $TOKEN")
 
         USER_ID=$(echo "$USER_RESPONSE" | jq -r '.[0].id // empty')
@@ -381,7 +381,7 @@ runcmd:
           echo "Setting test-user.journey password..."
           PASSWORD_JSON=$(jq -n --arg pass "$TEST_USER_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
           HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X PUT \
-            "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/reset-password" \
+            "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PASSWORD_JSON")
@@ -397,12 +397,12 @@ runcmd:
             echo "Configuring TOTP for test-user.journey..."
 
             # Delete existing OTP credentials
-            EXISTING_CREDS=$(curl -s "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+            EXISTING_CREDS=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
               -H "Authorization: Bearer $TOKEN")
 
             for CRED_ID in $(echo "$EXISTING_CREDS" | jq -r '.[] | select(.type=="otp") | .id'); do
               echo "Deleting existing OTP credential: $CRED_ID"
-              curl -s -X DELETE "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials/$CRED_ID" \
+              curl -s -X DELETE "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials/$CRED_ID" \
                 -H "Authorization: Bearer $TOKEN"
             done
 
@@ -419,7 +419,7 @@ runcmd:
     )
 
             HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X POST \
-              "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+              "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
               -d "$CREDENTIAL_JSON")
@@ -434,7 +434,7 @@ runcmd:
             # Clear required actions to prevent TOTP setup prompt
             echo "Clearing required actions..."
             curl -s -X PUT \
-              "http://localhost:8080/auth/admin/realms/tamshai-corp/users/$USER_ID" \
+              "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
               -d '{"requiredActions":[]}' > /dev/null
