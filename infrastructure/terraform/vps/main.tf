@@ -361,21 +361,17 @@ locals {
   # Use provided secret or generate one
   mcp_hr_service_secret = var.mcp_hr_service_client_secret != "" ? var.mcp_hr_service_client_secret : random_password.mcp_hr_service_secret.result
 
-  # Get test user credentials from GitHub Secrets or use variable overrides
-  test_user_password = coalesce(
-    var.test_user_password,
-    data.external.github_secrets.result.test_user_password,
-    ""
-  )
-  test_user_totp_secret_raw = coalesce(
-    var.test_user_totp_secret_raw,
-    data.external.github_secrets.result.test_user_totp_secret_raw,
-    ""
-  )
-  # Get stage user password (corporate users) from GitHub Secrets if not provided
+  # Phoenix Architecture: Test credentials ALWAYS come from GitHub Secrets
+  # This ensures terraform apply produces a consistent, testable environment
+  # Do NOT use coalesce with variables - that allows env vars to override
+  test_user_password        = data.external.github_secrets.result.test_user_password
+  test_user_totp_secret_raw = data.external.github_secrets.result.test_user_totp_secret_raw
+
+  # Stage user password (corporate users) from GitHub Secrets
+  # Falls back to variable only if external data returns empty (shouldn't happen)
   stage_user_password_resolved = coalesce(
-    var.stage_user_password,
     data.external.github_secrets.result.user_password,
+    var.stage_user_password,
     ""
   )
 
