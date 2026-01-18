@@ -775,6 +775,8 @@ gcloud iam service-accounts add-iam-policy-binding \
     echo "Update deploy-to-gcp.yml KC_DB_URL with: jdbc:postgresql://${NEW_IP}:5432/keycloak"
     ```
 
+15. **Cloud Run service URLs change after Phoenix rebuild**: Cloud Run service URLs include the project number (e.g., `https://keycloak-1046947015464.us-central1.run.app`). After Phoenix rebuild, the MCP Gateway environment variables (KEYCLOAK_URL, JWKS_URI, MCP_*_URL) must be updated to reflect the new URLs. Custom domain mappings (auth.tamshai.com) also need to be reconfigured.
+
 ### Commands Reference
 
 ```bash
