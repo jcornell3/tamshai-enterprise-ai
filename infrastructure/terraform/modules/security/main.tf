@@ -291,6 +291,13 @@ resource "google_project_iam_member" "cicd_artifact_registry_writer" {
   member  = "serviceAccount:${google_service_account.cicd.email}"
 }
 
+# Allow CI/CD to query Cloud SQL instance details (for dynamic PostgreSQL IP discovery)
+resource "google_project_iam_member" "cicd_cloudsql_viewer" {
+  project = var.project_id
+  role    = "roles/cloudsql.viewer"
+  member  = "serviceAccount:${google_service_account.cicd.email}"
+}
+
 # =============================================================================
 # CI/CD Service Account Impersonation - RESOURCE SCOPED (SECURE)
 # =============================================================================
