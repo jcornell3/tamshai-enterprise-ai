@@ -89,9 +89,9 @@ jobs:
             --region=${{ env.GCP_REGION }} \
             --format="value(status.url)" 2>/dev/null || echo "")
 
-          # Cloud SQL private IP (filter for PRIVATE type)
+          # Cloud SQL private IP
           POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres \
-            --format="get(ipAddresses)" 2>/dev/null | grep -oP "(?<='ipAddress': ')[^']+(?='.*PRIVATE)" || echo "")
+            --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
 
           # Use auth.tamshai.com as the canonical Keycloak URL for token validation
           # (Cloud Run URL is internal, auth.tamshai.com is the public endpoint)
@@ -381,7 +381,7 @@ jobs:
           if [ -z "$POSTGRES_IP" ]; then
             echo "Discovering PostgreSQL IP..."
             POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres \
-              --format="get(ipAddresses)" 2>/dev/null | grep -oP "(?<='ipAddress': ')[^']+(?='.*PRIVATE)" || echo "")
+              --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
           fi
 
           if [ -z "$POSTGRES_IP" ]; then
