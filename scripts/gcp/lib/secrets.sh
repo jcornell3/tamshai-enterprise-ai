@@ -294,4 +294,98 @@ cleanup_secret_versions() {
     log_secrets_success "Cleanup complete for $secret_name"
 }
 
+# =============================================================================
+# GAP #41: Sync secrets from environment variables to GCP
+# =============================================================================
+# This function reads secrets from environment variables (as set by GitHub Actions)
+# and syncs them to GCP Secret Manager. This enables Phoenix rebuild automation.
+#
+# Usage in GitHub Actions:
+#   export CLAUDE_API_KEY_PROD="${{ secrets.CLAUDE_API_KEY_PROD }}"
+#   export MCP_HR_SERVICE_CLIENT_SECRET="${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}"
+#   ./phoenix-rebuild.sh
+#
+# The phoenix-rebuild.sh will call sync_secrets_from_env automatically.
+
+sync_secrets_from_env() {
+    log_secrets_info "Syncing secrets from environment variables to GCP (Gap #41)..."
+
+    local synced=0
+    local skipped=0
+
+    # Check each mapped GitHub secret name in environment
+    for github_name in "${!GITHUB_TO_GCP_MAP[@]}"; do
+        local gcp_name="${GITHUB_TO_GCP_MAP[$github_name]}"
+        local env_value="${!github_name:-}"
+
+        if [ -n "$env_value" ]; then
+            log_secrets_info "  Syncing $github_name -> $gcp_name"
+            if ensure_gcp_secret "$gcp_name" "$env_value"; then
+                synced=$((synced + 1))
+            fi
+        else
+            log_secrets_warn "  Skipping $github_name (not in environment)"
+            skipped=$((skipped + 1))
+        fi
+    done
+
+    log_secrets_success "Synced $synced secrets, skipped $skipped"
+
+    if [ $skipped -gt 0 ]; then
+        log_secrets_warn "Some secrets were not in environment - they may need manual sync"
+        echo ""
+        echo "To set missing secrets before Phoenix rebuild:"
+        echo "  export GITHUB_SECRET_NAME='secret-value'"
+        echo "  # Or sync manually:"
+        echo "  source scripts/gcp/lib/secrets.sh"
+        echo "  ensure_gcp_secret 'gcp-secret-name' 'value'"
+    fi
+
+    return 0
+}
+
+# Create mcp-hr-service-client-secret if it doesn't exist (Gap #41 helper)
+# This is needed because the secret is created by Terraform but may not have a version
+ensure_mcp_hr_client_secret() {
+    local project="${GCP_PROJECT_ID:-}"
+    local secret_name="mcp-hr-service-client-secret"
+
+    if [ -z "$project" ]; then
+        log_secrets_error "GCP_PROJECT_ID not set"
+        return 1
+    fi
+
+    # Check if secret exists
+    if ! gcp_secret_exists "$secret_name"; then
+        log_secrets_info "Creating $secret_name..."
+        local new_secret
+        new_secret=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
+        ensure_gcp_secret "$secret_name" "$new_secret"
+        log_secrets_success "Created $secret_name with random value"
+        echo ""
+        log_secrets_warn "Remember to sync this value back to GitHub:"
+        echo "  gh secret set MCP_HR_SERVICE_CLIENT_SECRET < <(gcloud secrets versions access latest --secret=$secret_name)"
+        return 0
+    fi
+
+    # Check if secret has any versions
+    local version_count
+    version_count=$(gcloud secrets versions list "$secret_name" --project="$project" --format="value(name)" 2>/dev/null | wc -l)
+
+    if [ "$version_count" -eq 0 ]; then
+        log_secrets_info "$secret_name exists but has no versions - adding one..."
+        local new_secret
+        new_secret=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
+        echo -n "$new_secret" | gcloud secrets versions add "$secret_name" --project="$project" --data-file=-
+        log_secrets_success "Added version to $secret_name"
+        echo ""
+        log_secrets_warn "Remember to sync this value back to GitHub:"
+        echo "  gh secret set MCP_HR_SERVICE_CLIENT_SECRET < <(gcloud secrets versions access latest --secret=$secret_name)"
+    else
+        log_secrets_success "$secret_name already has $version_count version(s)"
+    fi
+
+    return 0
+}
+
 echo "[secrets] Library loaded"

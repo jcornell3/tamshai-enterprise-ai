@@ -207,6 +207,10 @@ phase_2_secret_sync() {
         return 0
     fi
 
+    # Gap #41: Sync secrets from environment variables to GCP
+    log_step "Syncing secrets from environment variables (Gap #41)..."
+    sync_secrets_from_env || log_warn "Some secrets could not be synced from environment"
+
     log_step "Verifying GCP secrets exist..."
 
     if verify_gcp_secrets; then
@@ -256,11 +260,24 @@ phase_3_destroy() {
         return 0
     fi
 
-    # Pre-destroy cleanup (Gap #21, #22)
+    # Pre-destroy cleanup (Gap #21, #22, #38)
     log_step "Running pre-destroy cleanup..."
 
     log_step "Deleting Cloud Run jobs (Gap #21)..."
     gcloud run jobs delete provision-users --region="${GCP_REGION}" --quiet 2>/dev/null || true
+
+    # Gap #38: Delete Cloud Run services BEFORE terraform destroy
+    # This releases database connections that would otherwise block keycloak DB deletion
+    log_step "Deleting Cloud Run services to release DB connections (Gap #38)..."
+    local services=("keycloak" "mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support" "web-portal")
+    for svc in "${services[@]}"; do
+        if gcloud run services describe "$svc" --region="${GCP_REGION}" &>/dev/null; then
+            log_info "  Deleting $svc..."
+            gcloud run services delete "$svc" --region="${GCP_REGION}" --quiet 2>/dev/null || true
+        fi
+    done
+    log_info "Waiting for connections to close..."
+    sleep 10
 
     log_step "Disabling deletion protection on Cloud SQL (Gap #22)..."
     local instance_name="tamshai-prod-postgres"
@@ -279,16 +296,48 @@ phase_3_destroy() {
     terraform destroy -auto-approve || {
         log_warn "Terraform destroy had errors - attempting cleanup..."
 
+        # =============================================================================
+        # GAPS #23-25: Comprehensive Terraform State Cleanup
+        # =============================================================================
+        # These gaps address common Phoenix rebuild blockers:
+        # - Gap #23: Service networking connection blocks VPC deletion
+        # - Gap #24: Private IP address blocks VPC deletion
+        # - Gap #25: VPC connector count dependency causes errors
+        #
+        # The state cleanup removes resources that would otherwise require manual
+        # deletion or cause circular dependency issues during destroy.
+
         # Gap #23: Remove service networking from state if blocked
+        # Service networking connections can block VPC deletion due to peering dependencies
         log_step "Removing service networking from state (Gap #23)..."
         terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
         terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
 
-        # Gap #24: Delete orphaned private IP
+        # Gap #24: Delete orphaned private IP manually
+        # GCP may retain the private IP even after state removal
         log_step "Deleting orphaned private IP (Gap #24)..."
         gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
 
-        # Retry destroy
+        # Gap #25: Handle VPC connector count dependency
+        # When vpc_connector_id changes from set to empty, count conditions fail
+        log_step "Removing VPC connector references from state (Gap #25)..."
+        terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
+
+        # Additional state cleanup for persistent resources
+        log_step "Removing Cloud SQL resources from state..."
+        terraform state rm 'module.database.google_sql_database.keycloak_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.hr_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.finance_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.keycloak_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.postgres_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
+
+        # Retry targeted VPC destroy
+        log_step "Attempting targeted VPC destroy..."
+        terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve 2>/dev/null || true
+
+        # Final retry of full destroy
         log_step "Retrying terraform destroy..."
         terraform destroy -auto-approve || log_warn "Destroy may be incomplete - verify manually"
     }
@@ -391,18 +440,9 @@ phase_4_infrastructure() {
     log_step "Waiting for Cloud SQL to be ready..."
     wait_for_cloudsql "tamshai-prod-postgres" 300
 
-    # Gap #26: Add version to mcp-hr-service-client-secret
-    log_step "Adding version to mcp-hr-service-client-secret (Gap #26)..."
-    if gcloud secrets describe mcp-hr-service-client-secret --project="${GCP_PROJECT_ID}" &>/dev/null; then
-        local version_count
-        version_count=$(gcloud secrets versions list mcp-hr-service-client-secret --project="${GCP_PROJECT_ID}" --format="value(name)" 2>/dev/null | wc -l)
-        if [ "$version_count" -eq 0 ]; then
-            openssl rand -base64 32 | gcloud secrets versions add mcp-hr-service-client-secret --data-file=- --project="${GCP_PROJECT_ID}"
-            log_success "Added version to mcp-hr-service-client-secret"
-        else
-            log_info "mcp-hr-service-client-secret already has a version"
-        fi
-    fi
+    # Gap #26/41: Ensure mcp-hr-service-client-secret has a version
+    log_step "Ensuring mcp-hr-service-client-secret has a version (Gap #26/41)..."
+    ensure_mcp_hr_client_secret || log_warn "Could not ensure mcp-hr-service-client-secret"
 
     save_checkpoint 4 "completed"
     log_success "Phase 4 complete - Infrastructure created"

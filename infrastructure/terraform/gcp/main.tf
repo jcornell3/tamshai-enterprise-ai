@@ -127,7 +127,8 @@ module "storage" {
   project_id                 = var.project_id
   region                     = var.region
   environment                = local.environment
-  force_destroy              = false # Production: prevent accidental deletion
+  # Gap #39: Phoenix mode allows force_destroy for complete environment rebuilds
+  force_destroy              = var.phoenix_mode # Production: normally false, true during Phoenix rebuild
   enable_versioning          = true
   lifecycle_age_days         = 365
   enable_static_website      = var.static_website_domain != "" # Only enable if domain is set

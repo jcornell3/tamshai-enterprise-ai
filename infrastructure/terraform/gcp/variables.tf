@@ -120,3 +120,13 @@ variable "prod_user_password" {
 #
 # This variable (prod_user_password) is optional - if provided, it will be
 # stored in GCP Secret Manager as a backup. The GitHub Secret is authoritative.
+
+# =============================================================================
+# PHOENIX REBUILD MODE (Gap #39)
+# =============================================================================
+
+variable "phoenix_mode" {
+  description = "Enable Phoenix rebuild mode: sets force_destroy=true on storage buckets and disables deletion protection. WARNING: Only use during full environment rebuilds."
+  type        = bool
+  default     = false
+}
