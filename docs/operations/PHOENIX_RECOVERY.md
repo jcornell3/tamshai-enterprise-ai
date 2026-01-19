@@ -229,8 +229,15 @@ The `deploy-vps.yml` workflow implements Phoenix principles:
 # ============================================================
 cd infrastructure/terraform/gcp
 
-# Delete Cloud Run jobs (have deletion_protection)
+# Delete Cloud Run jobs (Gap #42: deletion_protection now false in Terraform, but cleanup still recommended)
 gcloud run jobs delete provision-users --region=us-central1 --quiet 2>/dev/null || true
+
+# Gap #38: Delete Cloud Run services BEFORE terraform destroy
+# This releases database connections that would otherwise block keycloak DB deletion
+for svc in keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal; do
+  gcloud run services delete "$svc" --region=us-central1 --quiet 2>/dev/null || true
+done
+sleep 10  # Wait for connections to close
 
 # Disable Cloud SQL deletion protection
 gcloud sql instances patch tamshai-prod-postgres --no-deletion-protection --quiet 2>/dev/null || true
@@ -355,7 +362,7 @@ gcloud run services list --region=us-central1
 curl -sf https://auth.tamshai.com/auth/health/ready && echo "OK"
 
 # Verify HR data (via Cloud SQL Proxy)
-cloud-sql-proxy gen-lang-client-0553641830:us-central1:tamshai-prod-postgres --port=5432 &
+cloud-sql-proxy ${PROJECT_ID}:us-central1:tamshai-prod-postgres --port=5432 &
 PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
   psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT COUNT(*) FROM hr.employees;"
 
@@ -445,23 +452,29 @@ echo "New VPS IP: $NEW_IP"
 
 **Symptoms**: `terraform destroy` times out on VPC or networking resources
 
-**Root Cause**: Service networking connection or orphaned private IP blocks deletion
+**Root Cause**: Service networking connection, orphaned private IP, or VPC connector blocks deletion (Gaps #23-25)
 
 **Recovery**:
 ```bash
 cd infrastructure/terraform/gcp
 
-# Remove service networking from state
+# Gap #23: Remove service networking from state
 terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection'
 terraform state rm 'module.database.google_compute_global_address.private_ip_range'
 
-# Delete orphaned private IP addresses
+# Gap #24: Delete orphaned private IP addresses
 gcloud compute addresses list --global --format="value(name)" | grep tamshai | \
   xargs -I {} gcloud compute addresses delete {} --global --quiet
+
+# Gap #25: Remove VPC connector references from state
+terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
+terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
 
 # Targeted destroy of VPC
 terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
 ```
+
+**Note**: The `phoenix-rebuild.sh` script now handles all these state cleanup operations automatically.
 
 ### Scenario 6: auth.tamshai.com Not Reachable After Rebuild (Prod)
 
@@ -522,6 +535,120 @@ terraform force-unlock -force <LOCK_ID>
 # Retry operation
 terraform apply -auto-approve
 ```
+
+### Scenario 9: MCP Services Fail with MongoDB URI Permission Error (Prod)
+
+**Symptoms**: `gcloud run deploy mcp-*` fails with "Permission denied on secret: tamshai-prod-mongodb-uri"
+
+**Root Cause**: MCP servers service account doesn't have access to the MongoDB URI secret. (Gap #43)
+
+**Status**: ✅ **FIXED IN TERRAFORM** (January 2026)
+
+The `modules/security/main.tf` now includes:
+- Data source for external `tamshai-prod-mongodb-uri` secret
+- IAM binding for MCP servers SA to access the secret
+- Controlled by `enable_mongodb_uri_access` variable (default: true)
+
+**Recovery** (if issue still occurs):
+```bash
+# Manual fallback - Add IAM binding for MCP servers to access MongoDB URI secret
+gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
+  --member="serviceAccount:tamshai-prod-mcp-servers@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# Re-trigger deployment
+gh workflow run deploy-to-gcp.yml --ref main
+```
+
+### Scenario 10: GitHub Secrets Not Synced to GCP (Prod)
+
+**Symptoms**: `terraform apply` creates secrets but Cloud Run services fail with "secret version not found"
+
+**Root Cause**: Terraform creates GCP Secret Manager secrets as empty shells. Values must be populated from GitHub secrets. (Gap #41)
+
+**Status**: ✅ **AUTOMATION AVAILABLE** (January 2026)
+
+The `scripts/gcp/lib/secrets.sh` library now includes:
+- `sync_secrets_from_env()` - Syncs secrets from environment variables to GCP
+- `ensure_mcp_hr_client_secret()` - Creates mcp-hr-service-client-secret with version if missing
+- `phoenix-rebuild.sh` Phase 2 automatically calls these functions
+
+**Automated Recovery** (preferred):
+```bash
+# Export secrets as environment variables (e.g., from GitHub Actions)
+export CLAUDE_API_KEY_PROD="sk-ant-..."
+export MCP_HR_SERVICE_CLIENT_SECRET="..."
+
+# Run Phoenix rebuild which handles secret sync automatically
+./scripts/gcp/phoenix-rebuild.sh
+```
+
+**Manual Recovery** (fallback):
+```bash
+# Source the secrets library
+source scripts/gcp/lib/secrets.sh
+
+# Ensure mcp-hr-service-client-secret has a version
+ensure_mcp_hr_client_secret
+
+# Or generate and sync manually
+MCP_HR_SECRET=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
+echo -n "$MCP_HR_SECRET" | gcloud secrets versions add mcp-hr-service-client-secret --data-file=-
+
+# Update GitHub secret to match
+echo -n "$MCP_HR_SECRET" | gh secret set MCP_HR_SERVICE_CLIENT_SECRET
+
+# Re-trigger deployment
+gh workflow run deploy-to-gcp.yml --ref main
+```
+
+### Scenario 11: Keycloak Database Locked During Destroy (Prod)
+
+**Symptoms**: `terraform destroy` fails with "database 'keycloak' is being accessed by other users"
+
+**Root Cause**: Cloud Run services maintain active connections to Cloud SQL. When terraform tries to delete the keycloak database, connections are still open. (Gap #38)
+
+**Status**: ✅ **FIXED IN PHOENIX-REBUILD.SH** (January 2026)
+
+The `phoenix-rebuild.sh` Phase 3 now automatically deletes all Cloud Run services before terraform destroy, releasing database connections.
+
+**Recovery** (if running manual destroy):
+```bash
+# Delete Cloud Run services BEFORE terraform destroy
+for svc in keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal; do
+  gcloud run services delete "$svc" --region=us-central1 --quiet 2>/dev/null || true
+done
+
+# Wait for connections to close
+sleep 10
+
+# Then run terraform destroy
+terraform destroy -auto-approve
+```
+
+### Scenario 12: Storage Bucket Won't Delete Without force_destroy (Prod)
+
+**Symptoms**: `terraform destroy` fails with "Error trying to delete bucket without force_destroy set to true"
+
+**Root Cause**: Production storage buckets have `force_destroy=false` to prevent accidental data loss. During Phoenix rebuild, this blocks bucket deletion. (Gap #39)
+
+**Status**: ✅ **PHOENIX MODE AVAILABLE** (January 2026)
+
+The `phoenix_mode` variable in `infrastructure/terraform/gcp/variables.tf` now controls `force_destroy` on storage buckets.
+
+**Recovery**:
+```bash
+cd infrastructure/terraform/gcp
+
+# Option 1: Use phoenix_mode variable
+terraform destroy -var="phoenix_mode=true" -auto-approve
+
+# Option 2: Empty and delete bucket manually
+gcloud storage rm -r gs://prod.tamshai.com/** 2>/dev/null || true
+gcloud storage buckets delete gs://prod.tamshai.com --quiet
+```
+
+**Note**: `phoenix_mode=true` should only be used during full environment rebuilds.
 
 ## Recovery Checklist
 
@@ -676,14 +803,14 @@ When rotating secrets:
 3. **Clear caches** (Redis token cache, browser sessions)
 
 ```bash
-# Stage
-gh secret set TEST_USER_PASSWORD -b "NewPassword123!"
-gh workflow run deploy-vps.yml --ref main
-
-# Prod
-gcloud secrets versions add tamshai-prod-keycloak-admin-password --data-file=<(echo -n "NewAdminPassword!")
+# Prod - Keycloak admin password rotation
+# Generate new secure password and store it
+NEW_PASSWORD=$(openssl rand -base64 24)
+echo -n "$NEW_PASSWORD" | gcloud secrets versions add tamshai-prod-keycloak-admin-password --data-file=-
 gh workflow run deploy-to-gcp.yml --ref main
 ```
+
+> **Note**: `TEST_USER_PASSWORD` is a fixed credential stored in GitHub secrets. It should be **retrieved and used**, not rotated. The test-user.journey account uses this password across all environments.
 
 ## Related Documentation
 
@@ -697,4 +824,4 @@ gh workflow run deploy-to-gcp.yml --ref main
 ---
 
 *Last Updated: January 19, 2026*
-*Status: Active - Updated with Phoenix rebuild lessons learned (Gaps #1-37)*
+*Status: Active - Updated with Phoenix rebuild lessons learned (Gaps #1-43)*
