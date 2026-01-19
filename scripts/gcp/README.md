@@ -31,8 +31,8 @@ sudo apt-get install -y google-cloud-sdk postgresql-client
 # Login to GCP
 gcloud auth login
 
-# Set project
-gcloud config set project gen-lang-client-0553641830
+# Set project (use your actual project ID)
+gcloud config set project ${GCP_PROJECT}
 
 # For service account authentication
 gcloud auth activate-service-account --key-file=path/to/key.json
@@ -101,10 +101,10 @@ Removes sample data from production databases. **Destructive operation!**
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GCP_PROJECT` | `gen-lang-client-0553641830` | GCP Project ID |
-| `GCP_REGION` | `us-central1` | GCP Region |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GCP_PROJECT` | Yes | GCP Project ID |
+| `GCP_REGION` | Yes | GCP Region (e.g., from `${{ vars.GCP_REGION }}` in GitHub Actions) |
 | `CLOUD_SQL_INSTANCE` | `tamshai-prod-postgres` | Cloud SQL instance name |
 | `POSTGRES_USER` | `tamshai` | PostgreSQL username |
 | `POSTGRES_PORT` | `5432` | Local port for Cloud SQL proxy |
@@ -127,7 +127,7 @@ The scripts retrieve credentials from GCP Secret Manager:
 pgrep -f cloud-sql-proxy
 
 # Start manually
-cloud-sql-proxy gen-lang-client-0553641830:us-central1:tamshai-prod-postgres --port=5432
+cloud-sql-proxy ${GCP_PROJECT}:${GCP_REGION}:tamshai-prod-postgres --port=5432
 
 # Test connection
 PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
@@ -239,8 +239,8 @@ This is useful when:
 ```bash
 # Reset passwords and assign roles for all synced users
 gcloud run jobs execute provision-users \
-  --region=us-central1 \
-  --project=gen-lang-client-0553641830 \
+  --region=${GCP_REGION} \
+  --project=${GCP_PROJECT} \
   --update-env-vars="ACTION=sync-users,FORCE_PASSWORD_RESET=true" \
   --wait
 ```
@@ -292,25 +292,25 @@ cd scripts/gcp
 # Build the container image (from repo root)
 gcloud builds submit \
   --config=scripts/gcp/provision-job/cloudbuild.yaml \
-  --project=gen-lang-client-0553641830
+  --project=${GCP_PROJECT}
 
 # Execute the Cloud Run Job
 gcloud run jobs execute provision-users \
-  --region=us-central1 \
-  --project=gen-lang-client-0553641830 \
+  --region=${GCP_REGION} \
+  --project=${GCP_PROJECT} \
   --wait
 
 # Execute with specific action (override env vars)
 gcloud run jobs execute provision-users \
-  --region=us-central1 \
-  --project=gen-lang-client-0553641830 \
+  --region=${GCP_REGION} \
+  --project=${GCP_PROJECT} \
   --update-env-vars=ACTION=load-hr-data \
   --wait
 
 # Execute all steps with force password reset
 gcloud run jobs execute provision-users \
-  --region=us-central1 \
-  --project=gen-lang-client-0553641830 \
+  --region=${GCP_REGION} \
+  --project=${GCP_PROJECT} \
   --update-env-vars=ACTION=all,FORCE_PASSWORD_RESET=true \
   --wait
 ```
@@ -343,12 +343,12 @@ For running provisioning directly via Cloud Run Job (without GitHub Actions):
 ```bash
 # Update password in GCP Secret Manager
 echo -n 'YourNewPassword123!' | gcloud secrets versions add prod-user-password \
-  --data-file=- --project=gen-lang-client-0553641830
+  --data-file=- --project=${GCP_PROJECT}
 
 # Then run the provisioning job with force password reset
 gcloud run jobs execute provision-users \
-  --region=us-central1 \
-  --project=gen-lang-client-0553641830 \
+  --region=${GCP_REGION} \
+  --project=${GCP_PROJECT} \
   --update-env-vars="ACTION=sync-users,FORCE_PASSWORD_RESET=true" \
   --wait
 ```
@@ -381,12 +381,12 @@ All secrets must be in GCP Secret Manager:
 # Create mcp-hr-service-client-secret (get value from Keycloak Admin UI)
 echo -n "YOUR_CLIENT_SECRET" | gcloud secrets create mcp-hr-service-client-secret \
   --data-file=- \
-  --project=gen-lang-client-0553641830
+  --project=${GCP_PROJECT}
 
 # Create prod-user-password
 echo -n "YOUR_USER_PASSWORD" | gcloud secrets create prod-user-password \
   --data-file=- \
-  --project=gen-lang-client-0553641830
+  --project=${GCP_PROJECT}
 ```
 
 ### Cloud Run Job Steps
@@ -473,17 +473,17 @@ The container image is built via Cloud Build (`scripts/gcp/provision-job/cloudbu
 
 **Job keeps failing after Terraform changes**
 - Cloud Run Job may be using old revision
-- Force update: `gcloud run jobs update provision-users --region=us-central1 --image=...`
+- Force update: `gcloud run jobs update provision-users --region=${GCP_REGION} --image=...`
 - Or destroy and recreate the job via Terraform
 
 **View job logs**
 ```bash
 # Get recent executions
-gcloud run jobs executions list --job=provision-users --region=us-central1 --limit=5
+gcloud run jobs executions list --job=provision-users --region=${GCP_REGION} --limit=5
 
 # View logs for specific execution
 gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=provision-users" \
-  --project=gen-lang-client-0553641830 --limit=100 --format="table(timestamp,textPayload)"
+  --project=${GCP_PROJECT} --limit=100 --format="table(timestamp,textPayload)"
 ```
 
 ---
@@ -516,7 +516,7 @@ terraform apply -auto-approve
 # 2. Build and push Cloud Run Job image (required after entrypoint.sh changes)
 gcloud builds submit \
   --config=scripts/gcp/provision-job/cloudbuild.yaml \
-  --project=gen-lang-client-0553641830
+  --project=${GCP_PROJECT}
 
 # 3. Deploy all services (triggers automatically on main, or manually)
 gh workflow run deploy-to-gcp.yml -f service=all

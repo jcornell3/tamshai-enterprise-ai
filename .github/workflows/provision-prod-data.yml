@@ -48,8 +48,8 @@ on:
         default: true
 
 env:
-  GCP_PROJECT: gen-lang-client-0553641830
-  GCP_REGION: us-central1
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
   CLOUD_SQL_INSTANCE: tamshai-prod-postgres
 
 jobs:

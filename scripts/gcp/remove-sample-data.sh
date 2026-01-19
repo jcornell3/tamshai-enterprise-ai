@@ -36,9 +36,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# GCP Configuration
-GCP_PROJECT="${GCP_PROJECT:-gen-lang-client-0553641830}"
-GCP_REGION="${GCP_REGION:-us-central1}"
+# GCP Configuration (required - no defaults)
+GCP_PROJECT="${GCP_PROJECT:?GCP_PROJECT environment variable is required}"
+GCP_REGION="${GCP_REGION:?GCP_REGION environment variable is required}"
 CLOUD_SQL_INSTANCE="${CLOUD_SQL_INSTANCE:-tamshai-prod-postgres}"
 
 # Database Configuration

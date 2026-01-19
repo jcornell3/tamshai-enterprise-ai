@@ -18,7 +18,7 @@ images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai-${_ENVIRONMENT}/provision-job:latest'
 
 substitutions:
-  _REGION: 'us-central1'
+  _REGION: ''  # REQUIRED: Pass via --substitutions=_REGION=<value>
   _ENVIRONMENT: 'prod'
   _TAG: 'latest'
 

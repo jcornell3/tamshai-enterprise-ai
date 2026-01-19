@@ -8,6 +8,9 @@ on:
         required: true
         type: string
 
+env:
+  GCP_REGION: ${{ vars.GCP_REGION }}
+
 jobs:
   create-domain-mapping:
     name: Create auth.tamshai.com domain mapping
@@ -37,7 +40,7 @@ jobs:
         run: |
           echo "📋 Checking existing domain mappings..."
           gcloud run domain-mappings list \
-            --region=us-central1 \
+            --region=${{ env.GCP_REGION }} \
             --platform=managed \
             --project=$GCP_PROJECT_ID || echo "No existing mappings"
 
@@ -49,7 +52,7 @@ jobs:
 
           # Check if mapping already exists
           if gcloud run domain-mappings describe auth.tamshai.com \
-            --region=us-central1 \
+            --region=${{ env.GCP_REGION }} \
             --platform=managed \
             --project=$GCP_PROJECT_ID 2>/dev/null; then
             echo "⚠️ Domain mapping already exists for auth.tamshai.com"
@@ -60,7 +63,7 @@ jobs:
           gcloud run domain-mappings create \
             --service=keycloak \
             --domain=auth.tamshai.com \
-            --region=us-central1 \
+            --region=${{ env.GCP_REGION }} \
             --platform=managed \
             --project=$GCP_PROJECT_ID
 
@@ -72,7 +75,7 @@ jobs:
         run: |
           echo "🔍 Checking domain mapping status..."
           gcloud run domain-mappings describe auth.tamshai.com \
-            --region=us-central1 \
+            --region=${{ env.GCP_REGION }} \
             --platform=managed \
             --project=$GCP_PROJECT_ID \
             --format=yaml
@@ -108,4 +111,4 @@ jobs:
 
           echo "⚠️ Keycloak returned status $STATUS_CODE"
           echo "Note: DNS/SSL propagation may take up to 15 minutes"
-          echo "Check domain mapping status with: gcloud run domain-mappings describe auth.tamshai.com --region=us-central1"
+          echo "Check domain mapping status with: gcloud run domain-mappings describe auth.tamshai.com --region=${{ env.GCP_REGION }}"

@@ -13,7 +13,7 @@
 #
 # Requirements:
 #   - gcloud CLI authenticated
-#   - GCP_REGION environment variable (default: us-central1)
+#   - GCP_REGION environment variable (required)
 #
 # =============================================================================
 
@@ -32,14 +32,14 @@ log_urls_warn() { echo -e "${YELLOW}[urls]${NC} $1"; }
 log_urls_error() { echo -e "${RED}[urls]${NC} $1"; }
 
 # Default values
-GCP_REGION="${GCP_REGION:-us-central1}"
+GCP_REGION="${GCP_REGION}"
 CLOUD_SQL_INSTANCE="${CLOUD_SQL_INSTANCE:-tamshai-prod-postgres}"
 
 # Discover Cloud Run service URL
 # Usage: discover_service_url "service-name"
 discover_service_url() {
     local service_name="$1"
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
 
     local url
     url=$(gcloud run services describe "$service_name" \
@@ -113,7 +113,7 @@ discover_web_portal_url() {
 # Discover Cloud SQL private IP
 discover_cloudsql_ip() {
     local instance_name="${1:-$CLOUD_SQL_INSTANCE}"
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
 
     local ip
     ip=$(gcloud sql instances describe "$instance_name" \
@@ -148,7 +148,7 @@ discover_cloudsql_connection_name() {
 # Discover VPC connector self-link
 discover_vpc_connector() {
     local connector_name="${1:-tamshai-prod-connector}"
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
 
     local self_link
     self_link=$(gcloud compute networks vpc-access connectors describe "$connector_name" \
@@ -167,7 +167,7 @@ discover_vpc_connector() {
 # Discover Artifact Registry repo URL
 discover_artifact_registry_url() {
     local project_id="${GCP_PROJECT_ID:-}"
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
     local repo_name="${1:-tamshai}"
 
     if [ -z "$project_id" ]; then

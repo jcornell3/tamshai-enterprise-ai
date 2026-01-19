@@ -260,7 +260,7 @@ phase_3_destroy() {
     log_step "Running pre-destroy cleanup..."
 
     log_step "Deleting Cloud Run jobs (Gap #21)..."
-    gcloud run jobs delete provision-users --region="${GCP_REGION:-us-central1}" --quiet 2>/dev/null || true
+    gcloud run jobs delete provision-users --region="${GCP_REGION}" --quiet 2>/dev/null || true
 
     log_step "Disabling deletion protection on Cloud SQL (Gap #22)..."
     local instance_name="tamshai-prod-postgres"
@@ -299,10 +299,10 @@ phase_3_destroy() {
     local verification_failed=false
 
     # Check for orphaned Cloud Run services
-    if gcloud run services list --region="${GCP_REGION:-us-central1}" --format="value(name)" 2>/dev/null | grep -qE "^(keycloak|mcp-|web-portal)"; then
+    if gcloud run services list --region="${GCP_REGION}" --format="value(name)" 2>/dev/null | grep -qE "^(keycloak|mcp-|web-portal)"; then
         log_warn "Orphaned Cloud Run services found - deleting..."
         for svc in keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal; do
-            gcloud run services delete "$svc" --region="${GCP_REGION:-us-central1}" --quiet 2>/dev/null || true
+            gcloud run services delete "$svc" --region="${GCP_REGION}" --quiet 2>/dev/null || true
         done
     fi
 
@@ -420,7 +420,7 @@ phase_5_build_images() {
     fi
 
     local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
-    local region="us-central1"
+    local region="${GCP_REGION}"
 
     log_step "Building container images via Cloud Build..."
 
@@ -532,7 +532,7 @@ phase_7_cloud_run() {
 
     # Gap #35: Create auth.tamshai.com domain mapping
     log_step "Creating auth.tamshai.com domain mapping (Gap #35)..."
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
 
     if ! gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null; then
         gcloud beta run domain-mappings create \

@@ -50,10 +50,10 @@ on:
         default: false
 
 env:
-  GCP_PROJECT: gen-lang-client-0553641830
-  GCP_REGION: us-central1
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
   CLOUD_SQL_INSTANCE: tamshai-prod-postgres
-  KEYCLOAK_URL: https://keycloak-1046947015464.us-central1.run.app/auth
+  # KEYCLOAK_URL is discovered dynamically - see discover-urls job in deploy-to-gcp.yml
   KEYCLOAK_REALM: tamshai-corp
 
 jobs:
