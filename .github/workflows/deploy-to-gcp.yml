@@ -486,11 +486,10 @@ jobs:
             exit 1
           fi
           echo "Admin password fetched successfully (length: ${#KEYCLOAK_ADMIN_PASSWORD})"
+          export KEYCLOAK_ADMIN_PASSWORD
 
           # Get admin token with verbose error handling
           echo "Requesting admin token from Keycloak..."
-          # URL-encode the password to handle special characters
-          ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${KEYCLOAK_ADMIN_PASSWORD}', safe=''))")
           TOKEN_RESPONSE=$(curl -s -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             --data-urlencode "username=admin" \
@@ -541,44 +540,20 @@ jobs:
           fi
           echo "Password reset successfully"
 
-          # Remove existing OTP credentials
-          EXISTING_CREDS=$(curl -sf "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/credentials" \
-            -H "Authorization: Bearer $TOKEN")
-          echo "Existing credentials: $(echo $EXISTING_CREDS | jq -r '[.[].type]')"
+          # Configure TOTP using set-user-totp.sh script
+          # The script handles: auth, finding user, deleting old OTP, creating new OTP via Admin API
+          # IMPORTANT: TEST_USER_TOTP_SECRET_RAW must be the RAW secret (not BASE32)
+          # The corresponding BASE32 version is used by E2E tests with oathtool
+          echo "Configuring TOTP credential via set-user-totp.sh..."
+          if [ -z "$TEST_USER_TOTP_SECRET_RAW" ]; then
+            echo "ERROR: TEST_USER_TOTP_SECRET_RAW secret not set"
+            exit 1
+          fi
 
-          # Delete OTP credentials
-          for CRED_ID in $(echo $EXISTING_CREDS | jq -r '.[] | select(.type=="otp") | .id'); do
-            echo "Deleting OTP credential: $CRED_ID"
-            curl -sf -X DELETE "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/credentials/${CRED_ID}" \
-              -H "Authorization: Bearer $TOKEN"
-          done
+          chmod +x keycloak/scripts/set-user-totp.sh
+          AUTO_CONFIRM=true ./keycloak/scripts/set-user-totp.sh prod test-user.journey "$TEST_USER_TOTP_SECRET_RAW"
 
-          # Create new OTP credential with raw secret
-          # IMPORTANT: secretData must ONLY contain "value" field - other fields go in credentialData
-          # (Keycloak OTPSecretData class doesn't recognize period/digits/algorithm)
-          OTP_CREDENTIAL=$(cat <<EOFCRED
-          {
-            "type": "otp",
-            "secretData": "{\"value\":\"${TEST_USER_TOTP_SECRET_RAW}\"}",
-            "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
-          }
-          EOFCRED
-          )
-
-          # Note: Keycloak Admin API doesn't support creating OTP credentials directly
-          # Check if the realm needs to be deleted and reimported
-          echo "Checking if realm reimport is needed..."
-
-          # Test TOTP by checking if it's properly configured
-          # If the user has OTP but no secretData, we need to reimport
-          OTP_COUNT=$(echo "$EXISTING_CREDS" | jq '[.[] | select(.type=="otp")] | length')
-
-          # We no longer delete the realm here - it causes issues because
-          # Keycloak only imports realms on first container startup.
-          # Instead, the realm-export.json should always have correct TOTP config
-          # and deployment always creates a new container revision with the latest realm file.
           echo "TOTP configuration complete."
-          echo "OTP credentials found: $OTP_COUNT"
 
       - name: Wait for Realm Reimport
         run: |
