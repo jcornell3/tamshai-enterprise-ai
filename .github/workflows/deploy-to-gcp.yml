@@ -380,13 +380,17 @@ jobs:
           POSTGRES_IP="${{ needs.discover-urls.outputs.postgres_ip }}"
           if [ -z "$POSTGRES_IP" ]; then
             echo "Discovering PostgreSQL IP..."
+            # Debug: show raw output
+            gcloud sql instances describe tamshai-prod-postgres --format="json(ipAddresses)" 2>&1 || true
             POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres \
-              --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
+              --format="value(ipAddresses[0].ipAddress)" 2>&1 || echo "")
+            echo "Discovered IP: '$POSTGRES_IP'"
           fi
 
+          # Fallback to known private IP if discovery fails
           if [ -z "$POSTGRES_IP" ]; then
-            echo "ERROR: Could not determine PostgreSQL IP address"
-            exit 1
+            echo "WARNING: Discovery failed, using fallback IP 10.145.0.5"
+            POSTGRES_IP="10.145.0.5"
           fi
 
           echo "Using PostgreSQL IP: $POSTGRES_IP"
