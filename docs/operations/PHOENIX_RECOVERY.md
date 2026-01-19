@@ -2,7 +2,8 @@
 
 This document describes how to recover Tamshai Enterprise AI environments from scratch following the **Phoenix Architecture** principle: any environment should be destroyable and recreatable without manual intervention.
 
-**Last Updated**: January 18, 2026
+**Last Updated**: January 19, 2026
+**Version**: 2.0 (Updated with lessons from Phoenix rebuild 2026-01-18/19)
 
 ## Overview
 
@@ -29,8 +30,10 @@ Phoenix Architecture means:
 | Environment | Recovery Method | Time | Data Loss |
 |-------------|-----------------|------|-----------|
 | **Dev** | Terraform destroy + apply | 5-10 min | None (sample data reloaded) |
-| **Stage** | Terraform destroy + apply | 5-10 min | None (sample data reloaded) |
-| **Prod** | Terraform destroy + apply | 10-15 min | **User data if not backed up** |
+| **Stage** | Terraform destroy + apply | 15-20 min | None (sample data reloaded) |
+| **Prod** | Full Phoenix rebuild | **~100 min** | **User data if not backed up** |
+
+> **Note**: Prod recovery time increased from 10-15 min to ~100 min based on Phoenix rebuild lessons learned (Jan 2026). See [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md) for detailed phases.
 
 ## Dev Environment Recovery
 
@@ -172,6 +175,9 @@ The `deploy-vps.yml` workflow implements Phoenix principles:
 
 ## Prod (GCP) Environment Recovery
 
+> **IMPORTANT**: For detailed step-by-step instructions, see [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md).
+> For gap documentation and troubleshooting, see [PHOENIX_MANUAL_ACTIONS.md](./PHOENIX_MANUAL_ACTIONS.md).
+
 ### Prerequisites
 
 - Terraform 1.5+
@@ -180,60 +186,138 @@ The `deploy-vps.yml` workflow implements Phoenix principles:
 - GitHub repository with GCP secrets configured
 - gcloud CLI authenticated
 
-### Complete Phoenix Rebuild Sequence
+### Complete Phoenix Rebuild Sequence (10 Phases)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    GCP PROD PHOENIX REBUILD SEQUENCE                    │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  1. terraform destroy + apply    │ Recreate GCP infrastructure          │
-│  2. gcloud builds submit         │ Rebuild Cloud Run Job image          │
-│  3. deploy-to-gcp.yml            │ Deploy all Cloud Run services        │
-│  4. provision-prod-users.yml     │ Load HR data, sync users to Keycloak │
-│  5. provision-prod-data.yml      │ Load Finance, Sales, Support data    │
+│  Phase 1: Pre-flight checks      │ Validate tools, secrets, DNS         │
+│  Phase 2: Secret sync            │ Verify GCP Secret Manager             │
+│  Phase 3: Pre-destroy cleanup    │ Delete jobs, disable protections     │
+│  Phase 4: Terraform destroy      │ Destroy all GCP infrastructure       │
+│  Phase 5: Post-destroy verify    │ FAIL if orphaned resources exist     │
+│  Phase 6: Terraform apply        │ Staged: networking first, then full  │
+│  Phase 7: Domain mapping         │ Create auth.tamshai.com → keycloak   │
+│  Phase 8: Deploy via GHA         │ Deploy all Cloud Run services        │
+│  Phase 9: Configure TOTP         │ Set test-user.journey credentials    │
+│  Phase 10: Verify                │ E2E tests, health checks             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Full Recovery Procedure
+### Quick Recovery (Automated)
 
 ```bash
-# Step 1: Navigate to Terraform directory
+# Run the automated Phoenix rebuild script
+./scripts/gcp/phoenix-rebuild.sh
+
+# Or with options:
+./scripts/gcp/phoenix-rebuild.sh --dry-run   # Preview only
+./scripts/gcp/phoenix-rebuild.sh --resume    # Resume from checkpoint
+```
+
+### Full Recovery Procedure (Manual)
+
+```bash
+# ============================================================
+# PHASE 1-2: Pre-flight and Secret Verification
+# ============================================================
+./scripts/gcp/phoenix-preflight.sh
+
+# ============================================================
+# PHASE 3: Pre-Destroy Cleanup (CRITICAL)
+# ============================================================
 cd infrastructure/terraform/gcp
 
-# Step 2: Destroy existing infrastructure
+# Delete Cloud Run jobs (have deletion_protection)
+gcloud run jobs delete provision-users --region=us-central1 --quiet 2>/dev/null || true
+
+# Disable Cloud SQL deletion protection
+gcloud sql instances patch tamshai-prod-postgres --no-deletion-protection --quiet 2>/dev/null || true
+
+# ============================================================
+# PHASE 4: Terraform Destroy
+# ============================================================
 terraform destroy -auto-approve
 # WARNING: This destroys ALL production data if not backed up!
-# Takes ~5-10 minutes (Cloud Run, Cloud SQL, etc.)
 
-# Step 3: Recreate infrastructure
+# If destroy fails on VPC, see PHOENIX_RUNBOOK.md troubleshooting
+
+# ============================================================
+# PHASE 5: Post-Destroy Verification (CRITICAL - FAIL FAST)
+# ============================================================
+# Verify all resources destroyed - FAIL if any remain
+gcloud run services list --region=us-central1 --format="value(name)" | \
+  grep -E "^(keycloak|mcp-|web-portal)" && echo "ERROR: Cloud Run still exists" && exit 1
+gcloud sql instances list --format="value(name)" | \
+  grep tamshai && echo "ERROR: Cloud SQL still exists" && exit 1
+echo "Post-destroy verification PASSED"
+
+# Delete persisted secrets
+for secret in tamshai-prod-keycloak-admin-password tamshai-prod-keycloak-db-password \
+  tamshai-prod-db-password tamshai-prod-anthropic-api-key mcp-hr-service-client-secret; do
+  gcloud secrets delete "$secret" --quiet 2>/dev/null || true
+done
+
+# ============================================================
+# PHASE 6: Terraform Apply (STAGED)
+# ============================================================
+terraform init -upgrade
+
+# CRITICAL: Networking module MUST complete first
+terraform apply -target=module.networking -auto-approve
+
+# Then full apply
 terraform apply -auto-approve
-# This creates: Cloud Run services, Cloud SQL, Secret Manager, VPC connector, etc.
-# Takes ~10-15 minutes
 
-# Step 4: Rebuild Cloud Run Job image (required after entrypoint.sh changes)
-gcloud builds submit \
-  --config=scripts/gcp/provision-job/cloudbuild.yaml \
-  --project=gen-lang-client-0553641830
-# Takes ~2-3 minutes
+# Add version to mcp-hr-service-client-secret (Terraform creates shell only)
+openssl rand -base64 32 | tr -d '\n' | \
+  gcloud secrets versions add mcp-hr-service-client-secret --data-file=- 2>/dev/null || true
 
-# Step 5: Deploy all services
+# ============================================================
+# PHASE 7: Domain Mapping (CRITICAL)
+# ============================================================
+# Cloudflare DNS persists but GCP domain mapping is destroyed
+gcloud beta run domain-mappings create \
+  --service=keycloak \
+  --domain=auth.tamshai.com \
+  --region=us-central1 2>/dev/null || true
+
+# Wait for domain to be routable (Cloudflare handles SSL)
+echo "Waiting for auth.tamshai.com to be routable..."
+for i in {1..30}; do
+  STATUS=$(gcloud beta run domain-mappings describe \
+    --domain=auth.tamshai.com --region=us-central1 \
+    --format="value(status.conditions[2].status)" 2>/dev/null || echo "Unknown")
+  [[ "$STATUS" == "True" ]] && echo "Domain routable!" && break
+  echo "  Waiting... ($((i*10))s, status: $STATUS)"
+  sleep 10
+done
+
+# ============================================================
+# PHASE 8: Regenerate CICD Key and Deploy
+# ============================================================
+PROJECT_ID=$(gcloud config get-value project)
+gcloud iam service-accounts keys create /tmp/key.json \
+  --iam-account=tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com
+gh secret set GCP_SA_KEY_PROD < /tmp/key.json
+rm /tmp/key.json
+
+# Deploy all services
 gh workflow run deploy-to-gcp.yml -f service=all
-# Monitor: gh run watch
-# Deploys: Keycloak, MCP Gateway, MCP Suite, Web Portal
-# Takes ~5-10 minutes
+gh run watch
 
-# Step 6: Load HR data and sync users to Keycloak
-gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
-# Monitor: gh run watch
-# Loads: sample-data/hr-data.sql → Cloud SQL
-# Syncs: HR employees → Keycloak users
-# Takes ~2-3 minutes
+# ============================================================
+# PHASE 9-10: Configure TOTP and Verify
+# ============================================================
+# Set TOTP for test-user.journey
+export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
+export AUTO_CONFIRM=true
+./keycloak/scripts/set-user-totp.sh prod test-user.journey
 
-# Step 7: Load Finance, Sales, Support sample data
-gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
-# Monitor: gh run watch
-# Loads: Finance → Cloud SQL, Sales/Support → MongoDB Atlas
-# Takes ~2-3 minutes
+# Run E2E tests
+cd tests/e2e
+npm run test:login:prod
 ```
 
 ### Sample Data Targets
@@ -355,6 +439,88 @@ echo "New VPS IP: $NEW_IP"
 
 # DNS is handled by Cloudflare (www.tamshai.com)
 # If using raw IP for SSH, update your local references
+```
+
+### Scenario 5: Terraform Destroy Hangs on VPC (Prod)
+
+**Symptoms**: `terraform destroy` times out on VPC or networking resources
+
+**Root Cause**: Service networking connection or orphaned private IP blocks deletion
+
+**Recovery**:
+```bash
+cd infrastructure/terraform/gcp
+
+# Remove service networking from state
+terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection'
+terraform state rm 'module.database.google_compute_global_address.private_ip_range'
+
+# Delete orphaned private IP addresses
+gcloud compute addresses list --global --format="value(name)" | grep tamshai | \
+  xargs -I {} gcloud compute addresses delete {} --global --quiet
+
+# Targeted destroy of VPC
+terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
+```
+
+### Scenario 6: auth.tamshai.com Not Reachable After Rebuild (Prod)
+
+**Symptoms**: mcp-gateway fails to start, Keycloak unreachable at custom domain
+
+**Root Cause**: Cloudflare DNS persists but GCP domain mapping was destroyed
+
+**Recovery**:
+```bash
+# Create the domain mapping
+gcloud beta run domain-mappings create \
+  --service=keycloak \
+  --domain=auth.tamshai.com \
+  --region=us-central1
+
+# Wait for it to be routable
+gcloud beta run domain-mappings describe \
+  --domain=auth.tamshai.com --region=us-central1 \
+  --format="value(status.conditions[2].status)"
+# Should return "True"
+
+# Verify HTTPS access (Cloudflare handles SSL)
+curl -sf https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration
+```
+
+### Scenario 7: deploy-static-website Fails with Permission Error (Prod)
+
+**Symptoms**: `gcloud storage rsync` fails with "storage.buckets.get" permission denied
+
+**Root Cause**: CICD service account missing `roles/storage.legacyBucketReader`
+
+**Recovery**:
+```bash
+# Apply Terraform to create IAM binding (fixed in storage module)
+cd infrastructure/terraform/gcp
+terraform apply -target=module.storage -auto-approve
+
+# Or manually add the binding
+gcloud storage buckets add-iam-policy-binding gs://prod.tamshai.com \
+  --member="serviceAccount:tamshai-prod-cicd@$(gcloud config get-value project).iam.gserviceaccount.com" \
+  --role="roles/storage.legacyBucketReader"
+```
+
+### Scenario 8: Terraform State Lock Stuck
+
+**Symptoms**: "Error acquiring the state lock" message
+
+**Root Cause**: Previous terraform command crashed or was interrupted
+
+**Recovery**:
+```bash
+cd infrastructure/terraform/gcp
+
+# Get lock ID from error message
+# Force unlock (use ID from error)
+terraform force-unlock -force <LOCK_ID>
+
+# Retry operation
+terraform apply -auto-approve
 ```
 
 ## Recovery Checklist
@@ -521,6 +687,8 @@ gh workflow run deploy-to-gcp.yml --ref main
 
 ## Related Documentation
 
+- [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md) - **Detailed step-by-step runbook with checkpoints**
+- [PHOENIX_MANUAL_ACTIONS.md](./PHOENIX_MANUAL_ACTIONS.md) - **Gap documentation and troubleshooting**
 - [KEYCLOAK_MANAGEMENT.md](./KEYCLOAK_MANAGEMENT.md) - Keycloak-specific operations
 - [IDENTITY_SYNC.md](./IDENTITY_SYNC.md) - User provisioning details
 - [E2E_USER_TESTS.md](../testing/E2E_USER_TESTS.md) - E2E test procedures
@@ -528,5 +696,5 @@ gh workflow run deploy-to-gcp.yml --ref main
 
 ---
 
-*Last Updated: January 18, 2026*
-*Status: Active - Aligned with Phoenix Architecture principles*
+*Last Updated: January 19, 2026*
+*Status: Active - Updated with Phoenix rebuild lessons learned (Gaps #1-37)*
