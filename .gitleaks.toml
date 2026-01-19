@@ -19,6 +19,9 @@ paths = [
   '''\.freezed\.dart''',
   '''\.g\.dart''',
   '''realm-export.*\.json''',  # Keycloak exports with development passwords are marked [REDACTED]
+  '''.*_test\.dart''',         # Flutter/Dart test files may contain fake JWTs
+  '''.*\.test\.tsx?''',        # React test files
+  '''.*\.spec\.tsx?''',        # React spec files
 ]
 
 regexes = [
