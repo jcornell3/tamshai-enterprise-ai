@@ -20,7 +20,7 @@
 #
 # Environment Variables:
 #   GCP_PROJECT_ID      GCP project ID (required)
-#   GCP_REGION          GCP region (default: us-central1)
+#   GCP_REGION          GCP region (required)
 #   GCP_SA_KEY_FILE     Path to service account key (optional)
 #
 # Examples:
@@ -44,7 +44,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-GCP_REGION="${GCP_REGION:-us-central1}"
+GCP_REGION="${GCP_REGION}"
 TERRAFORM_DIR="$REPO_ROOT/infrastructure/terraform/gcp"
 RUN_INIT=false
 PLAN_ONLY=false

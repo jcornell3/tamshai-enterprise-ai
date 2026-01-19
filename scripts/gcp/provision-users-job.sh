@@ -32,9 +32,9 @@
 
 set -e
 
-# Configuration
-PROJECT_ID="${GCP_PROJECT:-gen-lang-client-0553641830}"
-REGION="${GCP_REGION:-us-central1}"
+# Configuration (required - no defaults)
+PROJECT_ID="${GCP_PROJECT:?GCP_PROJECT environment variable is required}"
+REGION="${GCP_REGION:?GCP_REGION environment variable is required}"
 ENVIRONMENT="${ENVIRONMENT:-prod}"
 JOB_NAME="provision-users"
 IMAGE_NAME="${REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai-${ENVIRONMENT}/provision-job"

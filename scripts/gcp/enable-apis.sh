@@ -8,7 +8,7 @@ PROJECT_ID="${1:-}"
 
 if [ -z "$PROJECT_ID" ]; then
   echo "Usage: $0 <PROJECT_ID>"
-  echo "Example: $0 gen-lang-client-0553641830"
+  echo "Example: $0 your-gcp-project-id"
   exit 1
 fi
 

@@ -5,7 +5,7 @@
 # Runs as a Cloud Run Job with VPC connector for private IP access.
 #
 # Build:
-#   docker build -t us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai-prod/provision-job:latest .
+#   docker build -t ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/tamshai-prod/provision-job:latest .
 #
 # =============================================================================
 

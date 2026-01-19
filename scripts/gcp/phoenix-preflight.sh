@@ -320,7 +320,7 @@ check_artifact_registry() {
     log_section "8. Artifact Registry Images"
 
     local project="${GCP_PROJECT_ID:-}"
-    local region="us-central1"
+    local region="${GCP_REGION}"
     local repo="tamshai"
 
     if [ -z "$project" ]; then

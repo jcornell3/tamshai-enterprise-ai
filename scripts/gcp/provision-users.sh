@@ -30,11 +30,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Configuration
+# Configuration (required - no defaults)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG_FILE="scripts/gcp/cloudbuild-provision-users.yaml"
-PROJECT_ID="${GCP_PROJECT:-gen-lang-client-0553641830}"
+PROJECT_ID="${GCP_PROJECT:?GCP_PROJECT environment variable is required}"
 
 # Default values
 ACTION="${1:-verify-only}"

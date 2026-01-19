@@ -14,7 +14,7 @@
 # Requirements:
 #   - gcloud CLI authenticated
 #   - curl available
-#   - GCP_REGION environment variable set (default: us-central1)
+#   - GCP_REGION environment variable set (required)
 #
 # =============================================================================
 
@@ -35,7 +35,7 @@ log_health_error() { echo -e "${RED}[health]${NC} $1"; }
 # Default values
 DEFAULT_TIMEOUT=300
 DEFAULT_INTERVAL=10
-GCP_REGION="${GCP_REGION:-us-central1}"
+GCP_REGION="${GCP_REGION}"
 
 # Cloud Run services to check
 CLOUD_RUN_SERVICES=(
@@ -51,7 +51,7 @@ CLOUD_RUN_SERVICES=(
 # Get Cloud Run service URL
 get_service_url() {
     local service_name="$1"
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
 
     gcloud run services describe "$service_name" \
         --region="$region" \
@@ -329,7 +329,7 @@ print_service_status() {
 # Check VPC connector status
 check_vpc_connector() {
     local connector_name="${1:-tamshai-prod-connector}"
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION}"
 
     log_health_info "Checking VPC connector: $connector_name"
 

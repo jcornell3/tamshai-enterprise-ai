@@ -3,28 +3,21 @@
 # =============================================================================
 #
 # Loads HR sample data into Cloud SQL and syncs users to Keycloak.
-# Runs within GCP network, so can connect to private IP Cloud SQL instances.
+# Runs within GCP network and uses Cloud SQL Proxy for private IP access.
+#
+# Architecture:
+#   - Each step that needs DB access downloads and runs its own Cloud SQL Proxy
+#   - Steps are isolated (no shared localhost), so proxy runs per-step
+#   - /workspace is shared for scripts and data files
 #
 # Usage:
-#   # Verify only (dry run)
+#   # Verify only (safe, read-only)
 #   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
-#     --substitutions=_ACTION=verify-only
+#     --substitutions=_ACTION=verify-only .
 #
-#   # Load HR data only
+#   # Load HR data + sync users
 #   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
-#     --substitutions=_ACTION=load-hr-data
-#
-#   # Sync users to Keycloak only
-#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
-#     --substitutions=_ACTION=sync-users
-#
-#   # Full provisioning (load data + sync users)
-#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
-#     --substitutions=_ACTION=all
-#
-#   # With dry run (preview only)
-#   gcloud builds submit --config=scripts/gcp/cloudbuild-provision-users.yaml \
-#     --substitutions=_ACTION=all,_DRY_RUN=true
+#     --substitutions=_ACTION=all .
 #
 # Required secrets in Secret Manager:
 #   - tamshai-prod-db-password
@@ -38,8 +31,10 @@ substitutions:
   _ACTION: 'verify-only'  # verify-only, load-hr-data, sync-users, all
   _DRY_RUN: 'false'
   _FORCE_PASSWORD_RESET: 'false'
-  _CLOUD_SQL_INSTANCE: 'gen-lang-client-0553641830:us-central1:tamshai-prod-postgres'
-  _KEYCLOAK_URL: 'https://keycloak-fn44nd7wba-uc.a.run.app'
+  _REGION: ''  # REQUIRED: Pass via --substitutions=_REGION=<value>
+  # Note: _CLOUD_SQL_INSTANCE uses $PROJECT_ID which is auto-populated by Cloud Build
+  _CLOUD_SQL_INSTANCE: '${PROJECT_ID}:${_REGION}:tamshai-prod-postgres'
+  _KEYCLOAK_URL: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth'
   _KEYCLOAK_REALM: 'tamshai-corp'
 
 options:
@@ -78,53 +73,48 @@ steps:
         echo "=============================================="
 
   # ===========================================================================
-  # Step 1: Start Cloud SQL Proxy (background)
+  # Step 1: Verify current state (Cloud SQL + Keycloak)
   # ===========================================================================
-  - name: 'gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0'
-    id: 'start-proxy'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        /cloud-sql-proxy ${_CLOUD_SQL_INSTANCE} \
-          --private-ip \
-          --port=5432 &
-        sleep 5
-        echo "Cloud SQL Proxy started"
-    waitFor: ['show-config']
-
-  # ===========================================================================
-  # Step 2: Verify current state
-  # ===========================================================================
-  - name: 'postgres:15-alpine'
+  - name: 'gcr.io/cloud-builders/gcloud'
     id: 'verify-state'
-    entrypoint: 'sh'
+    entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD', 'KC_ADMIN_PASSWORD']
+    env:
+      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
     args:
       - '-c'
       - |
+        set -e
         echo "=== Verifying Current State ==="
 
-        # Test database connection
-        export PGPASSWORD="$$DB_PASSWORD"
+        # Install PostgreSQL client
+        apt-get update -qq && apt-get install -qq -y postgresql-client netcat-openbsd > /dev/null
 
+        # Source the connection helper
+        source /workspace/scripts/gcp/lib/cloudsql-connect.sh
+
+        # Start Cloud SQL Proxy
+        start_proxy
+
+        # Test database connection and count employees
+        echo ""
         echo "[INFO] Testing database connection..."
-        if ! psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT 1;" > /dev/null 2>&1; then
-          echo "[WARN] Could not connect to database"
-          echo "employee_count=0" > /workspace/verify-state.env
-        else
-          # Count employees
-          EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
-            "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null | tr -d ' ' || echo "0")
-          echo "[INFO] Active employees: $EMPLOYEE_COUNT"
-          echo "employee_count=$EMPLOYEE_COUNT" > /workspace/verify-state.env
+        if EMPLOYEE_COUNT=$(cloudsql_query "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null); then
+          echo "[OK] Connected to Cloud SQL"
+          echo "[INFO] Active employees: $$EMPLOYEE_COUNT"
+          echo "employee_count=$$EMPLOYEE_COUNT" > /workspace/verify-state.env
 
-          # List sample employees
+          # Show sample employees
           echo ""
           echo "=== Sample Employees ==="
-          psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c \
-            "SELECT id, first_name, last_name, email, department FROM hr.employees LIMIT 5;" 2>/dev/null || true
+          cloudsql_exec "SELECT id, first_name, last_name, email, department FROM hr.employees LIMIT 5;" || true
+        else
+          echo "[WARN] Could not connect to database or table doesn't exist"
+          echo "employee_count=0" > /workspace/verify-state.env
         fi
+
+        # Stop proxy before Keycloak check (cleanup)
+        stop_proxy
 
         # Check Keycloak
         echo ""
@@ -136,31 +126,36 @@ steps:
           -d "grant_type=password" \
           -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
 
-        if [ -z "$KC_TOKEN" ]; then
+        if [ -z "$$KC_TOKEN" ]; then
           echo "[WARN] Could not get Keycloak admin token"
           echo "keycloak_users=unknown" >> /workspace/verify-state.env
         else
+          echo "[OK] Keycloak authentication successful"
           USER_COUNT=$(curl -sf "${_KEYCLOAK_URL}/admin/realms/${_KEYCLOAK_REALM}/users?max=1000" \
-            -H "Authorization: Bearer $KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l || echo "0")
-          echo "[INFO] Keycloak users: $USER_COUNT"
-          echo "keycloak_users=$USER_COUNT" >> /workspace/verify-state.env
+            -H "Authorization: Bearer $$KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l || echo "0")
+          echo "[INFO] Keycloak users in ${_KEYCLOAK_REALM}: $$USER_COUNT"
+          echo "keycloak_users=$$USER_COUNT" >> /workspace/verify-state.env
         fi
 
         echo ""
         echo "=== State Summary ==="
         cat /workspace/verify-state.env
-    waitFor: ['start-proxy']
+    waitFor: ['show-config']
 
   # ===========================================================================
-  # Step 3: Load HR sample data (conditional)
+  # Step 2: Load HR sample data (conditional)
   # ===========================================================================
-  - name: 'postgres:15-alpine'
+  - name: 'gcr.io/cloud-builders/gcloud'
     id: 'load-hr-data'
-    entrypoint: 'sh'
+    entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD']
+    env:
+      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
     args:
       - '-c'
       - |
+        set -e
+
         # Check if we should load data
         if [ "${_ACTION}" != "load-hr-data" ] && [ "${_ACTION}" != "all" ]; then
           echo "[SKIP] Action is ${_ACTION}, skipping HR data load"
@@ -171,33 +166,42 @@ steps:
 
         if [ "${_DRY_RUN}" = "true" ]; then
           echo "[DRY RUN] Would load sample-data/hr-data.sql"
-          wc -l < sample-data/hr-data.sql
+          echo "File size: $(wc -l < /workspace/sample-data/hr-data.sql) lines"
           exit 0
         fi
 
-        export PGPASSWORD="$$DB_PASSWORD"
+        # Install PostgreSQL client
+        apt-get update -qq && apt-get install -qq -y postgresql-client netcat-openbsd > /dev/null
+
+        # Source the connection helper
+        source /workspace/scripts/gcp/lib/cloudsql-connect.sh
+
+        # Start Cloud SQL Proxy
+        start_proxy
 
         # Load the data
         echo "[INFO] Loading HR data from sample-data/hr-data.sql..."
-        psql -h localhost -p 5432 -U tamshai -d tamshai_hr -f sample-data/hr-data.sql
+        cloudsql_exec_file /workspace/sample-data/hr-data.sql
 
         # Verify
-        EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
-          "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" | tr -d ' ')
-
-        echo "[OK] HR data loaded: $EMPLOYEE_COUNT active employees"
+        EMPLOYEE_COUNT=$(cloudsql_query "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';")
+        echo "[OK] HR data loaded: $$EMPLOYEE_COUNT active employees"
     waitFor: ['verify-state']
 
   # ===========================================================================
-  # Step 4: Sync users to Keycloak (conditional)
+  # Step 3: Sync users to Keycloak (conditional)
   # ===========================================================================
-  - name: 'node:20-alpine'
+  - name: 'node:20-bookworm'
     id: 'sync-users'
-    entrypoint: 'sh'
+    entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD', 'KC_CLIENT_SECRET', 'PROD_USER_PASSWORD']
+    env:
+      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
     args:
       - '-c'
       - |
+        set -e
+
         # Check if we should sync users
         if [ "${_ACTION}" != "sync-users" ] && [ "${_ACTION}" != "all" ]; then
           echo "[SKIP] Action is ${_ACTION}, skipping user sync"
@@ -214,9 +218,16 @@ steps:
           exit 0
         fi
 
-        # Install dependencies
-        cd services/mcp-hr
-        npm ci --production=false
+        # Install netcat for connection helper
+        apt-get update -qq && apt-get install -qq -y netcat-openbsd > /dev/null
+
+        # Source the connection helper and start proxy
+        source /workspace/scripts/gcp/lib/cloudsql-connect.sh
+        start_proxy
+
+        # Install mcp-hr dependencies
+        cd /workspace/services/mcp-hr
+        npm ci --production=false --silent
 
         # Build sync arguments
         SYNC_ARGS=""
@@ -224,7 +235,7 @@ steps:
           SYNC_ARGS="--force-password-reset"
         fi
 
-        # Run identity-sync
+        # Set environment for identity-sync
         export POSTGRES_HOST=localhost
         export POSTGRES_PORT=5432
         export POSTGRES_DB=tamshai_hr
@@ -234,15 +245,15 @@ steps:
         export KEYCLOAK_REALM="${_KEYCLOAK_REALM}"
         export KEYCLOAK_CLIENT_ID=mcp-hr-service
         export KEYCLOAK_CLIENT_SECRET="$$KC_CLIENT_SECRET"
-        export REDIS_HOST=localhost
-        export REDIS_PORT=6379
+        export DEFAULT_USER_PASSWORD="$$PROD_USER_PASSWORD"
         export ENVIRONMENT=prod
 
-        # Start a minimal Redis for BullMQ (required by identity-sync)
-        echo "[INFO] Note: Redis not available, sync may fail if BullMQ required"
-
-        npx tsx src/scripts/sync-identities.ts $SYNC_ARGS || {
+        # Note: identity-sync may require Redis for BullMQ
+        # If it fails, we may need to add Redis or make it optional
+        echo "[INFO] Running identity-sync..."
+        npx tsx src/scripts/sync-identities.ts $$SYNC_ARGS || {
           echo "[ERROR] Identity sync failed"
+          echo "[HINT] Check if Redis is required. May need to make BullMQ optional."
           exit 1
         }
 
@@ -250,25 +261,35 @@ steps:
     waitFor: ['load-hr-data']
 
   # ===========================================================================
-  # Step 5: Final verification
+  # Step 4: Final verification
   # ===========================================================================
-  - name: 'postgres:15-alpine'
+  - name: 'gcr.io/cloud-builders/gcloud'
     id: 'final-verify'
-    entrypoint: 'sh'
+    entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD', 'KC_ADMIN_PASSWORD']
+    env:
+      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
     args:
       - '-c'
       - |
+        set -e
         echo "=== Final Verification ==="
 
-        export PGPASSWORD="$$DB_PASSWORD"
+        # Install PostgreSQL client
+        apt-get update -qq && apt-get install -qq -y postgresql-client netcat-openbsd > /dev/null
+
+        # Source the connection helper
+        source /workspace/scripts/gcp/lib/cloudsql-connect.sh
+
+        # Start Cloud SQL Proxy
+        start_proxy
 
         # Count employees
-        EMPLOYEE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
-          "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null | tr -d ' ' || echo "0")
+        EMPLOYEE_COUNT=$(cloudsql_query "SELECT COUNT(*) FROM hr.employees WHERE UPPER(status) = 'ACTIVE';" 2>/dev/null || echo "0")
+        SYNCED_COUNT=$(cloudsql_query "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null || echo "0")
 
-        SYNCED_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
-          "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null | tr -d ' ' || echo "0")
+        # Stop proxy before Keycloak check
+        stop_proxy
 
         # Count Keycloak users
         KC_TOKEN=$(curl -sf -X POST "${_KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
@@ -278,14 +299,14 @@ steps:
           -d "grant_type=password" \
           -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
 
-        if [ -n "$KC_TOKEN" ]; then
+        if [ -n "$$KC_TOKEN" ]; then
           KC_USER_COUNT=$(curl -sf "${_KEYCLOAK_URL}/admin/realms/${_KEYCLOAK_REALM}/users?max=1000" \
-            -H "Authorization: Bearer $KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l || echo "unknown")
+            -H "Authorization: Bearer $$KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l || echo "unknown")
         else
           KC_USER_COUNT="unknown"
         fi
 
-        # Load initial state
+        # Load initial state for comparison
         source /workspace/verify-state.env 2>/dev/null || true
 
         echo ""
@@ -300,9 +321,9 @@ steps:
         echo "  Keycloak Users:    ${keycloak_users:-unknown}"
         echo ""
         echo "AFTER:"
-        echo "  HR Employees:      $EMPLOYEE_COUNT"
-        echo "  Synced to KC:      $SYNCED_COUNT"
-        echo "  Keycloak Users:    $KC_USER_COUNT"
+        echo "  HR Employees:      $$EMPLOYEE_COUNT"
+        echo "  Synced to KC:      $$SYNCED_COUNT"
+        echo "  Keycloak Users:    $$KC_USER_COUNT"
         echo "=============================================="
     waitFor: ['sync-users']
 

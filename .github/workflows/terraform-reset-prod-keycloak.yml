@@ -12,7 +12,7 @@ on:
         type: string
 
 env:
-  GCP_REGION: us-central1
+  GCP_REGION: ${{ vars.GCP_REGION }}
 
 jobs:
   confirm:
