@@ -146,6 +146,83 @@ if ! [[ "$POSTGRES_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 ```
 
+## Terraform State Reconciliation (Added 2026-01-18)
+
+These actions are needed when Cloud Run services exist in GCP but aren't in Terraform state.
+
+### 16. Import Cloud Run Services into Terraform State
+If terraform apply hangs creating services that already exist:
+```bash
+# Kill the stuck terraform apply
+terraform force-unlock -force <LOCK_ID>
+
+# Import each Cloud Run service
+terraform import 'module.cloudrun.google_cloud_run_service.keycloak' \
+  us-central1/keycloak
+terraform import 'module.cloudrun.google_cloud_run_service.mcp_gateway' \
+  us-central1/mcp-gateway
+terraform import 'module.cloudrun.google_cloud_run_service.web_portal[0]' \
+  us-central1/web-portal
+
+# For MCP suite services, temporarily modify outputs.tf first (see #17)
+terraform import 'module.cloudrun.google_cloud_run_service.mcp_suite["hr"]' \
+  us-central1/mcp-hr
+terraform import 'module.cloudrun.google_cloud_run_service.mcp_suite["finance"]' \
+  us-central1/mcp-finance
+terraform import 'module.cloudrun.google_cloud_run_service.mcp_suite["sales"]' \
+  us-central1/mcp-sales
+terraform import 'module.cloudrun.google_cloud_run_service.mcp_suite["support"]' \
+  us-central1/mcp-support
+```
+
+### 17. Temporary outputs.tf Modification for Sequential Imports
+MCP suite imports fail because outputs reference all 4 services. Temporarily wrap with try():
+```bash
+# Edit infrastructure/terraform/modules/cloudrun/outputs.tf
+# Change:
+#   value = google_cloud_run_service.mcp_suite["hr"].status[0].url
+# To:
+#   value = try(google_cloud_run_service.mcp_suite["hr"].status[0].url, null)
+
+# Apply to all 4 MCP service outputs and service_urls map
+# After all imports complete, revert the changes
+```
+**Automation**: Create import script that temporarily patches outputs.tf.
+
+### 18. Import Domain Mapping
+If domain mapping already exists:
+```bash
+terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
+  'locations/us-central1/namespaces/gen-lang-client-0553641830/domainmappings/auth.tamshai.com'
+```
+
+### 19. Import Storage Buckets
+If storage buckets already exist (409 conflict):
+```bash
+terraform import 'module.storage.google_storage_bucket.finance_docs' \
+  tamshai-prod-finance-docs-gen-lang-client-0553641830
+terraform import 'module.storage.google_storage_bucket.public_docs' \
+  tamshai-prod-public-docs-gen-lang-client-0553641830
+terraform import 'module.storage.google_storage_bucket.static_website[0]' \
+  prod.tamshai.com
+```
+
+### 20. Handle Storage Bucket Location Mismatch
+If static_website bucket exists in different region (US vs US-CENTRAL1):
+```bash
+# Option 1: Add lifecycle ignore_changes (PERMANENT FIX - already applied)
+# In infrastructure/terraform/modules/storage/main.tf, static_website resource:
+lifecycle {
+  ignore_changes = [location]
+}
+
+# Option 2: Remove from state and re-import (if lifecycle not working)
+terraform state rm 'module.storage.google_storage_bucket.static_website[0]'
+terraform import 'module.storage.google_storage_bucket.static_website[0]' \
+  prod.tamshai.com
+```
+**Note**: The lifecycle fix is now permanent in the storage module.
+
 ## Summary of Root Causes
 
 | Issue | Root Cause | Fix Priority |
@@ -157,6 +234,9 @@ fi
 | Missing secret versions | Terraform creates secret shell only | Medium |
 | Cloud Run failed state | Missing images at deploy time | Medium |
 | PostgreSQL IP discovery | Job doesn't have cloudsql.admin role | Low |
+| Cloud Run state mismatch | Services exist in GCP but not in Terraform state | High |
+| MCP suite import failures | Outputs reference all 4 services during partial import | Medium |
+| Storage bucket location | Bucket in US but Terraform expects US-CENTRAL1 | Medium |
 
 ## Recommended Phoenix Script Enhancements
 
@@ -166,3 +246,7 @@ fi
 4. **Service account key rotation**: Auto-update GitHub secret after terraform apply
 5. **Health gates**: Wait for Cloud SQL before deploying Cloud Run services
 6. **Idempotent cleanup**: Delete Cloud Run services in failed state before redeploy
+7. **State reconciliation**: Check for existing Cloud Run services before apply, auto-import if needed
+8. **outputs.tf patcher**: Script to temporarily add try() wrappers for sequential imports
+9. **Storage bucket import**: Auto-detect 409 conflicts and import existing buckets
+10. **Lifecycle management**: Ensure storage module has location ignore_changes for static_website

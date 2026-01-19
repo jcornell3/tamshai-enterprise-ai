@@ -138,6 +138,12 @@ resource "google_storage_bucket" "static_website" {
     environment = var.environment
     purpose     = "static-website"
   }
+
+  # Ignore location changes - the bucket may already exist in a different region
+  # This allows terraform to manage the bucket without forcing recreation
+  lifecycle {
+    ignore_changes = [location]
+  }
 }
 
 # Make website bucket publicly readable
