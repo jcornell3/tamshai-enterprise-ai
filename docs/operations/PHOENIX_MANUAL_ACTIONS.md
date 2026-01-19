@@ -37,6 +37,18 @@ gcloud compute networks list --format="value(name)" | grep tamshai && echo "ERRO
 ```
 **Automation**: Script should fail if any critical resources (Cloud Run, Cloud SQL, VPC) still exist.
 
+### 1b. Remove Stale Resources from Terraform State
+If terraform state has references to resources that were deleted outside of terraform:
+```bash
+terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["hr"]'
+terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["finance"]'
+terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["sales"]'
+terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["support"]'
+terraform state rm 'module.cloudrun.google_cloud_run_service.keycloak'
+terraform state rm 'module.cloudrun.google_cloud_run_service.web_portal[0]'
+```
+**Rationale**: Stale state entries cause apply to fail when trying to update non-existent resources.
+
 ## Post-Destroy / Pre-Apply Actions
 
 ### 2. Delete Existing GCP Secrets
@@ -110,17 +122,6 @@ terraform import 'module.storage.google_storage_bucket.logs' \
 # Static website bucket (if needed)
 terraform import 'module.storage.google_storage_bucket.static_website' \
   prod.tamshai.com
-```
-
-### 10. Remove Stale Resources from Terraform State
-If terraform has stale state for deleted resources:
-```bash
-terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["hr"]'
-terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["finance"]'
-terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["sales"]'
-terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["support"]'
-terraform state rm 'module.cloudrun.google_cloud_run_service.keycloak'
-terraform state rm 'module.cloudrun.google_cloud_run_service.web_portal[0]'
 ```
 
 ## Post-Terraform Apply
@@ -295,9 +296,8 @@ These gaps were discovered during a full Phoenix rebuild execution:
 | 32 | MongoDB URI secret IAM missing | mcp-servers can't access | Manual IAM binding added | High |
 | 33 | Static website bucket IAM not applied | Import doesn't create IAM | terraform apply after import | Medium |
 | 34 | Keycloak health check timeout | 60s too short for cold start | Increase timeout to 120s | Low |
-| 35 | auth.tamshai.com domain mapping missing | Terraform didn't create it | Create via gcloud beta | High |
-| 36 | mcp-gateway can't start | Depends on auth.tamshai.com | Create domain mapping first | Critical |
-| 37 | GCP managed SSL certificate provisioning | Takes 10-15 minutes after domain mapping | Wait for certificate before deploying gateway | High |
+| 35 | auth.tamshai.com Cloud Run domain mapping missing | Cloudflare DNS (auth.tamshai.com → ghs.googlehosted.com) persists, but GCP domain mapping that routes to keycloak service is destroyed | `gcloud beta run domain-mappings create --service=keycloak --domain=auth.tamshai.com --region=us-central1` | High |
+| 36 | mcp-gateway can't start | Depends on auth.tamshai.com being routable | Create domain mapping before deploying gateway | Critical |
 
 ### Deployment Order Dependencies
 
@@ -305,13 +305,108 @@ Correct deployment order after Phoenix rebuild:
 1. Terraform apply (networking module first, then full apply)
 2. Create/regenerate CICD service account key → update GitHub secret
 3. Create auth.tamshai.com domain mapping → keycloak
-4. Wait for SSL certificate provisioning (10-15 minutes, poll `gcloud beta run domain-mappings describe`)
+4. Wait for domain mapping to be routable (Cloudflare handles SSL)
 5. Deploy Keycloak (must start first)
 6. Deploy MCP services (hr, finance, sales, support)
-7. Deploy mcp-gateway (depends on auth.tamshai.com being HTTPS-reachable)
+7. Deploy mcp-gateway (depends on auth.tamshai.com being reachable)
 8. Deploy web-portal
 9. Sync Keycloak realm
 10. Run E2E tests to verify
+
+## Gap Resolution Plan by Stage
+
+This section consolidates all gaps into actionable steps organized by Phoenix rebuild stage.
+
+### Stage 1: Pre-Destroy
+
+**Goal**: Prepare resources for clean destruction.
+
+| Gap # | Resolution | Command |
+|-------|------------|---------|
+| 1 | Check for and remove stale terraform locks | `terraform force-unlock -force <LOCK_ID>` (if lock > 1 hour old) |
+| 21 | Disable Cloud Run Job deletion protection | `gcloud run jobs delete provision-users --region=us-central1 --quiet` |
+| 22 | Disable Cloud SQL deletion protection | `gcloud sql instances patch tamshai-prod-postgres --no-deletion-protection` |
+
+### Stage 2: During Destroy
+
+**Goal**: Handle resources that block terraform destroy.
+
+| Gap # | Resolution | Command |
+|-------|------------|---------|
+| 23 | Remove service networking from state before Cloud SQL deletion completes | `terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection'` |
+| 24 | Delete orphaned private IP address | `gcloud compute addresses delete tamshai-prod-private-ip --global --quiet` |
+| 25 | Use targeted destroy for VPC when vpc_connector_id count fails | `terraform destroy -target=module.networking.google_compute_network.vpc` |
+
+### Stage 3: Post-Destroy Verification
+
+**Goal**: Verify clean slate before apply. Fail-fast if resources remain.
+
+| Gap # | Resolution | Command |
+|-------|------------|---------|
+| 1a | Verify no orphaned Cloud Run services | `gcloud run services list --region=us-central1 --format="value(name)" \| grep -E "^(keycloak\|mcp-\|web-portal)"` |
+| 1a | Verify no orphaned Cloud SQL | `gcloud sql instances list --format="value(name)" \| grep tamshai` |
+| 1a | Verify no orphaned VPC | `gcloud compute networks list --format="value(name)" \| grep tamshai` |
+| 1b | Remove stale Cloud Run entries from terraform state | `terraform state rm 'module.cloudrun.google_cloud_run_service.mcp_suite["hr"]'` (repeat for each) |
+| 2 | Delete persisted secrets | Loop through secrets with `gcloud secrets delete "$secret" --quiet` |
+| 3 | Delete Cloud SQL if still exists | `gcloud sql instances delete tamshai-prod-postgres --quiet` |
+| 4 | Delete Cloud Run job if still exists | `gcloud run jobs delete provision-users --region=us-central1 --quiet` |
+
+### Stage 4: Pre-Apply
+
+**Goal**: Prepare for terraform apply.
+
+| Gap # | Resolution | Command |
+|-------|------------|---------|
+| 5 | Ensure terraform state bucket exists | `gcloud storage buckets create gs://tamshai-terraform-state-prod --location=US --uniform-bucket-level-access` |
+| 6 | Disable bootstrap state bucket file | `mv infrastructure/terraform/gcp/bootstrap-state-bucket.tf infrastructure/terraform/gcp/bootstrap-state-bucket.tf.disabled` |
+
+### Stage 5: During Apply
+
+**Goal**: Handle terraform apply issues.
+
+| Gap # | Resolution | Command |
+|-------|------------|---------|
+| 7, 25 | Staged apply: networking first | `terraform apply -target=module.networking -auto-approve && terraform apply -auto-approve` |
+| 8, 26 | Add version to mcp-hr-service-client-secret | `openssl rand -base64 32 \| gcloud secrets versions add mcp-hr-service-client-secret --data-file=-` |
+| 9, 28 | Import existing storage buckets (409 conflict) | `terraform import 'module.storage.google_storage_bucket.static_website[0]' prod.tamshai.com` |
+| 17 | Temporarily wrap outputs.tf with try() for imports | Edit outputs.tf, add `try(..., null)` wrappers, import, then revert |
+| 20 | Handle bucket location mismatch | Already fixed: `lifecycle { ignore_changes = [location] }` in storage module |
+
+### Stage 6: Post-Apply
+
+**Goal**: Configure resources terraform doesn't fully manage.
+
+| Gap # | Resolution | Command |
+|-------|------------|---------|
+| 11, 27, 29 | Delete failed Cloud Run services (no images) | `for svc in keycloak mcp-finance mcp-hr mcp-sales mcp-support web-portal; do gcloud run services delete "$svc" --region=us-central1 --quiet; done` |
+| 12 | Regenerate CICD SA key and update GitHub | `gcloud iam service-accounts keys create /tmp/key.json --iam-account=tamshai-prod-cicd@gen-lang-client-0553641830.iam.gserviceaccount.com && gh secret set GCP_SA_KEY_PROD < /tmp/key.json` |
+| 14, 32 | Add missing IAM bindings for secrets | `gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri --member="serviceAccount:tamshai-prod-mcp-servers@gen-lang-client-0553641830.iam.gserviceaccount.com" --role="roles/secretmanager.secretAccessor"` |
+| 35 | Create auth.tamshai.com domain mapping | `gcloud beta run domain-mappings create --service=keycloak --domain=auth.tamshai.com --region=us-central1` |
+
+### Stage 7: Deploy Workflow
+
+**Goal**: Trigger CI/CD deployment after infrastructure is ready.
+
+| Gap # | Resolution | Implementation |
+|-------|------------|----------------|
+| 30 | Dynamic PostgreSQL IP discovery | Already fixed in deploy-to-gcp.yml: queries Cloud SQL directly |
+| 31 | CICD SA needs cloudsql.viewer | Already fixed in Terraform security module |
+| 33 | Static website bucket IAM after import | Run `terraform apply -target=module.storage` after importing bucket |
+| 34 | Keycloak health check timeout | Increase to 120s in Cloud Run service config |
+| 36 | Deploy gateway after auth.tamshai.com routable | Wait for `gcloud beta run domain-mappings describe --domain=auth.tamshai.com` shows DomainRoutable=True |
+
+### Stage 8: Post-Deploy Verification
+
+**Goal**: Verify all services are healthy.
+
+| Check | Command |
+|-------|---------|
+| All 7 Cloud Run services running | `gcloud run services list --region=us-central1 --format="table(name,status.conditions[0].status)"` |
+| auth.tamshai.com reachable | `curl -sf https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration` |
+| mcp-gateway healthy | `curl -sf https://mcp-gateway-fn44nd7wba-uc.a.run.app/health` |
+| E2E tests pass | `cd tests/e2e && npm run test:login:prod` |
+
+---
 
 ## Recommended Phoenix Script Enhancements
 
@@ -330,4 +425,4 @@ Correct deployment order after Phoenix rebuild:
 13. **CICD cloudsql.viewer role**: Required for PostgreSQL IP discovery
 14. **Domain mapping creation**: Create auth.tamshai.com mapping before gateway deploy
 15. **Extended health check timeout**: 120s instead of 60s for Keycloak cold starts
-16. **SSL certificate wait loop**: Poll domain mapping status until CertificateProvisioned=True (up to 20 min)
+16. **Domain routing wait**: Poll until DomainRoutable=True (Cloudflare handles SSL)

@@ -39,6 +39,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib/secrets.sh"
 source "$SCRIPT_DIR/lib/health-checks.sh"
 source "$SCRIPT_DIR/lib/dynamic-urls.sh"
+source "$SCRIPT_DIR/lib/verify.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/cleanup.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/domain-mapping.sh" 2>/dev/null || true
 
 # Checkpoint file for resume capability
 CHECKPOINT_FILE="${HOME}/.phoenix-rebuild-progress.json"
@@ -253,7 +256,13 @@ phase_3_destroy() {
         return 0
     fi
 
-    log_step "Disabling deletion protection on Cloud SQL..."
+    # Pre-destroy cleanup (Gap #21, #22)
+    log_step "Running pre-destroy cleanup..."
+
+    log_step "Deleting Cloud Run jobs (Gap #21)..."
+    gcloud run jobs delete provision-users --region="${GCP_REGION:-us-central1}" --quiet 2>/dev/null || true
+
+    log_step "Disabling deletion protection on Cloud SQL (Gap #22)..."
     local instance_name="tamshai-prod-postgres"
     if gcloud sql instances describe "$instance_name" &>/dev/null; then
         gcloud sql instances patch "$instance_name" \
@@ -267,10 +276,83 @@ phase_3_destroy() {
     echo "Press Ctrl+C to abort, or wait 10 seconds to continue..."
     sleep 10
 
-    terraform destroy -auto-approve
+    terraform destroy -auto-approve || {
+        log_warn "Terraform destroy had errors - attempting cleanup..."
+
+        # Gap #23: Remove service networking from state if blocked
+        log_step "Removing service networking from state (Gap #23)..."
+        terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+        terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+
+        # Gap #24: Delete orphaned private IP
+        log_step "Deleting orphaned private IP (Gap #24)..."
+        gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
+
+        # Retry destroy
+        log_step "Retrying terraform destroy..."
+        terraform destroy -auto-approve || log_warn "Destroy may be incomplete - verify manually"
+    }
+
+    # Post-destroy verification (Gap #1a)
+    log_step "Running post-destroy verification (Gap #1a)..."
+
+    local verification_failed=false
+
+    # Check for orphaned Cloud Run services
+    if gcloud run services list --region="${GCP_REGION:-us-central1}" --format="value(name)" 2>/dev/null | grep -qE "^(keycloak|mcp-|web-portal)"; then
+        log_warn "Orphaned Cloud Run services found - deleting..."
+        for svc in keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal; do
+            gcloud run services delete "$svc" --region="${GCP_REGION:-us-central1}" --quiet 2>/dev/null || true
+        done
+    fi
+
+    # Check for orphaned Cloud SQL
+    if gcloud sql instances list --format="value(name)" 2>/dev/null | grep -q "tamshai"; then
+        log_error "Cloud SQL instance still exists - manual deletion required"
+        verification_failed=true
+    fi
+
+    # Check for orphaned VPC
+    if gcloud compute networks list --format="value(name)" 2>/dev/null | grep -q "tamshai"; then
+        log_error "VPC still exists - manual deletion required"
+        verification_failed=true
+    fi
+
+    # Gap #1b: Remove stale state entries
+    log_step "Removing stale state entries (Gap #1b)..."
+    for resource in \
+        'module.cloudrun.google_cloud_run_service.mcp_suite["hr"]' \
+        'module.cloudrun.google_cloud_run_service.mcp_suite["finance"]' \
+        'module.cloudrun.google_cloud_run_service.mcp_suite["sales"]' \
+        'module.cloudrun.google_cloud_run_service.mcp_suite["support"]' \
+        'module.cloudrun.google_cloud_run_service.keycloak' \
+        'module.cloudrun.google_cloud_run_service.mcp_gateway' \
+        'module.cloudrun.google_cloud_run_service.web_portal[0]'; do
+        terraform state rm "$resource" 2>/dev/null || true
+    done
+
+    # Delete persisted secrets (Gap #2)
+    log_step "Deleting persisted secrets (Gap #2)..."
+    for secret in \
+        tamshai-prod-keycloak-admin-password \
+        tamshai-prod-keycloak-db-password \
+        tamshai-prod-db-password \
+        tamshai-prod-anthropic-api-key \
+        tamshai-prod-mcp-gateway-client-secret \
+        tamshai-prod-jwt-secret \
+        mcp-hr-service-client-secret \
+        prod-user-password; do
+        gcloud secrets delete "$secret" --quiet 2>/dev/null || true
+    done
+
+    if [ "$verification_failed" = true ]; then
+        log_error "Post-destroy verification failed - manual cleanup required"
+        save_checkpoint 3 "failed"
+        exit 1
+    fi
 
     save_checkpoint 3 "completed"
-    log_success "Phase 3 complete - Infrastructure destroyed"
+    log_success "Phase 3 complete - Infrastructure destroyed and verified"
 }
 
 # =============================================================================
@@ -308,6 +390,19 @@ phase_4_infrastructure() {
 
     log_step "Waiting for Cloud SQL to be ready..."
     wait_for_cloudsql "tamshai-prod-postgres" 300
+
+    # Gap #26: Add version to mcp-hr-service-client-secret
+    log_step "Adding version to mcp-hr-service-client-secret (Gap #26)..."
+    if gcloud secrets describe mcp-hr-service-client-secret --project="${GCP_PROJECT_ID}" &>/dev/null; then
+        local version_count
+        version_count=$(gcloud secrets versions list mcp-hr-service-client-secret --project="${GCP_PROJECT_ID}" --format="value(name)" 2>/dev/null | wc -l)
+        if [ "$version_count" -eq 0 ]; then
+            openssl rand -base64 32 | gcloud secrets versions add mcp-hr-service-client-secret --data-file=- --project="${GCP_PROJECT_ID}"
+            log_success "Added version to mcp-hr-service-client-secret"
+        else
+            log_info "mcp-hr-service-client-secret already has a version"
+        fi
+    fi
 
     save_checkpoint 4 "completed"
     log_success "Phase 4 complete - Infrastructure created"
@@ -421,6 +516,57 @@ phase_7_cloud_run() {
 
     log_step "Applying full Terraform configuration..."
     terraform apply -auto-approve
+
+    # Gap #32: Add MongoDB URI IAM binding for MCP servers
+    log_step "Adding MongoDB URI IAM binding (Gap #32)..."
+    local project="${GCP_PROJECT_ID}"
+    local sa_email="tamshai-prod-mcp-servers@${project}.iam.gserviceaccount.com"
+
+    if gcloud secrets describe tamshai-prod-mongodb-uri --project="$project" &>/dev/null; then
+        gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
+            --member="serviceAccount:${sa_email}" \
+            --role="roles/secretmanager.secretAccessor" \
+            --project="$project" \
+            --quiet 2>/dev/null || log_info "IAM binding may already exist"
+    fi
+
+    # Gap #35: Create auth.tamshai.com domain mapping
+    log_step "Creating auth.tamshai.com domain mapping (Gap #35)..."
+    local region="${GCP_REGION:-us-central1}"
+
+    if ! gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null; then
+        gcloud beta run domain-mappings create \
+            --service=keycloak \
+            --domain=auth.tamshai.com \
+            --region="$region" || log_warn "Domain mapping creation failed - may need manual creation"
+    else
+        log_info "Domain mapping auth.tamshai.com already exists"
+    fi
+
+    # Gap #16: Wait for domain mapping to be routable
+    log_step "Waiting for domain mapping to be routable (Gap #16)..."
+    local timeout=300
+    local elapsed=0
+    while [ $elapsed -lt $timeout ]; do
+        local routable
+        routable=$(gcloud beta run domain-mappings describe \
+            --domain=auth.tamshai.com \
+            --region="$region" \
+            --format="value(status.conditions[2].status)" 2>/dev/null || echo "Unknown")
+
+        if [ "$routable" = "True" ]; then
+            log_success "Domain mapping is routable"
+            break
+        fi
+
+        log_info "  Waiting for domain routing... (${elapsed}s elapsed)"
+        sleep 10
+        elapsed=$((elapsed + 10))
+    done
+
+    if [ $elapsed -ge $timeout ]; then
+        log_warn "Domain mapping may not be fully routable yet - continuing anyway"
+    fi
 
     save_checkpoint 7 "completed"
     log_success "Phase 7 complete - Cloud Run services configured"
