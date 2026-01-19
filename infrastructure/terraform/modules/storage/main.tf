@@ -164,3 +164,14 @@ resource "google_storage_bucket_iam_member" "static_website_cicd" {
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${var.cicd_service_account_email}"
 }
+
+# Grant CI/CD service account bucket-level read access (required for gcloud storage rsync)
+# storage.objectAdmin provides object operations but NOT storage.buckets.get
+# legacyBucketReader provides storage.buckets.get which rsync needs to read bucket metadata
+resource "google_storage_bucket_iam_member" "static_website_cicd_bucket_reader" {
+  count = var.enable_static_website && var.cicd_service_account_email != "" ? 1 : 0
+
+  bucket = google_storage_bucket.static_website[0].name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${var.cicd_service_account_email}"
+}

@@ -298,6 +298,7 @@ These gaps were discovered during a full Phoenix rebuild execution:
 | 34 | Keycloak health check timeout | 60s too short for cold start | Increase timeout to 120s | Low |
 | 35 | auth.tamshai.com Cloud Run domain mapping missing | Cloudflare DNS (auth.tamshai.com → ghs.googlehosted.com) persists, but GCP domain mapping that routes to keycloak service is destroyed | `gcloud beta run domain-mappings create --service=keycloak --domain=auth.tamshai.com --region=us-central1` | High |
 | 36 | mcp-gateway can't start | Depends on auth.tamshai.com being routable | Create domain mapping before deploying gateway | Critical |
+| 37 | CICD SA missing storage.buckets.get permission | `roles/storage.objectAdmin` doesn't include `storage.buckets.get` which `gcloud storage rsync` requires | Fixed in Terraform: Added `roles/storage.legacyBucketReader` to storage module IAM | High |
 
 ### Deployment Order Dependencies
 
@@ -371,6 +372,7 @@ This section consolidates all gaps into actionable steps organized by Phoenix re
 | 9, 28 | Import existing storage buckets (409 conflict) | `terraform import 'module.storage.google_storage_bucket.static_website[0]' prod.tamshai.com` |
 | 17 | Temporarily wrap outputs.tf with try() for imports | Edit outputs.tf, add `try(..., null)` wrappers, import, then revert |
 | 20 | Handle bucket location mismatch | Already fixed: `lifecycle { ignore_changes = [location] }` in storage module |
+| 37 | CICD SA bucket reader IAM | Already fixed: `roles/storage.legacyBucketReader` added to storage module |
 
 ### Stage 6: Post-Apply
 
@@ -426,3 +428,4 @@ This section consolidates all gaps into actionable steps organized by Phoenix re
 14. **Domain mapping creation**: Create auth.tamshai.com mapping before gateway deploy
 15. **Extended health check timeout**: 120s instead of 60s for Keycloak cold starts
 16. **Domain routing wait**: Poll until DomainRoutable=True (Cloudflare handles SSL)
+17. **CICD bucket reader IAM**: Ensure `roles/storage.legacyBucketReader` for `gcloud storage rsync` to work
