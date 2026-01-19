@@ -12,21 +12,25 @@
 # Environments:
 #   dev    - Development environment (default)
 #   stage  - Staging VPS environment
+#   prod   - Production GCP environment (for --sync-gcp)
 #
 # Options:
 #   --dry-run    Show what would be updated without making changes
 #   --ssh-key    Update only VPS_SSH_KEY
 #   --all        Update all secrets from Terraform outputs
+#   --sync-gcp   Sync secrets from GitHub to GCP Secret Manager (prod only)
 #
 # Examples:
 #   ./update-github-secrets.sh stage --ssh-key     # Update SSH key only
 #   ./update-github-secrets.sh stage --all         # Update all secrets
 #   ./update-github-secrets.sh stage --dry-run     # Preview changes
+#   ./update-github-secrets.sh prod --sync-gcp     # Sync to GCP Secret Manager
 #
 # Prerequisites:
 #   - GitHub CLI (gh) authenticated
 #   - Terraform state available
 #   - Appropriate repository permissions
+#   - gcloud CLI (for --sync-gcp)
 #
 # =============================================================================
 
@@ -38,6 +42,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV="${1:-stage}"
 ACTION=""
 DRY_RUN=false
+SYNC_GCP=false
 
 # Parse arguments
 shift || true
@@ -46,6 +51,7 @@ while [ $# -gt 0 ]; do
         --dry-run) DRY_RUN=true; shift ;;
         --ssh-key) ACTION="ssh-key"; shift ;;
         --all) ACTION="all"; shift ;;
+        --sync-gcp) SYNC_GCP=true; ACTION="sync-gcp"; shift ;;
         *) shift ;;
     esac
 done
@@ -188,6 +194,141 @@ update_all_secrets() {
     # update_secret "KEYCLOAK_ADMIN_PASSWORD" "$(terraform output -raw keycloak_admin_password 2>/dev/null)" || true
 }
 
+# =============================================================================
+# GCP Secret Manager Sync (Phoenix rebuild support)
+# =============================================================================
+
+# GitHub to GCP secret name mapping
+declare -A GITHUB_TO_GCP_MAP=(
+    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-anthropic-api-key"
+    ["PROD_DB_PASSWORD"]="tamshai-prod-db-password"
+    ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="tamshai-prod-keycloak-admin-password"
+    ["KEYCLOAK_DB_PASSWORD_PROD"]="tamshai-prod-keycloak-db-password"
+    ["MONGODB_URI_PROD"]="tamshai-prod-mongodb-uri"
+    ["MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
+)
+
+# Sanitize secret value (removes trailing whitespace, \r\n - Issue #25 fix)
+sanitize_secret() {
+    local value="$1"
+    echo -n "$value" | tr -d '\r' | sed 's/[[:space:]]*$//'
+}
+
+# Create or update a GCP secret (idempotent)
+ensure_gcp_secret() {
+    local secret_name="$1"
+    local secret_value="$2"
+    local project="${GCP_PROJECT_ID:-}"
+
+    if [ -z "$project" ]; then
+        project=$(gcloud config get-value project 2>/dev/null)
+    fi
+
+    if [ -z "$project" ]; then
+        log_error "GCP_PROJECT_ID not set and no default project configured"
+        return 1
+    fi
+
+    # Sanitize the value
+    local clean_value
+    clean_value=$(sanitize_secret "$secret_value")
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "[DRY-RUN] Would sync to GCP secret: $secret_name (${#clean_value} chars)"
+        return 0
+    fi
+
+    # Check if secret exists
+    if gcloud secrets describe "$secret_name" --project="$project" &>/dev/null; then
+        # Secret exists - add new version
+        log_info "Updating GCP secret: $secret_name"
+        echo -n "$clean_value" | gcloud secrets versions add "$secret_name" \
+            --project="$project" \
+            --data-file=- 2>/dev/null
+    else
+        # Secret doesn't exist - create it
+        log_info "Creating GCP secret: $secret_name"
+        echo -n "$clean_value" | gcloud secrets create "$secret_name" \
+            --project="$project" \
+            --replication-policy="automatic" \
+            --data-file=- 2>/dev/null
+    fi
+
+    log_info "GCP secret $secret_name updated"
+}
+
+# Sync secrets to GCP Secret Manager
+sync_to_gcp() {
+    log_header "Syncing Secrets to GCP Secret Manager"
+
+    # Check prerequisites
+    if ! command -v gcloud &>/dev/null; then
+        log_error "gcloud CLI not installed"
+        exit 1
+    fi
+
+    if ! gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null | head -1 | grep -q "@"; then
+        log_error "gcloud not authenticated. Run: gcloud auth login"
+        exit 1
+    fi
+
+    local project="${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+    if [ -z "$project" ]; then
+        log_error "GCP_PROJECT_ID not set"
+        exit 1
+    fi
+
+    export GCP_PROJECT_ID="$project"
+    log_info "Target GCP project: $project"
+
+    echo ""
+    log_warn "This will sync the following secrets from GitHub to GCP Secret Manager:"
+    for github_name in "${!GITHUB_TO_GCP_MAP[@]}"; do
+        local gcp_name="${GITHUB_TO_GCP_MAP[$github_name]}"
+        echo "  $github_name -> $gcp_name"
+    done
+    echo ""
+
+    if [ "$DRY_RUN" = false ]; then
+        log_warn "Note: This operation requires you to provide secret values."
+        log_info "The script cannot read GitHub secret values directly."
+        echo ""
+    fi
+
+    # For each mapped secret, prompt for value (since we can't read GitHub secrets)
+    for github_name in "${!GITHUB_TO_GCP_MAP[@]}"; do
+        local gcp_name="${GITHUB_TO_GCP_MAP[$github_name]}"
+
+        if [ "$DRY_RUN" = true ]; then
+            log_info "[DRY-RUN] Would sync $github_name -> $gcp_name"
+            continue
+        fi
+
+        # Check if there's an environment variable with the secret value
+        local env_var_value="${!github_name:-}"
+
+        if [ -n "$env_var_value" ]; then
+            log_info "Using value from \$$github_name environment variable"
+            ensure_gcp_secret "$gcp_name" "$env_var_value"
+        else
+            log_warn "Skipping $github_name (not set in environment)"
+            log_info "To sync, set the environment variable: export $github_name='value'"
+        fi
+    done
+
+    log_header "GCP Sync Summary"
+
+    # Verify which secrets exist in GCP
+    log_info "Verifying GCP secrets..."
+    for gcp_name in "${GITHUB_TO_GCP_MAP[@]}"; do
+        if gcloud secrets describe "$gcp_name" --project="$project" &>/dev/null; then
+            log_info "  $gcp_name: exists"
+        else
+            log_warn "  $gcp_name: missing"
+        fi
+    done
+}
+
 # Show current secrets (names only)
 show_current_secrets() {
     log_header "Current Repository Secrets"
@@ -202,6 +343,18 @@ main() {
     echo "Action: $ACTION"
     echo "Dry Run: $DRY_RUN"
     echo ""
+
+    # GCP sync has different prerequisites
+    if [ "$ACTION" = "sync-gcp" ]; then
+        sync_to_gcp
+        log_header "Summary"
+        if [ "$DRY_RUN" = true ]; then
+            log_info "Dry run complete - no changes made"
+        else
+            log_info "GCP secrets sync complete"
+        fi
+        return 0
+    fi
 
     check_prerequisites
     show_current_secrets

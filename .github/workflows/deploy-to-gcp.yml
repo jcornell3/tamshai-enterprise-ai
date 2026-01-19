@@ -37,6 +37,82 @@ env:
   AR_REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
 
 jobs:
+  # ==========================================================================
+  # Dynamic URL Discovery
+  # Eliminates hardcoded Cloud Run URLs (Phoenix rebuild fix)
+  # ==========================================================================
+  discover-urls:
+    runs-on: ubuntu-latest
+    outputs:
+      keycloak_url: ${{ steps.discover.outputs.keycloak_url }}
+      keycloak_issuer: ${{ steps.discover.outputs.keycloak_issuer }}
+      jwks_uri: ${{ steps.discover.outputs.jwks_uri }}
+      mcp_gateway_url: ${{ steps.discover.outputs.mcp_gateway_url }}
+      mcp_hr_url: ${{ steps.discover.outputs.mcp_hr_url }}
+      mcp_finance_url: ${{ steps.discover.outputs.mcp_finance_url }}
+      mcp_sales_url: ${{ steps.discover.outputs.mcp_sales_url }}
+      mcp_support_url: ${{ steps.discover.outputs.mcp_support_url }}
+      postgres_ip: ${{ steps.discover.outputs.postgres_ip }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Discover Cloud Run URLs and Cloud SQL IP
+        id: discover
+        run: |
+          echo "Discovering GCP resource URLs..."
+
+          # Cloud Run services (may not exist yet during initial Phoenix rebuild)
+          KEYCLOAK_URL=$(gcloud run services describe keycloak \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          MCP_GATEWAY_URL=$(gcloud run services describe mcp-gateway \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          MCP_HR_URL=$(gcloud run services describe mcp-hr \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          MCP_FINANCE_URL=$(gcloud run services describe mcp-finance \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          MCP_SALES_URL=$(gcloud run services describe mcp-sales \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          MCP_SUPPORT_URL=$(gcloud run services describe mcp-support \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+
+          # Cloud SQL private IP
+          POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres \
+            --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
+
+          # Use auth.tamshai.com as the canonical Keycloak URL for token validation
+          # (Cloud Run URL is internal, auth.tamshai.com is the public endpoint)
+          KEYCLOAK_PUBLIC_URL="https://auth.tamshai.com"
+
+          # Output values (empty strings are OK - services may not exist yet)
+          echo "keycloak_url=${KEYCLOAK_URL:-$KEYCLOAK_PUBLIC_URL}" >> $GITHUB_OUTPUT
+          echo "keycloak_issuer=${KEYCLOAK_PUBLIC_URL}/auth/realms/tamshai-corp" >> $GITHUB_OUTPUT
+          echo "jwks_uri=${KEYCLOAK_PUBLIC_URL}/auth/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
+          echo "mcp_gateway_url=${MCP_GATEWAY_URL}" >> $GITHUB_OUTPUT
+          echo "mcp_hr_url=${MCP_HR_URL}" >> $GITHUB_OUTPUT
+          echo "mcp_finance_url=${MCP_FINANCE_URL}" >> $GITHUB_OUTPUT
+          echo "mcp_sales_url=${MCP_SALES_URL}" >> $GITHUB_OUTPUT
+          echo "mcp_support_url=${MCP_SUPPORT_URL}" >> $GITHUB_OUTPUT
+          echo "postgres_ip=${POSTGRES_IP}" >> $GITHUB_OUTPUT
+
+          echo "Discovery complete:"
+          echo "  Keycloak: ${KEYCLOAK_URL:-'not deployed yet'}"
+          echo "  MCP Gateway: ${MCP_GATEWAY_URL:-'not deployed yet'}"
+          echo "  PostgreSQL IP: ${POSTGRES_IP:-'not available yet'}"
+
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -65,7 +141,7 @@ jobs:
               - 'apps/tamshai-website/**'
 
   deploy-gateway:
-    needs: detect-changes
+    needs: [detect-changes, discover-urls]
     if: |
       needs.detect-changes.outputs.gateway == 'true' ||
       github.event.inputs.service == 'all' ||
@@ -95,6 +171,18 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          # Use discovered URLs or fallback to well-known public endpoints
+          KEYCLOAK_ISSUER="${{ needs.discover-urls.outputs.keycloak_issuer }}"
+          JWKS_URI="${{ needs.discover-urls.outputs.jwks_uri }}"
+          MCP_HR_URL="${{ needs.discover-urls.outputs.mcp_hr_url }}"
+          MCP_FINANCE_URL="${{ needs.discover-urls.outputs.mcp_finance_url }}"
+          MCP_SALES_URL="${{ needs.discover-urls.outputs.mcp_sales_url }}"
+          MCP_SUPPORT_URL="${{ needs.discover-urls.outputs.mcp_support_url }}"
+
+          # Fallback to auth.tamshai.com for Keycloak (always available)
+          KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://auth.tamshai.com/auth/realms/tamshai-corp}"
+          JWKS_URI="${JWKS_URI:-https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs}"
+
           gcloud run deploy mcp-gateway \
             --image=${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
@@ -107,7 +195,21 @@ jobs:
             --cpu=1 \
             --timeout=300 \
             --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
-            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://keycloak-1046947015464.us-central1.run.app/auth,KEYCLOAK_ISSUER=https://keycloak-1046947015464.us-central1.run.app/auth/realms/tamshai-corp,JWKS_URI=https://keycloak-1046947015464.us-central1.run.app/auth/realms/tamshai-corp/protocol/openid-connect/certs,MCP_HR_URL=https://mcp-hr-1046947015464.us-central1.run.app,MCP_FINANCE_URL=https://mcp-finance-1046947015464.us-central1.run.app,MCP_SALES_URL=https://mcp-sales-1046947015464.us-central1.run.app,MCP_SUPPORT_URL=https://mcp-support-1046947015464.us-central1.run.app,TOKEN_REVOCATION_FAIL_OPEN=true,MCP_READ_TIMEOUT_MS=30000,MCP_WRITE_TIMEOUT_MS=60000"
+            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://auth.tamshai.com/auth,KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER},JWKS_URI=${JWKS_URI},MCP_HR_URL=${MCP_HR_URL},MCP_FINANCE_URL=${MCP_FINANCE_URL},MCP_SALES_URL=${MCP_SALES_URL},MCP_SUPPORT_URL=${MCP_SUPPORT_URL},TOKEN_REVOCATION_FAIL_OPEN=true,MCP_READ_TIMEOUT_MS=30000,MCP_WRITE_TIMEOUT_MS=60000"
+
+      - name: Health Check
+        run: |
+          echo "Waiting for mcp-gateway to be healthy..."
+          for i in {1..12}; do
+            URL=$(gcloud run services describe mcp-gateway --region=${{ env.GCP_REGION }} --format="value(status.url)")
+            if curl -sf "${URL}/health" > /dev/null 2>&1; then
+              echo "mcp-gateway is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/12: Not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "WARNING: mcp-gateway health check timed out"
 
   deploy-mcp-postgres:
     needs: detect-changes
@@ -229,7 +331,7 @@ jobs:
             --set-env-vars="NODE_ENV=production,MONGODB_DB=${{ matrix.db_name }}${{ matrix.backend && format(',SUPPORT_DATA_BACKEND={0}', matrix.backend) || '' }}"
 
   deploy-keycloak:
-    needs: detect-changes
+    needs: [detect-changes, discover-urls]
     if: |
       needs.detect-changes.outputs.keycloak == 'true' ||
       github.event.inputs.service == 'all' ||
@@ -274,6 +376,21 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          # Use discovered PostgreSQL IP or fetch dynamically
+          POSTGRES_IP="${{ needs.discover-urls.outputs.postgres_ip }}"
+          if [ -z "$POSTGRES_IP" ]; then
+            echo "Discovering PostgreSQL IP..."
+            POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres \
+              --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$POSTGRES_IP" ]; then
+            echo "ERROR: Could not determine PostgreSQL IP address"
+            exit 1
+          fi
+
+          echo "Using PostgreSQL IP: $POSTGRES_IP"
+
           gcloud run deploy keycloak \
             --image=${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
@@ -288,7 +405,20 @@ jobs:
             --vpc-connector=tamshai-prod-connector \
             --vpc-egress=private-ranges-only \
             --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
-            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://10.194.0.3:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth,KC_DB_POOL_MAX_SIZE=10,KC_DB_POOL_MIN_SIZE=2"
+            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://${POSTGRES_IP}:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth,KC_DB_POOL_MAX_SIZE=10,KC_DB_POOL_MIN_SIZE=2"
+
+      - name: Health Check
+        run: |
+          echo "Waiting for Keycloak to be healthy..."
+          for i in {1..12}; do
+            if curl -sf "https://auth.tamshai.com/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
+              echo "Keycloak is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/12: Not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "WARNING: Keycloak health check timed out"
 
   sync-keycloak-realm:
     needs: deploy-keycloak
@@ -516,7 +646,7 @@ jobs:
           gcloud storage objects update gs://prod.tamshai.com/index.html --cache-control="no-cache,must-revalidate"
 
   deploy-web-portal:
-    needs: detect-changes
+    needs: [detect-changes, discover-urls]
     if: |
       needs.detect-changes.outputs.web == 'true' ||
       github.event.inputs.service == 'all' ||
@@ -537,22 +667,33 @@ jobs:
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
       - name: Build and Push Web Apps Image
-        env:
-          VITE_RELEASE_TAG: v1.0.0
-          VITE_KEYCLOAK_URL: https://auth.tamshai.com/auth/realms/tamshai-corp
-          VITE_KEYCLOAK_CLIENT_ID: web-portal
-          VITE_API_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
-          VITE_MCP_GATEWAY_URL: https://mcp-gateway-fn44nd7wba-uc.a.run.app
         run: |
+          # Use discovered MCP Gateway URL or fetch dynamically
+          MCP_GATEWAY_URL="${{ needs.discover-urls.outputs.mcp_gateway_url }}"
+          if [ -z "$MCP_GATEWAY_URL" ]; then
+            echo "Discovering MCP Gateway URL..."
+            MCP_GATEWAY_URL=$(gcloud run services describe mcp-gateway \
+              --region=${{ env.GCP_REGION }} \
+              --format="value(status.url)" 2>/dev/null || echo "")
+          fi
+
+          # Use auth.tamshai.com for Keycloak (always available via domain mapping)
+          KEYCLOAK_URL="https://auth.tamshai.com/auth/realms/tamshai-corp"
+
+          echo "Building web-portal with:"
+          echo "  KEYCLOAK_URL: $KEYCLOAK_URL"
+          echo "  MCP_GATEWAY_URL: ${MCP_GATEWAY_URL:-'will be set at runtime'}"
+
           # Build ALL web apps (portal, hr, finance, sales, support) using unified Dockerfile
           docker build \
             -f clients/web/Dockerfile.prod \
             -t ${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
             -t ${{ env.AR_REPO }}/web-portal:latest \
-            --build-arg VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL \
-            --build-arg VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID \
-            --build-arg VITE_API_GATEWAY_URL=$VITE_API_GATEWAY_URL \
-            --build-arg VITE_MCP_GATEWAY_URL=$VITE_MCP_GATEWAY_URL \
+            --build-arg VITE_KEYCLOAK_URL="$KEYCLOAK_URL" \
+            --build-arg VITE_KEYCLOAK_CLIENT_ID=web-portal \
+            --build-arg VITE_API_GATEWAY_URL="$MCP_GATEWAY_URL" \
+            --build-arg VITE_MCP_GATEWAY_URL="$MCP_GATEWAY_URL" \
+            --build-arg VITE_RELEASE_TAG=v1.0.0 \
             .
           docker push ${{ env.AR_REPO }}/web-portal:${{ github.sha }}
           docker push ${{ env.AR_REPO }}/web-portal:latest
@@ -571,6 +712,20 @@ jobs:
             --cpu=1 \
             --timeout=60 \
             --port=80
+
+      - name: Health Check
+        run: |
+          echo "Waiting for web-portal to be healthy..."
+          for i in {1..6}; do
+            URL=$(gcloud run services describe web-portal --region=${{ env.GCP_REGION }} --format="value(status.url)")
+            if curl -sf "${URL}/" > /dev/null 2>&1; then
+              echo "web-portal is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/6: Not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "WARNING: web-portal health check timed out"
 
   notify:
     needs: [deploy-gateway, deploy-mcp-postgres, deploy-mcp-mongodb, deploy-keycloak, deploy-static-website, deploy-web-portal]
