@@ -272,20 +272,21 @@ These gaps were discovered during a full Phoenix rebuild execution:
 | 34 | Keycloak health check timeout | 60s too short for cold start | Increase timeout to 120s | Low |
 | 35 | auth.tamshai.com domain mapping missing | Terraform didn't create it | Create via gcloud beta | High |
 | 36 | mcp-gateway can't start | Depends on auth.tamshai.com | Create domain mapping first | Critical |
+| 37 | GCP managed SSL certificate provisioning | Takes 10-15 minutes after domain mapping | Wait for certificate before deploying gateway | High |
 
 ### Deployment Order Dependencies
 
 Correct deployment order after Phoenix rebuild:
 1. Terraform apply (networking module first, then full apply)
 2. Create/regenerate CICD service account key → update GitHub secret
-3. Deploy Keycloak (must start first)
-4. Create auth.tamshai.com domain mapping → keycloak
-5. Wait for domain verification/propagation
+3. Create auth.tamshai.com domain mapping → keycloak
+4. Wait for SSL certificate provisioning (10-15 minutes, poll `gcloud beta run domain-mappings describe`)
+5. Deploy Keycloak (must start first)
 6. Deploy MCP services (hr, finance, sales, support)
-7. Deploy mcp-gateway (depends on Keycloak URL being reachable)
+7. Deploy mcp-gateway (depends on auth.tamshai.com being HTTPS-reachable)
 8. Deploy web-portal
 9. Sync Keycloak realm
-10. Configure test user TOTP
+10. Run E2E tests to verify
 
 ## Recommended Phoenix Script Enhancements
 
@@ -303,3 +304,4 @@ Correct deployment order after Phoenix rebuild:
 12. **CICD cloudsql.viewer role**: Required for PostgreSQL IP discovery
 13. **Domain mapping creation**: Create auth.tamshai.com mapping before gateway deploy
 14. **Extended health check timeout**: 120s instead of 60s for Keycloak cold starts
+15. **SSL certificate wait loop**: Poll domain mapping status until CertificateProvisioned=True (up to 20 min)
