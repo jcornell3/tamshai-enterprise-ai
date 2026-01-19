@@ -376,14 +376,18 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          # Use discovered PostgreSQL IP or hardcoded fallback
+          # Use discovered PostgreSQL IP or dynamically query Cloud SQL
           # Note: Discovery requires cloudsql.admin role which may not be available in all jobs
           POSTGRES_IP="${{ needs.discover-urls.outputs.postgres_ip }}"
 
-          # Validate IP format (x.x.x.x) or use fallback
+          # Validate IP format (x.x.x.x) or query Cloud SQL directly
           if ! [[ "$POSTGRES_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Using fallback PostgreSQL IP (discovery unavailable or invalid)"
-            POSTGRES_IP="10.145.0.5"
+            echo "Discovery unavailable or invalid, querying Cloud SQL directly..."
+            POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
+            if ! [[ "$POSTGRES_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "ERROR: Could not determine PostgreSQL IP"
+              exit 1
+            fi
           fi
 
           echo "Using PostgreSQL IP: $POSTGRES_IP"
