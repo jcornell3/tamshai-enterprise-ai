@@ -37,6 +37,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
+
 ENV="${1:-dev}"
 REMOVE_VOLUMES=false
 REMOVE_ALL=false
@@ -118,7 +124,14 @@ teardown_stage() {
     log_info "Rebuilding stage environment (stopping containers)..."
 
     # Check for VPS host
-    local VPS_HOST="${VPS_HOST:-5.78.159.29}"
+    local VPS_HOST="${VPS_HOST:-}"
+    if [ -z "$VPS_HOST" ]; then
+        log_error "VPS_HOST not set. Either:"
+        log_info "  1. Create .env.local with VPS_HOST=<ip>"
+        log_info "  2. Export VPS_HOST environment variable"
+        log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+        exit 1
+    fi
     local VPS_USER="${VPS_USER:-root}"
 
     log_warn "This will stop containers on the VPS at $VPS_HOST (infrastructure preserved)"

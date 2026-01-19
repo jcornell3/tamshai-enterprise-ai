@@ -48,6 +48,9 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0  # Compatible with Dart 3.5+ (Flutter 3.24+)
 
+  # Testing
+  mocktail: ^1.0.4  # Mock framework for unit tests
+
   # Code Generation
   build_runner: ^2.5.4  # Pinned to 2.5.x for freezed 2.x compatibility
   freezed: ^2.5.7  # Pinned to 2.x for Dart 3.6 compatibility

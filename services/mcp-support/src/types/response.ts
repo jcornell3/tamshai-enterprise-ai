@@ -57,6 +57,30 @@ export type MCPToolResponse<T = unknown> =
   | MCPErrorResponse
   | MCPPendingConfirmationResponse;
 
+/**
+ * Type guards for narrowing MCPToolResponse
+ */
+export function isSuccessResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPSuccessResponse<T> {
+  return response.status === 'success';
+}
+
+export function isErrorResponse(
+  response: MCPToolResponse
+): response is MCPErrorResponse {
+  return response.status === 'error';
+}
+
+export function isPendingConfirmationResponse(
+  response: MCPToolResponse
+): response is MCPPendingConfirmationResponse {
+  return response.status === 'pending_confirmation';
+}
+
+/**
+ * Helper functions for creating responses
+ */
 export function createSuccessResponse<T>(data: T, metadata?: PaginationMetadata): MCPSuccessResponse<T> {
   return { status: 'success', data, ...(metadata && { metadata }) };
 }

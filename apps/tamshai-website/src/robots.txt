@@ -1,0 +1,24 @@
+# Tamshai Corporate Website - Robots.txt
+# Allow indexing of public marketing pages, disallow internal app routes
+
+User-agent: *
+
+# Allow public marketing pages
+Allow: /
+Allow: /index.html
+Allow: /blog.html
+Allow: /leadership.html
+Allow: /mission.html
+Allow: /downloads.html
+
+# Disallow internal application routes (SPA)
+Disallow: /app/
+Disallow: /auth/
+Disallow: /api/
+
+# Disallow login pages (not useful for search)
+Disallow: /employee-login.html
+Disallow: /client-login.html
+
+# Sitemap (optional - add if you create one)
+# Sitemap: https://prod.tamshai.com/sitemap.xml

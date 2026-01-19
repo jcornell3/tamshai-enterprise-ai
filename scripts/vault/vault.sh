@@ -39,6 +39,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
+
 COMMAND="${1:-status}"
 ENV="${2:-dev}"
 SECRET_PATH="${3:-}"
@@ -62,7 +68,15 @@ setup_vault() {
         export VAULT_ADDR="http://localhost:8200"
         export VAULT_TOKEN="${VAULT_DEV_ROOT_TOKEN:-dev-root-token}"
     else
-        export VAULT_ADDR="https://${VPS_HOST:-5.78.159.29}:8200"
+        local vps_host="${VPS_HOST:-}"
+        if [ -z "$vps_host" ]; then
+            log_error "VPS_HOST not set. Either:"
+            log_info "  1. Create .env.local with VPS_HOST=<ip>"
+            log_info "  2. Export VPS_HOST environment variable"
+            log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+            exit 1
+        fi
+        export VAULT_ADDR="https://${vps_host}:8200"
         if [ -z "${VAULT_TOKEN:-}" ]; then
             log_error "VAULT_TOKEN required for stage environment"
             exit 1
@@ -205,7 +219,15 @@ cmd_ui() {
             echo "Open this URL in your browser: $url"
         fi
     else
-        local url="https://${VPS_HOST:-5.78.159.29}:8200"
+        local vps_host="${VPS_HOST:-}"
+        if [ -z "$vps_host" ]; then
+            log_error "VPS_HOST not set. Either:"
+            log_info "  1. Create .env.local with VPS_HOST=<ip>"
+            log_info "  2. Export VPS_HOST environment variable"
+            log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+            exit 1
+        fi
+        local url="https://${vps_host}:8200"
         log_info "Vault UI: $url"
         log_warn "Ensure VPN/SSH tunnel is active for secure access"
     fi

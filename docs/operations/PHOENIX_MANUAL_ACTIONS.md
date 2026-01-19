@@ -117,7 +117,7 @@ If resources already exist, import them:
 ```bash
 # Logs bucket
 terraform import 'module.storage.google_storage_bucket.logs' \
-  tamshai-prod-logs-gen-lang-client-0553641830
+  tamshai-prod-logs-${PROJECT_ID}
 
 # Static website bucket (if needed)
 terraform import 'module.storage.google_storage_bucket.static_website' \
@@ -138,7 +138,7 @@ done
 After terraform recreates the service account, update GitHub secret:
 ```bash
 gcloud iam service-accounts keys create /tmp/gcp-sa-key.json \
-  --iam-account=tamshai-prod-cicd@gen-lang-client-0553641830.iam.gserviceaccount.com
+  --iam-account=tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com
 gh secret set GCP_SA_KEY_PROD < /tmp/gcp-sa-key.json
 rm /tmp/gcp-sa-key.json
 ```
@@ -156,7 +156,7 @@ If permissions are missing:
 ```bash
 # MongoDB URI access for MCP servers
 gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
-  --member="serviceAccount:tamshai-prod-mcp-servers@gen-lang-client-0553641830.iam.gserviceaccount.com" \
+  --member="serviceAccount:tamshai-prod-mcp-servers@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
 
@@ -219,16 +219,16 @@ MCP suite imports fail because outputs reference all 4 services. Temporarily wra
 If domain mapping already exists:
 ```bash
 terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
-  'locations/us-central1/namespaces/gen-lang-client-0553641830/domainmappings/auth.tamshai.com'
+  'locations/us-central1/namespaces/${PROJECT_ID}/domainmappings/auth.tamshai.com'
 ```
 
 ### 19. Import Storage Buckets
 If storage buckets already exist (409 conflict):
 ```bash
 terraform import 'module.storage.google_storage_bucket.finance_docs' \
-  tamshai-prod-finance-docs-gen-lang-client-0553641830
+  tamshai-prod-finance-docs-${PROJECT_ID}
 terraform import 'module.storage.google_storage_bucket.public_docs' \
-  tamshai-prod-public-docs-gen-lang-client-0553641830
+  tamshai-prod-public-docs-${PROJECT_ID}
 terraform import 'module.storage.google_storage_bucket.static_website[0]' \
   prod.tamshai.com
 ```
@@ -381,8 +381,8 @@ This section consolidates all gaps into actionable steps organized by Phoenix re
 | Gap # | Resolution | Command |
 |-------|------------|---------|
 | 11, 27, 29 | Delete failed Cloud Run services (no images) | `for svc in keycloak mcp-finance mcp-hr mcp-sales mcp-support web-portal; do gcloud run services delete "$svc" --region=us-central1 --quiet; done` |
-| 12 | Regenerate CICD SA key and update GitHub | `gcloud iam service-accounts keys create /tmp/key.json --iam-account=tamshai-prod-cicd@gen-lang-client-0553641830.iam.gserviceaccount.com && gh secret set GCP_SA_KEY_PROD < /tmp/key.json` |
-| 14, 32 | Add missing IAM bindings for secrets | `gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri --member="serviceAccount:tamshai-prod-mcp-servers@gen-lang-client-0553641830.iam.gserviceaccount.com" --role="roles/secretmanager.secretAccessor"` |
+| 12 | Regenerate CICD SA key and update GitHub | `gcloud iam service-accounts keys create /tmp/key.json --iam-account=tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com && gh secret set GCP_SA_KEY_PROD < /tmp/key.json` |
+| 14, 32 | Add missing IAM bindings for secrets | `gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri --member="serviceAccount:tamshai-prod-mcp-servers@${PROJECT_ID}.iam.gserviceaccount.com" --role="roles/secretmanager.secretAccessor"` |
 | 35 | Create auth.tamshai.com domain mapping | `gcloud beta run domain-mappings create --service=keycloak --domain=auth.tamshai.com --region=us-central1` |
 
 ### Stage 7: Deploy Workflow

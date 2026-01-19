@@ -38,6 +38,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
+
 # Parse arguments
 ENV="${1:-dev}"
 BUILD_FLAG=""
@@ -181,11 +187,15 @@ deploy_dev() {
 deploy_stage() {
     log_header "Deploying to Stage Environment"
 
-    local vps_host="${VPS_HOST:-5.78.159.29}"
+    local vps_host="${VPS_HOST:-}"
     local vps_user="${VPS_SSH_USER:-root}"
 
-    if [ -z "${VPS_HOST:-}" ]; then
-        log_warn "VPS_HOST not set, using default: $vps_host"
+    if [ -z "$vps_host" ]; then
+        log_error "VPS_HOST not set. Either:"
+        log_info "  1. Create .env.local with VPS_HOST=<ip>"
+        log_info "  2. Export VPS_HOST environment variable"
+        log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+        exit 1
     fi
 
     log_info "Connecting to $vps_user@$vps_host..."
@@ -239,8 +249,16 @@ sync_keycloak_dev() {
 sync_keycloak_stage() {
     log_header "Syncing Keycloak (Stage)"
 
-    local vps_host="${VPS_HOST:-5.78.159.29}"
+    local vps_host="${VPS_HOST:-}"
     local vps_user="${VPS_SSH_USER:-root}"
+
+    if [ -z "$vps_host" ]; then
+        log_error "VPS_HOST not set. Either:"
+        log_info "  1. Create .env.local with VPS_HOST=<ip>"
+        log_info "  2. Export VPS_HOST environment variable"
+        log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+        exit 1
+    fi
 
     ssh "$vps_user@$vps_host" << 'SYNC_SCRIPT'
 cd /opt/tamshai

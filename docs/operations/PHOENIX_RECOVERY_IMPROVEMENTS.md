@@ -35,7 +35,7 @@ Terraform apply
 **Error Messages:**
 ```
 Error: Error waiting to create Service: resource is in failed state "Ready:False",
-message: Image 'us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai/mcp-hr:latest' not found.
+message: Image 'us-central1-docker.pkg.dev/${PROJECT_ID}/tamshai/mcp-hr:latest' not found.
 ```
 
 ### Root Cause
@@ -414,7 +414,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TERRAFORM_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
 
-GCP_PROJECT="gen-lang-client-0553641830"
+GCP_PROJECT="${PROJECT_ID}"
 GCP_REGION="us-central1"
 
 # Colors for output
@@ -663,8 +663,8 @@ After `terraform apply` creates new service accounts:
 ```bash
 # 1. Create new key for CICD service account
 gcloud iam service-accounts keys create ./gcp-sa-key-prod.json \
-  --iam-account=tamshai-prod-cicd@gen-lang-client-0553641830.iam.gserviceaccount.com \
-  --project=gen-lang-client-0553641830
+  --iam-account=tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com \
+  --project=${PROJECT_ID}
 
 # 2. Update GitHub secret
 gh secret set GCP_SA_KEY_PROD < ./gcp-sa-key-prod.json
@@ -674,8 +674,8 @@ rm ./gcp-sa-key-prod.json
 
 # 4. Verify key works
 gcloud iam service-accounts keys list \
-  --iam-account=tamshai-prod-cicd@gen-lang-client-0553641830.iam.gserviceaccount.com \
-  --project=gen-lang-client-0553641830
+  --iam-account=tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com \
+  --project=${PROJECT_ID}
 ```
 
 ### Integration into Phoenix Rebuild Sequence
@@ -797,7 +797,7 @@ gcloud iam service-accounts add-iam-policy-binding \
 17. **Cloud SQL private IP not accessible from GitHub Actions**: Cloud SQL only has private IP (no public IP for security). GitHub Actions runners run on the public internet and **cannot connect to private IPs** even with Cloud SQL Proxy and IAM authentication. The Cloud SQL Proxy fails with:
     ```
     instance does not have IP of type "PUBLIC"
-    (connection name = "gen-lang-client-0553641830:us-central1:tamshai-prod-postgres")
+    (connection name = "${PROJECT_ID}:us-central1:tamshai-prod-postgres")
     ```
     **Solution**: Use Cloud Run Job instead of direct connection. The `provision-users` Cloud Run Job:
     - Runs inside VPC via VPC connector

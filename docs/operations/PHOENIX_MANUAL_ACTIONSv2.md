@@ -16,6 +16,7 @@
 | Time (UTC) | Phase | Action | Result |
 |------------|-------|--------|--------|
 | 16:57:31 | 1 | Pre-flight checks | PASS |
+| - | 2 | Secret verification | SKIPPED (see Phase 2 notes) |
 | 16:58:41 | 3 | Pre-destroy cleanup | PASS |
 | 16:59:48 | 4 | Terraform destroy | PASS (manual actions required) |
 | 17:16:46 | 5 | Post-destroy verification | PASS |
@@ -42,7 +43,7 @@ gcloud run services list --region=us-central1
 ```
 
 **Result**: PASS
-- gcloud: Authenticated as claude-deployer@gen-lang-client-0553641830.iam.gserviceaccount.com
+- gcloud: Authenticated as claude-deployer@${PROJECT_ID}.iam.gserviceaccount.com
 - terraform: v1.14.3
 - gh: Logged in as jcornell3
 - GCP secrets: 8 secrets found
@@ -54,16 +55,31 @@ gcloud run services list --region=us-central1
 
 ## Phase 2: Secret Verification
 
-**Start Time**:
+**Start Time**: SKIPPED
 
+**Reason for Skipping**: Phase 2 was not executed as a distinct phase. Secret verification was implicitly performed during Phase 6 (Terraform Apply) when secret-related errors surfaced:
+- Gap #41: `mcp-hr-service-client-secret` had no version (discovered during terraform apply)
+- Gap #43: MCP servers SA missing access to `mongodb-uri` secret (discovered during deploy workflow)
+
+**Lesson Learned**: Phase 2 should be explicitly run before terraform apply to:
+1. Verify all required GitHub secrets exist
+2. Sync secrets to GCP Secret Manager
+3. Verify IAM bindings for secret access
+
+**Recommended Pre-Apply Check**:
 ```bash
-# Command executed:
+# Verify GitHub secrets exist
+gh secret list | grep -E "(GCP_SA_KEY_PROD|TEST_USER_|MCP_HR_SERVICE)"
 
+# Verify GCP secrets have versions
+for secret in tamshai-prod-db-password tamshai-prod-anthropic-api-key mcp-hr-service-client-secret; do
+  gcloud secrets versions list "$secret" --limit=1 || echo "MISSING: $secret"
+done
 ```
 
-**Result**:
+**Result**: SKIPPED (secrets verified reactively during later phases)
 
-**Manual Actions Required**:
+**Manual Actions Required**: None (addressed in Phases 6 and 8)
 
 ---
 
@@ -236,7 +252,7 @@ nslookup auth.tamshai.com
 # Commands executed:
 # Regenerate CICD SA key (old key invalidated during destroy)
 gcloud iam service-accounts keys create /tmp/gcp-sa-key.json \
-  --iam-account="tamshai-prod-cicd@gen-lang-client-0553641830.iam.gserviceaccount.com"
+  --iam-account="tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com"
 cat /tmp/gcp-sa-key.json | gh secret set GCP_SA_KEY_PROD
 
 # Trigger deploy workflow
@@ -260,7 +276,7 @@ gh workflow run deploy-to-gcp.yml --ref main
 - Gap #43: Added IAM binding for MCP servers → mongodb-uri secret
   ```bash
   gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
-    --member="serviceAccount:tamshai-prod-mcp-servers@gen-lang-client-0553641830.iam.gserviceaccount.com" \
+    --member="serviceAccount:tamshai-prod-mcp-servers@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor"
   ```
 - Re-triggered deploy workflow after IAM fix

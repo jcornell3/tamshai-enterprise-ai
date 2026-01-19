@@ -220,7 +220,8 @@ VPS database contained BOTH FY2024 and FY2025 budget data (7 records each, 14 to
 **Investigation**:
 ```bash
 # VPS database query revealed the issue
-ssh root@5.78.159.29
+# Get VPS IP from: cd infrastructure/terraform/vps && terraform output vps_ip
+ssh root@${VPS_HOST}
 docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c \
   "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year;"
 
@@ -529,7 +530,8 @@ Without authentication, MCP Gateway returned 401 Unauthorized.
 **Investigation via SSH**:
 ```bash
 # SSH into VPS to verify deployment
-ssh -i infrastructure/terraform/vps/.keys/deploy_key root@5.78.159.29
+# Get VPS IP from: cd infrastructure/terraform/vps && terraform output vps_ip
+ssh -i infrastructure/terraform/vps/.keys/deploy_key root@${VPS_HOST}
 
 # Checked actual deployed code
 grep -A5 'const eventSource = new EventSource' clients/web/apps/finance/src/pages/AIQueryPage.tsx
@@ -672,7 +674,8 @@ Passing JWT tokens via query parameters is **deprecated** due to URL logging ris
 
 **Finance** (PostgreSQL):
 ```bash
-ssh root@5.78.159.29
+# Get VPS IP from: cd infrastructure/terraform/vps && terraform output vps_ip
+ssh root@${VPS_HOST}
 docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;"
 docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;"
 docker exec -i tamshai-postgres psql -U tamshai -d tamshai_finance < /tmp/finance-data.sql

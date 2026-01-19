@@ -24,7 +24,7 @@
 #   TEST_ENV        - Environment to test (dev or stage)
 #   TEST_USERNAME   - Username to test (default: eve.thompson)
 #   GITHUB_BACKUP   - If "true", also backs up credential to GitHub Secrets
-#   VPS_HOST        - Stage VPS IP address (default: 5.78.159.29)
+#   VPS_HOST        - Stage VPS IP address (required for stage)
 #   VPS_SSH_USER    - Stage VPS SSH user (default: root)
 #
 # Requirements:
@@ -42,6 +42,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BACKUP_DIR="$PROJECT_ROOT/tests/e2e/.totp-backups"
 BACKUP_FILE="$BACKUP_DIR/${USERNAME}-totp-credential.json"
+
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -63,7 +69,14 @@ if [ "$ENV" = "dev" ]; then
 elif [ "$ENV" = "stage" ]; then
     # Stage environment - connect via SSH to VPS
     # Requires VPS_HOST and VPS_SSH_USER environment variables
-    VPS_HOST="${VPS_HOST:-5.78.159.29}"
+    VPS_HOST="${VPS_HOST:-}"
+    if [ -z "$VPS_HOST" ]; then
+        log_error "VPS_HOST not set. Either:"
+        log_info "  1. Create .env.local with VPS_HOST=<ip>"
+        log_info "  2. Export VPS_HOST environment variable"
+        log_info "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+        exit 1
+    fi
     VPS_SSH_USER="${VPS_SSH_USER:-root}"
 
     # Test SSH connectivity

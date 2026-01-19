@@ -11,7 +11,24 @@
 
 set -e
 
-VPS_IP="${VPS_IP:-5.78.159.29}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Load .env.local if it exists (for VPS_HOST and other local config)
+if [ -f "$PROJECT_ROOT/.env.local" ]; then
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env.local"
+fi
+
+# Support both VPS_IP and VPS_HOST for backward compatibility
+VPS_IP="${VPS_IP:-${VPS_HOST:-}}"
+if [ -z "$VPS_IP" ]; then
+    echo "ERROR: VPS_IP or VPS_HOST not set. Either:"
+    echo "  1. Create .env.local with VPS_HOST=<ip>"
+    echo "  2. Export VPS_IP or VPS_HOST environment variable"
+    echo "  3. Get IP from: cd infrastructure/terraform/vps && terraform output vps_ip"
+    exit 1
+fi
 SSH_KEY="${SSH_KEY:-infrastructure/terraform/vps/.keys/deploy_key}"
 
 echo "=================================================="

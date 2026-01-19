@@ -37,10 +37,10 @@ environment = "staging"
 # Your domain name (required)
 # Configure Cloudflare DNS A record to point to VPS IP after deployment
 # Cloudflare SSL/TLS mode: Flexible or Full
-domain = "staging.tamshai.com"
+domain = "staging.example-domain.com"
 
 # Email for notifications
-email = "admin@tamshai.com"
+email = "admin@example-domain.com"
 
 # =============================================================================
 # APPLICATION SECRETS - ALL VIA ENVIRONMENT VARIABLES
@@ -69,7 +69,7 @@ email = "admin@tamshai.com"
 # =============================================================================
 
 # GitHub repository for deployment
-github_repo = "https://github.com/jcornell3/tamshai-enterprise-ai.git"
+github_repo = "https://github.com/github-id/tamshai-enterprise-ai.git"
 
 # Git branch to deploy
 github_branch = "main"

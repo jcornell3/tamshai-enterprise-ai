@@ -1,0 +1,58 @@
+# Cloud Build ignore file
+# Reduces upload size from 2.2 GB to much smaller
+
+# Git
+.git/
+.gitignore
+
+# Node modules (will be installed in build)
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+build/
+**/build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+coverage/
+**/coverage/
+.nyc_output/
+
+# Logs
+*.log
+logs/
+
+# Terraform state (sensitive)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Local development
+.env.local
+*.local
+
+# Large binary files
+*.zip
+*.tar.gz
+*.tgz
+
+# Flutter build outputs
+clients/unified_flutter/build/
+clients/unified_flutter/.dart_tool/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

@@ -620,6 +620,7 @@ When adding new integration tests:
 
 ---
 
-**Last Updated**: January 1, 2026
+**Last Updated**: January 15, 2026
 **Test Count**: 96 tests (89 passed, 7 skipped in CI)
 **Coverage**: All 19 MCP tools, 5 user roles, 4 v1.4 features, cursor-based pagination
+**Related**: See `.specify/specs/011-qa-testing/TEST_COVERAGE_STRATEGY.md` for overall project coverage (80.8%)

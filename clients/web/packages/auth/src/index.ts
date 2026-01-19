@@ -19,6 +19,8 @@
 
 // Components
 export { AuthProvider } from './AuthProvider';
+export { CallbackPage } from './CallbackPage';
+export type { CallbackPageProps } from './CallbackPage';
 export { PrivateRoute } from './PrivateRoute';
 
 // Hooks

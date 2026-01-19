@@ -397,7 +397,7 @@ rm /tmp/gcp-key.json
 **Result**: PASS
 
 **Findings**:
-- Created new key ID: e2e960471657afb6047a6ac2cd76c7a2d16dae36
+- Created new key ID: <KEY_ID_REDACTED>
 - Updated GitHub secret GCP_SA_KEY_PROD
 - Temporary key file removed
 

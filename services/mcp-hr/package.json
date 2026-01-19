@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@keycloak/keycloak-admin-client": "^26.0.0",
+    "@keycloak/keycloak-admin-client": "^24.0.5",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "bullmq": "^5.1.0",
     "dotenv": "^16.3.1",

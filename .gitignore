@@ -115,3 +115,15 @@ tests/e2e/test-results/
 
 # GCP Service Account Key
 claude-deployer-key.json
+
+# Temporary credentials (never commit)
+access_token.txt
+token_response.json
+users.json
+
+# Windows artifacts
+nul
+
+# Terraform plan files
+*.tfplan
+tfplan

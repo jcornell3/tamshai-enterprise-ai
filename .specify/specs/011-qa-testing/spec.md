@@ -83,20 +83,25 @@ We use **Test-Driven Development (TDD)** for all service application code. This 
 
 ### 2.1 Coverage Targets and Strategy
 
-**Current Status (December 2025):**
-- **Overall Coverage**: 49.06% (up from 31.52% at session start)
-- **Total Tests**: 283 tests passing across 10 test suites
+**Current Status (January 15, 2026):**
+- **Overall Coverage**: 80.8% statements, 81.28% lines (target achieved!)
+- **MCP Gateway Tests**: 497 tests passing
+- **Code Simplification TDD Tests**: ~397 tests (Shell, Flutter, React, MCP servers)
+- **Integration Tests**: 96 tests (89 passed, 7 skipped)
 - **Diff Coverage**: 90% required on all new/changed code (BLOCKS PRs via Codecov)
 
-**Coverage by Module (MCP Gateway):**
+**Coverage by Module (MCP Gateway - Post Phase 5-8 Refactoring):**
 
 | Module | Coverage | Status |
 |--------|----------|--------|
-| routes/ | 92.02% | ✅ Excellent |
-| security/ | 88.37% | ✅ Excellent |
+| ai/ | 100% | ✅ Excellent |
+| auth/ | 94% | ✅ Excellent |
+| mcp/ | 98%+ | ✅ Excellent |
+| routes/ | 97%+ | ✅ Excellent |
+| security/ | 90%+ | ✅ Excellent |
 | types/ | 100% | ✅ Excellent |
-| utils/ | 90.07% | ✅ Excellent |
-| index.ts | 0% | ❌ Legacy monolithic (1,532 uncovered lines) |
+| utils/ | 95%+ | ✅ Excellent |
+| index.ts | 0% | ✅ Intentional (thin wiring, ~525 lines) |
 
 **Codecov Configuration** (`codecov.yml`):
 
@@ -120,8 +125,9 @@ coverage:
 
 **Coverage Evolution Path:**
 - **Phase 1 (Completed)**: Baseline establishment - 31.52% → 49.06% (+17.54pp)
-- **Phase 2 (Current)**: Diff coverage enforcement - 90% on all new code
-- **Phase 3 (Future)**: Overall target achievement - 75-80% in 12 months
+- **Phase 2 (Completed)**: Diff coverage enforcement - 90% on all new code
+- **Phase 3 (Completed)**: Module extraction refactoring - 49% → 64% via Phase 1-4
+- **Phase 4 (Completed)**: Final extraction - 64% → 80.8% via Phase 5-8 ✅ TARGET ACHIEVED
 
 **Rationale for Diff Coverage Approach:**
 1. **Prevents Regression**: All new code must be tested at 90%+
@@ -130,13 +136,16 @@ coverage:
 4. **Realistic Target**: 90% allows for edge cases, not 100% perfectionism
 5. **Industry Alignment**: Google/Microsoft use similar strategies
 
-**Service-Specific Thresholds:**
+**Service-Specific Coverage:**
 
-| Service | Threshold | Rationale |
-|---------|-----------|-----------|
-| MCP Gateway | 31% (current) | Legacy monolithic architecture, gradual improvement via diff coverage |
-| MCP HR | 70% | Greenfield service, well-structured from start |
-| New Services | 70% default | Industry "Commendable" tier (see `TEST_COVERAGE_STRATEGY.md`) |
+| Service | Coverage | Status |
+|---------|----------|--------|
+| MCP Gateway | 80.8% | ✅ Target achieved (was 31%, now 80.8% after Phase 5-8) |
+| MCP HR | 70%+ | ✅ Greenfield service, well-structured |
+| MCP Finance | 70%+ | ✅ Sprint 3 GREEN complete (38 tests) |
+| MCP Support | 70%+ | ✅ Sprint 3 GREEN complete (64 tests) |
+| MCP Sales | 70%+ | ✅ Sprint 3 GREEN complete (38 tests) |
+| New Services | 70% target | Industry "Commendable" tier (see `TEST_COVERAGE_STRATEGY.md`) |
 
 **Industry Benchmarks:**
 - **60%**: Acceptable (bare minimum)
@@ -153,16 +162,26 @@ See [TEST_COVERAGE_STRATEGY.md](./TEST_COVERAGE_STRATEGY.md) for complete covera
 
 **Framework:** Jest v30.2.0 with TypeScript
 
-**Coverage Target:** 31% current (legacy), 90% on new code via diff coverage
+**Coverage:** 80.8% overall (target: 70-80%) ✅ ACHIEVED
 
-**Test Inventory (283 total tests across 10 suites):**
-- `src/security/prompt-defense.test.ts` - Prompt injection defense (75 tests)
-- `src/security/token-revocation.test.ts` - Token revocation logic (45 tests)
-- `src/utils/pii-scrubber.test.ts` - PII masking (38 tests)
-- `src/utils/redis.test.ts` - Redis utility functions (60 tests)
-- `src/routes/query.test.ts` - Query endpoint (28 tests)
-- `src/routes/health.test.ts` - Health check (12 tests)
-- `src/types/mcp-response.test.ts` - Type guards (25 tests)
+**Test Inventory (497 total tests across 15+ suites):**
+- `src/ai/claude-client.test.ts` - Claude API client + mock mode (Phase 8)
+- `src/auth/jwt-validator.test.ts` - JWT validation
+- `src/mcp/mcp-client.test.ts` - MCP tool execution
+- `src/mcp/role-mapper.test.ts` - Role-to-server mapping
+- `src/routes/ai-query.routes.test.ts` - AI query endpoint (Phase 7)
+- `src/routes/confirmation.routes.test.ts` - HITL confirmations (Phase 7)
+- `src/routes/mcp-proxy.routes.test.ts` - MCP proxy (Phase 7)
+- `src/routes/health.routes.test.ts` - Health check
+- `src/routes/user.routes.test.ts` - User info
+- `src/routes/gdpr.test.ts` - GDPR compliance
+- `src/routes/streaming.routes.test.ts` - SSE streaming
+- `src/security/prompt-defense.test.ts` - Prompt injection defense
+- `src/security/token-revocation.test.ts` - Token revocation
+- `src/types/mcp-response.test.ts` - Type guards
+- `src/utils/pii-scrubber.test.ts` - PII masking
+- `src/utils/redis.test.ts` - Redis helpers
+- `src/utils/gateway-utils.test.ts` - Gateway utilities
 
 **Testing Tools:**
 - **Test Runner**: Jest (v30.2.0)
