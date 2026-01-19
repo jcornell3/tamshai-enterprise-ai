@@ -35,6 +35,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Default GCP configuration
+export GCP_REGION="${GCP_REGION:-us-central1}"
+export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-}}"
+
 # Source libraries
 source "$SCRIPT_DIR/lib/secrets.sh"
 source "$SCRIPT_DIR/lib/health-checks.sh"
@@ -199,6 +203,9 @@ phase_1_preflight() {
 # =============================================================================
 # Phase 2: Secret Sync
 # =============================================================================
+# CRITICAL: Gap #41 - mcp-hr-service-client-secret must have a version
+# BEFORE Terraform runs. This phase ensures all secrets exist with versions.
+# =============================================================================
 phase_2_secret_sync() {
     log_phase "2" "Secret Sync (GitHub -> GCP)"
 
@@ -210,6 +217,17 @@ phase_2_secret_sync() {
     # Gap #41: Sync secrets from environment variables to GCP
     log_step "Syncing secrets from environment variables (Gap #41)..."
     sync_secrets_from_env || log_warn "Some secrets could not be synced from environment"
+
+    # Gap #41 CRITICAL: Ensure mcp-hr-service-client-secret has a version
+    # This MUST happen BEFORE any Terraform operations because Terraform creates
+    # the secret shell but doesn't add a version, causing Cloud Run deployment to fail.
+    log_step "CRITICAL: Ensuring mcp-hr-service-client-secret has a version (Gap #41)..."
+    ensure_mcp_hr_client_secret || {
+        log_error "FAILED to ensure mcp-hr-service-client-secret has a version"
+        log_error "This will cause Cloud Run deployment to fail!"
+        log_error "Manual fix: openssl rand -base64 32 | gcloud secrets versions add mcp-hr-service-client-secret --data-file=-"
+        exit 1
+    }
 
     log_step "Verifying GCP secrets exist..."
 
@@ -286,6 +304,47 @@ phase_3_destroy() {
             --no-deletion-protection \
             --quiet 2>/dev/null || log_warn "Could not disable deletion protection"
     fi
+
+    # =============================================================================
+    # PROACTIVE cleanup for KNOWN destroy issues (Gaps #39, #40, #23, #24, #25)
+    # These are handled BEFORE terraform destroy to prevent failures
+    # =============================================================================
+
+    # Gap #39: Empty storage bucket BEFORE destroy (force_destroy=false in terraform)
+    log_step "Emptying storage bucket before destroy (Gap #39)..."
+    if gcloud storage ls "gs://prod.tamshai.com" &>/dev/null 2>&1; then
+        gcloud storage rm -r "gs://prod.tamshai.com/**" 2>/dev/null || log_info "Bucket already empty or doesn't exist"
+    fi
+
+    # Gap #40: Delete Cloud SQL instance BEFORE terraform destroy to avoid keycloak user dependency
+    log_step "Deleting Cloud SQL instance to avoid user dependency (Gap #40)..."
+    if gcloud sql instances describe "$instance_name" &>/dev/null; then
+        log_warn "Deleting Cloud SQL instance: $instance_name (this takes ~30 seconds)"
+        gcloud sql instances delete "$instance_name" --quiet 2>/dev/null || log_warn "Cloud SQL deletion may have failed"
+        # Remove from state since we deleted it manually
+        terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.keycloak_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.postgres_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.keycloak_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.hr_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.finance_db' 2>/dev/null || true
+    fi
+
+    # Gap #23: Remove service networking from state BEFORE destroy (blocks VPC deletion)
+    log_step "Removing service networking from state (Gap #23 - proactive)..."
+    terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+    terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+
+    # Gap #24: Delete orphaned private IP BEFORE destroy
+    log_step "Deleting orphaned private IP (Gap #24 - proactive)..."
+    gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
+
+    # Gap #25: Remove VPC connector from state BEFORE destroy
+    log_step "Removing VPC connector from state (Gap #25 - proactive)..."
+    terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
+    terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
+
+    log_success "Proactive cleanup complete - terraform destroy should succeed on first try"
 
     log_step "Running terraform destroy..."
     echo ""
@@ -425,20 +484,33 @@ phase_4_infrastructure() {
     # First, create just the infrastructure without Cloud Run services
     # This allows images to be built before Cloud Run needs them
     terraform apply -auto-approve \
-        -target=google_compute_network.vpc \
-        -target=google_compute_global_address.private_ip_range \
-        -target=google_service_networking_connection.private_vpc_connection \
-        -target=google_sql_database_instance.postgres \
-        -target=google_sql_database.keycloak_db \
-        -target=google_sql_database.hr_db \
-        -target=google_sql_database.finance_db \
-        -target=google_sql_user.postgres_user \
-        -target=google_artifact_registry_repository.docker \
-        -target=google_vpc_access_connector.connector \
-        2>/dev/null || terraform apply -auto-approve  # Fallback to full apply if targets don't exist
+        -target=module.networking \
+        -target=module.security \
+        -target=module.database \
+        -target=module.storage \
+        2>/dev/null || {
+        log_warn "Targeted apply had errors - checking for Gap #44 (Cloud SQL state mismatch)..."
+
+        # Gap #44: Cloud SQL instance may exist but not be in Terraform state
+        # This happens when Cloud SQL creation takes >15 minutes and Terraform loses track
+        local instance_name="tamshai-prod-postgres"
+        if gcloud sql instances describe "$instance_name" &>/dev/null; then
+            log_step "Cloud SQL instance exists - checking if it needs to be imported (Gap #44)..."
+
+            # Check if instance is in terraform state
+            if ! terraform state show 'module.database.google_sql_database_instance.postgres' &>/dev/null; then
+                log_warn "Cloud SQL instance exists in GCP but not in Terraform state - importing..."
+                terraform import 'module.database.google_sql_database_instance.postgres' \
+                    "projects/${GCP_PROJECT_ID}/instances/${instance_name}" || log_warn "Import may have failed"
+            fi
+        fi
+
+        # Retry apply after potential import
+        terraform apply -auto-approve || log_warn "Terraform apply may be incomplete"
+    }
 
     log_step "Waiting for Cloud SQL to be ready..."
-    wait_for_cloudsql "tamshai-prod-postgres" 300
+    wait_for_cloudsql "tamshai-prod-postgres" 600  # Increased timeout for initial creation
 
     # Gap #26/41: Ensure mcp-hr-service-client-secret has a version
     log_step "Ensuring mcp-hr-service-client-secret has a version (Gap #26/41)..."
@@ -451,6 +523,13 @@ phase_4_infrastructure() {
 # =============================================================================
 # Phase 5: Build Images
 # =============================================================================
+# NOTE: Images MUST be built BEFORE Phase 7 (Cloud Run) because Terraform
+# will fail with "image not found" if Cloud Run is created before images exist.
+#
+# SPECIAL HANDLING:
+# - Gap #45: Keycloak uses Dockerfile.cloudbuild (no BuildKit --chmod syntax)
+# - Gap #46: web-portal must be built from repo root with -f flag
+# =============================================================================
 phase_5_build_images() {
     log_phase "5" "Build Container Images"
 
@@ -461,32 +540,86 @@ phase_5_build_images() {
 
     local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
     local region="${GCP_REGION}"
+    local registry="${region}-docker.pkg.dev/${project}/tamshai"
 
     log_step "Building container images via Cloud Build..."
 
-    local services=("mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support" "keycloak" "web-portal")
-
-    for service in "${services[@]}"; do
+    # Build MCP services (standard Dockerfile)
+    local mcp_services=("mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support")
+    for service in "${mcp_services[@]}"; do
         log_info "Building $service..."
-
-        local service_dir
-        case "$service" in
-            keycloak) service_dir="keycloak" ;;
-            web-portal) service_dir="clients/web" ;;
-            *) service_dir="services/$service" ;;
-        esac
-
-        if [ -f "$PROJECT_ROOT/$service_dir/Dockerfile" ] || [ -f "$PROJECT_ROOT/$service_dir/Dockerfile.prod" ]; then
-            gcloud builds submit "$PROJECT_ROOT/$service_dir" \
-                --tag="${region}-docker.pkg.dev/${project}/tamshai/${service}:latest" \
-                --quiet 2>/dev/null || log_warn "Build failed for $service (may need manual intervention)"
+        if [ -f "$PROJECT_ROOT/services/$service/Dockerfile" ]; then
+            gcloud builds submit "$PROJECT_ROOT/services/$service" \
+                --tag="${registry}/${service}:latest" \
+                --quiet || log_warn "Build failed for $service"
         else
             log_warn "No Dockerfile found for $service"
         fi
     done
 
+    # Gap #45: Keycloak - use Dockerfile.cloudbuild to avoid BuildKit --chmod issue
+    log_info "Building keycloak (using Dockerfile.cloudbuild for Cloud Build compatibility)..."
+    if [ -f "$PROJECT_ROOT/keycloak/Dockerfile.cloudbuild" ]; then
+        # Use Dockerfile.cloudbuild which doesn't use BuildKit-specific syntax
+        gcloud builds submit "$PROJECT_ROOT/keycloak" \
+            --tag="${registry}/keycloak:v2.0.0-postgres" \
+            --config=<(cat <<EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${registry}/keycloak:v2.0.0-postgres', '-f', 'Dockerfile.cloudbuild', '.']
+images:
+  - '${registry}/keycloak:v2.0.0-postgres'
+EOF
+) || log_warn "Keycloak build failed"
+    elif [ -f "$PROJECT_ROOT/keycloak/Dockerfile" ]; then
+        # Fallback to regular Dockerfile (may fail if using BuildKit syntax)
+        log_warn "Dockerfile.cloudbuild not found, using regular Dockerfile (may fail)"
+        gcloud builds submit "$PROJECT_ROOT/keycloak" \
+            --tag="${registry}/keycloak:v2.0.0-postgres" \
+            --quiet || log_warn "Keycloak build failed - create Dockerfile.cloudbuild without --chmod flag"
+    else
+        log_error "No Dockerfile found for keycloak"
+    fi
+
+    # Gap #46: web-portal - must be built from repo root with -f flag
+    log_info "Building web-portal (from repo root with explicit Dockerfile path)..."
+    if [ -f "$PROJECT_ROOT/clients/web/Dockerfile.prod" ]; then
+        gcloud builds submit "$PROJECT_ROOT" \
+            --config=<(cat <<EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${registry}/web-portal:latest', '-f', 'clients/web/Dockerfile.prod', '.']
+images:
+  - '${registry}/web-portal:latest'
+EOF
+) || log_warn "web-portal build failed"
+    else
+        log_warn "No Dockerfile.prod found for web-portal"
+    fi
+
+    # Verify all images were built
+    log_step "Verifying images in Artifact Registry..."
+    local all_images=("mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support" "keycloak" "web-portal")
+    local missing=0
+    for img in "${all_images[@]}"; do
+        if gcloud artifacts docker images describe "${registry}/${img}:latest" &>/dev/null 2>&1 || \
+           gcloud artifacts docker images describe "${registry}/${img}:v2.0.0-postgres" &>/dev/null 2>&1; then
+            log_success "  Found: $img"
+        else
+            log_error "  MISSING: $img"
+            missing=$((missing + 1))
+        fi
+    done
+
+    if [ $missing -gt 0 ]; then
+        log_error "$missing images are missing - Cloud Run deployment will fail!"
+        log_error "Fix the build issues above before continuing."
+        save_checkpoint 5 "failed"
+        exit 1
+    fi
+
     save_checkpoint 5 "completed"
-    log_success "Phase 5 complete - Images built"
+    log_success "Phase 5 complete - All images built"
 }
 
 # =============================================================================
@@ -570,43 +703,45 @@ phase_7_cloud_run() {
             --quiet 2>/dev/null || log_info "IAM binding may already exist"
     fi
 
-    # Gap #35: Create auth.tamshai.com domain mapping
-    log_step "Creating auth.tamshai.com domain mapping (Gap #35)..."
+    # Gap #35 & #48: Create auth.tamshai.com domain mapping (handle already exists)
+    log_step "Creating auth.tamshai.com domain mapping (Gap #35, #48)..."
     local region="${GCP_REGION}"
 
-    if ! gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null; then
+    # Gap #48: Domain mapping may already exist from a previous deployment
+    # Unlike other resources, domain mappings persist across terraform destroys
+    if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null; then
+        log_info "Domain mapping auth.tamshai.com already exists (Gap #48 - this is expected)"
+        log_info "Domain mappings persist across Phoenix rebuilds - no action needed"
+    else
+        log_info "Creating new domain mapping for auth.tamshai.com..."
         gcloud beta run domain-mappings create \
             --service=keycloak \
             --domain=auth.tamshai.com \
             --region="$region" || log_warn "Domain mapping creation failed - may need manual creation"
-    else
-        log_info "Domain mapping auth.tamshai.com already exists"
     fi
 
-    # Gap #16: Wait for domain mapping to be routable
-    log_step "Waiting for domain mapping to be routable (Gap #16)..."
-    local timeout=300
-    local elapsed=0
-    while [ $elapsed -lt $timeout ]; do
-        local routable
-        routable=$(gcloud beta run domain-mappings describe \
-            --domain=auth.tamshai.com \
-            --region="$region" \
-            --format="value(status.conditions[2].status)" 2>/dev/null || echo "Unknown")
+    # =============================================================================
+    # CLOUDFLARE SSL NOTE:
+    # Cloud Run domain mappings provision Google-managed SSL certificates, but
+    # auth.tamshai.com uses Cloudflare which handles SSL at the edge. The DNS
+    # points to Cloudflare, which proxies to Cloud Run via ghs.googlehosted.com.
+    #
+    # IMPORTANT: Do NOT wait for Cloud Run SSL provisioning to complete!
+    # - Cloudflare provides the SSL certificate to clients
+    # - Cloud Run's certificate is only for the Cloudflare->Cloud Run connection
+    # - Cloudflare can use "Full (Strict)" mode with its own origin CA certificate
+    # - Waiting for Cloud Run SSL can add 10+ minutes unnecessarily
+    # =============================================================================
+    log_step "Checking domain mapping status (Cloudflare handles SSL)..."
+    local mapping_status
+    mapping_status=$(gcloud beta run domain-mappings describe \
+        --domain=auth.tamshai.com \
+        --region="$region" \
+        --format="value(status.conditions[0].type)" 2>/dev/null || echo "Unknown")
 
-        if [ "$routable" = "True" ]; then
-            log_success "Domain mapping is routable"
-            break
-        fi
-
-        log_info "  Waiting for domain routing... (${elapsed}s elapsed)"
-        sleep 10
-        elapsed=$((elapsed + 10))
-    done
-
-    if [ $elapsed -ge $timeout ]; then
-        log_warn "Domain mapping may not be fully routable yet - continuing anyway"
-    fi
+    log_info "Domain mapping status: $mapping_status"
+    log_info "NOTE: Cloudflare handles SSL termination - no need to wait for Cloud Run SSL"
+    log_info "DNS should point to ghs.googlehosted.com (via Cloudflare proxy)"
 
     save_checkpoint 7 "completed"
     log_success "Phase 7 complete - Cloud Run services configured"

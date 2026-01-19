@@ -252,6 +252,15 @@ resource "google_secret_manager_secret_iam_member" "mcp_servers_mongodb_uri_acce
   project   = var.project_id
 }
 
+# Gap #47: MCP Gateway also needs MongoDB URI access for token storage
+resource "google_secret_manager_secret_iam_member" "mcp_gateway_mongodb_uri_access" {
+  count     = var.enable_mongodb_uri_access ? 1 : 0
+  secret_id = data.google_secret_manager_secret.mongodb_uri[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_gateway.email}"
+  project   = var.project_id
+}
+
 # =============================================================================
 # IAM ROLES FOR CLOUD RUN
 # =============================================================================
@@ -421,9 +430,24 @@ resource "google_secret_manager_secret" "mcp_hr_service_client_secret" {
   depends_on = [google_project_service.secretmanager]
 }
 
-# Note: The actual secret value must be set manually after Keycloak is configured
-# with the mcp-hr-service client. Use:
-# echo -n "CLIENT_SECRET" | gcloud secrets versions add mcp-hr-service-client-secret --data-file=-
+# Gap #41 FIX: Add default version to mcp-hr-service-client-secret
+# This ensures the secret has a version BEFORE Cloud Run services are created,
+# preventing "secret version not found" errors during Phoenix rebuild.
+# The value can be updated later after Keycloak is configured with the actual client secret.
+resource "google_secret_manager_secret_version" "mcp_hr_service_client_secret" {
+  secret      = google_secret_manager_secret.mcp_hr_service_client_secret.id
+  secret_data = random_password.mcp_hr_service_client_secret.result
+
+  lifecycle {
+    # Allow manual updates to the secret value without Terraform overwriting it
+    ignore_changes = [secret_data]
+  }
+}
+
+resource "random_password" "mcp_hr_service_client_secret" {
+  length  = 32
+  special = false
+}
 
 resource "google_secret_manager_secret" "prod_user_password" {
   secret_id = "prod-user-password"
