@@ -10,6 +10,9 @@ on:
 jobs:
   security:
     runs-on: ubuntu-latest
+    # Skip for Dependabot PRs - they cannot access repository secrets (GitHub security feature)
+    # Other security scanning (CodeQL, Trivy, npm audit) still runs via DevSecOps Pipeline
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
