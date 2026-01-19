@@ -124,9 +124,9 @@ module "database" {
 module "storage" {
   source = "../modules/storage"
 
-  project_id                 = var.project_id
-  region                     = var.region
-  environment                = local.environment
+  project_id  = var.project_id
+  region      = var.region
+  environment = local.environment
   # Gap #39: Phoenix mode allows force_destroy for complete environment rebuilds
   force_destroy              = var.phoenix_mode # Production: normally false, true during Phoenix rebuild
   enable_versioning          = true
