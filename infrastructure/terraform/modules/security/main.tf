@@ -232,6 +232,27 @@ resource "google_secret_manager_secret_iam_member" "mcp_servers_db_access" {
 }
 
 # =============================================================================
+# GAP #43: MCP Servers MongoDB URI Access
+# =============================================================================
+# The mongodb-uri secret is created externally (e.g., manually or by a separate
+# process that provisions MongoDB Atlas). MCP servers need read access to it.
+# This binding grants the MCP servers service account access to the external secret.
+
+data "google_secret_manager_secret" "mongodb_uri" {
+  count     = var.enable_mongodb_uri_access ? 1 : 0
+  secret_id = "tamshai-${var.environment}-mongodb-uri"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "mcp_servers_mongodb_uri_access" {
+  count     = var.enable_mongodb_uri_access ? 1 : 0
+  secret_id = data.google_secret_manager_secret.mongodb_uri[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.mcp_servers.email}"
+  project   = var.project_id
+}
+
+# =============================================================================
 # IAM ROLES FOR CLOUD RUN
 # =============================================================================
 
@@ -559,6 +580,9 @@ resource "google_cloud_run_v2_job" "provision_users" {
   name     = "provision-users"
   location = var.region
   project  = var.project_id
+
+  # Gap #42: Disable deletion protection to allow terraform to manage job lifecycle
+  deletion_protection = false
 
   template {
     template {

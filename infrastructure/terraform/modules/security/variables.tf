@@ -53,3 +53,10 @@ variable "prod_user_password" {
   sensitive   = true
   default     = ""
 }
+
+# Gap #43: MongoDB URI IAM binding
+variable "enable_mongodb_uri_access" {
+  description = "Enable IAM binding for MCP servers to access external mongodb-uri secret"
+  type        = bool
+  default     = true
+}
