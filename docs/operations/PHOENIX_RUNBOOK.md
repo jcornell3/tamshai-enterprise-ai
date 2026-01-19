@@ -153,17 +153,71 @@ echo -n "secret-value" | gcloud secrets versions add SECRET_NAME --data-file=-
 ```bash
 cd infrastructure/terraform/gcp
 
-# Disable deletion protection on Cloud SQL
-gcloud sql instances patch tamshai-prod-postgres --no-deletion-protection --quiet
+# Pre-destroy cleanup (Gap #21, #22)
+# Delete Cloud Run jobs (have deletion_protection)
+gcloud run jobs delete provision-users --region=us-central1 --quiet 2>/dev/null || true
+
+# Disable Cloud SQL deletion protection
+gcloud sql instances patch tamshai-prod-postgres --no-deletion-protection --quiet 2>/dev/null || true
 
 # Destroy infrastructure
 terraform destroy -auto-approve
 ```
 
+**If destroy fails on service networking (Gap #23)**:
+```bash
+# Remove service networking from state (blocks VPC deletion)
+terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+
+# Retry destroy
+terraform destroy -auto-approve
+```
+
+**If destroy fails on VPC (Gap #24, #25)**:
+```bash
+# Delete orphaned private IP addresses
+gcloud compute addresses list --global --format="value(name)" | grep tamshai | \
+  xargs -I {} gcloud compute addresses delete {} --global --quiet
+
+# Targeted destroy if vpc_connector_id count fails
+terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
+```
+
+**Post-Destroy Verification (Gap #1a)** - CRITICAL:
+```bash
+# Verify all resources are destroyed - FAIL if any exist
+gcloud run services list --region=us-central1 --format="value(name)" | \
+  grep -E "^(keycloak|mcp-|web-portal)" && echo "ERROR: Cloud Run services still exist" && exit 1
+
+gcloud run jobs list --region=us-central1 --format="value(name)" | \
+  grep provision && echo "ERROR: Cloud Run jobs still exist" && exit 1
+
+gcloud sql instances list --format="value(name)" | \
+  grep tamshai && echo "ERROR: Cloud SQL still exists" && exit 1
+
+gcloud compute networks list --format="value(name)" | \
+  grep tamshai && echo "ERROR: VPC still exists" && exit 1
+
+echo "Post-destroy verification PASSED"
+```
+
+**Remove stale state entries (Gap #1b)**:
+```bash
+# Remove Cloud Run services from state (may reference deleted resources)
+for svc in hr finance sales support; do
+  terraform state rm "module.cloudrun.google_cloud_run_service.mcp_suite[\"$svc\"]" 2>/dev/null || true
+done
+terraform state rm 'module.cloudrun.google_cloud_run_service.keycloak' 2>/dev/null || true
+terraform state rm 'module.cloudrun.google_cloud_run_service.web_portal[0]' 2>/dev/null || true
+```
+
 **Checkpoints**:
+- [ ] Cloud Run jobs deleted
 - [ ] Cloud SQL deletion protection disabled
 - [ ] `terraform destroy` completes successfully
-- [ ] Verify no orphaned resources: `gcloud compute instances list`
+- [ ] Post-destroy verification passes (no orphaned resources)
+- [ ] Stale state entries removed
 
 **Rollback**: Cannot roll back destruction. Proceed to Phase 4 to rebuild.
 
@@ -176,22 +230,55 @@ terraform destroy -auto-approve
 ```bash
 cd infrastructure/terraform/gcp
 
+# Delete persisted secrets from previous deployment (Gap #2)
+for secret in \
+  tamshai-prod-keycloak-admin-password \
+  tamshai-prod-keycloak-db-password \
+  tamshai-prod-db-password \
+  tamshai-prod-anthropic-api-key \
+  tamshai-prod-mcp-gateway-client-secret \
+  tamshai-prod-jwt-secret \
+  mcp-hr-service-client-secret \
+  prod-user-password \
+  tamshai-prod-mongodb-uri; do
+  gcloud secrets delete "$secret" --quiet 2>/dev/null || true
+done
+
 # Initialize Terraform
 terraform init -upgrade
 
-# Apply infrastructure targets first
-terraform apply -auto-approve \
-    -target=google_compute_network.vpc \
-    -target=google_sql_database_instance.postgres \
-    -target=google_artifact_registry_repository.docker \
-    -target=google_vpc_access_connector.connector
+# STAGED APPLY (Gap #7, #25): Networking module MUST complete first
+# This avoids vpc_connector_id count dependency issues
+terraform apply -target=module.networking -auto-approve
+
+# Then apply remaining infrastructure
+terraform apply -auto-approve
+```
+
+**If apply fails with "409 Conflict" on storage buckets (Gap #28)**:
+```bash
+# Import existing buckets instead of recreating
+terraform import 'module.storage.google_storage_bucket.static_website[0]' prod.tamshai.com
+terraform import 'module.storage.google_storage_bucket.finance_docs' \
+  tamshai-prod-finance-docs-$(gcloud config get-value project)
+
+# Retry apply
+terraform apply -auto-approve
+```
+
+**If apply fails due to outputs referencing missing services (Gap #17)**:
+```bash
+# Temporarily wrap outputs.tf with try() - see PHOENIX_MANUAL_ACTIONS.md #17
+# After imports complete, revert the changes
 ```
 
 **Checkpoints**:
+- [ ] Secrets deleted from previous deployment
 - [ ] VPC created: `gcloud compute networks list`
 - [ ] Cloud SQL running: `gcloud sql instances list`
 - [ ] Artifact Registry exists: `gcloud artifacts repositories list`
 - [ ] VPC Connector ready: `gcloud compute networks vpc-access connectors list`
+- [ ] Storage buckets created (or imported)
 
 **Wait for Cloud SQL**:
 ```bash
@@ -265,14 +352,71 @@ rm /tmp/gcp-key.json
 ```bash
 cd infrastructure/terraform/gcp
 
+# Add version to mcp-hr-service-client-secret (Gap #26)
+# Terraform creates the secret but not the version
+openssl rand -base64 32 | tr -d '\n' | \
+  gcloud secrets versions add mcp-hr-service-client-secret --data-file=- 2>/dev/null || true
+
+# Add MongoDB URI IAM binding (Gap #32)
+PROJECT_ID=$(gcloud config get-value project)
+gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
+  --member="serviceAccount:tamshai-prod-mcp-servers@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor" 2>/dev/null || true
+
 # Full apply
 terraform apply -auto-approve
 ```
 
+**Create auth.tamshai.com domain mapping (Gap #35)** - CRITICAL:
+```bash
+# Cloudflare DNS (auth.tamshai.com → ghs.googlehosted.com) persists after destroy,
+# but the GCP domain mapping that routes to keycloak is destroyed
+
+gcloud beta run domain-mappings create \
+  --service=keycloak \
+  --domain=auth.tamshai.com \
+  --region=us-central1 2>/dev/null || echo "Domain mapping may already exist"
+```
+
+**Wait for domain mapping to be routable (Gap #16, #36)** - CRITICAL:
+```bash
+# mcp-gateway depends on auth.tamshai.com being reachable
+# Cloudflare handles SSL - we just wait for GCP routing
+
+echo "Waiting for auth.tamshai.com domain mapping to be routable..."
+TIMEOUT=300
+ELAPSED=0
+while [[ $ELAPSED -lt $TIMEOUT ]]; do
+  STATUS=$(gcloud beta run domain-mappings describe \
+    --domain=auth.tamshai.com \
+    --region=us-central1 \
+    --format="value(status.conditions[2].status)" 2>/dev/null || echo "Unknown")
+
+  if [[ "$STATUS" == "True" ]]; then
+    echo "Domain mapping is routable!"
+    break
+  fi
+
+  echo "  Waiting... ($ELAPSED s elapsed, status: $STATUS)"
+  sleep 10
+  ELAPSED=$((ELAPSED + 10))
+done
+
+# Verify Keycloak is reachable via HTTPS
+curl -sf -o /dev/null -w "Keycloak HTTP status: %{http_code}\n" \
+  "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" || \
+  echo "WARNING: Keycloak not yet reachable - may need more time"
+```
+
 **Checkpoints**:
+- [ ] mcp-hr-service-client-secret has a version
+- [ ] MongoDB URI IAM binding exists
 - [ ] All Cloud Run services created: `gcloud run services list`
 - [ ] VPC connector attached to services
 - [ ] Service accounts assigned
+- [ ] auth.tamshai.com domain mapping created
+- [ ] Domain mapping is routable (DomainRoutable=True)
+- [ ] Keycloak reachable at https://auth.tamshai.com
 
 ---
 
@@ -409,6 +553,84 @@ gh secret set GCP_SA_KEY_PROD < /tmp/key.json
 rm /tmp/key.json
 ```
 
+### Issue: deploy-static-website fails with "storage.buckets.get" error (Gap #37)
+
+**Symptom**: `gcloud storage rsync` fails with permission denied.
+```
+ERROR: tamshai-prod-cicd@...iam.gserviceaccount.com does not have storage.buckets.get access
+```
+
+**Root Cause**: `roles/storage.objectAdmin` doesn't include `storage.buckets.get` which rsync needs.
+
+**Resolution**:
+```bash
+# Fixed in Terraform (storage module now includes roles/storage.legacyBucketReader)
+# Run terraform apply to create the IAM binding:
+cd infrastructure/terraform/gcp
+terraform apply -target=module.storage -auto-approve
+
+# Or manually add the binding:
+gcloud storage buckets add-iam-policy-binding gs://prod.tamshai.com \
+  --member="serviceAccount:tamshai-prod-cicd@$(gcloud config get-value project).iam.gserviceaccount.com" \
+  --role="roles/storage.legacyBucketReader"
+```
+
+### Issue: Terraform destroy hangs on VPC (Gap #23, #24, #25)
+
+**Symptom**: `terraform destroy` times out on VPC or networking resources.
+
+**Resolution**:
+```bash
+# 1. Remove service networking from state
+terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection'
+terraform state rm 'module.database.google_compute_global_address.private_ip_range'
+
+# 2. Delete orphaned private IP addresses
+gcloud compute addresses list --global --format="value(name)" | grep tamshai | \
+  xargs -I {} gcloud compute addresses delete {} --global --quiet
+
+# 3. Targeted destroy of VPC
+terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
+```
+
+### Issue: auth.tamshai.com not reachable after rebuild (Gap #35, #36)
+
+**Symptom**: mcp-gateway fails to start because it can't reach Keycloak.
+
+**Root Cause**: Cloudflare DNS persists but GCP domain mapping is destroyed.
+
+**Resolution**:
+```bash
+# Create the domain mapping
+gcloud beta run domain-mappings create \
+  --service=keycloak \
+  --domain=auth.tamshai.com \
+  --region=us-central1
+
+# Wait for it to be routable (Cloudflare handles SSL)
+gcloud beta run domain-mappings describe \
+  --domain=auth.tamshai.com \
+  --region=us-central1 \
+  --format="value(status.conditions[2].status)"
+# Should return "True"
+
+# Verify HTTPS access
+curl -sf https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration
+```
+
+### Issue: Storage bucket location mismatch (Gap #20)
+
+**Symptom**: Terraform wants to recreate bucket due to location difference (US vs US-CENTRAL1).
+
+**Resolution**:
+Already fixed in storage module with `lifecycle { ignore_changes = [location] }`.
+If still occurring:
+```bash
+# Remove from state and re-import
+terraform state rm 'module.storage.google_storage_bucket.static_website[0]'
+terraform import 'module.storage.google_storage_bucket.static_website[0]' prod.tamshai.com
+```
+
 ---
 
 ## Workload Identity Federation (Future)
@@ -461,6 +683,7 @@ After a successful Phoenix rebuild:
 
 ## Related Documentation
 
+- [Phoenix Manual Actions](./PHOENIX_MANUAL_ACTIONS.md) - **Detailed gap documentation and resolutions**
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures
 - [Phoenix Recovery Improvements](./PHOENIX_RECOVERY_IMPROVEMENTS.md) - Lessons learned
 - [Identity Sync](./IDENTITY_SYNC.md) - User provisioning
@@ -472,5 +695,6 @@ After a successful Phoenix rebuild:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.1.0 | Jan 2026 | Tamshai-QA | Added Gaps #1a-#37 from Phoenix rebuild 2026-01-18/19 |
 | 2.0.0 | Jan 2026 | Tamshai-QA | Complete rewrite with automated scripts |
 | 1.0.0 | Dec 2025 | Tamshai-Dev | Initial version |
