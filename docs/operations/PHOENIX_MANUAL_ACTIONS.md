@@ -12,6 +12,31 @@ terraform force-unlock -force <LOCK_ID>
 ```
 **Automation**: Check for stale locks before destroy, auto-unlock if older than 1 hour.
 
+## Post-Destroy Verification
+
+### 1a. Verify All Resources Destroyed
+After terraform destroy completes, verify no orphaned resources remain:
+```bash
+# Check Cloud Run services
+gcloud run services list --region=us-central1 --format="value(name)" | grep -E "^(keycloak|mcp-|web-portal)" && echo "ERROR: Cloud Run services still exist"
+
+# Check Cloud Run jobs
+gcloud run jobs list --region=us-central1 --format="value(name)" | grep provision && echo "ERROR: Cloud Run jobs still exist"
+
+# Check Cloud SQL instances
+gcloud sql instances list --format="value(name)" | grep tamshai && echo "ERROR: Cloud SQL instance still exists"
+
+# Check storage buckets (except terraform state)
+gcloud storage buckets list --format="value(name)" | grep -E "tamshai-prod-(logs|finance|public)" && echo "WARNING: Storage buckets still exist"
+
+# Check secrets
+gcloud secrets list --format="value(name)" | grep -E "^(tamshai-prod-|mcp-hr-service)" && echo "WARNING: Secrets still exist"
+
+# Check VPC and networking
+gcloud compute networks list --format="value(name)" | grep tamshai && echo "ERROR: VPC still exists"
+```
+**Automation**: Script should fail if any critical resources (Cloud Run, Cloud SQL, VPC) still exist.
+
 ## Post-Destroy / Pre-Apply Actions
 
 ### 2. Delete Existing GCP Secrets
@@ -290,18 +315,19 @@ Correct deployment order after Phoenix rebuild:
 
 ## Recommended Phoenix Script Enhancements
 
-1. **Pre-destroy cleanup**: Delete secrets, Cloud Run jobs before terraform destroy
-2. **Staged apply**: Always run networking module first
-3. **Secret versioning**: After creating secrets, add initial versions
-4. **Service account key rotation**: Auto-update GitHub secret after terraform apply
-5. **Health gates**: Wait for Cloud SQL before deploying Cloud Run services
-6. **Idempotent cleanup**: Delete Cloud Run services in failed state before redeploy
-7. **State reconciliation**: Check for existing Cloud Run services before apply, auto-import if needed
-8. **outputs.tf patcher**: Script to temporarily add try() wrappers for sequential imports
-9. **Storage bucket import**: Auto-detect 409 conflicts and import existing buckets
-10. **Lifecycle management**: Ensure storage module has location ignore_changes for static_website
-11. **Dynamic PostgreSQL IP**: Query Cloud SQL directly instead of hardcoded fallback
-12. **CICD cloudsql.viewer role**: Required for PostgreSQL IP discovery
-13. **Domain mapping creation**: Create auth.tamshai.com mapping before gateway deploy
-14. **Extended health check timeout**: 120s instead of 60s for Keycloak cold starts
-15. **SSL certificate wait loop**: Poll domain mapping status until CertificateProvisioned=True (up to 20 min)
+1. **Post-destroy verification**: Verify all resources deleted before proceeding to apply (fail-fast)
+2. **Pre-destroy cleanup**: Delete secrets, Cloud Run jobs before terraform destroy
+3. **Staged apply**: Always run networking module first
+4. **Secret versioning**: After creating secrets, add initial versions
+5. **Service account key rotation**: Auto-update GitHub secret after terraform apply
+6. **Health gates**: Wait for Cloud SQL before deploying Cloud Run services
+7. **Idempotent cleanup**: Delete Cloud Run services in failed state before redeploy
+8. **State reconciliation**: Check for existing Cloud Run services before apply, auto-import if needed
+9. **outputs.tf patcher**: Script to temporarily add try() wrappers for sequential imports
+10. **Storage bucket import**: Auto-detect 409 conflicts and import existing buckets
+11. **Lifecycle management**: Ensure storage module has location ignore_changes for static_website
+12. **Dynamic PostgreSQL IP**: Query Cloud SQL directly instead of hardcoded fallback
+13. **CICD cloudsql.viewer role**: Required for PostgreSQL IP discovery
+14. **Domain mapping creation**: Create auth.tamshai.com mapping before gateway deploy
+15. **Extended health check timeout**: 120s instead of 60s for Keycloak cold starts
+16. **SSL certificate wait loop**: Poll domain mapping status until CertificateProvisioned=True (up to 20 min)
