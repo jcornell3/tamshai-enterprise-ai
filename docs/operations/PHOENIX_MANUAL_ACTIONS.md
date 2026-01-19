@@ -238,6 +238,55 @@ terraform import 'module.storage.google_storage_bucket.static_website[0]' \
 | MCP suite import failures | Outputs reference all 4 services during partial import | Medium |
 | Storage bucket location | Bucket in US but Terraform expects US-CENTRAL1 | Medium |
 
+## Additional Gaps Found (2026-01-19 Phoenix Rebuild)
+
+These gaps were discovered during a full Phoenix rebuild execution:
+
+### Terraform Destroy Gaps
+
+| # | Gap | Root Cause | Manual Action | Fix Priority |
+|---|-----|------------|---------------|--------------|
+| 21 | Cloud Run Job deletion_protection | Default enabled | `gcloud run jobs delete` | High |
+| 22 | Cloud SQL deletion_protection | Must disable before delete | `gcloud sql instances patch --no-deletion-protection` | High |
+| 23 | Service networking connection blocked | Cloud SQL references it | `terraform state rm` + wait for Cloud SQL deletion | High |
+| 24 | Private IP address blocks VPC deletion | Persists after state rm | `gcloud compute addresses delete` | Medium |
+| 25 | vpc_connector_id count dependency | Unknown at destroy time | Targeted destroy of VPC | Medium |
+
+### Terraform Apply Gaps
+
+| # | Gap | Root Cause | Manual Action | Fix Priority |
+|---|-----|------------|---------------|--------------|
+| 26 | mcp-hr-service-client-secret no version | Terraform creates empty secret | `gcloud secrets versions add` | High |
+| 27 | Cloud Run services fail (no images) | Images must exist before apply | Delete services, run deploy workflow first | High |
+| 28 | Static website bucket 409 conflict | Bucket persists from previous deploy | `terraform import` the bucket | Medium |
+| 29 | Failed Cloud Run services block operations | Null status in outputs.tf | Delete services + state rm before import | High |
+
+### Deploy Workflow Gaps
+
+| # | Gap | Root Cause | Fix Applied | Fix Priority |
+|---|-----|------------|-------------|--------------|
+| 30 | Hardcoded PostgreSQL IP fallback stale | IP changes per rebuild | Dynamic gcloud query added | High |
+| 31 | CICD SA missing cloudsql.viewer | Can't query Cloud SQL IP | Added role in Terraform | High |
+| 32 | MongoDB URI secret IAM missing | mcp-servers can't access | Manual IAM binding added | High |
+| 33 | Static website bucket IAM not applied | Import doesn't create IAM | terraform apply after import | Medium |
+| 34 | Keycloak health check timeout | 60s too short for cold start | Increase timeout to 120s | Low |
+| 35 | auth.tamshai.com domain mapping missing | Terraform didn't create it | Create via gcloud beta | High |
+| 36 | mcp-gateway can't start | Depends on auth.tamshai.com | Create domain mapping first | Critical |
+
+### Deployment Order Dependencies
+
+Correct deployment order after Phoenix rebuild:
+1. Terraform apply (networking module first, then full apply)
+2. Create/regenerate CICD service account key → update GitHub secret
+3. Deploy Keycloak (must start first)
+4. Create auth.tamshai.com domain mapping → keycloak
+5. Wait for domain verification/propagation
+6. Deploy MCP services (hr, finance, sales, support)
+7. Deploy mcp-gateway (depends on Keycloak URL being reachable)
+8. Deploy web-portal
+9. Sync Keycloak realm
+10. Configure test user TOTP
+
 ## Recommended Phoenix Script Enhancements
 
 1. **Pre-destroy cleanup**: Delete secrets, Cloud Run jobs before terraform destroy
@@ -250,3 +299,7 @@ terraform import 'module.storage.google_storage_bucket.static_website[0]' \
 8. **outputs.tf patcher**: Script to temporarily add try() wrappers for sequential imports
 9. **Storage bucket import**: Auto-detect 409 conflicts and import existing buckets
 10. **Lifecycle management**: Ensure storage module has location ignore_changes for static_website
+11. **Dynamic PostgreSQL IP**: Query Cloud SQL directly instead of hardcoded fallback
+12. **CICD cloudsql.viewer role**: Required for PostgreSQL IP discovery
+13. **Domain mapping creation**: Create auth.tamshai.com mapping before gateway deploy
+14. **Extended health check timeout**: 120s instead of 60s for Keycloak cold starts
