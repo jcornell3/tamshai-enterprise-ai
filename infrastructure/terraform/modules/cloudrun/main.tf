@@ -171,6 +171,13 @@ resource "google_cloud_run_service" "mcp_gateway" {
       template[0].metadata[0].annotations["run.googleapis.com/client-version"],
     ]
   }
+
+  # Issue #11 Fix: Increase timeouts for long-running operations
+  # Cloud Run service creation can take 20+ minutes during cold starts
+  timeouts {
+    create = "30m"
+    update = "20m"
+  }
 }
 
 # Make MCP Gateway publicly accessible
@@ -352,6 +359,12 @@ resource "google_cloud_run_service" "mcp_suite" {
       template[0].metadata[0].annotations["run.googleapis.com/client-version"],
     ]
   }
+
+  # Issue #11 Fix: Increase timeouts for long-running operations
+  timeouts {
+    create = "20m"
+    update = "15m"
+  }
 }
 
 # MCP Suite services are NOT publicly accessible (only via MCP Gateway)
@@ -509,6 +522,13 @@ resource "google_cloud_run_service" "keycloak" {
       template[0].metadata[0].annotations["run.googleapis.com/client-version"],
     ]
   }
+
+  # Issue #11 Fix: Increase timeouts for long-running operations
+  # Keycloak can take longer to start due to DB initialization
+  timeouts {
+    create = "30m"
+    update = "20m"
+  }
 }
 
 # Make Keycloak publicly accessible
@@ -547,6 +567,11 @@ resource "google_cloud_run_domain_mapping" "keycloak" {
 
   spec {
     route_name = google_cloud_run_service.keycloak.name
+  }
+
+  # Issue #11 Fix: Certificate provisioning can take 15-20 minutes
+  timeouts {
+    create = "30m"
   }
 }
 
@@ -614,6 +639,12 @@ resource "google_cloud_run_service" "web_portal" {
       template[0].metadata[0].annotations["run.googleapis.com/client-name"],
       template[0].metadata[0].annotations["run.googleapis.com/client-version"],
     ]
+  }
+
+  # Issue #11 Fix: Increase timeouts for long-running operations
+  timeouts {
+    create = "20m"
+    update = "15m"
   }
 }
 
