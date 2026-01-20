@@ -750,11 +750,36 @@ phase_6_regenerate_keys() {
         exit 1
     fi
 
+    # Issue #10 Fix: Validate the new key works before continuing
+    log_step "Validating new SA key (Issue #10 fix)..."
+
+    # Temporarily activate the new key to verify it works
+    local current_account
+    current_account=$(gcloud config get-value account 2>/dev/null) || true
+
+    if gcloud auth activate-service-account --key-file="$key_file" 2>/dev/null; then
+        # Verify we can access the project
+        if gcloud projects describe "$project" --format="value(projectId)" &>/dev/null; then
+            log_success "New SA key validated - can access project"
+        else
+            log_error "New SA key cannot access project!"
+            rm -f "$key_file"
+            exit 1
+        fi
+
+        # Restore previous auth if we had one
+        if [ -n "$current_account" ]; then
+            gcloud config set account "$current_account" 2>/dev/null || true
+        fi
+    else
+        log_warn "Could not validate new SA key (may need manual verification)"
+    fi
+
     # Clean up
     rm -f "$key_file"
 
     save_checkpoint 6 "completed"
-    log_success "Phase 6 complete - Keys regenerated"
+    log_success "Phase 6 complete - Keys regenerated and validated"
 }
 
 # =============================================================================
@@ -797,7 +822,94 @@ phase_7_cloud_run() {
     fi
 
     log_step "Applying full Terraform configuration..."
-    terraform apply -auto-approve
+
+    # Issue #11 Fix: Handle 409 conflicts from previous interrupted applies
+    local apply_output
+    local apply_exit_code=0
+
+    # Run terraform apply and capture output
+    apply_output=$(terraform apply -auto-approve 2>&1) || apply_exit_code=$?
+
+    if [ $apply_exit_code -ne 0 ]; then
+        # Check if this is a 409 "already exists" error
+        if echo "$apply_output" | grep -q "Error 409.*already exists"; then
+            log_warn "Detected 409 conflict - resources exist but not in state (Issue #11)"
+            log_info "This can happen if a previous terraform apply timed out"
+            log_info "Attempting auto-recovery by importing existing resources..."
+
+            local region="${GCP_REGION}"
+            local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
+
+            # Import mcp-gateway if it exists but not in state
+            if echo "$apply_output" | grep -q "mcp-gateway.*already exists"; then
+                if gcloud run services describe mcp-gateway --region="$region" &>/dev/null; then
+                    log_info "Importing existing mcp-gateway service..."
+                    terraform import 'module.cloudrun.google_cloud_run_service.mcp_gateway' \
+                        "locations/${region}/namespaces/${project}/services/mcp-gateway" 2>/dev/null || true
+                fi
+            fi
+
+            # Import keycloak if it exists but not in state
+            if echo "$apply_output" | grep -q "keycloak.*already exists"; then
+                if gcloud run services describe keycloak --region="$region" &>/dev/null; then
+                    log_info "Importing existing keycloak service..."
+                    terraform import 'module.cloudrun.google_cloud_run_service.keycloak' \
+                        "locations/${region}/namespaces/${project}/services/keycloak" 2>/dev/null || true
+                fi
+            fi
+
+            # Import MCP suite services if they exist
+            for svc in hr finance sales support; do
+                if echo "$apply_output" | grep -q "mcp-${svc}.*already exists"; then
+                    if gcloud run services describe "mcp-${svc}" --region="$region" &>/dev/null; then
+                        log_info "Importing existing mcp-${svc} service..."
+                        terraform import "module.cloudrun.google_cloud_run_service.mcp_suite[\"${svc}\"]" \
+                            "locations/${region}/namespaces/${project}/services/mcp-${svc}" 2>/dev/null || true
+                    fi
+                fi
+            done
+
+            # Import web-portal if it exists
+            if echo "$apply_output" | grep -q "web-portal.*already exists"; then
+                if gcloud run services describe web-portal --region="$region" &>/dev/null; then
+                    log_info "Importing existing web-portal service..."
+                    terraform import 'module.cloudrun.google_cloud_run_service.web_portal[0]' \
+                        "locations/${region}/namespaces/${project}/services/web-portal" 2>/dev/null || true
+                fi
+            fi
+
+            # Import domain mappings if they exist
+            if echo "$apply_output" | grep -q "auth.tamshai.com.*already exists"; then
+                if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null 2>&1; then
+                    log_info "Importing existing auth.tamshai.com domain mapping..."
+                    terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
+                        "locations/${region}/namespaces/${project}/domainmappings/auth.tamshai.com" 2>/dev/null || true
+                fi
+            fi
+
+            # Retry terraform apply after imports
+            log_step "Retrying terraform apply after import (Issue #11 recovery)..."
+            terraform apply -auto-approve || {
+                log_error "Terraform apply failed even after import recovery"
+                log_error "Original error output:"
+                echo "$apply_output"
+                log_error ""
+                log_error "Manual intervention may be required. Check:"
+                log_error "  - Cloud Run console: https://console.cloud.google.com/run"
+                log_error "  - Terraform state: terraform state list"
+                save_checkpoint 7 "failed"
+                exit 1
+            }
+            log_success "409 recovery successful - resources imported and apply completed"
+        else
+            log_error "Terraform apply failed with non-409 error:"
+            echo "$apply_output"
+            save_checkpoint 7 "failed"
+            exit 1
+        fi
+    else
+        log_success "Terraform apply completed successfully"
+    fi
 
     # Gap #32: Add MongoDB URI IAM binding for MCP servers
     log_step "Adding MongoDB URI IAM binding (Gap #32)..."

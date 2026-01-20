@@ -90,8 +90,8 @@ The script executes 10 phases automatically:
 | 4 | Terraform destroy | All resources destroyed |
 | 5 | Terraform apply (infra) | VPC, Cloud SQL, Registry created |
 | 6 | Build images | All 7 container images built |
-| 7 | Regenerate SA key | GitHub secret updated |
-| 8 | Terraform apply (Cloud Run) | Services deployed, domain mappings imported |
+| 7 | Regenerate SA key | GitHub secret updated, key validated (Issue #10 fix) |
+| 8 | Terraform apply (Cloud Run) | Services deployed, 409 auto-recovery (Issue #11 fix) |
 | 9 | Deploy via GitHub Actions | Full deployment completed |
 | 10 | Configure TOTP & verify | E2E tests pass |
 
@@ -153,6 +153,90 @@ check_secret_hygiene "tamshai-prod-keycloak-admin-password"
 
 ```bash
 terraform force-unlock -force <LOCK_ID>
+```
+
+### Issue #9: Provision Job Permission Denied
+
+**Symptom**: Provision job fails with "Permission denied on secret" during first execution after Phoenix rebuild.
+
+**Cause**: IAM binding race condition - the Cloud Run job was created before its IAM bindings were fully applied by Terraform.
+
+**Prevention**: The `google_cloud_run_v2_job.provision_users` resource now has `depends_on` for all required IAM bindings (`infrastructure/terraform/modules/security/main.tf`).
+
+**Manual Fix** (if encountered):
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+SA_EMAIL="tamshai-prod-provision@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# Grant secret access manually
+for secret in tamshai-prod-db-password tamshai-prod-keycloak-admin-password mcp-hr-service-client-secret tamshai-prod-user-password; do
+    gcloud secrets add-iam-policy-binding "$secret" \
+        --member="serviceAccount:${SA_EMAIL}" \
+        --role="roles/secretmanager.secretAccessor"
+done
+
+# Re-run the provision job
+gcloud run jobs execute provision-users --region=us-central1 --wait
+```
+
+### Issue #10: Service Account Key Invalid After Manual Terraform Apply
+
+**Symptom**: GitHub workflows fail with "Invalid JWT Signature" or "Could not deserialize key data" after running `terraform apply` manually (not using `phoenix-rebuild.sh`).
+
+**Cause**: When running terraform manually (bypassing `phoenix-rebuild.sh`), Phase 6 (key regeneration) doesn't execute. The CICD service account is recreated with Terraform, but GitHub secret `GCP_SA_KEY_PROD` still has the old key.
+
+**Prevention**: Always use `phoenix-rebuild.sh` which handles key regeneration and validation in Phase 6.
+
+**Manual Fix**:
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+gcloud iam service-accounts keys create /tmp/key.json \
+    --iam-account=tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com
+gh secret set GCP_SA_KEY_PROD < /tmp/key.json
+rm /tmp/key.json
+
+# Verify the key works
+gcloud auth activate-service-account --key-file=/tmp/key.json
+gcloud projects describe "$PROJECT_ID" --format="value(projectId)"
+```
+
+### Issue #11: Terraform 409 "Already Exists" Error
+
+**Symptom**: `terraform apply` fails with:
+```
+Error: Error creating Service: googleapi: Error 409: Resource 'mcp-gateway' already exists.
+Error: Error creating DomainMapping: googleapi: Error 409: Resource 'auth.tamshai.com' already exists.
+```
+
+**Cause**: A previous `terraform apply` timed out or was interrupted. The resources were created in GCP, but Terraform state wasn't updated. Cloud Run services can take 15-30 minutes to create, especially when certificates are being provisioned.
+
+**Prevention**:
+- `phoenix-rebuild.sh` now includes 409 auto-recovery logic in Phase 7
+- Terraform timeout blocks have been increased to 30 minutes for Cloud Run resources
+- Always use `phoenix-rebuild.sh` instead of manual `terraform apply`
+
+**Manual Fix** (import existing resources):
+```bash
+cd infrastructure/terraform/gcp
+PROJECT_ID=$(gcloud config get-value project)
+REGION="us-central1"
+
+# Import Cloud Run services (only if they exist)
+for svc in mcp-gateway keycloak mcp-hr mcp-finance mcp-sales mcp-support web-portal; do
+    if gcloud run services describe "$svc" --region="$REGION" &>/dev/null; then
+        terraform import "module.cloudrun.google_cloud_run_service.${svc//-/_}" \
+            "locations/${REGION}/namespaces/${PROJECT_ID}/services/${svc}" 2>/dev/null || true
+    fi
+done
+
+# Import domain mapping
+if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$REGION" &>/dev/null 2>&1; then
+    terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
+        "locations/${REGION}/namespaces/${PROJECT_ID}/domainmappings/auth.tamshai.com" 2>/dev/null || true
+fi
+
+# Retry apply
+terraform apply
 ```
 
 For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-procedures-fallback).
@@ -360,6 +444,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.1.0 | Jan 20, 2026 | Tamshai-Dev | Added Issues #9, #10, #11 troubleshooting; Phase 7 validates SA key; Phase 8 has 409 recovery |
 | 3.0.0 | Jan 20, 2026 | Tamshai-Dev | Restructured: minimal main runbook, manual procedures moved to Appendix B |
 | 2.3.0 | Jan 20, 2026 | Tamshai-Dev | Gap #49 fix, removed SSL waiting, automated pre-destroy cleanup |
 | 2.2.0 | Jan 2026 | Tamshai-Dev | Added Gaps #38-43 fixes |
