@@ -68,6 +68,7 @@ while [ $# -gt 0 ]; do
         --skip-destroy) SKIP_DESTROY=true; shift ;;
         --resume) RESUME_MODE=true; shift ;;
         --phase) START_PHASE="$2"; shift 2 ;;
+        --phase=*) START_PHASE="${1#*=}"; shift ;;  # Issue #22: Support --phase=N syntax
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help) show_help; exit 0 ;;
         *) shift ;;
