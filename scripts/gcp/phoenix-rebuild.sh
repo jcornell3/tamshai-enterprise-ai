@@ -330,11 +330,31 @@ phase_3_destroy() {
         fi
     done
 
-    # Gap #40: Delete Cloud SQL instance BEFORE terraform destroy to avoid keycloak user dependency
-    log_step "Deleting Cloud SQL instance to avoid user dependency (Gap #40)..."
+    # Gap #40 + Issue #14: Delete Cloud SQL instance AND WAIT for deletion
+    # Cloud SQL deletion is async - VPC peering can't be deleted until Cloud SQL is gone
+    log_step "Deleting Cloud SQL instance (Gap #40 + Issue #14 dependency)..."
     if gcloud sql instances describe "$instance_name" &>/dev/null; then
-        log_warn "Deleting Cloud SQL instance: $instance_name (this takes ~30 seconds)"
-        gcloud sql instances delete "$instance_name" --quiet 2>/dev/null || log_warn "Cloud SQL deletion may have failed"
+        log_warn "Deleting Cloud SQL instance: $instance_name (takes 30-90 seconds)"
+        gcloud sql instances delete "$instance_name" --quiet 2>/dev/null || log_warn "Cloud SQL deletion command may have failed"
+
+        # Issue #14: WAIT for Cloud SQL deletion to complete
+        # VPC peering cannot be deleted while Cloud SQL is still using the connection
+        local sql_wait=0
+        local sql_max_wait=18  # 18 * 10s = 3 minutes max
+        while gcloud sql instances describe "$instance_name" &>/dev/null; do
+            sql_wait=$((sql_wait + 1))
+            if [ $sql_wait -ge $sql_max_wait ]; then
+                log_warn "Cloud SQL deletion timeout - VPC peering deletion may fail"
+                break
+            fi
+            echo "   Waiting for Cloud SQL deletion... [$sql_wait/$sql_max_wait]"
+            sleep 10
+        done
+
+        if ! gcloud sql instances describe "$instance_name" &>/dev/null; then
+            log_success "Cloud SQL instance deleted"
+        fi
+
         # Remove from state since we deleted it manually
         terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_user.keycloak_user' 2>/dev/null || true
@@ -344,20 +364,86 @@ phase_3_destroy() {
         terraform state rm 'module.database.google_sql_database.finance_db' 2>/dev/null || true
     fi
 
-    # Gap #23: Remove service networking from state BEFORE destroy (blocks VPC deletion)
-    # Check both module.database and module.networking paths (varies by terraform version)
-    log_step "Removing service networking from state (Gap #23 - proactive)..."
+    # =============================================================================
+    # Issue #14 FIX: Complete VPC Cleanup with Proper Deletion Order
+    # =============================================================================
+    # Previous approach (Gap #23/24) only removed resources from Terraform state
+    # but never actually deleted the VPC peering from GCP. The private IP cannot
+    # be deleted while the peering still references it.
+    #
+    # Correct deletion order:
+    #   1. Delete VPC peering connection (releases the private IP)
+    #   2. Delete private IP address (now possible)
+    #   3. Remove from Terraform state (cleanup stale references)
+    # =============================================================================
+
+    local vpc_name="tamshai-prod-vpc"
+
+    # Step 1: Delete VPC peering connection (Issue #14 - this was the missing step)
+    log_step "Deleting VPC peering connection (Issue #14 fix)..."
+    set +u  # Disable unbound variable check for gcloud
+    if gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; then
+        log_info "VPC peering exists - deleting..."
+        gcloud services vpc-peerings delete \
+            --network="$vpc_name" \
+            --service=servicenetworking.googleapis.com \
+            --quiet 2>/dev/null || {
+            log_warn "VPC peering deletion may have failed - checking status..."
+        }
+
+        # Wait for peering deletion (async operation)
+        local wait_count=0
+        local max_wait=12  # 12 * 10s = 2 minutes max
+        while gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; do
+            wait_count=$((wait_count + 1))
+            if [ $wait_count -ge $max_wait ]; then
+                log_warn "VPC peering deletion timeout - may need manual cleanup"
+                break
+            fi
+            echo "   Waiting for VPC peering deletion... [$wait_count/$max_wait]"
+            sleep 10
+        done
+
+        # Verify deletion
+        if ! gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; then
+            log_success "VPC peering deleted from GCP"
+        else
+            log_warn "VPC peering may still exist - continuing anyway"
+        fi
+    else
+        log_info "VPC peering does not exist - skipping deletion"
+    fi
+    set -u  # Re-enable unbound variable check
+
+    # Step 2: Delete private IP addresses (now possible after peering deleted)
+    log_step "Deleting private IP addresses (Gap #24 - after peering deletion)..."
+    local private_ip_names=("tamshai-prod-private-ip" "google-managed-services-tamshai-prod-vpc" "tamshai-prod-private-ip-range")
+    for ip_name in "${private_ip_names[@]}"; do
+        set +u
+        if gcloud compute addresses describe "$ip_name" --global &>/dev/null; then
+            log_info "  Deleting $ip_name..."
+            gcloud compute addresses delete "$ip_name" --global --quiet || {
+                log_warn "  Could not delete $ip_name - may be in use"
+            }
+        fi
+        set -u
+    done
+
+    # Verify private IP deleted
+    set +u
+    if gcloud compute addresses describe "tamshai-prod-private-ip" --global &>/dev/null; then
+        log_warn "Private IP tamshai-prod-private-ip still exists - terraform destroy may fail"
+    else
+        log_success "Private IP addresses cleaned up"
+    fi
+    set -u
+
+    # Step 3: Remove from Terraform state (cleanup stale references)
+    log_step "Removing service networking from Terraform state (Gap #23)..."
     terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
     terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
     terraform state rm 'module.networking.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
     terraform state rm 'module.networking.google_compute_global_address.private_ip_range' 2>/dev/null || true
-
-    # Gap #24: Delete orphaned private IP BEFORE destroy (try multiple known names)
-    log_step "Deleting orphaned private IP (Gap #24 - proactive)..."
-    local private_ip_names=("tamshai-prod-private-ip" "google-managed-services-tamshai-prod-vpc" "tamshai-prod-private-ip-range")
-    for ip_name in "${private_ip_names[@]}"; do
-        gcloud compute addresses delete "$ip_name" --global --quiet 2>/dev/null || true
-    done
 
     # Gap #25 FIX: ACTUALLY DELETE the VPC connector, not just remove from state
     # Root cause: terraform state rm only removes from state - the actual GCP resource
@@ -423,14 +509,23 @@ phase_3_destroy() {
         # The state cleanup removes resources that would otherwise require manual
         # deletion or cause circular dependency issues during destroy.
 
-        # Gap #23: Remove service networking from state if blocked
-        # Service networking connections can block VPC deletion due to peering dependencies
+        # Issue #14 FIX (fallback): Delete VPC peering FIRST, then private IP
+        log_step "Deleting VPC peering connection (Issue #14 - fallback)..."
+        set +u
+        gcloud services vpc-peerings delete \
+            --network="tamshai-prod-vpc" \
+            --service=servicenetworking.googleapis.com \
+            --quiet 2>/dev/null || true
+        # Brief wait for peering deletion
+        sleep 15
+        set -u
+
+        # Gap #23: Remove service networking from state
         log_step "Removing service networking from state (Gap #23)..."
         terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
         terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
 
-        # Gap #24: Delete orphaned private IP manually
-        # GCP may retain the private IP even after state removal
+        # Gap #24: Delete private IP (now possible after peering deleted)
         log_step "Deleting orphaned private IP (Gap #24)..."
         gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
 

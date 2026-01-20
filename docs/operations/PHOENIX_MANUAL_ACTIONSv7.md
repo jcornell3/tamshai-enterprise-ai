@@ -436,6 +436,7 @@ fi
 | **#11** | NEW | 409 timeout recovery | **FIXED** (timeouts + auto-recovery) |
 | **#12** | NEW | Preflight fails on rebuild resources | **FIXED** (use warn not fail) |
 | **#13** | NEW | Duplicate depends_on blocks | **FIXED** (merged blocks) |
+| **#14** | NEW | VPC peering not deleted before private IP | **FIXED** (delete peering first) |
 
 ### Recommendations for v8
 
@@ -585,6 +586,88 @@ depends_on = [
 
 ---
 
+### Issue #14: VPC Peering Not Deleted Before Private IP Deletion
+
+**Symptom**: Terraform apply fails with 409 "already exists" error for private IP:
+```
+Error: Error creating GlobalAddress: googleapi: Error 409: The resource
+'projects/.../global/addresses/tamshai-prod-private-ip' already exists, alreadyExists
+```
+
+**Root Cause Analysis**:
+
+The VPC cleanup code (Gap #23/24) removed resources from Terraform **state** but never actually deleted the VPC peering from GCP. The deletion order was incorrect:
+
+| Step | Previous Behavior | Problem |
+|------|-------------------|---------|
+| 1 | `terraform state rm` service_networking | Only removes from state, not GCP |
+| 2 | `gcloud compute addresses delete` | Fails silently - IP still reserved by peering |
+| 3 | `terraform destroy` | VPC can't be deleted, IP still exists |
+
+The VPC peering (`servicenetworking-googleapis-com`) reserves the private IP range. **You cannot delete the private IP while the peering still references it.**
+
+**Correct Deletion Order**:
+```
+Cloud SQL → VPC Peering → Private IP → VPC
+```
+
+**Historical Context** (from PHOENIX_MANUAL_ACTIONS v1-v6):
+
+| Version | Gap | Fix Attempted | Result |
+|---------|-----|---------------|--------|
+| v1 | #23 | `terraform state rm` | Reactive, didn't delete GCP resource |
+| v1 | #24 | `gcloud addresses delete` | Failed silently (peering still active) |
+| v3 | #23-24 | Made proactive | Still didn't delete peering |
+| v6 | #61 | VPC connector delete (same pattern) | **Key insight**: state rm ≠ GCP delete |
+
+**The v6 insight was not applied to VPC peering**: "Nowhere in the scripts is there a `gcloud ... delete` command. The [resource] is NEVER actually deleted from GCP."
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Added VPC peering deletion with proper order and verification:
+
+```bash
+# Step 1: Delete VPC peering connection (Issue #14 - this was the missing step)
+log_step "Deleting VPC peering connection (Issue #14 fix)..."
+if gcloud services vpc-peerings list --network="$vpc_name" | grep -q "servicenetworking"; then
+    gcloud services vpc-peerings delete \
+        --network="$vpc_name" \
+        --service=servicenetworking.googleapis.com \
+        --quiet
+
+    # Wait for peering deletion (async operation)
+    while gcloud services vpc-peerings list --network="$vpc_name" | grep -q "servicenetworking"; do
+        echo "Waiting for VPC peering deletion..."
+        sleep 10
+    done
+    log_success "VPC peering deleted from GCP"
+fi
+
+# Step 2: Delete private IP (now possible after peering deleted)
+gcloud compute addresses delete "tamshai-prod-private-ip" --global --quiet
+
+# Step 3: Remove from Terraform state
+terraform state rm '...'
+```
+
+**Key Changes**:
+1. Added wait loop after Cloud SQL deletion (Gap #40) - VPC peering can't be deleted until Cloud SQL is fully gone
+2. Added `gcloud services vpc-peerings delete` before private IP deletion
+3. Added wait loop to confirm peering deletion completes
+4. Added verification steps to confirm each deletion succeeded
+5. Updated both proactive cleanup and fallback cleanup sections
+
+**Full Deletion Order in Script**:
+1. Gap #38: Delete Cloud Run services (release VPC connector)
+2. Gap #40: Delete Cloud SQL instance (release VPC peering)
+3. **Issue #14**: Delete VPC peering (release private IP)
+4. Gap #24: Delete private IP (now possible)
+5. Gap #25: Delete VPC connector
+6. Gap #23: Remove from Terraform state
+7. `terraform destroy`
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -593,3 +676,4 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #11: 30-minute timeouts + auto-recovery handles long operations
 - Issue #12: Preflight checks now use warnings for resources created during rebuild
 - Issue #13: Merged duplicate `depends_on` blocks in Terraform
+- Issue #14: VPC peering deleted before private IP deletion
