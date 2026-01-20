@@ -708,36 +708,144 @@ $ bash -c 'set -u; set +u; state=$(gcloud sql instances describe tamshai-prod-po
 RUNNABLE
 ```
 
-**Fix Applied** (`scripts/gcp/lib/health-checks.sh`):
+**Fix Applied**:
 
-Wrapped all gcloud calls with `set +u` ... `set -u`:
+Changed from `set -euo pipefail` to `set -eo pipefail` in ALL scripts (removing `-u` flag entirely):
+
+**Files Modified**:
+- `scripts/gcp/phoenix-rebuild.sh` (line 33)
+- `scripts/gcp/lib/health-checks.sh` (line 22)
+- `scripts/gcp/lib/secrets.sh` (line 14)
+- `scripts/gcp/lib/dynamic-urls.sh` (line 19)
+- `scripts/gcp/lib/cleanup.sh` (line 14)
+- `scripts/gcp/lib/domain-mapping.sh` (line 14)
+- `scripts/gcp/lib/verify.sh` (line 14)
+- `scripts/gcp/lib/cloudsql-connect.sh` (line 21)
+
+**Why Remove -u Instead of Wrapping**:
+- Simpler, less error-prone than `set +u`/`set -u` wrappers everywhere
+- gcloud is called in many places across multiple scripts
+- The gcloud wrapper's use of unbound `$CLOUDSDK_PYTHON` is outside our control
+- All scripts now consistently use `set -eo pipefail` without `-u`
+
+---
+
+### Issue #17: GCP_PROJECT Not Set Before Library Sourcing
+
+**Symptom**: Script hangs/loops after loading libraries when `verify.sh` is sourced.
+
+**Root Cause**: The `verify.sh` library requires `GCP_PROJECT` to be set, but it was sourced before `GCP_PROJECT` was initialized from gcloud config.
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Moved `GCP_PROJECT` initialization before library sourcing:
 
 ```bash
-# wait_for_cloudsql() - Line 181-184
-set +u
-state=$(gcloud sql instances describe "$instance_name" \
-    --format="value(state)" 2>/dev/null) || state=""
-set -u
+# Issue #17: Set GCP_PROJECT BEFORE sourcing libraries
+GCP_PROJECT="${GCP_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
+export GCP_PROJECT
 
-# get_service_url() - Line 57-61
-set +u
-gcloud run services describe "$service_name" \
-    --region="$region" \
-    --format="value(status.url)" 2>/dev/null || echo ""
-set -u
-
-# check_vpc_connector() - Line 346-350
-set +u
-state=$(gcloud compute networks vpc-access connectors describe "$connector_name" \
-    --region="$region" \
-    --format="value(state)" 2>/dev/null) || state=""
-set -u
+# Now source libraries (verify.sh requires GCP_PROJECT)
+source "$PROJECT_ROOT/scripts/gcp/lib/secrets.sh"
+source "$PROJECT_ROOT/scripts/gcp/lib/health-checks.sh"
+# ...
 ```
 
-**Affected Functions**:
-1. `wait_for_cloudsql()` - Cloud SQL instance state check
-2. `get_service_url()` - Cloud Run service URL retrieval
-3. `check_vpc_connector()` - VPC Access Connector state check
+---
+
+### Issue #18: Artifact Registry Not Targeted in Phase 4
+
+**Symptom**: Phase 5 (Build Container Images) fails because the Artifact Registry `tamshai` doesn't exist.
+
+**Root Cause**:
+1. Phase 4 targeted only networking, security, database, and storage modules
+2. The Artifact Registry is defined in `module.cloudrun` but was NOT included in Phase 4 targets
+3. Phase 5 tried to push images before the registry was created
+
+**Additional Complication**: An orphaned `tamshai-prod` registry existed in GCP (created manually or by old config). The Terraform config defines `repository_id = "tamshai"` (not `tamshai-prod`).
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Added Artifact Registry to Phase 4 targets:
+
+```bash
+terraform apply -auto-approve \
+    -target=module.networking \
+    -target=module.security \
+    -target=module.database \
+    -target=module.storage \
+    -target=module.cloudrun.google_artifact_registry_repository.tamshai  # Issue #18
+```
+
+**Note on Naming**:
+- Artifact Registry: `tamshai` (repository ID in Terraform)
+- Keycloak Realm: `tamshai-corp` (production realm, different purpose)
+
+These are separate resources with no relation to each other.
+
+---
+
+### Issue #20: Keycloak Build Uses Both --tag and --config (Mutually Exclusive)
+
+**Symptom**: Keycloak build fails with:
+```
+ERROR: (gcloud.builds.submit) argument --config: At most one of --config | --pack | --tag can be specified.
+```
+
+**Root Cause**: The build command used both `--tag` and `--config` flags, which are mutually exclusive in `gcloud builds submit`.
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Changed keycloak build to use only `--config` (which contains image specification):
+
+```bash
+# Before (incorrect):
+gcloud builds submit --tag="${registry}/keycloak:latest" --config=...
+
+# After (correct):
+local keycloak_config="/tmp/keycloak-cloudbuild-$$.yaml"
+cat > "$keycloak_config" <<EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${registry}/keycloak:v2.0.0-postgres', '-f', 'Dockerfile.cloudbuild', '.']
+images:
+  - '${registry}/keycloak:v2.0.0-postgres'
+EOF
+gcloud builds submit "$PROJECT_ROOT/keycloak" --config="$keycloak_config" --suppress-logs
+```
+
+---
+
+### Issue #21: Process Substitution Fails on Windows/Git Bash
+
+**Symptom**: Web-portal and keycloak builds fail with:
+```
+ERROR: (gcloud.builds.submit) Unable to read file [/proc/922/fd/63]: [Errno 2] No such file or directory
+```
+
+**Root Cause**: Process substitution `<(cat <<EOF...)` creates a `/proc/PID/fd/FD` pseudo-file path that doesn't work on Windows/Git Bash.
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Changed both keycloak and web-portal builds to use temp files instead of process substitution:
+
+```bash
+# Before (Windows-incompatible):
+gcloud builds submit --config=<(cat <<EOF
+steps:
+  ...
+EOF
+)
+
+# After (Windows-compatible):
+local config_file="/tmp/cloudbuild-$$.yaml"
+cat > "$config_file" <<EOF
+steps:
+  ...
+EOF
+gcloud builds submit --config="$config_file" --suppress-logs
+rm -f "$config_file"
+```
 
 ---
 
@@ -750,4 +858,8 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #12: Preflight checks now use warnings for resources created during rebuild
 - Issue #13: Merged duplicate `depends_on` blocks in Terraform
 - Issue #14: VPC peering deleted before private IP deletion
-- Issue #16: Cloud SQL health check fixed with `set +u` wrapper for gcloud calls
+- Issue #16: Removed `-u` from `set -euo pipefail` to fix gcloud wrapper compatibility
+- Issue #17: GCP_PROJECT initialized before library sourcing
+- Issue #18: Artifact Registry added to Phase 4 targets
+- Issue #20: Keycloak build uses only `--config` (not both `--tag` and `--config`)
+- Issue #21: Temp files replace process substitution for Windows/Git Bash compatibility

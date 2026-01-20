@@ -731,19 +731,23 @@ phase_5_build_images() {
     done
 
     # Gap #45: Keycloak - use Dockerfile.cloudbuild to avoid BuildKit --chmod issue
+    # Issue #20: Can't use both --tag and --config (mutually exclusive)
+    # Issue #21: Process substitution <() doesn't work on Windows
     log_info "Building keycloak (using Dockerfile.cloudbuild for Cloud Build compatibility)..."
     if [ -f "$PROJECT_ROOT/keycloak/Dockerfile.cloudbuild" ]; then
-        # Use Dockerfile.cloudbuild which doesn't use BuildKit-specific syntax
-        gcloud builds submit "$PROJECT_ROOT/keycloak" \
-            --tag="${registry}/keycloak:v2.0.0-postgres" \
-            --config=<(cat <<EOF
+        # Create temp cloudbuild.yaml (Windows-compatible)
+        local keycloak_config="/tmp/keycloak-cloudbuild-$$.yaml"
+        cat > "$keycloak_config" <<EOF
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', '${registry}/keycloak:v2.0.0-postgres', '-f', 'Dockerfile.cloudbuild', '.']
 images:
   - '${registry}/keycloak:v2.0.0-postgres'
 EOF
-) || log_warn "Keycloak build failed"
+        gcloud builds submit "$PROJECT_ROOT/keycloak" \
+            --config="$keycloak_config" \
+            --suppress-logs || log_warn "Keycloak build failed"
+        rm -f "$keycloak_config"
     elif [ -f "$PROJECT_ROOT/keycloak/Dockerfile" ]; then
         # Fallback to regular Dockerfile (may fail if using BuildKit syntax)
         log_warn "Dockerfile.cloudbuild not found, using regular Dockerfile (may fail)"
@@ -755,17 +759,22 @@ EOF
     fi
 
     # Gap #46: web-portal - must be built from repo root with -f flag
+    # Issue #21: Process substitution <() doesn't work on Windows/Git Bash
     log_info "Building web-portal (from repo root with explicit Dockerfile path)..."
     if [ -f "$PROJECT_ROOT/clients/web/Dockerfile.prod" ]; then
-        gcloud builds submit "$PROJECT_ROOT" \
-            --config=<(cat <<EOF
+        # Create temp cloudbuild.yaml (Windows-compatible)
+        local webportal_config="/tmp/webportal-cloudbuild-$$.yaml"
+        cat > "$webportal_config" <<EOF
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', '${registry}/web-portal:latest', '-f', 'clients/web/Dockerfile.prod', '.']
 images:
   - '${registry}/web-portal:latest'
 EOF
-) || log_warn "web-portal build failed"
+        gcloud builds submit "$PROJECT_ROOT" \
+            --config="$webportal_config" \
+            --suppress-logs || log_warn "web-portal build failed"
+        rm -f "$webportal_config"
     else
         log_warn "No Dockerfile.prod found for web-portal"
     fi
