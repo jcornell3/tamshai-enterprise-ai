@@ -435,6 +435,7 @@ fi
 | **#10** | NEW | SA key validation | **FIXED** (validation step) |
 | **#11** | NEW | 409 timeout recovery | **FIXED** (timeouts + auto-recovery) |
 | **#12** | NEW | Preflight fails on rebuild resources | **FIXED** (use warn not fail) |
+| **#13** | NEW | Duplicate depends_on blocks | **FIXED** (merged blocks) |
 
 ### Recommendations for v8
 
@@ -554,6 +555,36 @@ PREFLIGHT CHECKS PASSED - Ready for Phoenix rebuild
 
 ---
 
+### Issue #13: Duplicate depends_on Blocks in Terraform
+
+**Symptom**: Terraform fails with "Attribute redefined" error:
+```
+Error: Attribute redefined
+  on ..\modules\security\main.tf line 700, in resource "google_cloud_run_v2_job" "provision_users":
+  700:   depends_on = [
+The argument "depends_on" was already set at ..\modules\security\main.tf:614,3-13.
+```
+
+**Root Cause**: Issue #9 fix added a second `depends_on` block instead of merging with the existing one.
+
+**Fix Applied**: Merged both `depends_on` blocks into a single block at line 692:
+```hcl
+depends_on = [
+  google_project_service.cloudrun,
+  google_secret_manager_secret_version.tamshai_db_password,
+  google_secret_manager_secret_version.keycloak_admin_password,
+  google_secret_manager_secret_version.prod_user_password,
+  # Issue #9: IAM bindings must exist before job can access secrets
+  google_secret_manager_secret_iam_member.provision_job_db_password,
+  google_secret_manager_secret_iam_member.provision_job_keycloak_admin,
+  google_secret_manager_secret_iam_member.provision_job_mcp_hr_client,
+  google_secret_manager_secret_iam_member.provision_job_prod_user_password,
+  google_project_iam_member.provision_job_cloudsql_client,
+]
+```
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -561,3 +592,4 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #10: SA key validation prevents invalid key scenarios
 - Issue #11: 30-minute timeouts + auto-recovery handles long operations
 - Issue #12: Preflight checks now use warnings for resources created during rebuild
+- Issue #13: Merged duplicate `depends_on` blocks in Terraform
