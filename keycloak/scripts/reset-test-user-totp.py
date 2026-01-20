@@ -261,7 +261,9 @@ def main():
     if not user_password:
         log_error("TEST_USER_PASSWORD environment variable is required")
         log_error("Set it with: export TEST_USER_PASSWORD='your-password'")
-        log_error("Or pass as 4th argument: ./reset-test-user-totp.py prod user secret password")
+        log_error(
+            "Or pass as 4th argument: ./reset-test-user-totp.py prod user secret password"
+        )
         sys.exit(1)
 
     if env not in ENVIRONMENTS:
@@ -294,7 +296,9 @@ def main():
 
     # Create user with TOTP
     print()
-    if not create_user_with_totp(keycloak_url, token, username, totp_secret, user_password):
+    if not create_user_with_totp(
+        keycloak_url, token, username, totp_secret, user_password
+    ):
         log_error("Failed to create user with TOTP")
         sys.exit(1)
 
