@@ -17,7 +17,8 @@
 #
 # =============================================================================
 
-set -euo pipefail
+# Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
+set -eo pipefail
 
 PROXY_PID=""
 PROXY_BINARY="/tmp/cloud-sql-proxy"

@@ -30,14 +30,18 @@
 #
 # =============================================================================
 
-set -euo pipefail
+# Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
+# This causes all gcloud commands to fail with "unbound variable" when -u is enabled
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Default GCP configuration
 export GCP_REGION="${GCP_REGION:-us-central1}"
-export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-}}"
+
+# Issue #17: GCP_PROJECT must be set before sourcing libraries (verify.sh requires it)
+export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
 
 # Source libraries
 source "$SCRIPT_DIR/lib/secrets.sh"
@@ -381,7 +385,6 @@ phase_3_destroy() {
 
     # Step 1: Delete VPC peering connection (Issue #14 - this was the missing step)
     log_step "Deleting VPC peering connection (Issue #14 fix)..."
-    set +u  # Disable unbound variable check for gcloud
     if gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; then
         log_info "VPC peering exists - deleting..."
         gcloud services vpc-peerings delete \
@@ -413,30 +416,25 @@ phase_3_destroy() {
     else
         log_info "VPC peering does not exist - skipping deletion"
     fi
-    set -u  # Re-enable unbound variable check
 
     # Step 2: Delete private IP addresses (now possible after peering deleted)
     log_step "Deleting private IP addresses (Gap #24 - after peering deletion)..."
     local private_ip_names=("tamshai-prod-private-ip" "google-managed-services-tamshai-prod-vpc" "tamshai-prod-private-ip-range")
     for ip_name in "${private_ip_names[@]}"; do
-        set +u
         if gcloud compute addresses describe "$ip_name" --global &>/dev/null; then
             log_info "  Deleting $ip_name..."
             gcloud compute addresses delete "$ip_name" --global --quiet || {
                 log_warn "  Could not delete $ip_name - may be in use"
             }
         fi
-        set -u
     done
 
     # Verify private IP deleted
-    set +u
     if gcloud compute addresses describe "tamshai-prod-private-ip" --global &>/dev/null; then
         log_warn "Private IP tamshai-prod-private-ip still exists - terraform destroy may fail"
     else
         log_success "Private IP addresses cleaned up"
     fi
-    set -u
 
     # Step 3: Remove from Terraform state (cleanup stale references)
     log_step "Removing service networking from Terraform state (Gap #23)..."
@@ -452,7 +450,6 @@ phase_3_destroy() {
     local connector_name="tamshai-prod-connector"
 
     # First, actually delete from GCP (if it exists)
-    set +u  # Disable unbound variable check for gcloud
     if gcloud compute networks vpc-access connectors describe "$connector_name" \
         --region="${GCP_REGION}" &>/dev/null; then
         log_info "VPC connector exists - deleting..."
@@ -478,7 +475,6 @@ phase_3_destroy() {
     else
         log_info "VPC connector does not exist in GCP - skipping deletion"
     fi
-    set -u  # Re-enable unbound variable check
 
     # THEN remove from Terraform state (cleanup any stale references)
     log_step "Removing VPC connector from Terraform state..."
@@ -511,14 +507,12 @@ phase_3_destroy() {
 
         # Issue #14 FIX (fallback): Delete VPC peering FIRST, then private IP
         log_step "Deleting VPC peering connection (Issue #14 - fallback)..."
-        set +u
         gcloud services vpc-peerings delete \
             --network="tamshai-prod-vpc" \
             --service=servicenetworking.googleapis.com \
             --quiet 2>/dev/null || true
         # Brief wait for peering deletion
         sleep 15
-        set -u
 
         # Gap #23: Remove service networking from state
         log_step "Removing service networking from state (Gap #23)..."
@@ -531,10 +525,8 @@ phase_3_destroy() {
 
         # Gap #25 FIX: Actually delete VPC connector (not just state removal)
         log_step "Deleting VPC connector (Gap #25 - fallback cleanup)..."
-        set +u
         gcloud compute networks vpc-access connectors delete "tamshai-prod-connector" \
             --region="${GCP_REGION}" --quiet 2>/dev/null || true
-        set -u
         # Also remove from state
         terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
         terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
@@ -641,11 +633,13 @@ phase_4_infrastructure() {
     log_step "Creating infrastructure (VPC, Cloud SQL, Artifact Registry)..."
     # First, create just the infrastructure without Cloud Run services
     # This allows images to be built before Cloud Run needs them
+    # Issue #18: Also target artifact registry so Phase 5 can push images
     terraform apply -auto-approve \
         -target=module.networking \
         -target=module.security \
         -target=module.database \
         -target=module.storage \
+        -target=module.cloudrun.google_artifact_registry_repository.tamshai \
         2>/dev/null || {
         log_warn "Targeted apply had errors - checking for Gap #44 (Cloud SQL state mismatch)..."
 
@@ -1298,7 +1292,7 @@ main() {
     fi
 
     # Set GCP project
-    GCP_PROJECT_ID="${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
+    GCP_PROJECT_ID="${GCP_PROJECT_ID:-${GCP_PROJECT:-$(gcloud config get-value project 2>/dev/null)}}"
     export GCP_PROJECT_ID
 
     if [ -z "$GCP_PROJECT_ID" ]; then

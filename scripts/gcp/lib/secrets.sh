@@ -17,7 +17,8 @@
 #
 # =============================================================================
 
-set -euo pipefail
+# Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
+set -eo pipefail
 
 # Colors
 RED='\033[0;31m'
