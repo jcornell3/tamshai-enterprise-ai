@@ -348,4 +348,76 @@ check_vpc_connector() {
     fi
 }
 
+# =============================================================================
+# Issue #25: Cloud Build with VPC-SC support
+# =============================================================================
+# When VPC-SC blocks log streaming, gcloud builds submit returns non-zero
+# even though the build is running. Use --async and poll for actual status.
+
+# Submit a Cloud Build and wait for it to complete
+# Returns 0 if build succeeds, 1 if it fails
+# Usage: submit_and_wait_build <context_path> <--tag=xxx or --config=xxx>
+submit_and_wait_build() {
+    local context_path="$1"
+    shift
+    local build_args=("$@")
+    local timeout="${CLOUD_BUILD_TIMEOUT:-600}"  # 10 minutes default
+
+    # Submit build asynchronously
+    local build_output
+    build_output=$(gcloud builds submit "$context_path" "${build_args[@]}" --async --format="value(id)" 2>&1)
+    local submit_exit_code=$?
+
+    # Extract build ID from output
+    local build_id
+    build_id=$(echo "$build_output" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+
+    if [ -z "$build_id" ]; then
+        log_health_error "Failed to submit build: $build_output"
+        return 1
+    fi
+
+    log_health_info "Build submitted: $build_id"
+
+    # Poll for completion
+    local start_time
+    start_time=$(date +%s)
+    local elapsed=0
+
+    while [ $elapsed -lt "$timeout" ]; do
+        local status
+        status=$(gcloud builds describe "$build_id" --region=global --format="value(status)" 2>/dev/null) || status=""
+
+        case "$status" in
+            SUCCESS)
+                log_health_success "Build $build_id completed successfully"
+                return 0
+                ;;
+            FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED)
+                log_health_error "Build $build_id failed with status: $status"
+                return 1
+                ;;
+            QUEUED|WORKING)
+                # Still running, continue waiting
+                ;;
+            *)
+                log_health_warn "Build $build_id has unknown status: $status"
+                ;;
+        esac
+
+        local current_time
+        current_time=$(date +%s)
+        elapsed=$((current_time - start_time))
+
+        local remaining=$((timeout - elapsed))
+        if [ $((elapsed % 30)) -eq 0 ]; then
+            log_health_info "Build $build_id status: $status (${remaining}s remaining)"
+        fi
+        sleep 5
+    done
+
+    log_health_error "Build $build_id timed out after ${timeout}s"
+    return 1
+}
+
 echo "[health-checks] Library loaded"
