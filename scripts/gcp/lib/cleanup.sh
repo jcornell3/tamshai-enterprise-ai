@@ -2,7 +2,8 @@
 # Phoenix Rebuild - Cleanup Functions
 # Functions for pre-destroy and post-destroy cleanup
 
-set -euo pipefail
+# Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
+set -eo pipefail
 
 # Required environment variables
 : "${GCP_REGION:?ERROR: GCP_REGION environment variable must be set}"

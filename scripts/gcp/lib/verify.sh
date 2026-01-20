@@ -2,7 +2,8 @@
 # Phoenix Rebuild - Verification Functions
 # These functions verify resources are properly destroyed/created
 
-set -euo pipefail
+# Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
+set -eo pipefail
 
 # Required environment variables - no defaults for sensitive values
 : "${GCP_REGION:?ERROR: GCP_REGION environment variable must be set}"
