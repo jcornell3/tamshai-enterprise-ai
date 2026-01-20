@@ -117,6 +117,70 @@ wait_for_auth_domain() {
     wait_for_domain_reachable "auth.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" "$timeout" || return 1
 }
 
+# =============================================================================
+# HTTPS CERTIFICATE VERIFICATION (Issue #8 Fix)
+# =============================================================================
+# GCP's domain mapping "Ready" status is misleading - it only means the domain
+# mapping is configured, NOT that the SSL certificate is deployed.
+#
+# Certificate propagation timeline:
+#   T+0:00  Domain mapping created → Status: "Pending"
+#   T+0:30  DNS verified → Status: "Ready" (MISLEADING!)
+#   T+5:00  Certificate issued
+#   T+10:00 Certificate deployed to Cloud Run edge
+#   T+15:00 Full propagation to all edge locations
+#
+# This function waits for the certificate to actually work via HTTPS.
+
+# Wait for SSL certificate to be deployed and working
+# This is the authoritative check - ignore GCP "Ready" status
+wait_for_ssl_certificate() {
+    local domain="$1"
+    local path="${2:-/}"
+    local timeout="${3:-900}"  # Default 15 minutes (certs can take 10-15 min)
+    local interval=30          # Check every 30 seconds (cert deploys are slow)
+    local elapsed=0
+
+    log_info "Waiting for SSL certificate deployment: $domain"
+    log_info "  Note: GCP 'Ready' status is NOT reliable for certificate readiness"
+    log_info "  Timeout: ${timeout}s (~$((timeout / 60)) minutes)"
+    log_info "  This is the authoritative HTTPS check."
+
+    while [[ $elapsed -lt $timeout ]]; do
+        # Direct HTTPS check - this is what matters
+        local http_code
+        http_code=$(curl -sf -o /dev/null -w "%{http_code}" "https://${domain}${path}" 2>/dev/null || echo "000")
+
+        if [[ "$http_code" =~ ^[23] ]]; then
+            log_info "SSL certificate deployed and working: $domain (HTTP $http_code)"
+            return 0
+        fi
+
+        local elapsed_min=$((elapsed / 60))
+        log_info "  Waiting for certificate... (${elapsed_min}m elapsed, HTTP $http_code)"
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    log_error "SSL certificate not ready after $((timeout / 60)) minutes: $domain"
+    log_error "  This may be a temporary issue - try again in a few minutes"
+    log_error "  Or check: https://console.cloud.google.com/run/domains?project=$PROJECT"
+    return 1
+}
+
+# Wait for auth.tamshai.com with full certificate verification
+wait_for_auth_domain_with_ssl() {
+    local timeout="${1:-900}"  # Default 15 minutes for full cert deployment
+
+    log_info "Waiting for auth.tamshai.com with SSL certificate verification..."
+
+    # First check GCP status (fast check, informational only)
+    wait_for_domain_routable "auth.tamshai.com" 60 || true  # Don't fail on this
+
+    # The real check - wait for SSL to actually work
+    wait_for_ssl_certificate "auth.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" "$timeout"
+}
+
 # Delete domain mapping
 delete_domain_mapping() {
     local domain="$1"

@@ -122,6 +122,19 @@ resource "google_storage_bucket" "static_website" {
     enabled = true # Enable versioning for rollback capability
   }
 
+  # Phoenix rebuild fix (Issue #2): Delete noncurrent versions to enable force_destroy
+  # force_destroy=true only deletes current objects, not noncurrent versions
+  # Without this rule, bucket deletion fails with "bucket is not empty"
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = 1
+      with_state                 = "ANY"
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
   logging {
     log_bucket        = google_storage_bucket.logs.name
     log_object_prefix = "static-website/"
