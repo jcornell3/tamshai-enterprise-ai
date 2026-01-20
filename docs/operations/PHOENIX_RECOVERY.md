@@ -2,8 +2,8 @@
 
 This document describes how to recover Tamshai Enterprise AI environments from scratch following the **Phoenix Architecture** principle: any environment should be destroyable and recreatable without manual intervention.
 
-**Last Updated**: January 19, 2026
-**Version**: 2.0 (Updated with lessons from Phoenix rebuild 2026-01-18/19)
+**Last Updated**: January 20, 2026
+**Version**: 2.1 (Updated with Gap #49 fix and automation improvements)
 
 ## Overview
 
@@ -33,7 +33,7 @@ Phoenix Architecture means:
 | **Stage** | Terraform destroy + apply | 15-20 min | None (sample data reloaded) |
 | **Prod** | Full Phoenix rebuild | **~100 min** | **User data if not backed up** |
 
-> **Note**: Prod recovery time increased from 10-15 min to ~100 min based on Phoenix rebuild lessons learned (Jan 2026). See [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md) for detailed phases.
+> **Note**: Prod recovery time is ~60 min with `phoenix-rebuild.sh` automation (down from ~100 min manual). All pre-destroy cleanup, domain mapping imports, and post-apply steps are now automated. See [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md) for detailed phases.
 
 ## Dev Environment Recovery
 
@@ -290,16 +290,9 @@ gcloud beta run domain-mappings create \
   --domain=auth.tamshai.com \
   --region=us-central1 2>/dev/null || true
 
-# Wait for domain to be routable (Cloudflare handles SSL)
-echo "Waiting for auth.tamshai.com to be routable..."
-for i in {1..30}; do
-  STATUS=$(gcloud beta run domain-mappings describe \
-    --domain=auth.tamshai.com --region=us-central1 \
-    --format="value(status.conditions[2].status)" 2>/dev/null || echo "Unknown")
-  [[ "$STATUS" == "True" ]] && echo "Domain routable!" && break
-  echo "  Waiting... ($((i*10))s, status: $STATUS)"
-  sleep 10
-done
+# Note: Cloudflare handles SSL termination at the edge
+# No need to wait for GCP SSL certificates - domain mappings work immediately
+# once routing is configured. The phoenix-rebuild.sh script handles this automatically.
 
 # ============================================================
 # PHASE 8: Regenerate CICD Key and Deploy
@@ -454,7 +447,15 @@ echo "New VPS IP: $NEW_IP"
 
 **Root Cause**: Service networking connection, orphaned private IP, or VPC connector blocks deletion (Gaps #23-25)
 
-**Recovery**:
+**Status**: ✅ **AUTOMATED IN PHOENIX-REBUILD.SH** (January 2026)
+
+The `phoenix-rebuild.sh` Phase 3 now automatically handles all these state cleanup operations:
+- Terraform state lock detection and force-unlock
+- Service networking removal from state (both module.database and module.networking paths)
+- Orphaned private IP address deletion (multiple name variants)
+- VPC connector state cleanup
+
+**Recovery** (manual fallback only):
 ```bash
 cd infrastructure/terraform/gcp
 
@@ -473,8 +474,6 @@ terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/
 # Targeted destroy of VPC
 terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
 ```
-
-**Note**: The `phoenix-rebuild.sh` script now handles all these state cleanup operations automatically.
 
 ### Scenario 6: auth.tamshai.com Not Reachable After Rebuild (Prod)
 
@@ -823,5 +822,5 @@ gh workflow run deploy-to-gcp.yml --ref main
 
 ---
 
-*Last Updated: January 19, 2026*
-*Status: Active - Updated with Phoenix rebuild lessons learned (Gaps #1-43)*
+*Last Updated: January 20, 2026*
+*Status: Active - Updated with Gap #49 fix and automation improvements (Gaps #1-49)*

@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
-**Last Updated**: January 2026
-**Version**: 2.0.0
+**Last Updated**: January 20, 2026
+**Version**: 2.3.0
 **Owner**: Platform Team
 
 ## Overview
@@ -204,7 +204,8 @@ gcloud compute addresses list --global --format="value(name)" | grep tamshai | \
 terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
 terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
 
-# Targeted destroy if vpc_connector_id count fails
+# Gap #49 FIX: The vpc_connector_id count dependency is now fixed.
+# Targeted destroy is only needed if destroy fails on VPC for other reasons.
 terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
 ```
 
@@ -271,8 +272,10 @@ done
 # Initialize Terraform
 terraform init -upgrade
 
-# STAGED APPLY (Gap #7, #25): Networking module MUST complete first
-# This avoids vpc_connector_id count dependency issues
+# Note: Gap #49 FIX - Staged apply is no longer strictly required
+# The security module now uses enable_provision_job boolean (known at plan time)
+# instead of vpc_connector_id (unknown until apply), eliminating count dependency errors.
+# However, staged apply is still recommended for reliability.
 terraform apply -target=module.networking -auto-approve
 
 # Then apply remaining infrastructure
@@ -408,34 +411,22 @@ gcloud beta run domain-mappings create \
   --region=us-central1 2>/dev/null || echo "Domain mapping may already exist"
 ```
 
-**Wait for domain mapping to be routable (Gap #16, #36)** - CRITICAL:
+**Domain Mapping Notes**:
+- **Cloudflare handles SSL termination** at the edge - no waiting for GCP SSL certificates needed
+- Domain mappings work immediately once GCP routing is configured
+- The `phoenix-rebuild.sh` script automatically imports existing domain mappings (Gap #48)
+
 ```bash
-# mcp-gateway depends on auth.tamshai.com being reachable
-# Cloudflare handles SSL - we just wait for GCP routing
-
-echo "Waiting for auth.tamshai.com domain mapping to be routable..."
-TIMEOUT=300
-ELAPSED=0
-while [[ $ELAPSED -lt $TIMEOUT ]]; do
-  STATUS=$(gcloud beta run domain-mappings describe \
-    --domain=auth.tamshai.com \
-    --region=us-central1 \
-    --format="value(status.conditions[2].status)" 2>/dev/null || echo "Unknown")
-
-  if [[ "$STATUS" == "True" ]]; then
-    echo "Domain mapping is routable!"
-    break
-  fi
-
-  echo "  Waiting... ($ELAPSED s elapsed, status: $STATUS)"
-  sleep 10
-  ELAPSED=$((ELAPSED + 10))
-done
+# Quick verification that domain mapping exists and is routable
+gcloud beta run domain-mappings describe \
+  --domain=auth.tamshai.com \
+  --region=us-central1 \
+  --format="value(status.conditions[2].status)"
+# Should return "True"
 
 # Verify Keycloak is reachable via HTTPS
 curl -sf -o /dev/null -w "Keycloak HTTP status: %{http_code}\n" \
-  "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" || \
-  echo "WARNING: Keycloak not yet reachable - may need more time"
+  "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration"
 ```
 
 **Checkpoints**:
@@ -444,9 +435,8 @@ curl -sf -o /dev/null -w "Keycloak HTTP status: %{http_code}\n" \
 - [ ] All Cloud Run services created: `gcloud run services list`
 - [ ] VPC connector attached to services
 - [ ] Service accounts assigned
-- [ ] auth.tamshai.com domain mapping created
-- [ ] Domain mapping is routable (DomainRoutable=True)
-- [ ] Keycloak reachable at https://auth.tamshai.com
+- [ ] auth.tamshai.com domain mapping created (or imported by phoenix-rebuild.sh)
+- [ ] Keycloak reachable at https://auth.tamshai.com (no SSL wait needed - Cloudflare handles SSL)
 
 ---
 
@@ -609,35 +599,44 @@ gcloud storage buckets add-iam-policy-binding gs://prod.tamshai.com \
 
 **Symptom**: `terraform destroy` times out on VPC or networking resources.
 
-**Resolution**:
+**Status**: ✅ **AUTOMATED IN PHOENIX-REBUILD.SH** (January 2026)
+
+The `phoenix-rebuild.sh` Phase 3 now automatically handles these state cleanup operations. Additionally, **Gap #49** fixed the `vpc_connector_id` count dependency that caused some VPC destruction issues.
+
+**Resolution** (manual fallback only):
 ```bash
-# 1. Remove service networking from state
+# 1. Remove service networking from state (both module paths)
 terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection'
+terraform state rm 'module.networking.google_service_networking_connection.private_vpc_connection'
 terraform state rm 'module.database.google_compute_global_address.private_ip_range'
 
-# 2. Delete orphaned private IP addresses
-gcloud compute addresses list --global --format="value(name)" | grep tamshai | \
+# 2. Delete orphaned private IP addresses (multiple name variants)
+gcloud compute addresses list --global --format="value(name)" | grep -E "(tamshai|google-managed)" | \
   xargs -I {} gcloud compute addresses delete {} --global --quiet
 
-# 3. Targeted destroy of VPC
+# 3. Targeted destroy of VPC (only if needed)
 terraform destroy -target=module.networking.google_compute_network.vpc -auto-approve
 ```
 
-### Issue: auth.tamshai.com not reachable after rebuild (Gap #35, #36)
+### Issue: auth.tamshai.com not reachable after rebuild (Gap #35, #36, #48)
 
 **Symptom**: mcp-gateway fails to start because it can't reach Keycloak.
 
 **Root Cause**: Cloudflare DNS persists but GCP domain mapping is destroyed.
 
-**Resolution**:
+**Status**: ✅ **AUTOMATED IN PHOENIX-REBUILD.SH** (January 2026)
+
+The `phoenix-rebuild.sh` Phase 7 now automatically imports existing domain mappings before terraform apply (Gap #48). Cloudflare handles SSL termination, so no waiting for GCP certificates is needed.
+
+**Resolution** (manual fallback only):
 ```bash
-# Create the domain mapping
+# Create the domain mapping (or import if it exists)
 gcloud beta run domain-mappings create \
   --service=keycloak \
   --domain=auth.tamshai.com \
   --region=us-central1
 
-# Wait for it to be routable (Cloudflare handles SSL)
+# Verify domain mapping is routable (no SSL wait needed - Cloudflare handles SSL)
 gcloud beta run domain-mappings describe \
   --domain=auth.tamshai.com \
   --region=us-central1 \
@@ -841,6 +840,7 @@ This appendix lists all files required to run the Phoenix rebuild process for GC
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 2.3.0 | Jan 20, 2026 | Tamshai-Dev | Gap #49 fix (vpc_connector_id count dependency), removed SSL waiting (Cloudflare handles SSL), automated pre-destroy cleanup |
 | 2.2.0 | Jan 2026 | Tamshai-Dev | Added Gaps #38-43 fixes: Cloud Run cleanup, phoenix_mode, deletion_protection, MongoDB IAM, secret sync |
 | 2.1.0 | Jan 2026 | Tamshai-QA | Added Gaps #1a-#37 from Phoenix rebuild 2026-01-18/19 |
 | 2.0.0 | Jan 2026 | Tamshai-QA | Complete rewrite with automated scripts |
