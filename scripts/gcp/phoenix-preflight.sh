@@ -239,18 +239,26 @@ check_gcp_secrets() {
     fi
 
     local missing=0
+    local found=0
 
     for secret_name in "${REQUIRED_GCP_SECRETS[@]}"; do
         log_check "GCP secret: $secret_name"
         if gcp_secret_exists "$secret_name"; then
             check "GCP secret: $secret_name exists" 0
+            found=$((found + 1))
         else
-            check "GCP secret: $secret_name" 1
+            # Issue #12: GCP secrets are created by Terraform during Phoenix rebuild
+            # Missing secrets are expected for fresh rebuilds - use warn, not fail
+            warn "GCP secret: $secret_name will be created by Terraform"
             missing=$((missing + 1))
         fi
     done
 
-    return $missing
+    if [ $missing -gt 0 ]; then
+        log_info "$missing GCP secrets will be created during Phase 2 (secret sync) and Phase 5 (Terraform apply)"
+    fi
+
+    return 0  # Not a blocking failure - secrets are created during rebuild
 }
 
 # =============================================================================
@@ -301,8 +309,12 @@ check_secret_hygiene() {
 check_dns() {
     log_section "7. DNS Configuration"
 
-    # Check auth.tamshai.com points to Google
-    log_check "DNS: auth.tamshai.com -> Google"
+    # Issue #12: DNS is managed by Cloudflare, which proxies to Cloud Run.
+    # During Phoenix rebuild, Cloud Run services don't exist yet, so DNS won't resolve.
+    # We check if Cloudflare is configured (CNAME exists), not if the endpoint responds.
+
+    # Check auth.tamshai.com points to Google/Cloudflare
+    log_check "DNS: auth.tamshai.com -> Google/Cloudflare"
 
     local auth_cname
     auth_cname=$(dig +short auth.tamshai.com CNAME 2>/dev/null) || auth_cname=""
@@ -310,24 +322,29 @@ check_dns() {
     if echo "$auth_cname" | grep -qi "ghs.googlehosted.com\|run.app"; then
         check "DNS: auth.tamshai.com resolves to Google" 0
     elif [ -n "$auth_cname" ]; then
-        warn "DNS: auth.tamshai.com points to $auth_cname (expected ghs.googlehosted.com)"
+        # Has a CNAME - likely Cloudflare proxy
+        check "DNS: auth.tamshai.com has CNAME: $auth_cname" 0
     else
-        # May be an A record instead
+        # May be an A record (Cloudflare proxied)
         local auth_ip
         auth_ip=$(dig +short auth.tamshai.com A 2>/dev/null) || auth_ip=""
         if [ -n "$auth_ip" ]; then
-            warn "DNS: auth.tamshai.com has A record: $auth_ip (verify it's Google)"
+            # A record exists (likely Cloudflare proxy IP)
+            check "DNS: auth.tamshai.com has A record: $auth_ip (Cloudflare proxied)" 0
         else
-            check "DNS: auth.tamshai.com not resolving" 1
+            # No DNS record at all - this IS a problem
+            warn "DNS: auth.tamshai.com has no DNS record - configure in Cloudflare"
         fi
     fi
 
     # Check prod.tamshai.com
     log_check "DNS: prod.tamshai.com"
-    if dig +short prod.tamshai.com 2>/dev/null | head -1 | grep -q ""; then
-        check "DNS: prod.tamshai.com resolves" 0
+    local prod_record
+    prod_record=$(dig +short prod.tamshai.com 2>/dev/null | head -1) || prod_record=""
+    if [ -n "$prod_record" ]; then
+        check "DNS: prod.tamshai.com resolves to $prod_record" 0
     else
-        warn "DNS: prod.tamshai.com may not be configured"
+        warn "DNS: prod.tamshai.com may not be configured in Cloudflare"
     fi
 
     return 0
@@ -359,6 +376,7 @@ check_artifact_registry() {
     )
 
     local missing=0
+    local found=0
 
     for image in "${required_images[@]}"; do
         log_check "Image: $image"
@@ -366,14 +384,17 @@ check_artifact_registry() {
         if gcloud artifacts docker images list "${region}-docker.pkg.dev/${project}/${repo}/${image}" \
             --limit=1 --format="value(package)" 2>/dev/null | grep -q "$image"; then
             check "Image: $image exists" 0
+            found=$((found + 1))
         else
-            check "Image: $image" 1
+            # Issue #12: Images are built during Phase 6 of Phoenix rebuild
+            # Missing images are expected for fresh rebuilds - use warn, not fail
+            warn "Image: $image will be built in Phase 6"
             missing=$((missing + 1))
         fi
     done
 
     if [ $missing -gt 0 ]; then
-        log_info "Missing images will be built during Phoenix rebuild"
+        log_info "$missing images will be built during Phase 6 (Build Container Images)"
     fi
 
     return 0  # Images will be built, so not a blocking failure

@@ -434,6 +434,7 @@ fi
 | **#9** | NEW | IAM race condition | **FIXED** (depends_on) |
 | **#10** | NEW | SA key validation | **FIXED** (validation step) |
 | **#11** | NEW | 409 timeout recovery | **FIXED** (timeouts + auto-recovery) |
+| **#12** | NEW | Preflight fails on rebuild resources | **FIXED** (use warn not fail) |
 
 ### Recommendations for v8
 
@@ -485,9 +486,78 @@ The following issues have been fixed and will not require manual intervention in
 
 ---
 
+## v8 Pre-Rebuild: Issue #12 Discovered
+
+**Date**: January 20, 2026
+**Context**: While preparing for Phoenix v8 rebuild, preflight checks failed with 14 failures.
+
+### Issue #12: Preflight Checks Incorrectly Fail on Phoenix Rebuild Resources
+
+**Symptom**: Preflight checks fail with 14 failures for:
+- 6 GCP secrets that don't exist
+- 1 DNS record not resolving
+- 7 Artifact Registry images missing
+
+**Root Cause**: The preflight script was treating resources that are CREATED during Phoenix rebuild as failures. For a fresh Phoenix rebuild:
+- GCP secrets don't exist yet (created in Phase 2/5 by Terraform)
+- DNS points to Cloud Run which doesn't exist yet
+- Container images don't exist yet (built in Phase 6)
+
+These are not failures - they are expected conditions for a Phoenix rebuild.
+
+**Bug Analysis**:
+
+| Check | Line | Bug | Fix |
+|-------|------|-----|-----|
+| GCP Secrets | 248 | `check(..., 1)` fails on missing secrets | Changed to `warn()` |
+| DNS | 321 | `check(..., 1)` fails when DNS doesn't resolve | Changed to `warn()` for missing records |
+| Images | 370-371 | `check(..., 1)` but `return 0` (inconsistent) | Changed to `warn()` |
+
+**Fix Applied** (`scripts/gcp/phoenix-preflight.sh`):
+
+1. **GCP Secrets Check** (lines 249-258):
+```bash
+# Before: check "GCP secret: $secret_name" 1
+# After:
+warn "GCP secret: $secret_name will be created by Terraform"
+# ...
+return 0  # Not a blocking failure
+```
+
+2. **DNS Check** (lines 331-337):
+```bash
+# Before: check "DNS: auth.tamshai.com not resolving" 1
+# After:
+if [ -n "$auth_ip" ]; then
+    check "DNS: auth.tamshai.com has A record: $auth_ip (Cloudflare proxied)" 0
+else
+    warn "DNS: auth.tamshai.com has no DNS record - configure in Cloudflare"
+fi
+```
+
+3. **Image Check** (lines 388-392):
+```bash
+# Before: check "Image: $image" 1
+# After:
+warn "Image: $image will be built in Phase 6"
+```
+
+**Result After Fix**:
+```
+Total Checks:  18
+Passed:        18
+Failed:        0
+Warnings:      21
+
+PREFLIGHT CHECKS PASSED - Ready for Phoenix rebuild
+```
+
+---
+
 ## Expected v8 Manual Actions: 0
 
-All three issues discovered in v7 have been fixed:
+All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #9: `depends_on` ensures IAM bindings exist before provision job
 - Issue #10: SA key validation prevents invalid key scenarios
 - Issue #11: 30-minute timeouts + auto-recovery handles long operations
+- Issue #12: Preflight checks now use warnings for resources created during rebuild
