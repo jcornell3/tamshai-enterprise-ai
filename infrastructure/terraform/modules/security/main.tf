@@ -620,7 +620,7 @@ resource "google_cloud_run_v2_job" "provision_users" {
       }
 
       containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai-${var.environment}/provision-job:latest"
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/provision-job:latest"
 
         resources {
           limits = {

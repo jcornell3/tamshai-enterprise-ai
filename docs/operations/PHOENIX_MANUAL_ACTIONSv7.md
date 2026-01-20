@@ -849,6 +849,62 @@ rm -f "$config_file"
 
 ---
 
+---
+
+### Issue #22: `--phase=N` Argument Not Parsed Correctly
+
+**Symptom**: Running `phoenix-rebuild.sh --phase=5` starts from Phase 1 instead of Phase 5.
+
+**Root Cause**: The argument parsing only handled `--phase 5` (space-separated), not `--phase=5` (equals-separated).
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Added case pattern for `--phase=*` syntax:
+
+```bash
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --skip-preflight) SKIP_PREFLIGHT=true; shift ;;
+        --skip-destroy) SKIP_DESTROY=true; shift ;;
+        --resume) RESUME_MODE=true; shift ;;
+        --phase) START_PHASE="$2"; shift 2 ;;
+        --phase=*) START_PHASE="${1#*=}"; shift ;;  # Issue #22: Support --phase=N syntax
+        --dry-run) DRY_RUN=true; shift ;;
+        -h|--help) show_help; exit 0 ;;
+        *) shift ;;
+    esac
+done
+```
+
+---
+
+### Issue #23: Provision Job References Wrong Artifact Registry Name
+
+**Symptom**: Terraform apply fails with:
+```
+Error: Error waiting to create Job: Error waiting for Creating Job: Error code 5, message: Image 'us-central1-docker.pkg.dev/gen-lang-client-0553641830/tamshai-prod/provision-job:latest' not found.
+```
+
+**Root Cause**: Line 623 in `modules/security/main.tf` uses `tamshai-${var.environment}` which evaluates to `tamshai-prod`, but the artifact registry is named just `tamshai`.
+
+**Fix Applied** (`infrastructure/terraform/modules/security/main.tf`):
+
+Changed image path from environment-suffixed to match actual registry:
+
+```hcl
+# Before (incorrect):
+image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai-${var.environment}/provision-job:latest"
+
+# After (correct):
+image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/provision-job:latest"
+```
+
+**Artifact Registry Naming Convention**:
+- Registry: `tamshai` (shared across environments)
+- Images: `keycloak`, `mcp-gateway`, `mcp-hr`, `mcp-finance`, `mcp-sales`, `mcp-support`, `web-portal`, `provision-job`
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -863,3 +919,5 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #18: Artifact Registry added to Phase 4 targets
 - Issue #20: Keycloak build uses only `--config` (not both `--tag` and `--config`)
 - Issue #21: Temp files replace process substitution for Windows/Git Bash compatibility
+- Issue #22: Support `--phase=N` syntax in addition to `--phase N`
+- Issue #23: Provision job uses correct artifact registry name (`tamshai` not `tamshai-prod`)
