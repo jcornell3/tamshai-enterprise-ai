@@ -96,9 +96,19 @@ variable "static_website_domain" {
 # =============================================================================
 
 variable "keycloak_provisioning_url" {
-  description = "Keycloak URL for user provisioning job (with /auth suffix, e.g., https://keycloak-xxx-uc.a.run.app/auth)"
+  description = <<-EOT
+    Keycloak URL for user provisioning job (with /auth suffix).
+
+    Options:
+    - auth.tamshai.com/auth (default): Use domain mapping URL. Works once SSL cert is ready.
+    - Cloud Run URL: Use `gcloud run services describe keycloak --region=us-central1 --format="value(status.url)"`
+      to get the dynamic URL, then append /auth.
+
+    During Phoenix rebuild, the SSL certificate for auth.tamshai.com may take time to provision.
+    If immediate provisioning is needed, use the Cloud Run URL temporarily.
+  EOT
   type        = string
-  default     = "https://keycloak-fn44nd7wba-uc.a.run.app/auth"
+  default     = "https://auth.tamshai.com/auth"
 }
 
 variable "prod_user_password" {

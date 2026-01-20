@@ -359,8 +359,43 @@ phase_3_destroy() {
         gcloud compute addresses delete "$ip_name" --global --quiet 2>/dev/null || true
     done
 
-    # Gap #25: Remove VPC connector from state BEFORE destroy
-    log_step "Removing VPC connector from state (Gap #25 - proactive)..."
+    # Gap #25 FIX: ACTUALLY DELETE the VPC connector, not just remove from state
+    # Root cause: terraform state rm only removes from state - the actual GCP resource
+    # remains orphaned and blocks future terraform apply (duplicate connector error)
+    log_step "Deleting VPC Access Connector (Gap #25 - proactive)..."
+    local connector_name="tamshai-prod-connector"
+
+    # First, actually delete from GCP (if it exists)
+    set +u  # Disable unbound variable check for gcloud
+    if gcloud compute networks vpc-access connectors describe "$connector_name" \
+        --region="${GCP_REGION}" &>/dev/null; then
+        log_info "VPC connector exists - deleting..."
+        gcloud compute networks vpc-access connectors delete "$connector_name" \
+            --region="${GCP_REGION}" --quiet || {
+            log_warn "VPC connector deletion initiated (async operation)"
+        }
+
+        # Wait for deletion to complete (async operation takes 2-3 minutes)
+        local wait_count=0
+        local max_wait=20  # 20 * 15s = 5 minutes max
+        while gcloud compute networks vpc-access connectors describe "$connector_name" \
+            --region="${GCP_REGION}" &>/dev/null; do
+            wait_count=$((wait_count + 1))
+            if [ $wait_count -ge $max_wait ]; then
+                log_warn "VPC connector deletion timeout - continuing anyway"
+                break
+            fi
+            echo "   Waiting for VPC connector deletion (takes 2-3 minutes)... [$wait_count/$max_wait]"
+            sleep 15
+        done
+        log_success "VPC connector deleted from GCP"
+    else
+        log_info "VPC connector does not exist in GCP - skipping deletion"
+    fi
+    set -u  # Re-enable unbound variable check
+
+    # THEN remove from Terraform state (cleanup any stale references)
+    log_step "Removing VPC connector from Terraform state..."
     terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
     terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
     terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector[0]' 2>/dev/null || true
@@ -399,11 +434,17 @@ phase_3_destroy() {
         log_step "Deleting orphaned private IP (Gap #24)..."
         gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
 
-        # Gap #25: Handle VPC connector count dependency
-        # When vpc_connector_id changes from set to empty, count conditions fail
-        log_step "Removing VPC connector references from state (Gap #25)..."
+        # Gap #25 FIX: Actually delete VPC connector (not just state removal)
+        log_step "Deleting VPC connector (Gap #25 - fallback cleanup)..."
+        set +u
+        gcloud compute networks vpc-access connectors delete "tamshai-prod-connector" \
+            --region="${GCP_REGION}" --quiet 2>/dev/null || true
+        set -u
+        # Also remove from state
         terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
         terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector[0]' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector' 2>/dev/null || true
 
         # Additional state cleanup for persistent resources
         log_step "Removing Cloud SQL resources from state..."
@@ -789,27 +830,56 @@ phase_7_cloud_run() {
     fi
 
     # =============================================================================
-    # CLOUDFLARE SSL NOTE:
-    # Cloud Run domain mappings provision Google-managed SSL certificates, but
-    # auth.tamshai.com uses Cloudflare which handles SSL at the edge. The DNS
-    # points to Cloudflare, which proxies to Cloud Run via ghs.googlehosted.com.
-    #
-    # IMPORTANT: Do NOT wait for Cloud Run SSL provisioning to complete!
-    # - Cloudflare provides the SSL certificate to clients
-    # - Cloud Run's certificate is only for the Cloudflare->Cloud Run connection
-    # - Cloudflare can use "Full (Strict)" mode with its own origin CA certificate
-    # - Waiting for Cloud Run SSL can add 10+ minutes unnecessarily
+    # SSL CERTIFICATE VERIFICATION (Issue #8 Fix)
     # =============================================================================
-    log_step "Checking domain mapping status (Cloudflare handles SSL)..."
+    # Even with Cloudflare, Cloud Run MUST have a valid SSL certificate deployed.
+    # Cloudflare (in Full/Strict mode) connects to ghs.googlehosted.com via HTTPS
+    # and verifies the certificate. If Cloud Run's certificate isn't ready,
+    # Cloudflare returns a 525 error (SSL handshake failed).
+    #
+    # GCP's domain mapping "Ready" status is MISLEADING - it only means DNS is
+    # verified, NOT that the certificate is deployed. Certificate deployment
+    # typically takes 10-15 minutes after the mapping is created.
+    # =============================================================================
+    log_step "Verifying SSL certificate deployment (Issue #8 fix)..."
+
+    # First, quick check of GCP status (informational only)
     local mapping_status
     mapping_status=$(gcloud beta run domain-mappings describe \
         --domain=auth.tamshai.com \
         --region="$region" \
         --format="value(status.conditions[0].type)" 2>/dev/null || echo "Unknown")
+    log_info "GCP domain mapping status: $mapping_status (note: may show Ready before cert is deployed)"
 
-    log_info "Domain mapping status: $mapping_status"
-    log_info "NOTE: Cloudflare handles SSL termination - no need to wait for Cloud Run SSL"
-    log_info "DNS should point to ghs.googlehosted.com (via Cloudflare proxy)"
+    # The authoritative check - wait for HTTPS to actually work
+    log_info "Waiting for SSL certificate to be deployed..."
+    log_info "This can take 10-15 minutes - be patient!"
+
+    if type wait_for_ssl_certificate &>/dev/null; then
+        # Use the domain-mapping.sh function if available
+        if wait_for_ssl_certificate "auth.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" 900; then
+            log_success "SSL certificate verified - HTTPS is working!"
+        else
+            log_warn "SSL certificate not verified after 15 minutes"
+            log_warn "You may need to wait longer or check the GCP console"
+            log_warn "E2E tests may fail with 525 errors until certificate is ready"
+        fi
+    else
+        # Fallback: simple curl check
+        local ssl_ready=false
+        for i in {1..30}; do
+            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+                log_success "SSL certificate deployed and working!"
+                ssl_ready=true
+                break
+            fi
+            log_info "  Waiting for certificate... (attempt $i/30)"
+            sleep 30
+        done
+        if [ "$ssl_ready" = false ]; then
+            log_warn "SSL certificate may not be ready - check E2E tests"
+        fi
+    fi
 
     save_checkpoint 7 "completed"
     log_success "Phase 7 complete - Cloud Run services configured"

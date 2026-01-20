@@ -1,0 +1,317 @@
+# Phoenix Rebuild - Build All Container Images
+#
+# This workflow builds and pushes ALL container images to Artifact Registry
+# WITHOUT deploying them. Used during Phoenix rebuilds when Terraform will
+# handle the Cloud Run deployments.
+#
+# This workflow is separate from deploy-to-gcp.yml because:
+# 1. deploy-to-gcp.yml is for regular CI/CD (build + deploy)
+# 2. During Phoenix rebuilds, Terraform manages Cloud Run services
+# 3. Using deploy-to-gcp.yml during Phoenix causes state conflicts (Issue #4)
+#
+# Usage:
+#   1. Run this workflow manually before terraform apply
+#   2. Once images are pushed, terraform apply will deploy them
+#   3. After Phoenix completes, resume using deploy-to-gcp.yml for regular CI/CD
+
+name: Phoenix - Build All Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      keycloak_tag:
+        description: 'Keycloak image tag'
+        required: false
+        default: 'v2.0.0-postgres'
+        type: string
+      services_tag:
+        description: 'MCP services image tag'
+        required: false
+        default: 'latest'
+        type: string
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  AR_REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
+
+jobs:
+  build-keycloak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Inject TOTP Secret into Realm Export
+        env:
+          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
+        run: |
+          if [ -z "$TEST_USER_TOTP_SECRET_RAW" ]; then
+            echo "ERROR: TEST_USER_TOTP_SECRET_RAW secret not set"
+            exit 1
+          fi
+          sed -i "s/__TEST_USER_TOTP_SECRET__/${TEST_USER_TOTP_SECRET_RAW}/g" keycloak/realm-export.json
+
+      - name: Build and Push Keycloak Image
+        run: |
+          TAG="${{ inputs.keycloak_tag }}"
+          echo "Building keycloak:$TAG"
+
+          docker build \
+            -t ${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/keycloak:latest \
+            -t ${{ env.AR_REPO }}/keycloak:${TAG} \
+            keycloak
+
+          docker push ${{ env.AR_REPO }}/keycloak:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/keycloak:latest
+          docker push ${{ env.AR_REPO }}/keycloak:${TAG}
+
+          echo "Keycloak image pushed successfully"
+          echo "  - ${{ env.AR_REPO }}/keycloak:${{ github.sha }}"
+          echo "  - ${{ env.AR_REPO }}/keycloak:latest"
+          echo "  - ${{ env.AR_REPO }}/keycloak:${TAG}"
+
+  build-mcp-gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push MCP Gateway Image
+        run: |
+          TAG="${{ inputs.services_tag }}"
+          echo "Building mcp-gateway:$TAG"
+
+          docker build \
+            -t ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/mcp-gateway:latest \
+            -t ${{ env.AR_REPO }}/mcp-gateway:${TAG} \
+            services/mcp-gateway
+
+          docker push ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-gateway:latest
+          docker push ${{ env.AR_REPO }}/mcp-gateway:${TAG}
+
+          echo "MCP Gateway image pushed successfully"
+
+  build-mcp-hr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push MCP HR Image
+        run: |
+          TAG="${{ inputs.services_tag }}"
+          echo "Building mcp-hr:$TAG"
+
+          docker build \
+            -t ${{ env.AR_REPO }}/mcp-hr:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/mcp-hr:latest \
+            -t ${{ env.AR_REPO }}/mcp-hr:${TAG} \
+            services/mcp-hr
+
+          docker push ${{ env.AR_REPO }}/mcp-hr:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-hr:latest
+          docker push ${{ env.AR_REPO }}/mcp-hr:${TAG}
+
+          echo "MCP HR image pushed successfully"
+
+  build-mcp-finance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push MCP Finance Image
+        run: |
+          TAG="${{ inputs.services_tag }}"
+          echo "Building mcp-finance:$TAG"
+
+          docker build \
+            -t ${{ env.AR_REPO }}/mcp-finance:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/mcp-finance:latest \
+            -t ${{ env.AR_REPO }}/mcp-finance:${TAG} \
+            services/mcp-finance
+
+          docker push ${{ env.AR_REPO }}/mcp-finance:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-finance:latest
+          docker push ${{ env.AR_REPO }}/mcp-finance:${TAG}
+
+          echo "MCP Finance image pushed successfully"
+
+  build-mcp-sales:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push MCP Sales Image
+        run: |
+          TAG="${{ inputs.services_tag }}"
+          echo "Building mcp-sales:$TAG"
+
+          docker build \
+            -t ${{ env.AR_REPO }}/mcp-sales:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/mcp-sales:latest \
+            -t ${{ env.AR_REPO }}/mcp-sales:${TAG} \
+            services/mcp-sales
+
+          docker push ${{ env.AR_REPO }}/mcp-sales:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-sales:latest
+          docker push ${{ env.AR_REPO }}/mcp-sales:${TAG}
+
+          echo "MCP Sales image pushed successfully"
+
+  build-mcp-support:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push MCP Support Image
+        run: |
+          TAG="${{ inputs.services_tag }}"
+          echo "Building mcp-support:$TAG"
+
+          docker build \
+            -t ${{ env.AR_REPO }}/mcp-support:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/mcp-support:latest \
+            -t ${{ env.AR_REPO }}/mcp-support:${TAG} \
+            services/mcp-support
+
+          docker push ${{ env.AR_REPO }}/mcp-support:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/mcp-support:latest
+          docker push ${{ env.AR_REPO }}/mcp-support:${TAG}
+
+          echo "MCP Support image pushed successfully"
+
+  build-web-portal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Web Portal Image
+        run: |
+          TAG="${{ inputs.services_tag }}"
+          echo "Building web-portal:$TAG"
+
+          # Web portal needs repo root as build context (Dockerfile.prod references monorepo paths)
+          # Use auth.tamshai.com for Keycloak (stable domain endpoint)
+          docker build \
+            -f clients/web/Dockerfile.prod \
+            -t ${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
+            -t ${{ env.AR_REPO }}/web-portal:latest \
+            -t ${{ env.AR_REPO }}/web-portal:${TAG} \
+            --build-arg VITE_KEYCLOAK_URL="https://auth.tamshai.com/auth/realms/tamshai-corp" \
+            --build-arg VITE_KEYCLOAK_CLIENT_ID=web-portal \
+            --build-arg VITE_API_GATEWAY_URL="" \
+            --build-arg VITE_MCP_GATEWAY_URL="" \
+            --build-arg VITE_RELEASE_TAG=v1.0.0 \
+            .
+
+          docker push ${{ env.AR_REPO }}/web-portal:${{ github.sha }}
+          docker push ${{ env.AR_REPO }}/web-portal:latest
+          docker push ${{ env.AR_REPO }}/web-portal:${TAG}
+
+          echo "Web Portal image pushed successfully"
+
+  summary:
+    needs: [build-keycloak, build-mcp-gateway, build-mcp-hr, build-mcp-finance, build-mcp-sales, build-mcp-support, build-web-portal]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Summary
+        run: |
+          echo "## Phoenix Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All container images have been built and pushed to Artifact Registry." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| keycloak | ${{ needs.build-keycloak.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| mcp-gateway | ${{ needs.build-mcp-gateway.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| mcp-hr | ${{ needs.build-mcp-hr.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| mcp-finance | ${{ needs.build-mcp-finance.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| mcp-sales | ${{ needs.build-mcp-sales.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| mcp-support | ${{ needs.build-mcp-support.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| web-portal | ${{ needs.build-web-portal.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Run \`terraform apply\` to deploy the Cloud Run services using these images." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "```bash" >> $GITHUB_STEP_SUMMARY
+          echo "cd infrastructure/terraform/gcp" >> $GITHUB_STEP_SUMMARY
+          echo "terraform apply" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY

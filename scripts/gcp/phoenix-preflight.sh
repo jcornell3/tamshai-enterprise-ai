@@ -123,19 +123,39 @@ check_gcp_auth() {
     log_section "2. GCP Authentication"
 
     log_check "gcloud authenticated"
-    if gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null | head -1 | grep -q "@"; then
-        local account
-        account=$(gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null | head -1)
+    # Use gcloud config get-value account - works reliably with both interactive logins
+    # and service accounts (gcloud auth list --filter can fail with service accounts)
+    #
+    # Note: Temporarily disable 'set -u' because gcloud wrapper script uses
+    # CLOUDSDK_PYTHON without checking if it's set, causing "unbound variable" error
+    local account=""
+    set +u  # Disable unbound variable check for gcloud
+    account=$(gcloud config get-value account 2>/dev/null || true)
+    set -u  # Re-enable unbound variable check
+
+    # Check if account contains @ (indicating valid email format)
+    # Use [[ ]] with pattern matching to avoid pipefail issues with grep
+    if [[ -n "$account" && "$account" == *"@"* ]]; then
         check "gcloud authenticated as $account" 0
     else
-        check "gcloud authenticated" 1
-        return 1
+        # Fallback: try gcloud auth list for edge cases
+        set +u
+        account=$(gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null | head -1 || true)
+        set -u
+        if [[ -n "$account" && "$account" == *"@"* ]]; then
+            check "gcloud authenticated as $account" 0
+        else
+            check "gcloud authenticated" 1
+            return 1
+        fi
     fi
 
     log_check "GCP project configured"
-    local project
-    project=$(gcloud config get-value project 2>/dev/null) || project=""
-    if [ -n "$project" ]; then
+    local project=""
+    set +u  # Disable unbound variable check for gcloud
+    project=$(gcloud config get-value project 2>/dev/null || true)
+    set -u  # Re-enable unbound variable check
+    if [[ -n "$project" ]]; then
         check "GCP project: $project" 0
         export GCP_PROJECT_ID="$project"
     else
