@@ -905,6 +905,58 @@ image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/provision-job:la
 
 ---
 
+### Issue #24: Artifact Registry Not Created Due to provision_users Job Error
+
+**Symptom**: Phase 5 builds fail with:
+```
+Error: Image 'us-central1-docker.pkg.dev/.../tamshai/mcp-gateway:latest' not found
+PUSH_FAILED: Repository "tamshai" not found
+```
+
+**Root Cause**: During Phase 4, the targeted terraform apply also refreshes existing resources. The `provision_users` Cloud Run job (created from a previous run) gets refreshed and Terraform tries to update it. This fails because the `provision-job:latest` image doesn't exist yet. The failure aborts the entire apply, including artifact registry creation.
+
+This is a chicken-and-egg problem:
+- Terraform wants to update the job with the correct image
+- But the image can't be built without the artifact registry
+- The artifact registry creation is blocked by the job update error
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+Create artifact registry using gcloud BEFORE terraform operations:
+
+```bash
+# Issue #24: Create artifact registry FIRST using gcloud
+log_step "Ensuring Artifact Registry exists (Issue #24)..."
+local registry_name="tamshai"
+if ! gcloud artifacts repositories describe "$registry_name" --location="${GCP_REGION}" &>/dev/null; then
+    gcloud artifacts repositories create "$registry_name" \
+        --location="${GCP_REGION}" \
+        --repository-format=docker \
+        --description="Docker container images for Tamshai Enterprise AI"
+fi
+
+# Import into terraform state if not already there
+if ! terraform state show 'module.cloudrun.google_artifact_registry_repository.tamshai' &>/dev/null; then
+    terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+        "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/${registry_name}"
+fi
+
+# Then run targeted terraform apply WITHOUT the artifact registry target
+terraform apply -auto-approve \
+    -target=module.networking \
+    -target=module.security \
+    -target=module.database \
+    -target=module.storage
+```
+
+**Why gcloud over Terraform**:
+1. gcloud creates the registry immediately and reliably
+2. Terraform import brings it under management
+3. Avoids circular dependency with provision_users job
+4. No risk of entire apply failing due to unrelated resource refresh
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -921,3 +973,4 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #21: Temp files replace process substitution for Windows/Git Bash compatibility
 - Issue #22: Support `--phase=N` syntax in addition to `--phase N`
 - Issue #23: Provision job uses correct artifact registry name (`tamshai` not `tamshai-prod`)
+- Issue #24: Artifact registry created via gcloud before terraform to avoid chicken-and-egg dependency

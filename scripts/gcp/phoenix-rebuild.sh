@@ -631,16 +631,38 @@ phase_4_infrastructure() {
     log_step "Initializing Terraform..."
     terraform init -upgrade
 
-    log_step "Creating infrastructure (VPC, Cloud SQL, Artifact Registry)..."
+    # Issue #24: Create artifact registry FIRST using gcloud
+    # Terraform targeted apply can fail if provision_users job tries to update before images exist
+    # Creating via gcloud is more reliable and avoids the chicken-and-egg problem
+    log_step "Ensuring Artifact Registry exists (Issue #24)..."
+    local registry_name="tamshai"
+    if ! gcloud artifacts repositories describe "$registry_name" --location="${GCP_REGION}" &>/dev/null; then
+        log_info "Creating Artifact Registry: $registry_name"
+        gcloud artifacts repositories create "$registry_name" \
+            --location="${GCP_REGION}" \
+            --repository-format=docker \
+            --description="Docker container images for Tamshai Enterprise AI" \
+            --project="${GCP_PROJECT_ID}" || log_warn "Artifact Registry creation may have failed"
+    else
+        log_info "Artifact Registry already exists: $registry_name"
+    fi
+
+    # Import artifact registry into terraform state if not already there
+    if ! terraform state show 'module.cloudrun.google_artifact_registry_repository.tamshai' &>/dev/null; then
+        log_info "Importing Artifact Registry into Terraform state..."
+        terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+            "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/${registry_name}" || log_warn "Import may have failed"
+    fi
+
+    log_step "Creating infrastructure (VPC, Cloud SQL)..."
     # First, create just the infrastructure without Cloud Run services
     # This allows images to be built before Cloud Run needs them
-    # Issue #18: Also target artifact registry so Phase 5 can push images
+    # Note: Artifact registry is already created above via gcloud (Issue #24)
     terraform apply -auto-approve \
         -target=module.networking \
         -target=module.security \
         -target=module.database \
         -target=module.storage \
-        -target=module.cloudrun.google_artifact_registry_repository.tamshai \
         2>/dev/null || {
         log_warn "Targeted apply had errors - checking for Gap #44 (Cloud SQL state mismatch)..."
 
