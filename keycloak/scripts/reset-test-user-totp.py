@@ -7,20 +7,25 @@ with a known TOTP secret. This approach is recommended by GCP Production Special
 as it works around Keycloak Admin API limitations for OTP credential creation.
 
 Usage:
-    python reset-test-user-totp.py <environment> [username] [totp_secret]
+    python reset-test-user-totp.py <environment> [username] [totp_secret] [password]
 
 Arguments:
     environment   - dev, stage, or prod
     username      - Keycloak username (default: test-user.journey)
     totp_secret   - Base32-encoded TOTP secret (default: JBSWY3DPEHPK3PXP)
+    password      - User password (default: from TEST_USER_PASSWORD env var)
 
 Examples:
+    # Using environment variable for password (recommended):
+    export TEST_USER_PASSWORD="your-secure-password"
     python reset-test-user-totp.py prod
-    python reset-test-user-totp.py prod test-user.journey
-    python reset-test-user-totp.py stage alice.chen NEWBASE32SECRET
+
+    # Passing password as argument:
+    python reset-test-user-totp.py prod test-user.journey JBSWY3DPEHPK3PXP "your-password"
 
 Requirements:
     - KEYCLOAK_ADMIN_PASSWORD environment variable
+    - TEST_USER_PASSWORD environment variable (or pass as 4th argument)
     - requests library (pip install requests)
 
 Author: Tamshai-Dev
@@ -43,6 +48,7 @@ ENVIRONMENTS = {
 REALM = "tamshai-corp"
 DEFAULT_USERNAME = "test-user.journey"
 DEFAULT_TOTP_SECRET = "JBSWY3DPEHPK3PXP"
+DEFAULT_PASSWORD = os.environ.get("TEST_USER_PASSWORD", "")
 
 
 # ANSI colors for output
@@ -130,7 +136,7 @@ def delete_user(keycloak_url: str, token: str, user_id: str) -> bool:
 
 
 def create_user_with_totp(
-    keycloak_url: str, token: str, username: str, totp_secret: str
+    keycloak_url: str, token: str, username: str, totp_secret: str, user_password: str
 ) -> bool:
     """
     Create a user with TOTP credential using Partial Import API.
@@ -156,7 +162,7 @@ def create_user_with_totp(
                 "credentials": [
                     {
                         "type": "password",
-                        "value": "***REDACTED_PASSWORD***",
+                        "value": user_password,
                         "temporary": False,
                     },
                     {
@@ -241,13 +247,22 @@ def main():
 
     # Parse arguments
     if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <environment> [username] [totp_secret]")
+        print(f"Usage: {sys.argv[0]} <environment> [username] [totp_secret] [password]")
         print(f"  Environments: {', '.join(ENVIRONMENTS.keys())}")
+        print(f"  Password can also be set via TEST_USER_PASSWORD environment variable")
         sys.exit(1)
 
     env = sys.argv[1]
     username = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_USERNAME
     totp_secret = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_TOTP_SECRET
+    user_password = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_PASSWORD
+
+    # Validate password is provided
+    if not user_password:
+        log_error("TEST_USER_PASSWORD environment variable is required")
+        log_error("Set it with: export TEST_USER_PASSWORD='your-password'")
+        log_error("Or pass as 4th argument: ./reset-test-user-totp.py prod user secret password")
+        sys.exit(1)
 
     if env not in ENVIRONMENTS:
         log_error(f"Invalid environment: {env}")
@@ -279,7 +294,7 @@ def main():
 
     # Create user with TOTP
     print()
-    if not create_user_with_totp(keycloak_url, token, username, totp_secret):
+    if not create_user_with_totp(keycloak_url, token, username, totp_secret, user_password):
         log_error("Failed to create user with TOTP")
         sys.exit(1)
 

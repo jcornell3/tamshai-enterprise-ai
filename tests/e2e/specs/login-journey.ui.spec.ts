@@ -21,6 +21,7 @@ import * as path from 'path';
 
 // Environment configuration
 const ENV = process.env.TEST_ENV || 'dev';
+const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tamshai-corp';
 const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
     site: 'https://www.tamshai.local',      // Static marketing site
@@ -365,7 +366,8 @@ test.describe('Employee Login Journey', () => {
     await ssoButton.first().click();
 
     // Wait for redirect to Keycloak (portal redirects to Keycloak for auth)
-    await page.waitForURL(/\/auth\/realms\/tamshai-corp\/protocol\/openid-connect\/auth/, { timeout: 30000 });
+    // Note: Realm is configurable via KEYCLOAK_REALM env var (default: tamshai-corp)
+    await page.waitForURL(new RegExp(`/auth/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`), { timeout: 30000 });
 
     // Verify Keycloak login form appears
     await waitForKeycloakLogin(page);

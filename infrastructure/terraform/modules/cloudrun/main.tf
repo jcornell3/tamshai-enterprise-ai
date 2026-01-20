@@ -74,7 +74,7 @@ resource "google_cloud_run_service" "mcp_gateway" {
 
         env {
           name  = "REDIS_HOST"
-          value = "127.0.0.1"
+          value = var.redis_host
         }
 
         env {

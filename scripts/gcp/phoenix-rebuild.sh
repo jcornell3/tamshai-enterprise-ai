@@ -548,9 +548,30 @@ phase_4_infrastructure() {
 # NOTE: Images MUST be built BEFORE Phase 7 (Cloud Run) because Terraform
 # will fail with "image not found" if Cloud Run is created before images exist.
 #
-# SPECIAL HANDLING:
-# - Gap #45: Keycloak uses Dockerfile.cloudbuild (no BuildKit --chmod syntax)
-# - Gap #46: web-portal must be built from repo root with -f flag
+# BUILD PATTERNS (Gaps #55-58 documentation):
+# ============================================
+# 1. MCP Services (standard build):
+#    gcloud builds submit services/$service \
+#      --tag=${REGISTRY}/${service}:latest
+#    Context: services/$service (contains Dockerfile)
+#
+# 2. Keycloak (Gap #55, #56):
+#    gcloud builds submit keycloak/ \
+#      --tag=.../keycloak:v2.0.0-postgres
+#      --config=<inline-cloudbuild.yaml>
+#    Uses Dockerfile.cloudbuild (no BuildKit --chmod flags)
+#    Cloud Build doesn't support BuildKit-specific syntax
+#
+# 3. Web Portal (Gap #57, #58):
+#    gcloud builds submit . \
+#      --config=<inline-cloudbuild.yaml with -f clients/web/Dockerfile.prod>
+#    MUST be built from repo root because Dockerfile.prod references:
+#    - COPY clients/web/package*.json
+#    - COPY clients/web/ (monorepo paths)
+#
+# KEY INSIGHT: The --tag flag ONLY works when:
+#   a) Dockerfile is in the build context root, OR
+#   b) You use a cloudbuild.yaml with explicit --dockerfile flag
 # =============================================================================
 phase_5_build_images() {
     log_phase "5" "Build Container Images"
@@ -837,12 +858,34 @@ phase_8_deploy() {
 # =============================================================================
 # Phase 9: Configure TOTP
 # =============================================================================
+# Gap #52: Keycloak Cloud Run cold start takes 30-60s. We need to warm it up
+# before running sync-keycloak-realm or the script will timeout.
+# =============================================================================
 phase_9_totp() {
     log_phase "9" "Configure Test User TOTP"
 
     if [ "$DRY_RUN" = true ]; then
         log_info "[DRY-RUN] Would configure TOTP for test-user.journey"
         return 0
+    fi
+
+    # Gap #52: Warm up Keycloak before TOTP configuration
+    log_step "Warming up Keycloak (Gap #52 - cold start mitigation)..."
+    local keycloak_url
+    keycloak_url=$(gcloud run services describe keycloak --region="${GCP_REGION}" --format="value(status.url)" 2>/dev/null) || {
+        log_warn "Could not get Keycloak URL - skipping warmup"
+    }
+
+    if [ -n "$keycloak_url" ]; then
+        log_info "Keycloak URL: $keycloak_url"
+        for i in {1..10}; do
+            if curl -sf "${keycloak_url}/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+                log_success "Keycloak is ready (attempt $i)"
+                break
+            fi
+            log_info "Waiting for Keycloak warmup (attempt $i/10)..."
+            sleep 15
+        done
     fi
 
     local totp_script="$PROJECT_ROOT/keycloak/scripts/set-user-totp.sh"
@@ -887,6 +930,9 @@ phase_9_totp() {
 # =============================================================================
 # Phase 10: Provision and Verify
 # =============================================================================
+# Gap #53: Corporate users (eve.thompson, etc.) must be provisioned via
+# identity-sync workflow after Phoenix rebuild. This phase ensures they exist.
+# =============================================================================
 phase_10_verify() {
     log_phase "10" "Provision Users and Verify"
 
@@ -901,7 +947,25 @@ phase_10_verify() {
     log_step "Running health checks..."
     quick_health_check || log_warn "Some services may not be healthy"
 
-    log_step "Provisioning users..."
+    # Gap #53: Trigger identity-sync to provision corporate users
+    log_step "Triggering identity-sync workflow (Gap #53)..."
+    if gh workflow list --repo jcornell3/tamshai-enterprise-ai 2>/dev/null | grep -q "provision-prod-users"; then
+        log_info "Running provision-prod-users workflow..."
+        gh workflow run provision-prod-users.yml --ref main || log_warn "Could not trigger workflow"
+
+        # Wait for workflow to complete (with timeout)
+        log_info "Waiting for user provisioning workflow to complete..."
+        sleep 10
+        local run_id
+        run_id=$(gh run list --workflow=provision-prod-users.yml --limit=1 --json databaseId -q '.[0].databaseId' 2>/dev/null)
+        if [ -n "$run_id" ]; then
+            timeout 600 gh run watch "$run_id" --exit-status || log_warn "Workflow may not have completed successfully"
+        fi
+    else
+        log_warn "provision-prod-users.yml workflow not found"
+    fi
+
+    log_step "Provisioning users (local script)..."
     # Trigger user provisioning if available
     local provision_script="$PROJECT_ROOT/scripts/gcp/provision-users.sh"
     if [ -f "$provision_script" ]; then
