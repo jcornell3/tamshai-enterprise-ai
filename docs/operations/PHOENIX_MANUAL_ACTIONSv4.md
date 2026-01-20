@@ -210,7 +210,7 @@ cat /tmp/cicd-key.json | gh secret set GCP_SA_KEY_PROD
 **Result**: PASS
 
 **Findings**:
-- Created key ID: 3cb78b5cc868c18b719dd327d390f84637a2d56c
+- Created key ID: [REDACTED-KEY-ID]
 - Updated GitHub secret: GCP_SA_KEY_PROD
 
 **Manual Actions Required**: None
@@ -278,8 +278,8 @@ gh run watch 21156285307
 **Verification**:
 ```bash
 # test-user.journey credentials found
-- password: 75801ab3-80c3-4fd6-82bc-a230ef848282
-- otp: ac4ebcf3-ce52-4120-bc77-cb78ade10efb (E2E Test Authenticator)
+- password: [REDACTED-PASSWORD]
+- otp: [REDACTED-OTP-SECRET] (E2E Test Authenticator)
 ```
 
 **Result**: PASS (automated)
