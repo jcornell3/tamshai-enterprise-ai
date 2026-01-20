@@ -957,6 +957,60 @@ terraform apply -auto-approve \
 
 ---
 
+### Issue #25: VPC-SC Log Streaming Causes False Build Failures
+
+**Symptom**: Phase 5 shows "Build failed for mcp-gateway" warnings even though builds succeed in Cloud Build:
+```
+ERROR: (gcloud.builds.submit) The build is running, and logs are being written to the default logs bucket.
+This tool can only stream logs if you are Viewer/Owner of the project and, if applicable, allowed by your VPC-SC security policy.
+[WARN] Build failed for mcp-gateway
+```
+
+**Root Cause**: When VPC-SC (VPC Service Controls) blocks log streaming, `gcloud builds submit` returns a non-zero exit code even though the build is running successfully in Cloud Build. The script's `|| log_warn` interprets this as a failure.
+
+**Fix Applied**:
+
+1. Added `submit_and_wait_build()` helper function (`scripts/gcp/lib/health-checks.sh`):
+```bash
+submit_and_wait_build() {
+    local context_path="$1"
+    shift
+    local build_args=("$@")
+
+    # Submit build asynchronously to get build ID
+    build_output=$(gcloud builds submit "$context_path" "${build_args[@]}" --async --format="value(id)" 2>&1)
+
+    # Extract build ID and poll for actual completion status
+    build_id=$(echo "$build_output" | grep -oE '[0-9a-f]{8}-...-[0-9a-f]{12}')
+
+    # Poll until SUCCESS, FAILURE, or timeout
+    while [ $elapsed -lt "$timeout" ]; do
+        status=$(gcloud builds describe "$build_id" --region=global --format="value(status)")
+        case "$status" in
+            SUCCESS) return 0 ;;
+            FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED) return 1 ;;
+            QUEUED|WORKING) sleep 5 ;;
+        esac
+    done
+}
+```
+
+2. Updated Phase 5 builds (`scripts/gcp/phoenix-rebuild.sh`) to use new helper:
+```bash
+# Before (incorrect - VPC-SC error treated as failure):
+gcloud builds submit ... --quiet || log_warn "Build failed"
+
+# After (correct - checks actual build status):
+submit_and_wait_build ... || log_warn "Build failed"
+```
+
+**Why Async + Poll**:
+- `--async` returns immediately with build ID (no VPC-SC dependency)
+- `gcloud builds describe` returns actual build status from Cloud Build API
+- Correctly distinguishes between log streaming issues and real build failures
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -974,3 +1028,4 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #22: Support `--phase=N` syntax in addition to `--phase N`
 - Issue #23: Provision job uses correct artifact registry name (`tamshai` not `tamshai-prod`)
 - Issue #24: Artifact registry created via gcloud before terraform to avoid chicken-and-egg dependency
+- Issue #25: Cloud Build uses async submit + status polling to handle VPC-SC log streaming errors

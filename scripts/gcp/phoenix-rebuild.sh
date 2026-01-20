@@ -741,13 +741,13 @@ phase_5_build_images() {
     log_step "Building container images via Cloud Build..."
 
     # Build MCP services (standard Dockerfile)
+    # Issue #25: Use submit_and_wait_build to handle VPC-SC log streaming issues
     local mcp_services=("mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support")
     for service in "${mcp_services[@]}"; do
         log_info "Building $service..."
         if [ -f "$PROJECT_ROOT/services/$service/Dockerfile" ]; then
-            gcloud builds submit "$PROJECT_ROOT/services/$service" \
-                --tag="${registry}/${service}:latest" \
-                --quiet || log_warn "Build failed for $service"
+            submit_and_wait_build "$PROJECT_ROOT/services/$service" \
+                "--tag=${registry}/${service}:latest" || log_warn "Build failed for $service"
         else
             log_warn "No Dockerfile found for $service"
         fi
@@ -767,16 +767,15 @@ steps:
 images:
   - '${registry}/keycloak:v2.0.0-postgres'
 EOF
-        gcloud builds submit "$PROJECT_ROOT/keycloak" \
-            --config="$keycloak_config" \
-            --suppress-logs || log_warn "Keycloak build failed"
+        # Issue #25: Use submit_and_wait_build to handle VPC-SC log streaming issues
+        submit_and_wait_build "$PROJECT_ROOT/keycloak" \
+            "--config=$keycloak_config" || log_warn "Keycloak build failed"
         rm -f "$keycloak_config"
     elif [ -f "$PROJECT_ROOT/keycloak/Dockerfile" ]; then
         # Fallback to regular Dockerfile (may fail if using BuildKit syntax)
         log_warn "Dockerfile.cloudbuild not found, using regular Dockerfile (may fail)"
-        gcloud builds submit "$PROJECT_ROOT/keycloak" \
-            --tag="${registry}/keycloak:v2.0.0-postgres" \
-            --quiet || log_warn "Keycloak build failed - create Dockerfile.cloudbuild without --chmod flag"
+        submit_and_wait_build "$PROJECT_ROOT/keycloak" \
+            "--tag=${registry}/keycloak:v2.0.0-postgres" || log_warn "Keycloak build failed - create Dockerfile.cloudbuild without --chmod flag"
     else
         log_error "No Dockerfile found for keycloak"
     fi
@@ -794,9 +793,9 @@ steps:
 images:
   - '${registry}/web-portal:latest'
 EOF
-        gcloud builds submit "$PROJECT_ROOT" \
-            --config="$webportal_config" \
-            --suppress-logs || log_warn "web-portal build failed"
+        # Issue #25: Use submit_and_wait_build to handle VPC-SC log streaming issues
+        submit_and_wait_build "$PROJECT_ROOT" \
+            "--config=$webportal_config" || log_warn "web-portal build failed"
         rm -f "$webportal_config"
     else
         log_warn "No Dockerfile.prod found for web-portal"
