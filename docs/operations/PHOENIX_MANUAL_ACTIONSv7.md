@@ -668,6 +668,79 @@ terraform state rm '...'
 
 ---
 
+### Issue #16: Cloud SQL Health Check Returns "unknown" Due to set -u + gcloud Wrapper
+
+**Symptom**: After Terraform apply completes successfully, the Cloud SQL health check loops indefinitely showing "unknown" state:
+```
+[health]   Cloud SQL state: unknown, waiting... (600s remaining)
+[health]   Cloud SQL state: unknown, waiting... (589s remaining)
+...
+[health] Cloud SQL tamshai-prod-postgres did not become RUNNABLE within 600s
+```
+
+Meanwhile, directly querying Cloud SQL shows it's actually RUNNABLE:
+```bash
+$ gcloud sql instances describe tamshai-prod-postgres --format="value(state)"
+RUNNABLE
+```
+
+**Root Cause Analysis**:
+
+1. `phoenix-rebuild.sh` uses `set -euo pipefail` (line 33) for safety
+2. The `-u` option causes bash to fail on unbound variables
+3. The gcloud wrapper script at `google-cloud-sdk/bin/gcloud` uses `$CLOUDSDK_PYTHON` on line 108 without checking if it's set
+4. When `set -u` is enabled, gcloud fails with: `CLOUDSDK_PYTHON: unbound variable`
+5. The health check code suppresses errors with `2>/dev/null` and catches failures with `|| state=""`
+6. Result: `state` becomes empty string, displayed as "unknown"
+
+**Verification**:
+```bash
+# Direct command works:
+$ gcloud sql instances describe tamshai-prod-postgres --format="value(state)"
+RUNNABLE
+
+# With set -u, gcloud fails:
+$ set -u && gcloud sql instances describe tamshai-prod-postgres --format="value(state)"
+gcloud: line 108: CLOUDSDK_PYTHON: unbound variable
+
+# Fix: Temporarily disable set -u:
+$ bash -c 'set -u; set +u; state=$(gcloud sql instances describe tamshai-prod-postgres --format="value(state)"); set -u; echo $state'
+RUNNABLE
+```
+
+**Fix Applied** (`scripts/gcp/lib/health-checks.sh`):
+
+Wrapped all gcloud calls with `set +u` ... `set -u`:
+
+```bash
+# wait_for_cloudsql() - Line 181-184
+set +u
+state=$(gcloud sql instances describe "$instance_name" \
+    --format="value(state)" 2>/dev/null) || state=""
+set -u
+
+# get_service_url() - Line 57-61
+set +u
+gcloud run services describe "$service_name" \
+    --region="$region" \
+    --format="value(status.url)" 2>/dev/null || echo ""
+set -u
+
+# check_vpc_connector() - Line 346-350
+set +u
+state=$(gcloud compute networks vpc-access connectors describe "$connector_name" \
+    --region="$region" \
+    --format="value(state)" 2>/dev/null) || state=""
+set -u
+```
+
+**Affected Functions**:
+1. `wait_for_cloudsql()` - Cloud SQL instance state check
+2. `get_service_url()` - Cloud Run service URL retrieval
+3. `check_vpc_connector()` - VPC Access Connector state check
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -677,3 +750,4 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #12: Preflight checks now use warnings for resources created during rebuild
 - Issue #13: Merged duplicate `depends_on` blocks in Terraform
 - Issue #14: VPC peering deleted before private IP deletion
+- Issue #16: Cloud SQL health check fixed with `set +u` wrapper for gcloud calls

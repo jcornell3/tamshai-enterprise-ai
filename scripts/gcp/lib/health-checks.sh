@@ -53,9 +53,12 @@ get_service_url() {
     local service_name="$1"
     local region="${GCP_REGION}"
 
+    # Issue #16: gcloud wrapper fails with set -u due to unbound CLOUDSDK_PYTHON
+    set +u
     gcloud run services describe "$service_name" \
         --region="$region" \
         --format="value(status.url)" 2>/dev/null || echo ""
+    set -u
 }
 
 # Check if a URL is healthy (returns HTTP 200)
@@ -175,8 +178,13 @@ wait_for_cloudsql() {
 
     while [ $elapsed -lt "$timeout" ]; do
         local state
+        # Issue #16: gcloud wrapper uses $CLOUDSDK_PYTHON without checking if set
+        # With set -u enabled (from set -euo pipefail), gcloud fails with "unbound variable"
+        # Fix: Temporarily disable set -u for gcloud calls
+        set +u
         state=$(gcloud sql instances describe "$instance_name" \
             --format="value(state)" 2>/dev/null) || state=""
+        set -u
 
         if [ "$state" = "RUNNABLE" ]; then
             log_health_success "Cloud SQL instance $instance_name is RUNNABLE"
@@ -334,9 +342,12 @@ check_vpc_connector() {
     log_health_info "Checking VPC connector: $connector_name"
 
     local state
+    # Issue #16: gcloud wrapper fails with set -u due to unbound CLOUDSDK_PYTHON
+    set +u
     state=$(gcloud compute networks vpc-access connectors describe "$connector_name" \
         --region="$region" \
         --format="value(state)" 2>/dev/null) || state=""
+    set -u
 
     if [ "$state" = "READY" ]; then
         log_health_success "VPC connector $connector_name is READY"
