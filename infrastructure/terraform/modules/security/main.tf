@@ -609,16 +609,6 @@ resource "google_cloud_run_v2_job" "provision_users" {
   # Gap #42: Disable deletion protection to allow terraform to manage job lifecycle
   deletion_protection = false
 
-  # Issue #9 Fix: Ensure IAM bindings exist before job is created
-  # This prevents "Permission denied on secret" errors during first execution
-  depends_on = [
-    google_secret_manager_secret_iam_member.provision_job_db_password,
-    google_secret_manager_secret_iam_member.provision_job_keycloak_admin,
-    google_secret_manager_secret_iam_member.provision_job_mcp_hr_client,
-    google_secret_manager_secret_iam_member.provision_job_prod_user_password,
-    google_project_iam_member.provision_job_cloudsql_client,
-  ]
-
   template {
     template {
       service_account = google_service_account.provision_job.email
@@ -697,11 +687,19 @@ resource "google_cloud_run_v2_job" "provision_users" {
     }
   }
 
+  # Issue #9 Fix: Ensure IAM bindings exist before job is created
+  # This prevents "Permission denied on secret" errors during first execution
   depends_on = [
     google_project_service.cloudrun,
     google_secret_manager_secret_version.tamshai_db_password,
     google_secret_manager_secret_version.keycloak_admin_password,
-    google_secret_manager_secret_version.prod_user_password
+    google_secret_manager_secret_version.prod_user_password,
+    # Issue #9: IAM bindings must exist before job can access secrets
+    google_secret_manager_secret_iam_member.provision_job_db_password,
+    google_secret_manager_secret_iam_member.provision_job_keycloak_admin,
+    google_secret_manager_secret_iam_member.provision_job_mcp_hr_client,
+    google_secret_manager_secret_iam_member.provision_job_prod_user_password,
+    google_project_iam_member.provision_job_cloudsql_client,
   ]
 
   lifecycle {
