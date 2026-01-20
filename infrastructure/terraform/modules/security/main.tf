@@ -597,9 +597,10 @@ resource "google_project_iam_member" "provision_job_cloudsql_client" {
 
 # The Cloud Run Job resource
 # Note: The image must be built and pushed before terraform apply
-# Only created if vpc_connector_id is provided (GCP environment)
+# Only created if enable_provision_job is true (GCP environment)
+# Gap #49 Fix: Use boolean instead of runtime vpc_connector_id to avoid count dependency on unknown values
 resource "google_cloud_run_v2_job" "provision_users" {
-  count = var.vpc_connector_id != "" ? 1 : 0
+  count = var.enable_provision_job ? 1 : 0
 
   name     = "provision-users"
   location = var.region

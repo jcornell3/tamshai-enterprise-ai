@@ -310,11 +310,25 @@ phase_3_destroy() {
     # These are handled BEFORE terraform destroy to prevent failures
     # =============================================================================
 
-    # Gap #39: Empty storage bucket BEFORE destroy (force_destroy=false in terraform)
-    log_step "Emptying storage bucket before destroy (Gap #39)..."
-    if gcloud storage ls "gs://prod.tamshai.com" &>/dev/null 2>&1; then
-        gcloud storage rm -r "gs://prod.tamshai.com/**" 2>/dev/null || log_info "Bucket already empty or doesn't exist"
+    # Handle terraform state lock (common issue after interrupted operations)
+    log_step "Checking for stale terraform state locks..."
+    # Force unlock any stale locks - safe because we're about to destroy everything
+    local lock_id
+    lock_id=$(terraform plan -no-color 2>&1 | grep -oP 'ID:\s*\K\d+' | head -1) || true
+    if [ -n "$lock_id" ]; then
+        log_warn "Found stale lock ID: $lock_id - force unlocking..."
+        terraform force-unlock -force "$lock_id" 2>/dev/null || true
     fi
+
+    # Gap #39: Empty ALL storage buckets BEFORE destroy (force_destroy=false in terraform)
+    log_step "Emptying storage buckets before destroy (Gap #39)..."
+    local buckets=("prod.tamshai.com" "tamshai-prod-finance-docs" "tamshai-prod-finance-docs-${GCP_PROJECT_ID}")
+    for bucket in "${buckets[@]}"; do
+        if gcloud storage ls "gs://${bucket}" &>/dev/null 2>&1; then
+            log_info "  Emptying gs://${bucket}..."
+            gcloud storage rm -r "gs://${bucket}/**" 2>/dev/null || log_info "  Bucket ${bucket} already empty"
+        fi
+    done
 
     # Gap #40: Delete Cloud SQL instance BEFORE terraform destroy to avoid keycloak user dependency
     log_step "Deleting Cloud SQL instance to avoid user dependency (Gap #40)..."
@@ -331,18 +345,26 @@ phase_3_destroy() {
     fi
 
     # Gap #23: Remove service networking from state BEFORE destroy (blocks VPC deletion)
+    # Check both module.database and module.networking paths (varies by terraform version)
     log_step "Removing service networking from state (Gap #23 - proactive)..."
     terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
     terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+    terraform state rm 'module.networking.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+    terraform state rm 'module.networking.google_compute_global_address.private_ip_range' 2>/dev/null || true
 
-    # Gap #24: Delete orphaned private IP BEFORE destroy
+    # Gap #24: Delete orphaned private IP BEFORE destroy (try multiple known names)
     log_step "Deleting orphaned private IP (Gap #24 - proactive)..."
-    gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
+    local private_ip_names=("tamshai-prod-private-ip" "google-managed-services-tamshai-prod-vpc" "tamshai-prod-private-ip-range")
+    for ip_name in "${private_ip_names[@]}"; do
+        gcloud compute addresses delete "$ip_name" --global --quiet 2>/dev/null || true
+    done
 
     # Gap #25: Remove VPC connector from state BEFORE destroy
     log_step "Removing VPC connector from state (Gap #25 - proactive)..."
     terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
     terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
+    terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector[0]' 2>/dev/null || true
+    terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector' 2>/dev/null || true
 
     log_success "Proactive cleanup complete - terraform destroy should succeed on first try"
 
@@ -685,6 +707,31 @@ phase_7_cloud_run() {
     if [ "$DRY_RUN" = true ]; then
         log_info "[DRY-RUN] Would run terraform apply (full)"
         return 0
+    fi
+
+    # Gap #48: Import existing domain mappings before apply (they persist across Phoenix rebuilds)
+    log_step "Checking for existing domain mappings to import (Gap #48)..."
+    local region="${GCP_REGION}"
+    local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
+
+    # Check if auth.tamshai.com domain mapping exists but isn't in state
+    if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' &>/dev/null 2>&1; then
+            log_info "Importing existing auth.tamshai.com domain mapping..."
+            terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
+                "locations/${region}/namespaces/${project}/domainmappings/auth.tamshai.com" 2>/dev/null || \
+                log_warn "Domain mapping import failed - may already be in state"
+        fi
+    fi
+
+    # Check if app.tamshai.com domain mapping exists
+    if gcloud beta run domain-mappings describe --domain=app.tamshai.com --region="$region" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' &>/dev/null 2>&1; then
+            log_info "Importing existing app.tamshai.com domain mapping..."
+            terraform import 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' \
+                "locations/${region}/namespaces/${project}/domainmappings/app.tamshai.com" 2>/dev/null || \
+                log_warn "Domain mapping import failed - may not exist in config"
+        fi
     fi
 
     log_step "Applying full Terraform configuration..."

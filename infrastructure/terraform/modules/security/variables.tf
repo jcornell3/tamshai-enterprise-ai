@@ -29,6 +29,12 @@ variable "claude_api_key" {
 }
 
 # User Provisioning Job Variables
+variable "enable_provision_job" {
+  description = "Whether to create the Cloud Run provisioning job. Use this instead of checking vpc_connector_id to avoid count dependency on runtime values."
+  type        = bool
+  default     = false
+}
+
 variable "vpc_connector_id" {
   description = "VPC Connector ID for Cloud Run Job (e.g., projects/PROJECT/locations/REGION/connectors/NAME)"
   type        = string

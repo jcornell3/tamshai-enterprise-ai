@@ -63,7 +63,7 @@ output "prod_user_password" {
 # Provisioning Job Outputs
 output "provision_job_name" {
   description = "Name of the user provisioning Cloud Run job"
-  value       = var.vpc_connector_id != "" ? google_cloud_run_v2_job.provision_users[0].name : ""
+  value       = var.enable_provision_job ? google_cloud_run_v2_job.provision_users[0].name : ""
 }
 
 output "provision_job_service_account" {

@@ -85,7 +85,9 @@ module "security" {
   claude_api_key       = var.claude_api_key
 
   # User Provisioning Job configuration
-  # Note: These use variables/constructed values to avoid circular dependencies
+  # Gap #49 Fix: Use enable_provision_job boolean (known at plan time) instead of
+  # checking vpc_connector_id (unknown until apply) to avoid count dependency errors
+  enable_provision_job      = true
   vpc_connector_id          = module.networking.serverless_connector_id
   cloud_sql_connection_name = "${var.project_id}:${var.region}:tamshai-${local.environment}-postgres"
   keycloak_url              = var.keycloak_provisioning_url
