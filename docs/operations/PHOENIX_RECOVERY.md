@@ -2,8 +2,8 @@
 
 This document describes how to recover Tamshai Enterprise AI environments from scratch following the **Phoenix Architecture** principle: any environment should be destroyable and recreatable without manual intervention.
 
-**Last Updated**: January 20, 2026
-**Version**: 2.1 (Updated with Gap #49 fix and automation improvements)
+**Last Updated**: January 21, 2026
+**Version**: 2.2 (Updated with Issues #36, #37 fixes from v10/v11 rebuilds)
 
 ## Overview
 
@@ -31,9 +31,9 @@ Phoenix Architecture means:
 |-------------|-----------------|------|-----------|
 | **Dev** | Terraform destroy + apply | 5-10 min | None (sample data reloaded) |
 | **Stage** | Terraform destroy + apply | 15-20 min | None (sample data reloaded) |
-| **Prod** | Full Phoenix rebuild | **~100 min** | **User data if not backed up** |
+| **Prod** | Full Phoenix rebuild | **75-100 min** | **User data if not backed up** |
 
-> **Note**: Prod recovery time is ~60 min with `phoenix-rebuild.sh` automation (down from ~100 min manual). All pre-destroy cleanup, domain mapping imports, and post-apply steps are now automated. See [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md) for detailed phases.
+> **Note**: Prod recovery time is 75-100 minutes with `phoenix-rebuild.sh --yes` automation. The main variable is SSL certificate provisioning time (10-17 minutes on fresh rebuild). v11 rebuild completed in ~98 minutes. See [PHOENIX_RUNBOOK.md](./PHOENIX_RUNBOOK.md) for detailed phases.
 
 ## Dev Environment Recovery
 
@@ -192,18 +192,29 @@ The `deploy-vps.yml` workflow implements Phoenix principles:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    GCP PROD PHOENIX REBUILD SEQUENCE                    │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Phase 1: Pre-flight checks      │ Validate tools, secrets, DNS         │
-│  Phase 2: Secret sync            │ Verify GCP Secret Manager             │
-│  Phase 3: Pre-destroy cleanup    │ Delete jobs, disable protections     │
-│  Phase 4: Terraform destroy      │ Destroy all GCP infrastructure       │
-│  Phase 5: Post-destroy verify    │ FAIL if orphaned resources exist     │
-│  Phase 6: Terraform apply        │ Staged: networking first, then full  │
-│  Phase 7: Domain mapping         │ Create auth.tamshai.com → keycloak   │
+│  Phase 1-2: Pre-flight + Secrets │ Validate tools, sync GCP secrets     │
+│  Phase 3: Pre-destroy cleanup    │ Delete services, unlock state        │
+│  Phase 4: Terraform destroy+apply│ Destroy and recreate infrastructure  │
+│  Phase 5: Build container images │ Build all 8 container images         │
+│  Phase 6: Regenerate SA key      │ Create new CICD service account key  │
+│  Phase 7: Terraform Cloud Run    │ Staged: Keycloak → SSL wait → Gateway│
 │  Phase 8: Deploy via GHA         │ Deploy all Cloud Run services        │
 │  Phase 9: Configure TOTP         │ Set test-user.journey credentials    │
-│  Phase 10: Verify                │ E2E tests, health checks             │
+│  Phase 10: Provision & Verify    │ provision-users + E2E tests          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Typical Durations** (from v11 rebuild):
+- Phases 1-2: ~2 min
+- Phase 3: ~5 min
+- Phase 4: ~20 min (Cloud SQL creation ~13 min)
+- Phase 5: ~12 min (8 images)
+- Phase 6: ~1 min
+- Phase 7: ~20 min (SSL wait ~17 min on fresh rebuild)
+- Phase 8: ~8 min
+- Phase 9: ~2 min
+- Phase 10: ~7 min
+- **Total**: ~75-100 min (varies based on SSL provisioning time)
 
 ### Quick Recovery (Automated)
 
@@ -368,9 +379,11 @@ MONGODB_URI=$(gcloud secrets versions access latest --secret=tamshai-prod-mongod
 mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_sales').customers.countDocuments()"
 mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_support').tickets.countDocuments()"
 
-# Run E2E tests
+# Run E2E tests (use read-github-secrets.sh to load credentials)
 cd tests/e2e
-npx cross-env TEST_ENV=prod TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
+npx cross-env TEST_ENV=prod playwright test login-journey --project=chromium --workers=1
+# Expected: 6/6 tests pass
 ```
 
 ## Disaster Recovery Scenarios
@@ -517,25 +530,90 @@ gcloud storage buckets add-iam-policy-binding gs://prod.tamshai.com \
   --role="roles/storage.legacyBucketReader"
 ```
 
-### Scenario 8: Terraform State Lock Stuck
+### Scenario 8: Terraform State Lock Stuck (Issue #36)
 
 **Symptoms**: "Error acquiring the state lock" message
 
 **Root Cause**: Previous terraform command crashed or was interrupted
 
-**Recovery**:
+**Status**: ✅ **FIXED IN PHOENIX-REBUILD.SH v10** (January 2026)
+
+The `phoenix-rebuild.sh` Phase 3 now checks the GCS lock file directly instead of using `terraform plan` (which could create new locks). The script:
+1. Checks if lock file exists at `gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock`
+2. Extracts lock ID from the lock file JSON
+3. Runs `terraform force-unlock` with the extracted ID
+4. Deletes the lock file from GCS
+
+**Recovery** (manual fallback):
 ```bash
 cd infrastructure/terraform/gcp
 
-# Get lock ID from error message
-# Force unlock (use ID from error)
-terraform force-unlock -force <LOCK_ID>
+# Check if lock file exists
+LOCK_FILE="gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock"
+if gcloud storage cat "$LOCK_FILE" &>/dev/null; then
+    # Extract lock ID from lock file
+    lock_id=$(gcloud storage cat "$LOCK_FILE" | grep -o '"ID":"[0-9]*"' | grep -o '[0-9]*')
+
+    # Force unlock
+    terraform force-unlock -force "$lock_id"
+
+    # Delete lock file
+    gcloud storage rm "$LOCK_FILE"
+fi
 
 # Retry operation
 terraform apply -auto-approve
 ```
 
-### Scenario 9: MCP Services Fail with MongoDB URI Permission Error (Prod)
+**Why the fix matters**: Using `terraform plan` to detect locks could itself create new locks if interrupted, causing a deadlock situation.
+
+### Scenario 9: mcp-gateway Startup Fails with SSL Handshake Error (Issue #37)
+
+**Symptoms**: mcp-gateway fails Cloud Run startup probe with:
+```
+STARTUP HTTP probe failed 12 times consecutively
+Connection failed with status ERROR_CONNECTION_FAILED
+error: "Request failed with status code 525" (SSL handshake failed)
+jwksUri: https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs
+```
+
+**Root Cause**: mcp-gateway validates JWT tokens against Keycloak's JWKS endpoint on startup. If deployed simultaneously with Keycloak's domain mapping, the SSL certificate for `auth.tamshai.com` isn't ready yet (takes 10-17 minutes for new domain mappings).
+
+**Status**: ✅ **FIXED IN PHOENIX-REBUILD.SH v10** (January 2026)
+
+Phase 7 is now split into 3 stages:
+1. **Stage 1**: Deploy Keycloak, MCP Suite (hr, finance, sales, support), web-portal, domain mappings
+2. **Stage 2**: Wait for SSL certificate on `auth.tamshai.com` (poll every 30 seconds)
+3. **Stage 3**: Deploy mcp-gateway (SSL is now ready)
+
+**Recovery** (if running manual deployment):
+```bash
+# Step 1: Deploy Keycloak first with domain mapping
+cd infrastructure/terraform/gcp
+terraform apply -target=module.cloudrun_services.google_cloud_run_v2_service.keycloak -auto-approve
+terraform apply -target=module.cloudrun_services.google_cloud_run_domain_mapping.auth_domain -auto-approve
+
+# Step 2: Wait for SSL certificate to be ready
+echo "Waiting for SSL certificate on auth.tamshai.com..."
+attempts=0
+max_attempts=40  # ~20 minutes
+while [ $attempts -lt $max_attempts ]; do
+    if curl -sf https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration > /dev/null 2>&1; then
+        echo "SSL ready after $attempts attempts"
+        break
+    fi
+    echo "Attempt $((attempts+1))/$max_attempts - SSL not ready, waiting 30s..."
+    sleep 30
+    ((attempts++))
+done
+
+# Step 3: Deploy mcp-gateway
+terraform apply -target=module.cloudrun_services.google_cloud_run_v2_service.mcp_gateway -auto-approve
+```
+
+**Typical SSL Wait Time**: 10-17 minutes on fresh rebuild (34 attempts in v11)
+
+### Scenario 10: MCP Services Fail with MongoDB URI Permission Error (Prod) (Gap #43)
 
 **Symptoms**: `gcloud run deploy mcp-*` fails with "Permission denied on secret: tamshai-prod-mongodb-uri"
 
@@ -559,7 +637,7 @@ gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
 gh workflow run deploy-to-gcp.yml --ref main
 ```
 
-### Scenario 10: GitHub Secrets Not Synced to GCP (Prod)
+### Scenario 11: GitHub Secrets Not Synced to GCP (Prod) (Gap #41)
 
 **Symptoms**: `terraform apply` creates secrets but Cloud Run services fail with "secret version not found"
 
@@ -601,7 +679,7 @@ echo -n "$MCP_HR_SECRET" | gh secret set MCP_HR_SERVICE_CLIENT_SECRET
 gh workflow run deploy-to-gcp.yml --ref main
 ```
 
-### Scenario 11: Keycloak Database Locked During Destroy (Prod)
+### Scenario 12: Keycloak Database Locked During Destroy (Prod) (Gap #38)
 
 **Symptoms**: `terraform destroy` fails with "database 'keycloak' is being accessed by other users"
 
@@ -625,7 +703,7 @@ sleep 10
 terraform destroy -auto-approve
 ```
 
-### Scenario 12: Storage Bucket Won't Delete Without force_destroy (Prod)
+### Scenario 13: Storage Bucket Won't Delete Without force_destroy (Prod) (Gap #39)
 
 **Symptoms**: `terraform destroy` fails with "Error trying to delete bucket without force_destroy set to true"
 
@@ -822,5 +900,5 @@ gh workflow run deploy-to-gcp.yml --ref main
 
 ---
 
-*Last Updated: January 20, 2026*
-*Status: Active - Updated with Gap #49 fix and automation improvements (Gaps #1-49)*
+*Last Updated: January 21, 2026*
+*Status: Active - Updated with Issues #36, #37 fixes from v10/v11 rebuilds (13 disaster recovery scenarios)*

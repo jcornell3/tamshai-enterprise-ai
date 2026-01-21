@@ -1,8 +1,8 @@
 # Documentation Index
 
 **Generated**: January 13, 2026
-**Last Updated**: January 15, 2026
-**Total Documentation Files**: 204
+**Last Updated**: January 21, 2026
+**Total Documentation Files**: 218
 
 This index catalogs all markdown documentation files in the Tamshai Enterprise AI repository.
 
@@ -166,6 +166,20 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 ### docs/operations/
 - `docs/operations/IDENTITY_SYNC.md`
 - `docs/operations/KEYCLOAK_MANAGEMENT.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONS.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv2.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv3.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv4.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv5.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv6.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv7.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv8.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv9.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv10.md`
+- `docs/operations/PHOENIX_MANUAL_ACTIONSv11.md`
+- `docs/operations/PHOENIX_RECOVERY.md`
+- `docs/operations/PHOENIX_RECOVERY_IMPROVEMENTS.md`
+- `docs/operations/PHOENIX_RUNBOOK.md`
 - `docs/operations/TERRAFORM_PHASE1_RESULTS.md`
 - `docs/operations/TERRAFORM_USER_PROVISIONING_PLAN.md`
 
@@ -433,6 +447,20 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 |------|-------------|
 | `docs/operations/IDENTITY_SYNC.md` | Guide for syncing user identities from HR database to Keycloak for dev and stage environments. |
 | `docs/operations/KEYCLOAK_MANAGEMENT.md` | Guide for managing Keycloak realms, clients, and users. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONS.md` | Original Phoenix rebuild manual actions log documenting gaps found during rebuilds. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv2.md` | Phoenix v2 rebuild log with gap fixes and manual interventions documented. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv3.md` | Phoenix v3 rebuild log with additional automation improvements. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv4.md` | Phoenix v4 rebuild log documenting continued gap remediation. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv5.md` | Phoenix v5 rebuild log with Gap #49 fix and automation improvements. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv6.md` | Phoenix v6 rebuild log documenting Phase 6-10 execution. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv7.md` | Phoenix v7 rebuild log with additional stability improvements. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv8.md` | Phoenix v8 rebuild log documenting 1 manual action (Artifact Registry import). |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv9.md` | Phoenix v9 rebuild log - 0 manual actions, Issues #31, #34, #35 fixed. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv10.md` | Phoenix v10 rebuild log - 0 manual actions, Issues #32, #36, #37 fixed. |
+| `docs/operations/PHOENIX_MANUAL_ACTIONSv11.md` | **Latest** Phoenix v11 rebuild log - 0 manual actions, 6/6 E2E tests pass, ~98 min total. |
+| `docs/operations/PHOENIX_RECOVERY.md` | Disaster recovery procedures with 13 scenarios for dev, stage, and prod environments. |
+| `docs/operations/PHOENIX_RECOVERY_IMPROVEMENTS.md` | Planned improvements for Phoenix recovery automation. |
+| `docs/operations/PHOENIX_RUNBOOK.md` | Step-by-step runbook for Phoenix rebuilds with 10-phase automation and troubleshooting. |
 | `docs/operations/TERRAFORM_PHASE1_RESULTS.md` | Results and lessons learned from GCP Production Phase 1 Terraform deployment. |
 | `docs/operations/TERRAFORM_USER_PROVISIONING_PLAN.md` | Plan for implementing user provisioning via Terraform and identity sync. |
 
@@ -563,6 +591,28 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 ## Recent Changes
 
+### January 21, 2026 - Phoenix Documentation Update
+**Total Files**: Increased from 204 to 218 markdown files
+
+**New Phoenix Documentation Added** (`docs/operations/`):
+- `PHOENIX_MANUAL_ACTIONS.md` - Original rebuild log
+- `PHOENIX_MANUAL_ACTIONSv2.md` through `PHOENIX_MANUAL_ACTIONSv11.md` - Versioned rebuild logs (11 files)
+- `PHOENIX_RECOVERY.md` - Disaster recovery procedures (13 scenarios)
+- `PHOENIX_RECOVERY_IMPROVEMENTS.md` - Planned improvements
+- `PHOENIX_RUNBOOK.md` - Step-by-step runbook (v3.2.0)
+
+**Key Phoenix Documentation**:
+- **PHOENIX_RUNBOOK.md** - Primary operational runbook for 10-phase automated rebuilds
+- **PHOENIX_RECOVERY.md** - 13 disaster recovery scenarios including Issues #32, #36, #37
+- **PHOENIX_MANUAL_ACTIONSv11.md** - Latest rebuild log (0 manual actions, 6/6 E2E tests, ~98 min)
+
+**Issues Documented**:
+- Issue #32: provision-users `_REGION` substitution error (fixed in cloudbuild-provision-users.yaml)
+- Issue #36: Terraform state lock deadlock (fixed with GCS lock file check)
+- Issue #37: mcp-gateway SSL startup failure (fixed with staged Phase 7 deployment)
+
+---
+
 ### January 13, 2026 - Documentation Index Update
 **Total Files**: Increased from 150 to 203 markdown files
 
@@ -657,4 +707,4 @@ This index catalogs all markdown documentation files in the Tamshai Enterprise A
 
 ---
 
-*This index was last updated January 13, 2026 (53 new files added, enhanced file descriptions).*
+*This index was last updated January 21, 2026 (14 Phoenix documentation files added).*
