@@ -48,9 +48,23 @@ logs/
 *.tar.gz
 *.tgz
 
-# Flutter build outputs
-clients/unified_flutter/build/
-clients/unified_flutter/.dart_tool/
+# Flutter - only keep platform build directories for downloads page
+clients/unified_flutter/
+!clients/unified_flutter/windows/flutter/
+!clients/unified_flutter/linux/flutter/
+!clients/unified_flutter/macos/Flutter/
+!clients/unified_flutter/android/.gradle/
+!clients/unified_flutter/ios/Pods/
+
+# Issue #29: Deprecated Electron/desktop clients - NOT needed for any Cloud Build
+# clients/unified/ is 4.9GB and causes timeouts
+clients/unified/
+clients/desktop/
+
+# Web client build artifacts
+clients/web/node_modules/
+clients/web/dist/
+clients/web/build/
 
 # Temporary files
 tmp/

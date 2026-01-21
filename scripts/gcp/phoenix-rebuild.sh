@@ -367,6 +367,7 @@ phase_3_destroy() {
         terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_user.keycloak_user' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_user.postgres_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.tamshai_user' 2>/dev/null || true  # Issue #27
         terraform state rm 'module.database.google_sql_database.keycloak_db' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_database.hr_db' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_database.finance_db' 2>/dev/null || true
@@ -489,6 +490,67 @@ phase_3_destroy() {
 
     log_success "Proactive cleanup complete - terraform destroy should succeed on first try"
 
+    # =============================================================================
+    # Issue #28 FIX: Delete secrets and remove IAM bindings BEFORE terraform destroy
+    # =============================================================================
+    # Secrets persist across terraform destroy, causing 409 conflicts on next apply.
+    # More importantly, if we delete secrets after terraform starts destroying,
+    # terraform will fail trying to delete IAM bindings for non-existent secrets.
+    #
+    # Solution: Delete secrets and remove their IAM bindings from state BEFORE
+    # terraform destroy runs.
+    # =============================================================================
+    log_step "Pre-emptively deleting secrets (Gap #2 moved before destroy - Issue #28)..."
+    for secret in \
+        tamshai-prod-keycloak-admin-password \
+        tamshai-prod-keycloak-db-password \
+        tamshai-prod-db-password \
+        tamshai-prod-anthropic-api-key \
+        tamshai-prod-mcp-gateway-client-secret \
+        tamshai-prod-jwt-secret \
+        mcp-hr-service-client-secret \
+        prod-user-password; do
+        gcloud secrets delete "$secret" --quiet 2>/dev/null || true
+    done
+
+    log_step "Removing secret IAM bindings from state BEFORE destroy (Issue #28)..."
+    # Keycloak-related IAM bindings
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.keycloak_admin_access' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.keycloak_db_access' 2>/dev/null || true
+    # MCP Gateway-related IAM bindings
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.mcp_gateway_anthropic_access' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.mcp_gateway_client_secret_access' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.mcp_gateway_jwt_access' 2>/dev/null || true
+    # MCP Servers-related IAM bindings
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.mcp_servers_db_access' 2>/dev/null || true
+    # Cloud Build-related IAM bindings
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.cloudbuild_db_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.cloudbuild_keycloak_admin' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.cloudbuild_mcp_hr_client' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.cloudbuild_prod_user_password' 2>/dev/null || true
+    # Provision job-related IAM bindings
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.provision_job_db_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.provision_job_keycloak_admin' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.provision_job_mcp_hr_client' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_iam_member.provision_job_prod_user_password' 2>/dev/null || true
+    # Secret shells and versions (they were just deleted via gcloud)
+    terraform state rm 'module.security.google_secret_manager_secret.keycloak_admin_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.keycloak_db_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.tamshai_db_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.anthropic_api_key' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.mcp_gateway_client_secret' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.jwt_secret' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.mcp_hr_service_client_secret' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret.prod_user_password' 2>/dev/null || true
+    # Secret versions
+    terraform state rm 'module.security.google_secret_manager_secret_version.keycloak_admin_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_version.keycloak_db_password' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_version.anthropic_api_key' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_version.mcp_gateway_client_secret' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_version.jwt_secret' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_version.mcp_hr_service_client_secret' 2>/dev/null || true
+    terraform state rm 'module.security.google_secret_manager_secret_version.prod_user_password' 2>/dev/null || true
+
     log_step "Running terraform destroy..."
     echo ""
     echo -e "${YELLOW}WARNING: This will DESTROY all GCP infrastructure!${NC}"
@@ -549,6 +611,7 @@ phase_3_destroy() {
         terraform state rm 'module.database.google_sql_database.finance_db' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_user.keycloak_user' 2>/dev/null || true
         terraform state rm 'module.database.google_sql_user.postgres_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.tamshai_user' 2>/dev/null || true  # Issue #27
         terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
 
         # Retry targeted VPC destroy
@@ -598,19 +661,9 @@ phase_3_destroy() {
         terraform state rm "$resource" 2>/dev/null || true
     done
 
-    # Delete persisted secrets (Gap #2)
-    log_step "Deleting persisted secrets (Gap #2)..."
-    for secret in \
-        tamshai-prod-keycloak-admin-password \
-        tamshai-prod-keycloak-db-password \
-        tamshai-prod-db-password \
-        tamshai-prod-anthropic-api-key \
-        tamshai-prod-mcp-gateway-client-secret \
-        tamshai-prod-jwt-secret \
-        mcp-hr-service-client-secret \
-        prod-user-password; do
-        gcloud secrets delete "$secret" --quiet 2>/dev/null || true
-    done
+    # Note: Gap #2 (secret deletion) and Issue #28 (IAM binding state removal) are now
+    # handled BEFORE terraform destroy to prevent the "secret not found" errors.
+    # See the pre-destroy cleanup section above.
 
     if [ "$verification_failed" = true ]; then
         log_error "Post-destroy verification failed - manual cleanup required"
@@ -660,6 +713,51 @@ phase_4_infrastructure() {
         log_info "Importing Artifact Registry into Terraform state..."
         terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
             "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/${registry_name}" || log_warn "Import may have failed"
+    fi
+
+    # Issue #30: Build provision-job BEFORE terraform apply
+    # The provision_users Cloud Run Job in module.security references this image.
+    # Without building it first, terraform will fail with "image not found" error.
+    #
+    # Issue #30b: Use minimal build context to avoid uploading 7.6GB repo
+    # Only copy the files actually needed by the Dockerfile:
+    # - services/mcp-hr/ (for identity-sync)
+    # - sample-data/*.sql (SQL sample data)
+    # - scripts/gcp/provision-job/ (Dockerfile and entrypoint)
+    log_step "Building provision-job image (Issue #30: required before module.security)..."
+    local registry="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${registry_name}"
+    if [ -f "$PROJECT_ROOT/scripts/gcp/provision-job/Dockerfile" ]; then
+        # Create minimal build context (~50MB instead of 7.6GB)
+        local build_context="/tmp/provision-job-context-$$"
+        mkdir -p "$build_context/services" "$build_context/sample-data" "$build_context/scripts/gcp"
+
+        log_info "Creating minimal build context for provision-job..."
+        cp -r "$PROJECT_ROOT/services/mcp-hr" "$build_context/services/"
+        cp "$PROJECT_ROOT/sample-data"/*.sql "$build_context/sample-data/" 2>/dev/null || true
+        cp -r "$PROJECT_ROOT/scripts/gcp/provision-job" "$build_context/scripts/gcp/"
+
+        local provision_config="/tmp/provision-cloudbuild-phase4-$$.yaml"
+        cat > "$provision_config" <<EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${registry}/provision-job:latest', '-f', 'scripts/gcp/provision-job/Dockerfile', '.']
+images:
+  - '${registry}/provision-job:latest'
+EOF
+        # Use the helper function from health-checks.sh for VPC-SC compatible builds
+        if command -v submit_and_wait_build &>/dev/null; then
+            submit_and_wait_build "$build_context" "--config=$provision_config" || log_warn "provision-job build failed"
+        else
+            # Fallback to direct gcloud builds submit
+            gcloud builds submit "$build_context" \
+                --config="$provision_config" \
+                --project="${GCP_PROJECT_ID}" || log_warn "provision-job build failed"
+        fi
+        rm -f "$provision_config"
+        rm -rf "$build_context"
+        log_success "provision-job image built successfully"
+    else
+        log_warn "No Dockerfile found for provision-job - terraform may fail"
     fi
 
     log_step "Creating infrastructure (VPC, Cloud SQL)..."
@@ -788,9 +886,17 @@ EOF
         log_error "No Dockerfile found for keycloak"
     fi
 
-    # Issue #26: provision-job - must be built from repo root (needs services/mcp-hr and sample-data)
-    log_info "Building provision-job (from repo root with explicit Dockerfile path)..."
+    # Issue #26/#30b: provision-job - use minimal build context (~50MB instead of 7.6GB repo)
+    # Only copies files actually needed by the Dockerfile
+    log_info "Building provision-job (minimal context for fast upload)..."
     if [ -f "$PROJECT_ROOT/scripts/gcp/provision-job/Dockerfile" ]; then
+        # Create minimal build context
+        local provision_context="/tmp/provision-job-context-phase5-$$"
+        mkdir -p "$provision_context/services" "$provision_context/sample-data" "$provision_context/scripts/gcp"
+        cp -r "$PROJECT_ROOT/services/mcp-hr" "$provision_context/services/"
+        cp "$PROJECT_ROOT/sample-data"/*.sql "$provision_context/sample-data/" 2>/dev/null || true
+        cp -r "$PROJECT_ROOT/scripts/gcp/provision-job" "$provision_context/scripts/gcp/"
+
         local provision_config="/tmp/provision-cloudbuild-$$.yaml"
         cat > "$provision_config" <<EOF
 steps:
@@ -799,9 +905,10 @@ steps:
 images:
   - '${registry}/provision-job:latest'
 EOF
-        submit_and_wait_build "$PROJECT_ROOT" \
+        submit_and_wait_build "$provision_context" \
             "--config=$provision_config" || log_warn "provision-job build failed"
         rm -f "$provision_config"
+        rm -rf "$provision_context"
     else
         log_warn "No Dockerfile found for provision-job"
     fi
@@ -1030,6 +1137,15 @@ phase_7_cloud_run() {
                     log_info "Importing existing auth.tamshai.com domain mapping..."
                     terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
                         "locations/${region}/namespaces/${project}/domainmappings/auth.tamshai.com" 2>/dev/null || true
+                fi
+            fi
+
+            # Issue #31: Import Artifact Registry if it exists but not in state
+            if echo "$apply_output" | grep -q "artifact_registry.*already exists\|Repository.*already exists"; then
+                if gcloud artifacts repositories describe tamshai --location="$region" &>/dev/null; then
+                    log_info "Importing existing Artifact Registry repository..."
+                    terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+                        "projects/${project}/locations/${region}/repositories/tamshai" 2>/dev/null || true
                 fi
             fi
 

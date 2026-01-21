@@ -36,7 +36,7 @@ log_health_error() { echo -e "${RED}[health]${NC} $1"; }
 # Default values
 DEFAULT_TIMEOUT=300
 DEFAULT_INTERVAL=10
-GCP_REGION="${GCP_REGION}"
+GCP_REGION="${GCP_REGION:-us-central1}"
 
 # Cloud Run services to check
 # Issue #28: MCP suite services require authentication (only accessible via mcp-gateway)
@@ -76,7 +76,8 @@ get_service_url() {
         --format="value(status.url)" 2>/dev/null || echo ""
 }
 
-# Check if a URL is healthy (returns HTTP 200)
+# Check if a URL is healthy (returns HTTP 2xx)
+# Issue #33: Accept any 2xx status code (not just 200) to handle web-portal and other services
 check_url_health() {
     local url="$1"
     local endpoint="${2:-/health}"
@@ -88,9 +89,11 @@ check_url_health() {
     local full_url="${url}${endpoint}"
     local http_code
 
-    http_code=$(curl -sf -o /dev/null -w "%{http_code}" "$full_url" 2>/dev/null) || http_code="000"
+    # Use -L to follow redirects, capture final status code
+    http_code=$(curl -sL -o /dev/null -w "%{http_code}" "$full_url" 2>/dev/null) || http_code="000"
 
-    if [ "$http_code" = "200" ]; then
+    # Accept any 2xx status code as healthy
+    if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
         return 0
     fi
 
