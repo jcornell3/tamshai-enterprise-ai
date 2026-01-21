@@ -127,7 +127,7 @@
 **Result**: PASS
 
 **Findings**:
-- New SA key created: `e637c4db544ee5905ed6ac304f62ec9c21e1d1d4`
+- New SA key created: `[REDACTED-KEY-ID]`
 - GitHub secret `GCP_SA_KEY_PROD` updated
 - Key validation passed (Issue #10 fix working)
 
