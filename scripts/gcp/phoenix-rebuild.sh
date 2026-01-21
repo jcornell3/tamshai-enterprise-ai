@@ -1074,6 +1074,52 @@ phase_7_cloud_run() {
         fi
     fi
 
+    # Issue #31: Preemptive Artifact Registry import (before terraform apply)
+    # The repository may exist from Phase 5 builds but not be in terraform state
+    log_step "Checking for existing Artifact Registry to import (Issue #31)..."
+    if gcloud artifacts repositories describe tamshai --location="$region" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.cloudrun.google_artifact_registry_repository.tamshai' &>/dev/null 2>&1; then
+            log_info "Importing existing Artifact Registry repository..."
+            terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+                "projects/${project}/locations/${region}/repositories/tamshai" 2>/dev/null || \
+                log_warn "Artifact Registry import failed - may already be in state"
+        else
+            log_info "Artifact Registry already in terraform state"
+        fi
+    else
+        log_info "Artifact Registry does not exist yet - will be created by terraform"
+    fi
+
+    # Issue #35: Wait for SSL certificate BEFORE terraform apply
+    # mcp-gateway startup probes call auth.tamshai.com for JWT validation
+    # If SSL isn't ready, startup probe fails with HTTP 525
+    log_step "Checking SSL certificate status before deploying services (Issue #35)..."
+    if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null 2>&1; then
+        log_info "Domain mapping exists - checking if SSL certificate is deployed..."
+        local ssl_ready=false
+        local max_attempts=30  # 15 minutes max (30 * 30s)
+
+        for attempt in $(seq 1 $max_attempts); do
+            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+                log_success "SSL certificate is deployed and working!"
+                ssl_ready=true
+                break
+            fi
+            if [ $attempt -eq 1 ]; then
+                log_info "SSL certificate not ready yet - waiting (this can take 10-15 minutes)..."
+            fi
+            log_info "  Waiting for SSL certificate... (attempt $attempt/$max_attempts)"
+            sleep 30
+        done
+
+        if [ "$ssl_ready" = false ]; then
+            log_warn "SSL certificate not verified after 15 minutes"
+            log_warn "mcp-gateway may fail startup probes - check GCP console if deploy fails"
+        fi
+    else
+        log_info "Domain mapping does not exist yet - SSL check will happen after terraform apply"
+    fi
+
     log_step "Applying full Terraform configuration..."
 
     # Issue #11 Fix: Handle 409 conflicts from previous interrupted applies

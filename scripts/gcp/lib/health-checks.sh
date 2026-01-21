@@ -404,67 +404,113 @@ check_vpc_connector() {
 
 # Submit a Cloud Build and wait for it to complete
 # Returns 0 if build succeeds, 1 if it fails
+# Issue #34: Added retry logic for transient network failures (ECONNRESET, etc.)
 # Usage: submit_and_wait_build <context_path> <--tag=xxx or --config=xxx>
 submit_and_wait_build() {
     local context_path="$1"
     shift
     local build_args=("$@")
     local timeout="${CLOUD_BUILD_TIMEOUT:-600}"  # 10 minutes default
+    local max_retries="${CLOUD_BUILD_MAX_RETRIES:-3}"
 
-    # Submit build asynchronously
-    local build_output
-    build_output=$(gcloud builds submit "$context_path" "${build_args[@]}" --async --format="value(id)" 2>&1)
-    local submit_exit_code=$?
-
-    # Extract build ID from output
-    local build_id
-    build_id=$(echo "$build_output" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
-
-    if [ -z "$build_id" ]; then
-        log_health_error "Failed to submit build: $build_output"
-        return 1
-    fi
-
-    log_health_info "Build submitted: $build_id"
-
-    # Poll for completion
-    local start_time
-    start_time=$(date +%s)
-    local elapsed=0
-
-    while [ $elapsed -lt "$timeout" ]; do
-        local status
-        status=$(gcloud builds describe "$build_id" --region=global --format="value(status)" 2>/dev/null) || status=""
-
-        case "$status" in
-            SUCCESS)
-                log_health_success "Build $build_id completed successfully"
-                return 0
-                ;;
-            FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED)
-                log_health_error "Build $build_id failed with status: $status"
-                return 1
-                ;;
-            QUEUED|WORKING)
-                # Still running, continue waiting
-                ;;
-            *)
-                log_health_warn "Build $build_id has unknown status: $status"
-                ;;
-        esac
-
-        local current_time
-        current_time=$(date +%s)
-        elapsed=$((current_time - start_time))
-
-        local remaining=$((timeout - elapsed))
-        if [ $((elapsed % 30)) -eq 0 ]; then
-            log_health_info "Build $build_id status: $status (${remaining}s remaining)"
+    for attempt in $(seq 1 "$max_retries"); do
+        if [ "$attempt" -gt 1 ]; then
+            log_health_warn "Retrying build (attempt $attempt/$max_retries)..."
+            sleep 30  # Wait before retry
         fi
-        sleep 5
+
+        # Submit build asynchronously
+        local build_output
+        build_output=$(gcloud builds submit "$context_path" "${build_args[@]}" --async --format="value(id)" 2>&1)
+        local submit_exit_code=$?
+
+        # Extract build ID from output
+        local build_id
+        build_id=$(echo "$build_output" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+
+        if [ -z "$build_id" ]; then
+            log_health_error "Failed to submit build: $build_output"
+            if [ "$attempt" -lt "$max_retries" ]; then
+                continue  # Retry submission
+            fi
+            return 1
+        fi
+
+        log_health_info "Build submitted: $build_id (attempt $attempt/$max_retries)"
+
+        # Poll for completion
+        local start_time
+        start_time=$(date +%s)
+        local elapsed=0
+        local build_failed=false
+        local should_retry=false
+
+        while [ $elapsed -lt "$timeout" ]; do
+            local status
+            status=$(gcloud builds describe "$build_id" --region=global --format="value(status)" 2>/dev/null) || status=""
+
+            case "$status" in
+                SUCCESS)
+                    log_health_success "Build $build_id completed successfully"
+                    return 0
+                    ;;
+                FAILURE|INTERNAL_ERROR|TIMEOUT)
+                    # Issue #34: Check if this is a transient network error
+                    # These errors are retryable: ECONNRESET, network aborted, npm registry issues
+                    local build_logs
+                    build_logs=$(gcloud builds log "$build_id" --region=global 2>/dev/null | tail -100)
+                    if echo "$build_logs" | grep -qE "ECONNRESET|network aborted|ETIMEDOUT|ENOTFOUND|npm error network"; then
+                        log_health_warn "Build $build_id failed with transient network error"
+                        should_retry=true
+                    else
+                        log_health_error "Build $build_id failed with status: $status"
+                    fi
+                    build_failed=true
+                    break
+                    ;;
+                CANCELLED)
+                    log_health_error "Build $build_id was cancelled"
+                    build_failed=true
+                    break
+                    ;;
+                QUEUED|WORKING)
+                    # Still running, continue waiting
+                    ;;
+                *)
+                    log_health_warn "Build $build_id has unknown status: $status"
+                    ;;
+            esac
+
+            local current_time
+            current_time=$(date +%s)
+            elapsed=$((current_time - start_time))
+
+            local remaining=$((timeout - elapsed))
+            if [ $((elapsed % 30)) -eq 0 ]; then
+                log_health_info "Build $build_id status: $status (${remaining}s remaining)"
+            fi
+            sleep 5
+        done
+
+        if [ "$build_failed" = true ]; then
+            if [ "$should_retry" = true ] && [ "$attempt" -lt "$max_retries" ]; then
+                log_health_warn "Transient network error detected - will retry"
+                continue
+            fi
+            return 1
+        fi
+
+        # Timeout
+        if [ $elapsed -ge "$timeout" ]; then
+            log_health_error "Build $build_id timed out after ${timeout}s"
+            if [ "$attempt" -lt "$max_retries" ]; then
+                continue  # Retry on timeout
+            fi
+            return 1
+        fi
     done
 
-    log_health_error "Build $build_id timed out after ${timeout}s"
+    log_health_error "Build failed after $max_retries attempts"
     return 1
 }
 
