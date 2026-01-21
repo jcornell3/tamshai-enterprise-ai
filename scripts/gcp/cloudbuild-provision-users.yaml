@@ -31,9 +31,8 @@ substitutions:
   _ACTION: 'verify-only'  # verify-only, load-hr-data, sync-users, all
   _DRY_RUN: 'false'
   _FORCE_PASSWORD_RESET: 'false'
-  _REGION: ''  # REQUIRED: Pass via --substitutions=_REGION=<value>
-  # Note: _CLOUD_SQL_INSTANCE uses $PROJECT_ID which is auto-populated by Cloud Build
-  _CLOUD_SQL_INSTANCE: '${PROJECT_ID}:${_REGION}:tamshai-prod-postgres'
+  _REGION: 'us-central1'  # Default region, can override via --substitutions
+  # Issue #32 Fix: Cannot use ${_REGION} in substitution defaults - construct in steps instead
   _KEYCLOAK_URL: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth'
   _KEYCLOAK_REALM: 'tamshai-corp'
 
@@ -68,7 +67,8 @@ steps:
         echo "Action:              ${_ACTION}"
         echo "Dry Run:             ${_DRY_RUN}"
         echo "Force Password Reset: ${_FORCE_PASSWORD_RESET}"
-        echo "Cloud SQL Instance:  ${_CLOUD_SQL_INSTANCE}"
+        echo "Region:              ${_REGION}"
+        echo "Cloud SQL Instance:  ${PROJECT_ID}:${_REGION}:tamshai-prod-postgres"
         echo "Keycloak URL:        ${_KEYCLOAK_URL}"
         echo "=============================================="
 
@@ -80,7 +80,8 @@ steps:
     entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD', 'KC_ADMIN_PASSWORD']
     env:
-      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
+      # Issue #32 Fix: Construct CLOUD_SQL_INSTANCE inline (can't use substitution refs in defaults)
+      - 'CLOUD_SQL_INSTANCE=${PROJECT_ID}:${_REGION}:tamshai-prod-postgres'
     args:
       - '-c'
       - |
@@ -150,7 +151,8 @@ steps:
     entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD']
     env:
-      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
+      # Issue #32 Fix: Construct CLOUD_SQL_INSTANCE inline
+      - 'CLOUD_SQL_INSTANCE=${PROJECT_ID}:${_REGION}:tamshai-prod-postgres'
     args:
       - '-c'
       - |
@@ -196,7 +198,8 @@ steps:
     entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD', 'KC_CLIENT_SECRET', 'PROD_USER_PASSWORD']
     env:
-      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
+      # Issue #32 Fix: Construct CLOUD_SQL_INSTANCE inline
+      - 'CLOUD_SQL_INSTANCE=${PROJECT_ID}:${_REGION}:tamshai-prod-postgres'
     args:
       - '-c'
       - |
@@ -268,7 +271,8 @@ steps:
     entrypoint: 'bash'
     secretEnv: ['DB_PASSWORD', 'KC_ADMIN_PASSWORD']
     env:
-      - 'CLOUD_SQL_INSTANCE=${_CLOUD_SQL_INSTANCE}'
+      # Issue #32 Fix: Construct CLOUD_SQL_INSTANCE inline
+      - 'CLOUD_SQL_INSTANCE=${PROJECT_ID}:${_REGION}:tamshai-prod-postgres'
     args:
       - '-c'
       - |
