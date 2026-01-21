@@ -39,6 +39,23 @@ DEFAULT_INTERVAL=10
 GCP_REGION="${GCP_REGION}"
 
 # Cloud Run services to check
+# Issue #28: MCP suite services require authentication (only accessible via mcp-gateway)
+# Split into public (can health-check directly) and authenticated (check via gcloud)
+CLOUD_RUN_SERVICES_PUBLIC=(
+    "mcp-gateway"
+    "keycloak"
+    "web-portal"
+)
+
+# Authenticated services - skip direct health check, verify via gcloud status
+CLOUD_RUN_SERVICES_AUTHENTICATED=(
+    "mcp-hr"
+    "mcp-finance"
+    "mcp-sales"
+    "mcp-support"
+)
+
+# All services for reference
 CLOUD_RUN_SERVICES=(
     "mcp-gateway"
     "mcp-hr"
@@ -198,16 +215,25 @@ wait_for_cloudsql() {
 }
 
 # Wait for all MCP services to be healthy
+# Issue #28: MCP suite services require authentication, check via gcloud status
 wait_for_mcp_suite() {
     local timeout="${1:-$DEFAULT_TIMEOUT}"
 
-    log_health_info "Waiting for MCP suite services..."
+    log_health_info "Waiting for MCP suite services (auth-protected)..."
 
-    local mcp_services=("mcp-hr" "mcp-finance" "mcp-sales" "mcp-support")
     local failed=0
 
-    for service in "${mcp_services[@]}"; do
-        if ! wait_for_service "$service" "$timeout" "/health"; then
+    for service in "${CLOUD_RUN_SERVICES_AUTHENTICATED[@]}"; do
+        log_health_info "Checking $service via gcloud..."
+        local status
+        status=$(gcloud run services describe "$service" \
+            --region="${GCP_REGION}" \
+            --format="value(status.conditions[0].status)" 2>/dev/null) || status=""
+
+        if [ "$status" = "True" ]; then
+            log_health_success "  $service: Ready"
+        else
+            log_health_error "  $service: Not Ready (status: ${status:-unknown})"
             failed=$((failed + 1))
         fi
     done
@@ -222,6 +248,7 @@ wait_for_mcp_suite() {
 }
 
 # Wait for all Cloud Run services
+# Issue #28: Split into public (HTTP check) and authenticated (gcloud status check)
 wait_for_all_services() {
     local timeout="${1:-$DEFAULT_TIMEOUT}"
 
@@ -229,7 +256,8 @@ wait_for_all_services() {
 
     local failed=0
 
-    for service in "${CLOUD_RUN_SERVICES[@]}"; do
+    # Check public services via HTTP
+    for service in "${CLOUD_RUN_SERVICES_PUBLIC[@]}"; do
         local endpoint="/health"
 
         # Special handling for Keycloak
@@ -246,6 +274,23 @@ wait_for_all_services() {
         fi
 
         if ! wait_for_service "$service" "$timeout" "$endpoint"; then
+            failed=$((failed + 1))
+        fi
+    done
+
+    # Check authenticated services via gcloud (can't HTTP health-check them)
+    # These require authentication, so we just verify they're Ready via gcloud
+    for service in "${CLOUD_RUN_SERVICES_AUTHENTICATED[@]}"; do
+        log_health_info "Checking $service via gcloud (requires auth)..."
+        local status
+        status=$(gcloud run services describe "$service" \
+            --region="${GCP_REGION}" \
+            --format="value(status.conditions[0].status)" 2>/dev/null) || status=""
+
+        if [ "$status" = "True" ]; then
+            log_health_success "  $service: Ready (auth-protected)"
+        else
+            log_health_error "  $service: Not Ready (status: ${status:-unknown})"
             failed=$((failed + 1))
         fi
     done

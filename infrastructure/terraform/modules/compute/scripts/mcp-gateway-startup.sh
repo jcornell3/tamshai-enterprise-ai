@@ -1,6 +1,7 @@
 #!/bin/bash
 # MCP Gateway Startup Script
 # Fetches secrets from Secret Manager and starts MCP Gateway container
+# Issue #27: Also runs Redis for Cloud Run services to connect to
 
 set -e
 
@@ -9,6 +10,16 @@ apt-get update
 apt-get install -y docker.io jq
 systemctl enable docker
 systemctl start docker
+
+# Issue #27: Start Redis for Cloud Run mcp-gateway to connect to
+# This provides token revocation cache for the Cloud Run services
+docker run -d \
+  --name redis \
+  --restart unless-stopped \
+  -p 6379:6379 \
+  redis:7-alpine redis-server --appendonly yes
+
+echo "Redis started on port 6379"
 
 # Fetch secrets from Secret Manager at runtime
 ANTHROPIC_API_KEY=$(gcloud secrets versions access latest \

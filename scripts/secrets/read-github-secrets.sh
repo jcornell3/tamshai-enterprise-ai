@@ -11,6 +11,7 @@
 #
 # Options:
 #   --e2e             Get E2E test secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET)
+#   --phoenix         Get Phoenix rebuild secrets (TEST_USER_TOTP_SECRET_RAW)
 #   --keycloak        Get Keycloak admin password
 #   --user-passwords  Get user passwords (DEV/STAGE/PROD_USER_PASSWORD)
 #   --all             Get all available secrets
@@ -42,6 +43,7 @@ OUTPUT_FORMAT="text"
 while [ $# -gt 0 ]; do
     case "$1" in
         --e2e) SECRET_TYPE="e2e"; shift ;;
+        --phoenix) SECRET_TYPE="phoenix"; shift ;;
         --keycloak) SECRET_TYPE="keycloak"; shift ;;
         --user-passwords) SECRET_TYPE="user-passwords"; shift ;;
         --all) SECRET_TYPE="all"; shift ;;

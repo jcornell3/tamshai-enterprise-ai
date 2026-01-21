@@ -780,6 +780,24 @@ EOF
         log_error "No Dockerfile found for keycloak"
     fi
 
+    # Issue #26: provision-job - must be built from repo root (needs services/mcp-hr and sample-data)
+    log_info "Building provision-job (from repo root with explicit Dockerfile path)..."
+    if [ -f "$PROJECT_ROOT/scripts/gcp/provision-job/Dockerfile" ]; then
+        local provision_config="/tmp/provision-cloudbuild-$$.yaml"
+        cat > "$provision_config" <<EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${registry}/provision-job:latest', '-f', 'scripts/gcp/provision-job/Dockerfile', '.']
+images:
+  - '${registry}/provision-job:latest'
+EOF
+        submit_and_wait_build "$PROJECT_ROOT" \
+            "--config=$provision_config" || log_warn "provision-job build failed"
+        rm -f "$provision_config"
+    else
+        log_warn "No Dockerfile found for provision-job"
+    fi
+
     # Gap #46: web-portal - must be built from repo root with -f flag
     # Issue #21: Process substitution <() doesn't work on Windows/Git Bash
     log_info "Building web-portal (from repo root with explicit Dockerfile path)..."
@@ -803,7 +821,7 @@ EOF
 
     # Verify all images were built
     log_step "Verifying images in Artifact Registry..."
-    local all_images=("mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support" "keycloak" "web-portal")
+    local all_images=("mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support" "keycloak" "provision-job" "web-portal")
     local missing=0
     for img in "${all_images[@]}"; do
         if gcloud artifacts docker images describe "${registry}/${img}:latest" &>/dev/null 2>&1 || \
@@ -1207,13 +1225,30 @@ phase_9_totp() {
         exit 1
     }
 
-    # Get TOTP secret
+    # Get TOTP secret - priority: env var > GitHub Secrets
+    # Gap #60: Fetch from GitHub Secrets for single source of truth
     local totp_secret="${TEST_USER_TOTP_SECRET_RAW:-}"
 
     if [ -z "$totp_secret" ]; then
-        # Try to get from GCP secrets (if stored there)
-        log_warn "TEST_USER_TOTP_SECRET_RAW not set - using default"
-        totp_secret="JBSWY3DPEHPK3PXP"
+        log_info "TEST_USER_TOTP_SECRET_RAW not set, fetching from GitHub Secrets..."
+        if command -v gh &> /dev/null; then
+            # Use gh CLI to fetch secret via workflow (--phoenix exports TEST_USER_TOTP_SECRET_RAW)
+            local secrets_output
+            secrets_output=$("$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh" --phoenix 2>&1) || secrets_output=""
+            totp_secret=$(echo "$secrets_output" | grep "^TEST_USER_TOTP_SECRET_RAW=" | cut -d'=' -f2) || totp_secret=""
+
+            if [ -n "$totp_secret" ]; then
+                log_success "Fetched TEST_USER_TOTP_SECRET_RAW from GitHub Secrets"
+            else
+                log_error "Could not fetch TEST_USER_TOTP_SECRET_RAW from GitHub Secrets"
+                log_error "Set TEST_USER_TOTP_SECRET_RAW env var or ensure GitHub Secret exists"
+                exit 1
+            fi
+        else
+            log_error "gh CLI not available and TEST_USER_TOTP_SECRET_RAW not set"
+            log_error "Install gh CLI or set TEST_USER_TOTP_SECRET_RAW env var"
+            exit 1
+        fi
     fi
 
     # Run with AUTO_CONFIRM for non-interactive mode
