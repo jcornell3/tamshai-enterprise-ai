@@ -11,19 +11,19 @@
 # Arguments:
 #   environment   - dev, stage, or prod
 #   username      - Keycloak username (e.g., test-user.journey)
-#   totp_secret   - Base32-encoded TOTP secret (default: JBSWY3DPEHPK3PXP)
+#   totp_secret   - RAW TOTP secret (NOT Base32-encoded) - required
 #
 # Environment Variables:
 #   KEYCLOAK_ADMIN_PASSWORD  - Keycloak admin password (or will prompt)
 #   AUTO_CONFIRM=true        - Skip interactive confirmations (for automation/CI)
 #
-# Examples:
-#   ./set-user-totp.sh prod test-user.journey
-#   ./set-user-totp.sh prod test-user.journey JBSWY3DPEHPK3PXP
-#   ./set-user-totp.sh stage alice.chen NEWBASE32SECRET
+# IMPORTANT: Keycloak stores TOTP secrets in RAW format, not BASE32.
+#   - Pass TEST_USER_TOTP_SECRET_RAW (from GitHub Secrets) to this script
+#   - E2E tests use TEST_USER_TOTP_SECRET (BASE32-encoded) with oathtool
 #
-#   # Non-interactive mode (for Phoenix rebuild scripts)
-#   AUTO_CONFIRM=true KEYCLOAK_ADMIN_PASSWORD=xxx ./set-user-totp.sh prod test-user.journey
+# Examples:
+#   # Phoenix rebuild (fetches RAW secret from GitHub Secrets)
+#   AUTO_CONFIRM=true ./set-user-totp.sh prod test-user.journey "$TEST_USER_TOTP_SECRET_RAW"
 #
 # Requirements:
 #   - KEYCLOAK_ADMIN_PASSWORD environment variable (or will prompt if not in AUTO_CONFIRM mode)
@@ -42,8 +42,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default TOTP secret (matches E2E test expectations)
-DEFAULT_TOTP_SECRET="JBSWY3DPEHPK3PXP"
+# No default TOTP secret - must be provided as argument
 
 # Logging functions
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
@@ -53,27 +52,26 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Show usage
 usage() {
-    echo "Usage: $0 <environment> <username> [totp_secret]"
+    echo "Usage: $0 <environment> <username> <totp_secret>"
     echo ""
     echo "Arguments:"
     echo "  environment   - dev, stage, or prod"
     echo "  username      - Keycloak username (e.g., test-user.journey)"
-    echo "  totp_secret   - Base32-encoded TOTP secret (default: $DEFAULT_TOTP_SECRET)"
+    echo "  totp_secret   - RAW TOTP secret (required, from TEST_USER_TOTP_SECRET_RAW)"
     echo ""
-    echo "Examples:"
-    echo "  $0 prod test-user.journey"
-    echo "  $0 stage alice.chen NEWBASE32SECRET"
+    echo "Example:"
+    echo "  $0 prod test-user.journey \"\$TEST_USER_TOTP_SECRET_RAW\""
     exit 1
 }
 
-# Parse arguments
-if [[ $# -lt 2 ]]; then
+# Parse arguments - all 3 are required
+if [[ $# -lt 3 ]]; then
     usage
 fi
 
 ENV="$1"
 USERNAME="$2"
-TOTP_SECRET="${3:-$DEFAULT_TOTP_SECRET}"
+TOTP_SECRET="$3"
 
 # Configuration based on environment
 case "$ENV" in
@@ -345,20 +343,8 @@ verify_otp_credential() {
     fi
 }
 
-# Generate a test TOTP code for verification
-show_test_code() {
-    log_info "Generating test TOTP code..."
-
-    if command -v oathtool &> /dev/null; then
-        TOTP_CODE=$(oathtool --totp --base32 "$TOTP_SECRET" 2>/dev/null || echo "N/A")
-        echo ""
-        log_success "Current TOTP code: $TOTP_CODE"
-        echo "  (Valid for ~30 seconds)"
-    else
-        log_warn "oathtool not installed - cannot generate test code"
-        echo "  Install with: apt-get install oathtool (Linux) or brew install oath-toolkit (macOS)"
-    fi
-}
+# Note: TOTP code generation removed - E2E tests handle verification
+# This script only provisions the RAW secret in Keycloak
 
 # Main execution
 main() {
@@ -398,20 +384,14 @@ main() {
     verify_otp_credential
 
     echo ""
-    show_test_code
-
-    echo ""
     log_success "=============================================="
     log_success "  TOTP Configuration Complete!"
     log_success "=============================================="
     echo ""
-    echo "User '$USERNAME' now has TOTP configured with secret: ${TOTP_SECRET:0:4}****"
+    echo "User '$USERNAME' now has TOTP configured with RAW secret."
     echo ""
-    echo "To test login:"
-    echo "  1. Go to the application login page"
-    echo "  2. Enter username: $USERNAME"
-    echo "  3. Enter password (if prompted)"
-    echo "  4. Generate TOTP code: oathtool --totp --base32 $TOTP_SECRET"
+    echo "Note: E2E tests use the BASE32-encoded version of this secret"
+    echo "      (TEST_USER_TOTP_SECRET from GitHub Secrets)"
     echo ""
 }
 
