@@ -1,6 +1,6 @@
 # Project Journey Agent - Implementation Plan
 
-**Version**: 1.2.0
+**Version**: 1.3.0
 **Created**: January 21, 2026
 **Updated**: January 21, 2026
 **Author**: Tamshai-Dev
@@ -206,6 +206,69 @@ Add machine-readable metadata to key documents:
 ### Phase 2: MCP Journey Server (Week 3-4)
 
 **Goal**: Build the MCP server that exposes project knowledge.
+
+**Implementation Strategy**: Test-Driven Development (TDD)
+
+> **IMPORTANT**: Phase 2 follows our established TDD methodology (see ADR-007). QA Lead will create the detailed TDD plan with Red/Green phases.
+
+#### 2.0 TDD Implementation Approach
+
+This MCP server will be built using strict TDD methodology:
+
+| Phase | Owner | Description |
+|-------|-------|-------------|
+| **RED Phase** | QA Lead | Write failing tests that define expected behavior for all tools, resources, and indexer components |
+| **GREEN Phase** | Dev Lead | Implement minimum code to make tests pass |
+| **REFACTOR Phase** | Dev + QA | Improve code quality while keeping tests green |
+
+**TDD Plan Location**: `docs/plans/MCP_JOURNEY_TDD_PLAN.md` (to be created by QA)
+
+**Coverage Requirements**:
+- 90% diff coverage on all new code (per ADR-007)
+- Unit tests for all indexer components
+- Unit tests for all MCP tools
+- Unit tests for all MCP resource handlers
+- Integration tests for SQLite knowledge index
+- Integration tests for Gemini embedding generation (mocked)
+
+**Test File Structure**:
+```
+services/mcp-journey/
+├── src/
+│   └── ... (implementation)
+├── tests/
+│   ├── unit/
+│   │   ├── tools/
+│   │   │   ├── query-failures.test.ts
+│   │   │   ├── lookup-adr.test.ts
+│   │   │   ├── search-journey.test.ts
+│   │   │   ├── get-context.test.ts
+│   │   │   └── list-pivots.test.ts
+│   │   ├── resources/
+│   │   │   ├── failures.test.ts
+│   │   │   ├── decisions.test.ts
+│   │   │   └── evolution.test.ts
+│   │   ├── indexer/
+│   │   │   ├── markdown-parser.test.ts
+│   │   │   ├── json-ld-extractor.test.ts
+│   │   │   ├── embedding-generator.test.ts
+│   │   │   └── index-builder.test.ts
+│   │   └── middleware/
+│   │       ├── agent-identity.test.ts
+│   │       └── rate-limit.test.ts
+│   └── integration/
+│       ├── knowledge-index.test.ts
+│       └── mcp-server.test.ts
+└── vitest.config.ts
+```
+
+**Scaffolding Completed**:
+- `package.json` - Dependencies and scripts defined
+- `tsconfig.json` - TypeScript configuration
+
+**Next Step**: QA Lead creates `MCP_JOURNEY_TDD_PLAN.md` with detailed RED phase test specifications.
+
+---
 
 #### 2.1 Service Structure
 
@@ -1492,21 +1555,37 @@ RATE_LIMIT_DAILY=1000
 ### Implementation Order
 
 1. ~~**Approve Plan**~~: ✅ Complete
-2. **Create ADRs** (Phase 1): Document key architectural decisions with JSON-LD headers
-   - Priority: Desktop client migration (Electron → React Native → Flutter)
-   - Priority: Phoenix rebuild evolution
-3. **Scaffold Service** (Phase 2): Create `services/mcp-journey/` directory structure
-4. **Build Indexer** (Phase 2): Implement markdown parser and Gemini embedding generator
-5. **Implement Tools + Resources** (Phase 2): Build 5 MCP tools and 5 resource templates
-6. **Deploy to Dev** (Phase 2): Test in local development environment
-7. **Setup Portal + Discovery** (Phase 3): Create agent-setup portal and well-known manifest
-8. **Security Implementation** (Phase 4): Visual checksum, schema validation, injection defense
-9. **Deploy to Stage** (Phase 3-4): Deploy to www.tamshai.com for external access
+2. ~~**Create ADRs** (Phase 1)~~: ✅ Complete - 12 ADRs created with JSON-LD headers
+   - ADR-001: Desktop client migration (Electron → React Native → Flutter)
+   - ADR-002: Phoenix rebuild evolution
+   - ADR-003 through ADR-012: Additional architectural decisions
+3. ~~**Scaffold Service** (Phase 2)~~: ✅ Complete - `package.json` and `tsconfig.json` created
+4. **TDD Plan Creation** (Phase 2): 🔄 **IN PROGRESS - Awaiting QA**
+   - QA Lead creates `docs/plans/MCP_JOURNEY_TDD_PLAN.md`
+   - Define RED phase test specifications for all components
+   - Define expected behaviors, inputs, outputs for each tool/resource
+5. **RED Phase** (Phase 2): QA writes failing tests
+   - Unit tests for indexer components
+   - Unit tests for MCP tools
+   - Unit tests for MCP resources
+   - Integration test specifications
+6. **GREEN Phase** (Phase 2): Dev implements to pass tests
+   - Build Indexer: markdown parser, JSON-LD extractor, Gemini embeddings
+   - Implement Tools: query_failures, lookup_adr, search_journey, get_context, list_pivots
+   - Implement Resources: failures, decisions, evolution, lessons, phoenix
+7. **REFACTOR Phase** (Phase 2): Code quality improvements
+   - Achieve 90% diff coverage
+   - Type coverage verification
+8. **Deploy to Dev** (Phase 2): Test in local development environment
+9. **Setup Portal + Discovery** (Phase 3): Create agent-setup portal and well-known manifest
+10. **Security Implementation** (Phase 4): Visual checksum, schema validation, injection defense
+11. **Deploy to Stage** (Phase 3-4): Deploy to www.tamshai.com for external access
 
 ---
 
 ## Related Documentation
 
+- [ADR-007: Test Coverage Strategy - TDD with Diff Coverage](../adr/ADR-007-test-coverage-tdd-diff-strategy.md)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
 - [Agent Protocol Specification](https://agentprotocol.ai/)
 - [ADR Template](https://adr.github.io/)
