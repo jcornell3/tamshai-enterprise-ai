@@ -102,9 +102,12 @@ if ! gcloud services list --enabled --filter="name:cloudbuild.googleapis.com" --
 fi
 
 # Build substitutions
+# Issue #32: Include _REGION in substitutions (required by cloudbuild-provision-users.yaml)
+REGION="${GCP_REGION:-us-central1}"
 SUBSTITUTIONS="_ACTION=${ACTION}"
 SUBSTITUTIONS="${SUBSTITUTIONS},_DRY_RUN=${DRY_RUN}"
 SUBSTITUTIONS="${SUBSTITUTIONS},_FORCE_PASSWORD_RESET=${FORCE_PASSWORD_RESET}"
+SUBSTITUTIONS="${SUBSTITUTIONS},_REGION=${REGION}"
 
 echo -e "${GREEN}[INFO] Triggering Cloud Build...${NC}"
 echo ""
