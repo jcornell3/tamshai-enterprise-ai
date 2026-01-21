@@ -1011,6 +1011,150 @@ submit_and_wait_build ... || log_warn "Build failed"
 
 ---
 
+---
+
+### Gap #60: TEST_USER_TOTP_SECRET_RAW Not Fetched from GitHub Secrets
+
+**Symptom**: E2E tests fail with "Invalid authenticator code" after Phoenix rebuild, even though TOTP was configured.
+
+**Root Cause**: Phase 9 (Configure TOTP) had a comment saying "Try to get from GCP secrets" but **no code** to actually fetch the secret. Instead, it used a hardcoded default `JBSWY3DPEHPK3PXP` which doesn't match the E2E test's `TEST_USER_TOTP_SECRET`.
+
+**Code Analysis** (before fix):
+```bash
+# In phoenix-rebuild.sh Phase 9:
+# Get TOTP secret - priority: env var > GCP Secret Manager > default
+local totp_secret="${TEST_USER_TOTP_SECRET_RAW:-}"
+
+if [ -z "$totp_secret" ]; then
+    # Try to get from GCP secrets
+    totp_secret=$(gcloud secrets versions access latest --secret=...) 2>/dev/null || true
+fi
+
+if [ -z "$totp_secret" ]; then
+    log_warn "TEST_USER_TOTP_SECRET_RAW not set - using default"
+    totp_secret="JBSWY3DPEHPK3PXP"  # <-- HARDCODED DEFAULT - WRONG!
+fi
+```
+
+**The Problem**:
+1. `TEST_USER_TOTP_SECRET_RAW` not passed to script
+2. GCP secret `test-user-totp-secret-raw` doesn't exist
+3. Script falls back to hardcoded default
+4. Keycloak configured with wrong TOTP secret
+5. E2E tests fail because they use `TEST_USER_TOTP_SECRET` (BASE32) which doesn't match
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh` and related):
+
+1. Added `--phoenix` option to `export-test-secrets.yml` workflow to export `TEST_USER_TOTP_SECRET_RAW`
+2. Added `--phoenix` flag support to `read-github-secrets.sh`
+3. Updated Phase 9 to fetch from GitHub Secrets (NOT GCP Secret Manager):
+
+```bash
+# Gap #60: Fetch from GitHub Secrets for single source of truth
+local totp_secret="${TEST_USER_TOTP_SECRET_RAW:-}"
+
+if [ -z "$totp_secret" ]; then
+    log_info "TEST_USER_TOTP_SECRET_RAW not set, fetching from GitHub Secrets..."
+    if command -v gh &> /dev/null; then
+        local secrets_output
+        secrets_output=$("$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh" --phoenix 2>&1)
+        totp_secret=$(echo "$secrets_output" | grep "^TEST_USER_TOTP_SECRET_RAW=" | cut -d'=' -f2)
+
+        if [ -n "$totp_secret" ]; then
+            log_success "Fetched TEST_USER_TOTP_SECRET_RAW from GitHub Secrets"
+        else
+            log_error "Could not fetch TEST_USER_TOTP_SECRET_RAW from GitHub Secrets"
+            exit 1  # <-- NO MORE HARDCODED DEFAULTS!
+        fi
+    else
+        log_error "gh CLI not available and TEST_USER_TOTP_SECRET_RAW not set"
+        exit 1
+    fi
+fi
+```
+
+4. Removed hardcoded defaults from `keycloak/scripts/set-user-totp.sh`:
+   - Made `totp_secret` a required argument (no default)
+   - Script fails if secret not provided
+   - Removed `oathtool` verification (E2E tests handle that)
+
+**Key Insight**:
+- `TEST_USER_TOTP_SECRET_RAW` = RAW secret for Keycloak (`x6aQiJjmcl75ip0BdVHe`)
+- `TEST_USER_TOTP_SECRET` = BASE32-encoded for E2E tests (`PA3GCULJJJVG2Y3MG42WS4BQIJSFMSDF`)
+- GitHub Secrets is the single source of truth
+
+---
+
+### Gap #61: Interactive Confirmations Block Automated Phoenix Runs
+
+**Symptom**: When running Phoenix rebuild, the script pauses multiple times waiting for user confirmation, requiring manual intervention or `echo "PHOENIX" |` piping.
+
+**Root Cause**: The script has two interactive confirmation points:
+
+1. **Main confirmation** (lines 1351-1366) - Requires typing "PHOENIX":
+   ```bash
+   echo "Type 'PHOENIX' to confirm: "
+   read -r confirmation
+   ```
+
+2. **Phase 3 warning** (lines 494-501) - 10-second sleep before destroy:
+   ```bash
+   echo "Press Ctrl+C to abort, or wait 10 seconds to continue..."
+   sleep 10
+   ```
+
+**Fix Applied** (`scripts/gcp/phoenix-rebuild.sh`):
+
+1. Added `--yes` / `-y` flag to skip all interactive confirmations:
+   ```bash
+   AUTO_YES=false  # Gap #61: Skip interactive confirmations for automated runs
+
+   while [ $# -gt 0 ]; do
+       case "$1" in
+           --yes|-y) AUTO_YES=true; shift ;;  # Gap #61
+           # ...
+       esac
+   done
+   ```
+
+2. Updated main confirmation to respect flag:
+   ```bash
+   if [ "$DRY_RUN" = false ] && [ "$START_PHASE" -le 3 ]; then
+       if [ "$AUTO_YES" = true ]; then
+           log_warn "AUTO_YES=true - skipping interactive confirmation"
+           log_warn "This will DESTROY and rebuild production!"
+       else
+           echo "Type 'PHOENIX' to confirm: "
+           read -r confirmation
+           # ...
+       fi
+   fi
+   ```
+
+3. Updated Phase 3 sleep to respect flag:
+   ```bash
+   if [ "$AUTO_YES" = true ]; then
+       log_warn "AUTO_YES=true - skipping 10-second warning delay"
+   else
+       echo "Press Ctrl+C to abort, or wait 10 seconds to continue..."
+       sleep 10
+   fi
+   ```
+
+**Usage**:
+```bash
+# Interactive (with confirmations):
+./phoenix-rebuild.sh
+
+# Automated (skip confirmations):
+./phoenix-rebuild.sh --yes
+
+# Or short form:
+./phoenix-rebuild.sh -y
+```
+
+---
+
 ## Expected v8 Manual Actions: 0
 
 All issues discovered in v7 and v8 pre-rebuild have been fixed:
@@ -1029,3 +1173,5 @@ All issues discovered in v7 and v8 pre-rebuild have been fixed:
 - Issue #23: Provision job uses correct artifact registry name (`tamshai` not `tamshai-prod`)
 - Issue #24: Artifact registry created via gcloud before terraform to avoid chicken-and-egg dependency
 - Issue #25: Cloud Build uses async submit + status polling to handle VPC-SC log streaming errors
+- Gap #60: TOTP secret fetched from GitHub Secrets (no hardcoded defaults)
+- Gap #61: `--yes` flag allows fully automated Phoenix runs without confirmations

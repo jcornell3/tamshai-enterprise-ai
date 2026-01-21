@@ -60,6 +60,7 @@ SKIP_DESTROY=false
 RESUME_MODE=false
 START_PHASE=1
 DRY_RUN=false
+AUTO_YES=false  # Gap #61: Skip interactive confirmations for automated runs
 
 # Parse arguments
 while [ $# -gt 0 ]; do
@@ -70,6 +71,7 @@ while [ $# -gt 0 ]; do
         --phase) START_PHASE="$2"; shift 2 ;;
         --phase=*) START_PHASE="${1#*=}"; shift ;;  # Issue #22: Support --phase=N syntax
         --dry-run) DRY_RUN=true; shift ;;
+        --yes|-y) AUTO_YES=true; shift ;;  # Gap #61: Skip interactive confirmations
         -h|--help) show_help; exit 0 ;;
         *) shift ;;
     esac
@@ -103,6 +105,7 @@ Options:
   --resume           Resume from last checkpoint
   --phase N          Start from specific phase (1-10)
   --dry-run          Show what would be done without executing
+  --yes, -y          Skip interactive confirmations (for automated runs)
   -h, --help         Show this help message
 
 Phases:
@@ -489,8 +492,13 @@ phase_3_destroy() {
     log_step "Running terraform destroy..."
     echo ""
     echo -e "${YELLOW}WARNING: This will DESTROY all GCP infrastructure!${NC}"
-    echo "Press Ctrl+C to abort, or wait 10 seconds to continue..."
-    sleep 10
+    # Gap #61: Skip wait if --yes flag is set (for automated runs)
+    if [ "$AUTO_YES" = true ]; then
+        log_warn "AUTO_YES=true - skipping 10-second warning delay"
+    else
+        echo "Press Ctrl+C to abort, or wait 10 seconds to continue..."
+        sleep 10
+    fi
 
     terraform destroy -auto-approve || {
         log_warn "Terraform destroy had errors - attempting cleanup..."
@@ -1346,14 +1354,20 @@ main() {
     fi
 
     # Confirm before proceeding
+    # Gap #61: Skip confirmation if --yes flag is set (for automated runs)
     if [ "$DRY_RUN" = false ] && [ "$START_PHASE" -le 3 ]; then
-        echo -e "${RED}WARNING: This will DESTROY and rebuild production!${NC}"
-        echo "Type 'PHOENIX' to confirm: "
-        read -r confirmation
+        if [ "$AUTO_YES" = true ]; then
+            log_warn "AUTO_YES=true - skipping interactive confirmation"
+            log_warn "This will DESTROY and rebuild production!"
+        else
+            echo -e "${RED}WARNING: This will DESTROY and rebuild production!${NC}"
+            echo "Type 'PHOENIX' to confirm: "
+            read -r confirmation
 
-        if [ "$confirmation" != "PHOENIX" ]; then
-            echo "Aborted."
-            exit 0
+            if [ "$confirmation" != "PHOENIX" ]; then
+                echo "Aborted."
+                exit 0
+            fi
         fi
     fi
 
