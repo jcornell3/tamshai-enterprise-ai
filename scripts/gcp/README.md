@@ -44,9 +44,25 @@ gcloud auth activate-service-account --key-file=path/to/key.json
 
 | Script | Purpose |
 |--------|---------|
+| `phoenix-rebuild.sh` | **Full Phoenix rebuild automation (10 phases)** |
 | `gcp-infra-deploy.sh` | Deploy GCP infrastructure via Terraform |
 | `gcp-infra-teardown.sh` | Tear down GCP infrastructure |
 | `enable-apis.sh` | Enable required GCP APIs |
+
+### Phoenix Rebuild (Recommended)
+
+```bash
+# Full automated Phoenix rebuild (75-100 minutes)
+./scripts/gcp/phoenix-rebuild.sh --yes
+
+# Dry run (preview only)
+./scripts/gcp/phoenix-rebuild.sh --dry-run
+
+# Resume from specific phase
+./scripts/gcp/phoenix-rebuild.sh --yes --phase=5
+```
+
+See [PHOENIX_RUNBOOK.md](../../docs/operations/PHOENIX_RUNBOOK.md) for detailed phase documentation.
 
 ### Sample Data
 
@@ -492,20 +508,55 @@ gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=pr
 
 The **Phoenix Rebuild** is a complete environment teardown and rebuild from scratch. This process ensures all environments can be recreated from Terraform + GitHub Actions without manual intervention.
 
-### Phoenix Rebuild Sequence
+### Automated Phoenix Rebuild (Recommended)
+
+```bash
+# Full automated rebuild - handles all 10 phases
+./scripts/gcp/phoenix-rebuild.sh --yes
+
+# Typical duration: 75-100 minutes (varies based on SSL provisioning time)
+```
+
+### Phoenix Rebuild Sequence (10 Phases)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                       PHOENIX REBUILD SEQUENCE                          │
+│                    GCP PROD PHOENIX REBUILD SEQUENCE                    │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  1. terraform destroy + apply    │ Recreate GCP infrastructure          │
-│  2. deploy-to-gcp.yml            │ Deploy all Cloud Run services        │
-│  3. provision-prod-users.yml     │ Load HR data, sync users to Keycloak │
-│  4. provision-prod-data.yml      │ Load Finance, Sales, Support data    │
+│  Phase 1-2: Pre-flight + Secrets │ Validate tools, sync GCP secrets     │
+│  Phase 3: Pre-destroy cleanup    │ Delete services, unlock state        │
+│  Phase 4: Terraform destroy+apply│ Destroy and recreate infrastructure  │
+│  Phase 5: Build container images │ Build all 8 container images         │
+│  Phase 6: Regenerate SA key      │ Create new CICD service account key  │
+│  Phase 7: Terraform Cloud Run    │ Staged: Keycloak → SSL wait → Gateway│
+│  Phase 8: Deploy via GHA         │ Deploy all Cloud Run services        │
+│  Phase 9: Configure TOTP         │ Set test-user.journey credentials    │
+│  Phase 10: Provision & Verify    │ provision-users + E2E tests          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Step-by-Step Phoenix Rebuild
+**Typical Durations** (from v11 rebuild):
+- Phases 1-2: ~2 min
+- Phase 3: ~5 min (includes state lock cleanup)
+- Phase 4: ~20 min (Cloud SQL creation ~13 min)
+- Phase 5: ~12 min (8 images)
+- Phase 6: ~1 min
+- Phase 7: ~20 min (SSL wait ~17 min on fresh rebuild)
+- Phase 8: ~8 min
+- Phase 9: ~2 min
+- Phase 10: ~7 min
+
+### Key Fixes in phoenix-rebuild.sh
+
+| Issue | Problem | Fix |
+|-------|---------|-----|
+| #32 | provision-users `_REGION` substitution error | Inline CLOUD_SQL_INSTANCE construction in Cloud Build |
+| #36 | Terraform state lock deadlock | Check GCS lock file directly (not `terraform plan`) |
+| #37 | mcp-gateway SSL startup failure | Staged Phase 7: deploy Keycloak → wait SSL → deploy gateway |
+
+### Manual Phoenix Rebuild (Fallback)
+
+Only use this if the automated script fails:
 
 ```bash
 # 1. Destroy and recreate infrastructure
@@ -527,6 +578,12 @@ gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
 # 5. Load Finance, Sales, Support sample data
 gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
 ```
+
+### Related Documentation
+
+- [PHOENIX_RUNBOOK.md](../../docs/operations/PHOENIX_RUNBOOK.md) - Detailed step-by-step runbook
+- [PHOENIX_RECOVERY.md](../../docs/operations/PHOENIX_RECOVERY.md) - Disaster recovery procedures
+- [PHOENIX_MANUAL_ACTIONSv11.md](../../docs/operations/PHOENIX_MANUAL_ACTIONSv11.md) - Latest rebuild log
 
 ### provision-prod-data.yml Workflow
 
@@ -598,7 +655,15 @@ mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_support').tickets.countD
 
 ## See Also
 
+### Phoenix Rebuild Documentation
+- [PHOENIX_RUNBOOK.md](../../docs/operations/PHOENIX_RUNBOOK.md) - Detailed step-by-step runbook with checkpoints
+- [PHOENIX_RECOVERY.md](../../docs/operations/PHOENIX_RECOVERY.md) - Disaster recovery procedures (13 scenarios)
+- [PHOENIX_MANUAL_ACTIONSv11.md](../../docs/operations/PHOENIX_MANUAL_ACTIONSv11.md) - Latest rebuild log (0 manual actions)
+
+### Other Documentation
 - [GCP Production Phase 1 Plan](../../docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md)
 - [Production Testing Methodology](../../docs/testing/PROD_TESTING_METHODOLOGY.md)
 - [403 Remediation Plan](../../docs/troubleshooting/PROD_403_REMEDIATION_PLAN.md)
 - [Identity Sync Operations](../../docs/operations/IDENTITY_SYNC.md)
+- [E2E Test Procedures](../../docs/testing/E2E_USER_TESTS.md)
+- [Test User Journey](../../docs/testing/TEST_USER_JOURNEY.md)

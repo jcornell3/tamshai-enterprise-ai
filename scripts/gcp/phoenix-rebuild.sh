@@ -319,13 +319,20 @@ phase_3_destroy() {
     # =============================================================================
 
     # Handle terraform state lock (common issue after interrupted operations)
+    # Issue #36 Fix: Check GCS directly for lock file (avoids creating new locks)
     log_step "Checking for stale terraform state locks..."
-    # Force unlock any stale locks - safe because we're about to destroy everything
-    local lock_id
-    lock_id=$(terraform plan -no-color 2>&1 | grep -oP 'ID:\s*\K\d+' | head -1) || true
-    if [ -n "$lock_id" ]; then
-        log_warn "Found stale lock ID: $lock_id - force unlocking..."
-        terraform force-unlock -force "$lock_id" 2>/dev/null || true
+    local LOCK_FILE="gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock"
+    if gcloud storage cat "$LOCK_FILE" &>/dev/null; then
+        log_warn "Found stale lock file in GCS - force unlocking..."
+        local lock_id
+        lock_id=$(gcloud storage cat "$LOCK_FILE" 2>/dev/null | grep -o '"ID":"[0-9]*"' | grep -o '[0-9]*' | head -1) || true
+        if [ -n "$lock_id" ]; then
+            log_info "  Force unlocking lock ID: $lock_id"
+            terraform force-unlock -force "$lock_id" 2>/dev/null || true
+        fi
+        # Also delete the lock file directly as backup
+        log_info "  Removing lock file from GCS..."
+        gcloud storage rm "$LOCK_FILE" 2>/dev/null || true
     fi
 
     # Gap #39: Empty ALL storage buckets BEFORE destroy (force_destroy=false in terraform)
@@ -1120,13 +1127,71 @@ phase_7_cloud_run() {
         log_info "Domain mapping does not exist yet - SSL check will happen after terraform apply"
     fi
 
-    log_step "Applying full Terraform configuration..."
+    # Issue #37 Fix: Split terraform apply into two stages
+    # Stage 1: Deploy Keycloak + MCP Suite + domain mapping (creates SSL cert)
+    # Stage 2: Wait for SSL, then deploy mcp-gateway (which needs Keycloak JWKS)
+
+    log_step "Stage 1: Deploying Keycloak and MCP Suite (Issue #37 fix)..."
+    log_info "mcp-gateway will be deployed in Stage 2 after SSL is ready"
+
+    # Deploy everything EXCEPT mcp-gateway first
+    # This creates the keycloak domain mapping and starts SSL provisioning
+    local stage1_targets=(
+        "-target=module.cloudrun.google_artifact_registry_repository.tamshai"
+        "-target=module.cloudrun.google_cloud_run_service.keycloak"
+        "-target=module.cloudrun.google_cloud_run_service.mcp_suite"
+        "-target=module.cloudrun.google_cloud_run_service.web_portal"
+        "-target=module.cloudrun.google_cloud_run_domain_mapping.keycloak"
+        "-target=module.cloudrun.google_cloud_run_domain_mapping.web_portal"
+        "-target=module.cloudrun.google_cloud_run_service_iam_member.keycloak_public"
+        "-target=module.cloudrun.google_cloud_run_service_iam_member.web_portal_public"
+        "-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_suite_gateway_access"
+        "-target=module.utility_vm"
+    )
+
+    terraform apply -auto-approve "${stage1_targets[@]}" || {
+        log_error "Stage 1 terraform apply failed"
+        save_checkpoint 7 "failed"
+        exit 1
+    }
+    log_success "Stage 1 complete - Keycloak and MCP Suite deployed"
+
+    # Stage 2: Wait for SSL certificate on auth.tamshai.com
+    log_step "Stage 2: Waiting for SSL certificate on auth.tamshai.com (Issue #37 fix)..."
+    log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
+
+    local ssl_ready=false
+    local max_ssl_attempts=45  # 22.5 minutes max (45 * 30s)
+
+    for attempt in $(seq 1 $max_ssl_attempts); do
+        if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+            log_success "SSL certificate is deployed and working!"
+            ssl_ready=true
+            break
+        fi
+        if [ $attempt -eq 1 ]; then
+            log_info "SSL certificate not ready yet - starting wait loop..."
+        fi
+        log_info "  Waiting for SSL certificate... (attempt $attempt/$max_ssl_attempts)"
+        sleep 30
+    done
+
+    if [ "$ssl_ready" = false ]; then
+        log_error "SSL certificate not ready after 22.5 minutes"
+        log_error "mcp-gateway cannot start without SSL - check GCP Console"
+        log_error "Domain mapping: https://console.cloud.google.com/run/domains?project=$GCP_PROJECT_ID"
+        save_checkpoint 7 "failed"
+        exit 1
+    fi
+
+    # Stage 3: Deploy mcp-gateway (now that SSL is ready)
+    log_step "Stage 3: Deploying mcp-gateway (SSL is ready)..."
 
     # Issue #11 Fix: Handle 409 conflicts from previous interrupted applies
     local apply_output
     local apply_exit_code=0
 
-    # Run terraform apply and capture output
+    # Run full terraform apply to create mcp-gateway
     apply_output=$(terraform apply -auto-approve 2>&1) || apply_exit_code=$?
 
     if [ $apply_exit_code -ne 0 ]; then

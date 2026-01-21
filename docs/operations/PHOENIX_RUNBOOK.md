@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
-**Last Updated**: January 20, 2026
-**Version**: 3.0.0
+**Last Updated**: January 21, 2026
+**Version**: 3.2.0
 **Owner**: Platform Team
 
 ## Overview
@@ -18,7 +18,9 @@ This runbook provides instructions for performing a complete Phoenix rebuild of 
 - **Cost Optimization**: Need to recreate with different specs
 - **Testing DR Procedures**: Quarterly DR drills
 
-### Estimated Duration: ~60 minutes (automated)
+### Estimated Duration: 75-100 minutes (automated)
+
+> **Note**: Duration varies based on SSL certificate provisioning time (~10-17 minutes on fresh rebuild). v11 completed in ~98 minutes.
 
 ---
 
@@ -82,18 +84,17 @@ This runbook provides instructions for performing a complete Phoenix rebuild of 
 
 The script executes 10 phases automatically:
 
-| Phase | What It Does | Checkpoint |
-|-------|--------------|------------|
-| 1 | Pre-flight checks | Tools and auth validated |
-| 2 | Secret sync | GCP secrets verified |
-| 3 | Pre-destroy cleanup | State locks cleared, services deleted |
-| 4 | Terraform destroy | All resources destroyed |
-| 5 | Terraform apply (infra) | VPC, Cloud SQL, Registry created |
-| 6 | Build images | All 7 container images built |
-| 7 | Regenerate SA key | GitHub secret updated, key validated (Issue #10 fix) |
-| 8 | Terraform apply (Cloud Run) | Services deployed, 409 auto-recovery (Issue #11 fix) |
-| 9 | Deploy via GitHub Actions | Full deployment completed |
-| 10 | Configure TOTP & verify | E2E tests pass |
+| Phase | What It Does | Duration | Checkpoint |
+|-------|--------------|----------|------------|
+| 1-2 | Pre-flight + Secret sync | ~2 min | Tools, auth, GCP secrets verified |
+| 3 | Pre-destroy cleanup | ~5 min | State locks cleared (Issue #36), services deleted |
+| 4 | Terraform destroy + apply | ~20 min | VPC, Cloud SQL (~13 min), Registry created |
+| 5 | Build container images | ~12 min | All 8 container images built |
+| 6 | Regenerate SA key | ~1 min | GitHub secret updated, key validated (Issue #10) |
+| 7 | Terraform Cloud Run (staged) | ~20 min | Stage 1: Keycloak → Stage 2: SSL wait (~17 min) → Stage 3: mcp-gateway (Issue #37) |
+| 8 | Deploy via GitHub Actions | ~8 min | Full deployment completed, 409 auto-recovery (Issue #11) |
+| 9 | Configure TOTP | ~2 min | test-user.journey TOTP configured |
+| 10 | Provision & Verify | ~7 min | provision-users Cloud Build (Issue #32), E2E tests pass (6/6) |
 
 ### Step 4: Verify Completion
 
@@ -104,8 +105,11 @@ gcloud run services list --region=us-central1
 # Verify Keycloak
 curl -sf https://auth.tamshai.com/auth/health/ready && echo "OK"
 
-# Run E2E tests
-cd tests/e2e && npm run test:login:prod
+# Run E2E tests (use read-github-secrets.sh to load credentials)
+cd tests/e2e
+eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
+npx cross-env TEST_ENV=prod playwright test login-journey --project=chromium --workers=1
+# Expected: 6/6 tests pass
 ```
 
 **Final Checkpoints**:
@@ -239,6 +243,55 @@ fi
 terraform apply
 ```
 
+### Issue #32: provision-users `_REGION` Substitution Error
+
+**Symptom**: provision-users Cloud Build fails with:
+```
+ERROR: (gcloud.builds.submit) INVALID_ARGUMENT: key "_REGION" in the substitution data is not matched in the template
+```
+
+**Cause**: Cloud Build doesn't support nested substitution references in `substitutions` defaults. The original code tried to use `${_REGION}` inside another substitution value.
+
+**Prevention**: Fixed in `cloudbuild-provision-users.yaml` - CLOUD_SQL_INSTANCE is now constructed inline in each step's `env` block instead of using a substitution default.
+
+**Verification**: provision-users Cloud Build completes successfully without substitution errors.
+
+### Issue #36: Terraform State Lock Deadlock
+
+**Symptom**: "Error acquiring the state lock" that cannot be resolved by waiting.
+
+**Cause**: The original script used `terraform plan` to detect locks, but this could itself create new locks if interrupted, causing a deadlock.
+
+**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 3 - now checks GCS lock file directly at `gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock` instead of using `terraform plan`.
+
+**Manual Fix**:
+```bash
+LOCK_FILE="gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock"
+if gcloud storage cat "$LOCK_FILE" &>/dev/null; then
+    lock_id=$(gcloud storage cat "$LOCK_FILE" | grep -o '"ID":"[0-9]*"' | grep -o '[0-9]*')
+    terraform force-unlock -force "$lock_id"
+    gcloud storage rm "$LOCK_FILE"
+fi
+```
+
+### Issue #37: mcp-gateway SSL Startup Failure
+
+**Symptom**: mcp-gateway fails Cloud Run startup probe with:
+```
+STARTUP HTTP probe failed 12 times consecutively
+error: "Request failed with status code 525" (SSL handshake failed)
+jwksUri: https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs
+```
+
+**Cause**: mcp-gateway validates JWT tokens against Keycloak's JWKS endpoint on startup. If deployed simultaneously with Keycloak's domain mapping, the SSL certificate for `auth.tamshai.com` isn't ready yet (takes 10-17 minutes).
+
+**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 7 - now uses staged deployment:
+1. **Stage 1**: Deploy Keycloak, MCP Suite, web-portal, domain mappings
+2. **Stage 2**: Poll for SSL certificate readiness on `auth.tamshai.com` (every 30 seconds)
+3. **Stage 3**: Deploy mcp-gateway only after SSL is confirmed ready
+
+**Typical SSL Wait**: 10-17 minutes on fresh rebuild (34 polling attempts in v11).
+
 For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-procedures-fallback).
 
 ---
@@ -256,10 +309,12 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 
 ## Related Documentation
 
-- [Phoenix Manual Actions](./PHOENIX_MANUAL_ACTIONS.md) - Gap documentation
-- [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures
+- [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Latest rebuild log (0 manual actions)
+- [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)
 - [Identity Sync](./IDENTITY_SYNC.md) - User provisioning
 - [Keycloak Management](./KEYCLOAK_MANAGEMENT.md) - Keycloak operations
+- [E2E User Tests](../testing/E2E_USER_TESTS.md) - E2E test procedures
+- [Test User Journey](../testing/TEST_USER_JOURNEY.md) - Test user credentials
 
 ---
 
@@ -323,10 +378,18 @@ verify_gcp_secrets
 check_all_secrets_hygiene
 ```
 
-### Phase 3: Terraform Destroy
+### Phase 3: Pre-destroy Cleanup + Terraform Destroy
 
 ```bash
 cd infrastructure/terraform/gcp
+
+# Issue #36 fix: Check for stuck state locks via GCS file (not terraform plan)
+LOCK_FILE="gs://tamshai-terraform-state-prod/gcp/phase1/default.tflock"
+if gcloud storage cat "$LOCK_FILE" &>/dev/null; then
+    lock_id=$(gcloud storage cat "$LOCK_FILE" | grep -o '"ID":"[0-9]*"' | grep -o '[0-9]*')
+    terraform force-unlock -force "$lock_id"
+    gcloud storage rm "$LOCK_FILE"
+fi
 
 # Pre-destroy cleanup (automated in phoenix-rebuild.sh)
 gcloud run jobs delete provision-users --region=us-central1 --quiet 2>/dev/null || true
@@ -394,16 +457,35 @@ gh secret set GCP_SA_KEY_PROD < /tmp/gcp-key.json
 rm /tmp/gcp-key.json
 ```
 
-### Phase 7: Terraform Cloud Run
+### Phase 7: Terraform Cloud Run (Staged - Issue #37 Fix)
 
 ```bash
 cd infrastructure/terraform/gcp
-terraform apply -auto-approve
 
-# Domain mapping (automated via import in phoenix-rebuild.sh)
-gcloud beta run domain-mappings create \
-  --service=keycloak --domain=auth.tamshai.com --region=us-central1 2>/dev/null || true
+# Stage 1: Deploy Keycloak, MCP Suite, web-portal, domain mappings (NOT mcp-gateway)
+terraform apply -target=module.cloudrun_services.google_cloud_run_v2_service.keycloak -auto-approve
+terraform apply -target=module.cloudrun_services.google_cloud_run_domain_mapping.auth_domain -auto-approve
+# Deploy other services except mcp-gateway...
+
+# Stage 2: Wait for SSL certificate on auth.tamshai.com
+echo "Waiting for SSL certificate..."
+attempts=0
+max_attempts=40  # ~20 minutes
+while [ $attempts -lt $max_attempts ]; do
+    if curl -sf https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration > /dev/null 2>&1; then
+        echo "SSL ready after $attempts attempts"
+        break
+    fi
+    echo "Attempt $((attempts+1))/$max_attempts - SSL not ready, waiting 30s..."
+    sleep 30
+    ((attempts++))
+done
+
+# Stage 3: Deploy mcp-gateway (SSL is now ready)
+terraform apply -target=module.cloudrun_services.google_cloud_run_v2_service.mcp_gateway -auto-approve
 ```
+
+**Note**: Typical SSL wait is 10-17 minutes (34 attempts in v11). The `phoenix-rebuild.sh` script handles this automatically.
 
 ### Phase 8: Deploy via GitHub Actions
 
@@ -444,6 +526,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.2.0 | Jan 21, 2026 | Tamshai-Dev | Added Issues #32, #36, #37 from v10/v11 rebuilds; updated phase table with durations; updated E2E test command; staged Phase 7 with SSL wait |
 | 3.1.0 | Jan 20, 2026 | Tamshai-Dev | Added Issues #9, #10, #11 troubleshooting; Phase 7 validates SA key; Phase 8 has 409 recovery |
 | 3.0.0 | Jan 20, 2026 | Tamshai-Dev | Restructured: minimal main runbook, manual procedures moved to Appendix B |
 | 2.3.0 | Jan 20, 2026 | Tamshai-Dev | Gap #49 fix, removed SSL waiting, automated pre-destroy cleanup |
