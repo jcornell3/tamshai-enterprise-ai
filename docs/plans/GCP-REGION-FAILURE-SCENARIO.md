@@ -416,6 +416,194 @@ Is us-central1 available?
 
 ---
 
+## Testing Strategy
+
+### The Fundamental Challenge
+
+**We cannot test during an actual regional outage** because:
+1. Regional outages are rare and unpredictable
+2. We don't want to wait for disaster to validate our recovery procedure
+3. Testing during a real outage adds risk to an already critical situation
+
+**However**, testing while us-central1 is healthy has a key limitation:
+- We cannot validate that `terraform destroy` actually hangs against a dead region
+- We cannot test the "ignore the old state" decision under real pressure
+
+### What We CAN Test (Simulation Approach)
+
+Since regional evacuation uses the **"Amnesia" approach** (fresh state in new region), we can simulate this by running evacuation while the primary region is still healthy.
+
+**Key Insight**: The evacuation script doesn't interact with the primary region at all - it creates an entirely independent stack. This means testing with us-central1 healthy validates 95% of the recovery path.
+
+### Test Scenarios
+
+#### Test 1: Parallel Stack Deployment (PRIMARY TEST)
+
+**Purpose**: Validate that a recovery stack can be deployed alongside the primary stack without conflicts.
+
+**Procedure**:
+```bash
+# 1. Ensure primary stack is healthy
+curl -sf https://auth.tamshai.com/auth/health/ready && echo "Primary OK"
+
+# 2. Deploy recovery stack to us-west1
+./scripts/gcp/evacuate-region.sh us-west1 us-west1-b test-evacuation-01
+
+# 3. Verify both stacks exist independently
+gcloud run services list --region=us-central1  # Primary
+gcloud run services list --region=us-west1     # Recovery
+
+# 4. Verify no resource naming conflicts
+gcloud sql instances list  # Should show both instances
+
+# 5. Run E2E tests against recovery stack
+cd tests/e2e
+TEST_ENV=recovery npx playwright test login-journey
+```
+
+**Validates**:
+- ✅ Fresh Terraform state initialization works
+- ✅ Resource naming with `-<env_id>` suffix prevents collisions
+- ✅ All services deploy successfully to alternate region
+- ✅ Service account key regeneration works
+- ✅ E2E tests pass in recovery region
+
+**Does NOT Validate**:
+- ❌ Terraform hanging on unreachable region (can't simulate)
+- ❌ Decision-making under incident pressure
+- ❌ DNS failover timing (if applicable)
+
+#### Test 2: Backup and Restore Cycle
+
+**Purpose**: Validate that data can be backed up and restored across regions.
+
+**Procedure**:
+```bash
+# 1. Create a backup from primary
+gcloud sql export sql tamshai-prod-postgres \
+  gs://tamshai-prod-backups-<project-id>/test-backup/tamshai_hr.sql \
+  --database=tamshai_hr
+
+# 2. Deploy recovery stack (if not already running)
+./scripts/gcp/evacuate-region.sh us-west1 us-west1-b test-restore-01
+
+# 3. Import backup to recovery instance
+gcloud sql import sql tamshai-prod-postgres-test-restore-01 \
+  gs://tamshai-prod-backups-<project-id>/test-backup/tamshai_hr.sql \
+  --database=tamshai_hr
+
+# 4. Verify data exists in recovery stack
+# (connect via Cloud SQL Proxy and query)
+```
+
+**Validates**:
+- ✅ Multi-regional backup bucket accessible from both regions
+- ✅ Cloud SQL import works to recovery instance
+- ✅ Data integrity maintained across backup/restore
+
+#### Test 3: Cleanup and Re-Evacuation
+
+**Purpose**: Validate that recovery stacks can be torn down and recreated.
+
+**Procedure**:
+```bash
+# 1. Destroy recovery stack
+cd infrastructure/terraform/gcp
+terraform init -reconfigure \
+  -backend-config="bucket=tamshai-terraform-state-prod" \
+  -backend-config="prefix=gcp/recovery/test-evacuation-01"
+terraform destroy -auto-approve \
+  -var="region=us-west1" \
+  -var="env_id=test-evacuation-01" \
+  -var="phoenix_mode=true"
+
+# 2. Verify resources deleted
+gcloud run services list --region=us-west1  # Should be empty
+gcloud sql instances list | grep test-evacuation-01  # Should not exist
+
+# 3. Re-run evacuation to same env_id
+./scripts/gcp/evacuate-region.sh us-west1 us-west1-b test-evacuation-01
+
+# 4. Verify fresh deployment works
+```
+
+**Validates**:
+- ✅ Recovery stacks can be cleanly destroyed
+- ✅ Same env_id can be reused after cleanup
+- ✅ Idempotent evacuation behavior
+
+### What We CANNOT Test
+
+| Scenario | Why Untestable | Mitigation |
+|----------|----------------|------------|
+| Terraform hanging on dead region | Requires actual outage | Trust GCP specialist analysis; script skips destroy |
+| Real incident pressure | Psychological, not technical | Runbook documentation; tabletop exercises |
+| DNS propagation during outage | Requires actual outage | Document manual DNS update steps |
+| Concurrent user impact | No production traffic to recovery | Load testing after evacuation |
+
+### Tabletop Exercise (Recommended Quarterly)
+
+Since we can't test the real scenario, conduct **tabletop exercises** to practice decision-making:
+
+**Scenario Script**:
+1. "It's 2 AM. PagerDuty alerts: all production services unreachable."
+2. "GCP Status Dashboard shows us-central1 'Investigating'"
+3. "You run `terraform plan` - it hangs for 2 minutes."
+4. **Decision Point**: Do you wait for GCP to fix it, or evacuate?
+5. "GCP Status updates to 'Service Disruption - Estimated 4 hours'"
+6. **Action**: Run evacuation script
+7. Walk through each phase verbally
+8. "Recovery stack is up. What DNS changes are needed?"
+9. "Primary region recovers. How do you clean up?"
+
+**Participants**: On-call engineer, platform team lead
+**Frequency**: Quarterly
+**Duration**: 30-45 minutes
+**Output**: Document any gaps or confusion discovered
+
+### Test Schedule
+
+| Test | Frequency | Environment | Duration | Cost |
+|------|-----------|-------------|----------|------|
+| Parallel Stack | Quarterly | us-west1 | 30 min | ~$2 (cleanup same day) |
+| Backup/Restore | Monthly | us-west1 | 20 min | ~$1 |
+| Cleanup/Re-evacuate | After each parallel test | us-west1 | 15 min | $0 |
+| Tabletop Exercise | Quarterly | N/A (verbal) | 45 min | $0 |
+
+### Test Checklist
+
+**Before Testing**:
+- [ ] Primary stack is healthy and stable
+- [ ] No active deployments in progress
+- [ ] Backup bucket has recent backups
+- [ ] Team is aware testing is happening (avoid alarm)
+
+**During Parallel Stack Test**:
+- [ ] Evacuation script completes without errors
+- [ ] All 6 phases complete successfully
+- [ ] Resources created with correct `-<env_id>` suffix
+- [ ] No errors in primary stack during test
+- [ ] E2E tests pass against recovery stack
+
+**After Testing**:
+- [ ] Recovery stack destroyed (avoid ongoing costs)
+- [ ] Terraform state cleaned up
+- [ ] Test results documented
+- [ ] Any issues filed as GitHub issues
+
+### Acceptance Criteria for Regional Evacuation
+
+The feature is considered **production-ready** when:
+
+1. ✅ Parallel stack test passes 3 consecutive times
+2. ✅ Backup/restore test passes
+3. ✅ Cleanup/re-evacuation test passes
+4. ✅ At least one tabletop exercise completed
+5. ✅ Runbook documentation reviewed by second engineer
+6. ✅ Estimated RTO (15-25 min) validated by actual test timing
+
+---
+
 ## Cost Implications
 
 ### One-Time Costs
