@@ -66,9 +66,13 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
     }
 
     // Convert query params to proper types (Express parses everything as strings)
-    const queryParams: Record<string, string | number | string[]> = {};
+    // Security: Use Object.create(null) to prevent prototype pollution
+    const queryParams: Record<string, string | number | string[]> = Object.create(null);
+    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
     for (const [key, value] of Object.entries(req.query)) {
       if (value === undefined) continue;
+      // Security: Reject dangerous property names to prevent prototype pollution
+      if (dangerousKeys.includes(key)) continue;
       // Try to parse as number if it looks numeric
       if (typeof value === 'string' && /^\d+$/.test(value)) {
         queryParams[key] = parseInt(value, 10);

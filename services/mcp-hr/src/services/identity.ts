@@ -11,36 +11,36 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
-import { randomBytes } from 'crypto';
+import { randomInt } from 'crypto';
 
 /**
  * Generate a cryptographically secure random password.
  * Uses only alphanumeric characters to avoid shell/docker-compose issues.
+ * Uses crypto.randomInt() for unbiased random selection (rejection sampling internally).
  *
  * @param length Password length (default 20)
  * @returns Random alphanumeric password
  */
 export function generateSecurePassword(length = 20): string {
   // Alphanumeric characters only (no special chars to avoid shell issues)
-  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // Excluding I, O (confusable)
-  const lowercase = 'abcdefghjkmnpqrstuvwxyz';   // Excluding i, l, o (confusable)
-  const numbers = '23456789';                     // Excluding 0, 1 (confusable)
+  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Excluding I, O (confusable)
+  const lowercase = 'abcdefghjkmnpqrstuvwxyz'; // Excluding i, l, o (confusable)
+  const numbers = '23456789'; // Excluding 0, 1 (confusable)
   const charset = uppercase + lowercase + numbers;
 
-  // Generate cryptographically secure random bytes
-  const bytes = randomBytes(length);
+  // Generate cryptographically secure random characters using rejection sampling
+  // randomInt() uses rejection sampling internally to avoid modulo bias
   let password = '';
-
   for (let i = 0; i < length; i++) {
-    password += charset[bytes[i] % charset.length];
+    password += charset[randomInt(charset.length)];
   }
 
   // Ensure at least one of each character type for password policy compliance
   // Replace first 3 chars to guarantee mix (still random)
   const guaranteedChars = [
-    uppercase[randomBytes(1)[0] % uppercase.length],
-    lowercase[randomBytes(1)[0] % lowercase.length],
-    numbers[randomBytes(1)[0] % numbers.length],
+    uppercase[randomInt(uppercase.length)],
+    lowercase[randomInt(lowercase.length)],
+    numbers[randomInt(numbers.length)],
   ];
 
   return guaranteedChars.join('') + password.slice(3);

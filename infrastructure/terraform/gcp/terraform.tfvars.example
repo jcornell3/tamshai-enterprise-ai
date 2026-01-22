@@ -40,7 +40,8 @@ database_tier = "db-f1-micro"
 # MongoDB Atlas connection URI (M0 free tier)
 # Format: mongodb+srv://tamshai_app:<password>@<cluster>.mongodb.net/tamshai
 # Get from: https://cloud.mongodb.com (see Appendix A in Phase 1 plan)
-mongodb_atlas_uri = "mongodb+srv://tamshai_app:YOUR_PASSWORD@cluster0.xxxxx.mongodb.net/tamshai"
+# PLACEHOLDER - Replace with your actual MongoDB Atlas connection string
+mongodb_atlas_uri = "REPLACE_WITH_MONGODB_ATLAS_URI"
 
 # =============================================================================
 # COMPUTE
