@@ -429,9 +429,9 @@ https://api.tamshai.com/callback
 
 If domains change during evacuation, OAuth flows will fail with "Invalid redirect_uri" errors.
 
-### DNS Solution: Recovery Subdomains
+### DNS Solution: Recovery CNAME Records
 
-**Strategy**: Pre-configure recovery subdomains that can be activated during evacuation.
+**Strategy**: Pre-configure DR CNAME records that can be activated during evacuation.
 
 #### Pre-Configured DNS Records (Cloudflare)
 
@@ -658,7 +658,7 @@ log_warn "╚══════════════════════�
 
 ### Overview
 
-The `-dr` subdomain strategy requires changes across multiple files, scripts, and processes. This section documents all required modifications for a complete DR-aware system.
+The `-dr` CNAME strategy requires changes across multiple files, scripts, and processes. This section documents all required modifications for a complete DR-aware system.
 
 ### Files Requiring DR Domain Updates
 
