@@ -4,7 +4,7 @@
 **Created**: January 21, 2026
 **Updated**: January 22, 2026
 **Author**: Tamshai-QA (Claude-QA)
-**Status**: IN PROGRESS - Sprint 4 RED Complete
+**Status**: COMPLETE - All Sprints Done
 **Related**: [PROJECT_JOURNEY_AGENT.md](./PROJECT_JOURNEY_AGENT.md)
 
 ---
@@ -52,14 +52,14 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 
 ## Progress Tracking
 
-### Current Status: Sprint 4 RED Complete
+### Current Status: All Sprints Complete ✅
 
 | Sprint | RED Phase | GREEN Phase | Tests | Status |
 |--------|-----------|-------------|-------|--------|
 | Sprint 1 | ✅ Complete | ✅ Complete | 78 | **DONE** |
 | Sprint 2 | ✅ Complete | ✅ Complete | 74 | **DONE** |
 | Sprint 3 | ✅ Complete | ✅ Complete | 60 | **DONE** |
-| Sprint 4 | ✅ Complete | ⏳ Pending | ~42 | **RED COMPLETE** |
+| Sprint 4 | ✅ Complete | ✅ Complete | 48 | **DONE** |
 
 ### Test Count Summary
 
@@ -68,8 +68,8 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 | Sprint 1 (Indexer) | 78 | 0 | 78 |
 | Sprint 2 (Tools) | 74 | 0 | 74 |
 | Sprint 3 (Resources) | 60 | 0 | 60 |
-| Sprint 4 (Middleware) | ~10 | ~32 | ~42 |
-| **Current Total** | **~222** | **~32** | **~254** |
+| Sprint 4 (Middleware) | 48 | 0 | 48 |
+| **Final Total** | **260** | **0** | **260** |
 
 ### Sprint Completion Log
 
@@ -92,6 +92,17 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 - **Test Files Created**: agent-identity.test.ts (~12 tests), rate-limit.test.ts (~12 tests), knowledge-index.test.ts (~9 tests), mcp-server.test.ts (~17 tests)
 - **Stub Files Created**: agent-identity.ts, rate-limit.ts, middleware/index.ts, src/index.ts (McpServer), tools/index.ts
 - **All middleware/integration tests failing with "Not implemented"**
+
+#### Sprint 4 GREEN (January 22, 2026)
+- **Commit**: `24f7089` - feat(mcp-journey): Complete Sprint 4 GREEN phase - middleware and MCP server
+- **Implementation**:
+  - `agent-identity.ts` - `wrapWithIdentity()` and `createIdentityMiddleware()` for identity attribution
+  - `rate-limit.ts` - `burstLimiter` (10/10s), `sustainedLimiter` (60/min), `dailyLimiter` (1000/day) using express-rate-limit
+  - `src/index.ts` - Full `McpServer` class with health, tool, and resource endpoints
+  - `index-builder.ts` - Added `listDocuments()`, updated `deleteDocument()` to accept id or path
+- **Key Features**: Express server with rate limiting, identity wrapping for all tool responses, resource URI routing
+- **Integration Tests**: Fixed test ordering to prevent rate limit exhaustion before agent identity tests
+- **Final Test Count**: 260 passing (48 new in Sprint 4)
 
 ---
 
@@ -2321,6 +2332,7 @@ Use actual ADR files as fixtures for realistic testing:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-21 | Tamshai-QA | Initial TDD plan creation |
+| 1.2.0 | 2026-01-22 | Tamshai-QA | Sprint 4 GREEN complete - all 260 tests passing |
 
 ---
 
