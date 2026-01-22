@@ -46,11 +46,24 @@ provider "google" {
 
 locals {
   environment = "prod"
+
+  # Regional Evacuation: env_id-based naming for resource isolation
+  # - "primary" uses standard names (backwards compatible)
+  # - "recovery-*" uses suffixed names to avoid global collisions
+  is_recovery    = var.env_id != "primary"
+  name_suffix    = local.is_recovery ? "-${var.env_id}" : ""
+  name_prefix    = "tamshai-${local.environment}${local.name_suffix}"
+
+  # Resource naming for regional evacuation
+  # These ensure recovery deployments don't conflict with primary
+  postgres_instance_name = "tamshai-${local.environment}-postgres${local.name_suffix}"
+
   common_labels = {
     environment = local.environment
     managed-by  = "terraform"
     project     = "tamshai-enterprise-ai"
     phase       = "phase1"
+    env-id      = var.env_id
   }
 }
 
@@ -69,6 +82,9 @@ module "networking" {
   serverless_connector_cidr   = var.serverless_connector_cidr
   allowed_http_ports          = ["80", "443"]
   http_source_ranges          = ["0.0.0.0/0"]
+
+  # Regional evacuation support: suffix for resource naming
+  name_suffix = local.name_suffix
 }
 
 # =============================================================================
@@ -89,7 +105,7 @@ module "security" {
   # checking vpc_connector_id (unknown until apply) to avoid count dependency errors
   enable_provision_job      = true
   vpc_connector_id          = module.networking.serverless_connector_id
-  cloud_sql_connection_name = "${var.project_id}:${var.region}:tamshai-${local.environment}-postgres"
+  cloud_sql_connection_name = "${var.project_id}:${var.region}:${local.postgres_instance_name}"
   keycloak_url              = var.keycloak_provisioning_url
   prod_user_password        = var.prod_user_password
 
@@ -112,6 +128,9 @@ module "database" {
   disk_size_gb        = 10
   enable_backups      = true
   deletion_protection = true
+
+  # Regional evacuation support: suffix for resource naming
+  name_suffix = local.name_suffix
 
   keycloak_db_password = module.security.keycloak_db_password
   tamshai_db_password  = module.security.tamshai_db_password

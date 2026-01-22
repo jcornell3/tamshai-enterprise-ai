@@ -1,9 +1,14 @@
 # Database Module
 # Manages Cloud SQL PostgreSQL and databases
 
+# Local variables for naming
+locals {
+  instance_name = "tamshai-${var.environment}-postgres${var.name_suffix}"
+}
+
 # Private services connection for Cloud SQL
 resource "google_compute_global_address" "private_ip_range" {
-  name          = "tamshai-${var.environment}-private-ip"
+  name          = "tamshai-${var.environment}-private-ip${var.name_suffix}"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 16
@@ -22,7 +27,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 #checkov:skip=CKV_GCP_55:PostgreSQL log_min_messages set to ERROR with comprehensive audit logging
 #checkov:skip=CKV_GCP_109:PostgreSQL logging configured with pgAudit for SOC 2 compliance
 resource "google_sql_database_instance" "postgres" {
-  name             = "tamshai-${var.environment}-postgres"
+  name             = local.instance_name
   database_version = var.database_version
   region           = var.region
   project          = var.project_id

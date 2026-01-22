@@ -1,16 +1,21 @@
 # Networking Module
 # Manages VPC, subnets, NAT, and firewall rules
 
+# Local variables for naming
+locals {
+  name_prefix = "tamshai-${var.environment}${var.name_suffix}"
+}
+
 # VPC Network
 resource "google_compute_network" "vpc" {
-  name                    = "tamshai-${var.environment}-vpc"
+  name                    = "${local.name_prefix}-vpc"
   auto_create_subnetworks = false
-  description             = "VPC for Tamshai Enterprise AI - ${var.environment}"
+  description             = "VPC for Tamshai Enterprise AI - ${var.environment}${var.name_suffix != "" ? " (${var.name_suffix})" : ""}"
 }
 
 # Subnet for services
 resource "google_compute_subnetwork" "subnet" {
-  name          = "tamshai-${var.environment}-subnet"
+  name          = "${local.name_prefix}-subnet"
   ip_cidr_range = var.subnet_cidr
   region        = var.region
   network       = google_compute_network.vpc.id
@@ -26,14 +31,14 @@ resource "google_compute_subnetwork" "subnet" {
 
 # Cloud Router for NAT
 resource "google_compute_router" "router" {
-  name    = "tamshai-${var.environment}-router"
+  name    = "${local.name_prefix}-router"
   region  = var.region
   network = google_compute_network.vpc.id
 }
 
 # Cloud NAT for outbound internet access
 resource "google_compute_router_nat" "nat" {
-  name                               = "tamshai-${var.environment}-nat"
+  name                               = "${local.name_prefix}-nat"
   router                             = google_compute_router.router.name
   region                             = var.region
   nat_ip_allocate_option             = "AUTO_ONLY"
@@ -51,7 +56,7 @@ resource "google_compute_router_nat" "nat" {
 
 # Allow internal communication
 resource "google_compute_firewall" "allow_internal" {
-  name    = "tamshai-${var.environment}-allow-internal"
+  name    = "${local.name_prefix}-allow-internal"
   network = google_compute_network.vpc.name
 
   allow {
@@ -74,7 +79,7 @@ resource "google_compute_firewall" "allow_internal" {
 # Allow HTTP/HTTPS from anywhere
 #checkov:skip=CKV_GCP_106:HTTP port 80 required for HTTPS redirect (Caddy/nginx). All traffic redirected to HTTPS.
 resource "google_compute_firewall" "allow_http" {
-  name    = "tamshai-${var.environment}-allow-http"
+  name    = "${local.name_prefix}-allow-http"
   network = google_compute_network.vpc.name
 
   allow {
@@ -88,7 +93,7 @@ resource "google_compute_firewall" "allow_http" {
 
 # Allow SSH via IAP only (more secure than open SSH)
 resource "google_compute_firewall" "allow_iap_ssh" {
-  name    = "tamshai-${var.environment}-allow-iap-ssh"
+  name    = "${local.name_prefix}-allow-iap-ssh"
   network = google_compute_network.vpc.name
 
   allow {
@@ -110,7 +115,7 @@ resource "google_compute_firewall" "allow_iap_ssh" {
 resource "google_vpc_access_connector" "serverless_connector" {
   count = var.enable_serverless_connector ? 1 : 0
 
-  name          = "tamshai-${var.environment}-connector"
+  name          = "${local.name_prefix}-connector"
   region        = var.region
   network       = google_compute_network.vpc.name
   ip_cidr_range = var.serverless_connector_cidr
@@ -125,7 +130,7 @@ resource "google_vpc_access_connector" "serverless_connector" {
 resource "google_compute_firewall" "allow_serverless_connector" {
   count = var.enable_serverless_connector ? 1 : 0
 
-  name    = "tamshai-${var.environment}-allow-serverless-connector"
+  name    = "${local.name_prefix}-allow-serverless-connector"
   network = google_compute_network.vpc.name
 
   allow {
