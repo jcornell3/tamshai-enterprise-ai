@@ -11,12 +11,20 @@
 # unavailable and terraform destroy/apply would hang.
 #
 # Usage:
-#   ./evacuate-region.sh [NEW_REGION] [NEW_ZONE] [ENV_ID]
+#   ./evacuate-region.sh [OPTIONS] [NEW_REGION] [NEW_ZONE] [ENV_ID]
+#
+# Options:
+#   --yes, -y           Skip interactive confirmations (for automated runs)
+#   --region=REGION     Target region (default: us-west1)
+#   --zone=ZONE         Target zone (default: REGION-b)
+#   --env-id=ID         Environment ID (default: recovery-YYYYMMDD-HHMM)
+#   -h, --help          Show this help message
 #
 # Examples:
 #   ./evacuate-region.sh                                    # us-west1, auto-generated ID
 #   ./evacuate-region.sh us-west1 us-west1-b recovery-01    # Specific region and ID
 #   ./evacuate-region.sh us-east1 us-east1-b                # East coast, auto-generated ID
+#   ./evacuate-region.sh --yes us-west1 us-west1-b test-01  # Skip confirmation
 #
 # Priority Regions (same cost as us-central1):
 #   1. us-west1 (Oregon)    - Recommended: No hurricane risk, closest to CA team
@@ -35,9 +43,35 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # CONFIGURATION
 # =============================================================================
 
-NEW_REGION="${1:-us-west1}"
-NEW_ZONE="${2:-${NEW_REGION}-b}"
-ENV_ID="${3:-recovery-$(date +%Y%m%d-%H%M)}"
+# Defaults
+NEW_REGION="us-west1"
+NEW_ZONE=""
+ENV_ID=""
+AUTO_YES=false  # Skip interactive confirmations
+
+# Parse arguments (supports both positional and flags)
+POSITIONAL_ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --yes|-y) AUTO_YES=true; shift ;;
+        --region=*) NEW_REGION="${1#*=}"; shift ;;
+        --zone=*) NEW_ZONE="${1#*=}"; shift ;;
+        --env-id=*) ENV_ID="${1#*=}"; shift ;;
+        -h|--help) head -27 "$0" | tail -22; exit 0 ;;
+        -*) echo "Unknown option: $1"; exit 1 ;;
+        *) POSITIONAL_ARGS+=("$1"); shift ;;
+    esac
+done
+
+# Handle positional arguments for backwards compatibility
+# Usage: ./evacuate-region.sh [REGION] [ZONE] [ENV_ID]
+if [ ${#POSITIONAL_ARGS[@]} -ge 1 ]; then NEW_REGION="${POSITIONAL_ARGS[0]}"; fi
+if [ ${#POSITIONAL_ARGS[@]} -ge 2 ]; then NEW_ZONE="${POSITIONAL_ARGS[1]}"; fi
+if [ ${#POSITIONAL_ARGS[@]} -ge 3 ]; then ENV_ID="${POSITIONAL_ARGS[2]}"; fi
+
+# Set defaults based on region
+NEW_ZONE="${NEW_ZONE:-${NEW_REGION}-b}"
+ENV_ID="${ENV_ID:-recovery-$(date +%Y%m%d-%H%M)}"
 
 # GCP Configuration
 PROJECT_ID="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
@@ -145,6 +179,11 @@ confirm_evacuation() {
     echo -e "${YELLOW}This will create a NEW production stack in $NEW_REGION.${NC}"
     echo -e "${YELLOW}The primary stack (if still running) will NOT be affected.${NC}"
     echo ""
+
+    if [ "$AUTO_YES" = "true" ]; then
+        log_info "Auto-confirming (--yes flag provided)"
+        return 0
+    fi
 
     read -p "Proceed with regional evacuation? (yes/no): " confirm
     if [ "$confirm" != "yes" ]; then

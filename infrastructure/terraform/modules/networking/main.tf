@@ -4,6 +4,9 @@
 # Local variables for naming
 locals {
   name_prefix = "tamshai-${var.environment}${var.name_suffix}"
+  # VPC connector name has max 25 chars: ^[a-z][-a-z0-9]{0,23}[a-z0-9]$
+  # Use shorter name for connector: "tamshai-<env>-conn" or "tamshai-<env>-<hash>"
+  connector_name = var.name_suffix != "" ? "tamshai-${substr(md5(var.name_suffix), 0, 8)}" : "tamshai-${var.environment}-conn"
 }
 
 # VPC Network
@@ -115,7 +118,7 @@ resource "google_compute_firewall" "allow_iap_ssh" {
 resource "google_vpc_access_connector" "serverless_connector" {
   count = var.enable_serverless_connector ? 1 : 0
 
-  name          = "${local.name_prefix}-connector"
+  name          = local.connector_name
   region        = var.region
   network       = google_compute_network.vpc.name
   ip_cidr_range = var.serverless_connector_cidr
