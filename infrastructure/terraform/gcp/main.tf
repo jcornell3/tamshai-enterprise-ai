@@ -100,6 +100,9 @@ module "security" {
   enable_cloud_run_iam = false # Service-specific IAM is handled in cloudrun module
   claude_api_key       = var.claude_api_key
 
+  # Regional evacuation support: suffix for resource naming
+  name_suffix = local.name_suffix
+
   # User Provisioning Job configuration
   # Gap #49 Fix: Use enable_provision_job boolean (known at plan time) instead of
   # checking vpc_connector_id (unknown until apply) to avoid count dependency errors
