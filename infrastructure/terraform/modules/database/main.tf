@@ -26,6 +26,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 #checkov:skip=CKV_GCP_6:SSL enforced via ssl_mode=ENCRYPTED_ONLY (GCP recommended over require_ssl)
 #checkov:skip=CKV_GCP_55:PostgreSQL log_min_messages set to ERROR with comprehensive audit logging
 #checkov:skip=CKV_GCP_109:PostgreSQL logging configured with pgAudit for SOC 2 compliance
+#checkov:skip=CKV_GCP_79:POSTGRES_16 is the latest GA major version. Checkov rule may expect different format.
 resource "google_sql_database_instance" "postgres" {
   name             = local.instance_name
   database_version = var.database_version

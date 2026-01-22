@@ -198,6 +198,7 @@ jobs:
           soft_fail: true
           output_format: sarif
           output_file_path: checkov.sarif
+          skip_path: /usr/local,node_modules,.terraform
       
       - name: Upload Checkov results
         uses: github/codeql-action/upload-sarif@v3
