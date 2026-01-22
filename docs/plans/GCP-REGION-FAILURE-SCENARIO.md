@@ -652,6 +652,343 @@ log_warn "║    VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth           �
 log_warn "╚══════════════════════════════════════════════════════════════════╝"
 ```
 
+---
+
+## DR Domain Implementation Requirements
+
+### Overview
+
+The `-dr` subdomain strategy requires changes across multiple files, scripts, and processes. This section documents all required modifications for a complete DR-aware system.
+
+### Files Requiring DR Domain Updates
+
+#### 1. Keycloak Realm Configuration
+
+**File**: `keycloak/realm-export.json`
+
+**Current State**: Redirect URIs and web origins only include primary domains.
+
+**Required Changes**: Add `-dr` domains to all clients.
+
+```json
+{
+  "clientId": "tamshai-website",
+  "redirectUris": [
+    "https://prod.tamshai.com/*",
+    "https://prod-dr.tamshai.com/*",    // ADD
+    "https://app.tamshai.com/*",
+    "https://app-dr.tamshai.com/*"      // ADD
+  ],
+  "webOrigins": [
+    "https://prod.tamshai.com",
+    "https://prod-dr.tamshai.com",      // ADD
+    "https://app.tamshai.com",
+    "https://app-dr.tamshai.com"        // ADD
+  ],
+  "attributes": {
+    "post.logout.redirect.uris": "...##https://prod-dr.tamshai.com/*##https://app-dr.tamshai.com/*"  // APPEND
+  }
+}
+```
+
+**Clients to update**:
+- `tamshai-website` (main SSO client)
+- `web-portal` (SPA portal)
+- `mcp-gateway` (API gateway)
+- `hr-app`, `finance-app`, `sales-app`, `support-app`
+
+#### 2. Web Portal Auth Configuration
+
+**File**: `clients/web/packages/auth/src/config.ts`
+
+**Current State**: Detects `prod.tamshai.com` and `app.tamshai.com`.
+
+**Required Changes**: Add DR hostname detection.
+
+```typescript
+// Add to getKeycloakConfig()
+function getKeycloakConfig() {
+  const hostname = window.location.hostname;
+  const origin = window.location.origin;
+  const basePath = getAppBasePath();
+
+  // GCP Production - Primary OR Recovery
+  // prod.tamshai.com / prod-dr.tamshai.com / app.tamshai.com / app-dr.tamshai.com
+  const prodHosts = ['prod.tamshai.com', 'prod-dr.tamshai.com', 'app.tamshai.com', 'app-dr.tamshai.com'];
+  if (prodHosts.includes(hostname)) {
+    // Use environment variable which can be set differently for DR builds
+    const keycloakUrl = import.meta.env.VITE_KEYCLOAK_URL;
+    return {
+      authority: keycloakUrl,
+      client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'web-portal',
+      redirect_uri: `${origin}${basePath}/callback`,
+      post_logout_redirect_uri: origin,
+    };
+  }
+  // ... rest of function
+}
+```
+
+**Build-time DR configuration**:
+```bash
+# Primary build
+VITE_KEYCLOAK_URL=https://auth.tamshai.com/auth/realms/tamshai-corp
+
+# DR build
+VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth/realms/tamshai-corp
+```
+
+#### 3. Dynamic URL Discovery Library
+
+**File**: `scripts/gcp/lib/dynamic-urls.sh`
+
+**Current State**: Falls back to `auth.tamshai.com` if Keycloak URL discovery fails.
+
+**Required Changes**: Add DR-aware fallback logic.
+
+```bash
+# Modify discover_keycloak_url()
+discover_keycloak_url() {
+    local url
+    url=$(discover_service_url "keycloak") || {
+        # Check if we're in DR mode
+        if [ "${DR_MODE:-false}" = "true" ]; then
+            log_urls_warn "Falling back to auth-dr.tamshai.com (DR mode)" >&2
+            echo "https://auth-dr.tamshai.com"
+        else
+            log_urls_warn "Falling back to auth.tamshai.com" >&2
+            echo "https://auth.tamshai.com"
+        fi
+        return 0
+    }
+    echo "$url"
+}
+
+# Add DR mode detection
+is_dr_mode() {
+    # Check environment variable or Terraform workspace
+    if [ "${DR_MODE:-false}" = "true" ]; then
+        return 0
+    fi
+    # Check if env_id indicates recovery
+    if [[ "${ENV_ID:-primary}" == recovery-* ]]; then
+        return 0
+    fi
+    return 1
+}
+```
+
+#### 4. GitHub Actions Workflows
+
+**Files**:
+- `.github/workflows/deploy-to-gcp.yml`
+- `.github/workflows/phoenix-build-images.yml`
+
+**Required Changes**: Add DR mode input and environment detection.
+
+```yaml
+# deploy-to-gcp.yml
+inputs:
+  dr_mode:
+    description: 'Enable disaster recovery mode'
+    required: false
+    default: 'false'
+    type: boolean
+
+env:
+  DR_MODE: ${{ inputs.dr_mode }}
+  KEYCLOAK_DOMAIN: ${{ inputs.dr_mode == 'true' && 'auth-dr.tamshai.com' || 'auth.tamshai.com' }}
+  PORTAL_DOMAIN: ${{ inputs.dr_mode == 'true' && 'prod-dr.tamshai.com' || 'prod.tamshai.com' }}
+```
+
+#### 5. E2E Test Configuration
+
+**File**: `tests/e2e/specs/login-journey.ui.spec.ts`
+
+**Required Changes**: Add DR environment support.
+
+```typescript
+const environments = {
+  prod: {
+    baseUrl: process.env.PROD_BASE_URL || 'https://prod.tamshai.com',
+    keycloakUrl: process.env.PROD_KEYCLOAK_URL || 'https://auth.tamshai.com',
+  },
+  'prod-dr': {
+    baseUrl: process.env.PROD_DR_BASE_URL || 'https://prod-dr.tamshai.com',
+    keycloakUrl: process.env.PROD_DR_KEYCLOAK_URL || 'https://auth-dr.tamshai.com',
+  },
+};
+```
+
+### prod.tamshai.com (Static Website) Strategy
+
+#### Current Configuration
+
+```
+prod.tamshai.com → CNAME → c.storage.googleapis.com
+                          ↓
+                   GCS Bucket: prod.tamshai.com (us-central1)
+```
+
+**Problem**: If us-central1 is down, the GCS bucket is inaccessible.
+
+#### Solution: Multi-Regional Static Content
+
+**Option A: Multi-Regional Bucket (Recommended)**
+
+Change the static website bucket from regional to multi-regional:
+
+```terraform
+# modules/storage/main.tf
+resource "google_storage_bucket" "static_website" {
+  name     = var.static_website_domain
+  location = "US"  # Change from var.region to multi-regional "US"
+  # ...
+}
+```
+
+**Pros**: No DNS change needed during evacuation
+**Cons**: Slightly higher storage cost (~20% more), no change to current workflow
+
+**Option B: DR Bucket with DNS Failover**
+
+Create a separate bucket in the recovery region:
+
+```terraform
+resource "google_storage_bucket" "static_website_dr" {
+  count    = var.enable_dr_static_website ? 1 : 0
+  name     = "prod-dr.tamshai.com"  # DR domain as bucket name
+  location = "us-west1"
+  # Same website configuration as primary
+}
+```
+
+**DNS during evacuation**:
+```
+prod-dr.tamshai.com → CNAME → c.storage.googleapis.com
+                             ↓
+                      GCS Bucket: prod-dr.tamshai.com (us-west1)
+```
+
+**Pros**: Clear separation, lower ongoing cost
+**Cons**: Requires web portal rebuild and deployment to DR bucket, DNS update
+
+#### Recommended Approach
+
+1. **Immediate**: Keep current regional bucket, document manual failover
+2. **Short-term**: Change to multi-regional bucket (Option A)
+3. **Long-term**: Consider Cloud CDN with origin failover
+
+### Process: Switching to DR Domains
+
+#### Pre-Evacuation Setup (Do Now)
+
+1. **Keycloak Realm**:
+   ```bash
+   # Update realm-export.json with DR domains
+   # Run sync-realm.sh to apply changes
+   ./keycloak/scripts/sync-realm.sh prod
+   ```
+
+2. **Domain Verification**:
+   ```bash
+   # Verify auth-dr.tamshai.com in Google Search Console
+   # Create domain mapping in us-west1 (can coexist with primary)
+   gcloud run domain-mappings create \
+     --service=keycloak \
+     --domain=auth-dr.tamshai.com \
+     --region=us-west1
+   ```
+
+3. **DNS Pre-Configuration** (Cloudflare):
+   - Create `auth-dr.tamshai.com` → `ghs.googlehosted.com` (inactive until DR)
+   - Create `api-dr.tamshai.com` as a placeholder CNAME
+   - Create `prod-dr.tamshai.com` → placeholder (or multi-regional bucket)
+
+4. **Static Website** (if using Option A):
+   ```bash
+   # Change bucket to multi-regional
+   cd infrastructure/terraform/gcp
+   terraform apply -var="static_website_location=US"
+   ```
+
+#### During Evacuation
+
+1. **Run evacuation script** (handles infrastructure):
+   ```bash
+   ./scripts/gcp/evacuate-region.sh us-west1 us-west1-b recovery-01
+   ```
+
+2. **Update DNS** (Phase 7 of script provides guidance):
+   - `api.tamshai.com` → new MCP Gateway URL (or use `api-dr.tamshai.com`)
+   - `auth-dr.tamshai.com` → already mapped to us-west1 Keycloak
+
+3. **Rebuild and deploy web portal** (if not using multi-regional bucket):
+   ```bash
+   # Build with DR Keycloak URL
+   cd clients/web
+   VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth/realms/tamshai-corp \
+     npm run build
+
+   # Deploy to DR bucket (or update primary if multi-regional)
+   gsutil -m rsync -r dist/ gs://prod-dr.tamshai.com/
+   ```
+
+4. **Update Cloudflare DNS for portal**:
+   - `prod-dr.tamshai.com` → `c.storage.googleapis.com` (points to DR bucket)
+   - OR update `prod.tamshai.com` if using multi-regional bucket
+
+5. **Communicate to users**:
+   - Primary: Use `prod-dr.tamshai.com` during outage
+   - Or: Primary domains will work once DNS propagates (~30s with Cloudflare)
+
+#### Post-Recovery (When Primary Region Returns)
+
+1. **Verify primary region health**
+2. **Decide**: Stay on DR or migrate back?
+3. **If migrating back**:
+   - Revert DNS changes
+   - Sync any data changes from DR to primary
+   - Destroy DR stack to avoid costs
+
+### Summary: Files to Modify for DR Awareness
+
+| File | Change Type | Priority |
+|------|-------------|----------|
+| `keycloak/realm-export.json` | Add DR redirect URIs | **P0 - Required** |
+| `clients/web/packages/auth/src/config.ts` | Add DR hostname detection | **P0 - Required** |
+| `scripts/gcp/lib/dynamic-urls.sh` | Add DR_MODE fallback | P1 - Recommended |
+| `scripts/gcp/evacuate-region.sh` | Already updated | ✅ Done |
+| `.github/workflows/deploy-to-gcp.yml` | Add dr_mode input | P1 - Recommended |
+| `tests/e2e/specs/login-journey.ui.spec.ts` | Add prod-dr environment | P2 - Nice to have |
+| `infrastructure/terraform/modules/storage/main.tf` | Multi-regional bucket | P1 - Recommended |
+| `infrastructure/terraform/modules/cloudrun/main.tf` | DR domain mapping var | P1 - Recommended |
+
+### Implementation Checklist
+
+**Phase 1: Keycloak Configuration (Required for DR to work)**
+- [ ] Update `realm-export.json` with DR redirect URIs
+- [ ] Run `sync-realm.sh prod` to apply
+- [ ] Verify OAuth flows work with DR domains (test in dev first)
+
+**Phase 2: Infrastructure Preparation**
+- [ ] Verify `auth-dr.tamshai.com` domain in Google Search Console
+- [ ] Create domain mapping for `auth-dr.tamshai.com` in us-west1
+- [ ] Pre-configure Cloudflare DNS placeholders
+- [ ] Consider changing static bucket to multi-regional
+
+**Phase 3: Script and Code Updates**
+- [ ] Update `dynamic-urls.sh` with DR_MODE support
+- [ ] Update web portal auth config for DR hostnames
+- [ ] Update GitHub workflows with dr_mode input
+
+**Phase 4: Testing**
+- [ ] Test OAuth flow with `auth-dr.tamshai.com`
+- [ ] Test full evacuation with DR domains
+- [ ] Verify E2E tests pass against DR environment
+
+---
+
 ### Long-Term DNS Solutions
 
 #### Option 1: Global Load Balancer (Recommended for Production)
