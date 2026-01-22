@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
-**Last Updated**: January 21, 2026
-**Version**: 3.2.0
+**Last Updated**: January 22, 2026
+**Version**: 3.3.0
 **Owner**: Platform Team
 
 ## Overview
@@ -17,6 +17,18 @@ This runbook provides instructions for performing a complete Phoenix rebuild of 
 - **Major Infrastructure Changes**: Terraform state is corrupted
 - **Cost Optimization**: Need to recreate with different specs
 - **Testing DR Procedures**: Quarterly DR drills
+
+> **Regional Outage?** If the primary region (us-central1) is completely unavailable, **DO NOT use Phoenix Rebuild**. Use [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) instead. Phoenix requires the region to be accessible for `terraform destroy`.
+
+### Decision Tree
+
+```
+Is us-central1 available?
+  │
+  ├── YES → Use THIS RUNBOOK (Phoenix Rebuild)
+  │
+  └── NO (GCP Status shows outage) → Use GCP_REGION_FAILURE_RUNBOOK.md
+```
 
 ### Estimated Duration: 75-100 minutes (automated)
 
@@ -309,6 +321,7 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 
 ## Related Documentation
 
+- [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (15-25 min RTO)
 - [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Latest rebuild log (0 manual actions)
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)
 - [Identity Sync](./IDENTITY_SYNC.md) - User provisioning
@@ -349,6 +362,13 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 | `scripts/gcp/lib/secrets.sh` | Secret sync functions |
 | `scripts/gcp/lib/health-checks.sh` | Health check functions |
 | `scripts/gcp/lib/dynamic-urls.sh` | URL discovery |
+
+### Regional Evacuation Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/gcp/evacuate-region.sh` | Create recovery stack in alternate region |
+| `scripts/gcp/cleanup-recovery.sh` | Destroy recovery stack after failback |
 
 ### GitHub Actions Workflows
 
@@ -526,6 +546,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.3.0 | Jan 22, 2026 | Tamshai-Dev | Added decision tree and reference to GCP Regional Failure Runbook; added Regional Evacuation Scripts section |
 | 3.2.0 | Jan 21, 2026 | Tamshai-Dev | Added Issues #32, #36, #37 from v10/v11 rebuilds; updated phase table with durations; updated E2E test command; staged Phase 7 with SSL wait |
 | 3.1.0 | Jan 20, 2026 | Tamshai-Dev | Added Issues #9, #10, #11 troubleshooting; Phase 7 validates SA key; Phase 8 has 409 recovery |
 | 3.0.0 | Jan 20, 2026 | Tamshai-Dev | Restructured: minimal main runbook, manual procedures moved to Appendix B |
