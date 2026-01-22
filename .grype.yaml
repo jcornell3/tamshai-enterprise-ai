@@ -35,3 +35,6 @@ ignore:
   #
   # GHSA-8qq5-rm4j-mr97 (HIGH) - tar arbitrary file write vulnerability
   - vulnerability: GHSA-8qq5-rm4j-mr97
+  #
+  # GHSA-r6q2-hw4h-h46w (HIGH) - tar directory traversal vulnerability
+  - vulnerability: GHSA-r6q2-hw4h-h46w

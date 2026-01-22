@@ -1,10 +1,10 @@
 # MCP Journey Server - TDD Plan
 
-**Version**: 1.1.0
+**Version**: 1.2.0
 **Created**: January 21, 2026
 **Updated**: January 22, 2026
 **Author**: Tamshai-QA (Claude-QA)
-**Status**: IN PROGRESS - Sprint 3 RED Complete
+**Status**: IN PROGRESS - Sprint 4 RED Complete
 **Related**: [PROJECT_JOURNEY_AGENT.md](./PROJECT_JOURNEY_AGENT.md)
 
 ---
@@ -52,14 +52,14 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 
 ## Progress Tracking
 
-### Current Status: Sprint 3 RED Complete
+### Current Status: Sprint 4 RED Complete
 
 | Sprint | RED Phase | GREEN Phase | Tests | Status |
 |--------|-----------|-------------|-------|--------|
 | Sprint 1 | ✅ Complete | ✅ Complete | 78 | **DONE** |
 | Sprint 2 | ✅ Complete | ✅ Complete | 74 | **DONE** |
-| Sprint 3 | ✅ Complete | ⏳ Pending | 45 | **RED COMPLETE** |
-| Sprint 4 | ⏳ Pending | ⏳ Pending | ~35 | Not Started |
+| Sprint 3 | ✅ Complete | ✅ Complete | 60 | **DONE** |
+| Sprint 4 | ✅ Complete | ⏳ Pending | ~42 | **RED COMPLETE** |
 
 ### Test Count Summary
 
@@ -67,8 +67,9 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 |-------|---------|---------|-------|
 | Sprint 1 (Indexer) | 78 | 0 | 78 |
 | Sprint 2 (Tools) | 74 | 0 | 74 |
-| Sprint 3 (Resources) | 15 | 45 | 60 |
-| **Current Total** | **167** | **45** | **212** |
+| Sprint 3 (Resources) | 60 | 0 | 60 |
+| Sprint 4 (Middleware) | ~10 | ~32 | ~42 |
+| **Current Total** | **~222** | **~32** | **~254** |
 
 ### Sprint Completion Log
 
@@ -82,10 +83,15 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 - **Implementation**: query-failures.ts (159 lines), lookup-adr.ts (210 lines), search-journey.ts (163 lines), get-context.ts (213 lines), list-pivots.ts (170 lines)
 - **Key Features**: Input sanitization, ADR ID validation, semantic search with embeddings, date range filtering, component grouping
 
-#### Sprint 3 RED (January 22, 2026)
-- **Test Files Created**: failures.test.ts (10 tests), decisions.test.ts (11 tests), evolution.test.ts (12 tests), lessons.test.ts (10 tests), phoenix.test.ts (15 tests)
-- **Stub Files Created**: failures.ts, decisions.ts, evolution.ts, lessons.ts, phoenix.ts, index.ts
-- **All 45 resource tests failing with "Not implemented"**
+#### Sprint 3 GREEN (January 22, 2026)
+- **Commit**: `9e48e9f` - feat(mcp-journey): Complete Sprint 3 GREEN phase - MCP resources implementation
+- **Implementation**: failures.ts, decisions.ts, evolution.ts, lessons.ts, phoenix.ts
+- **Key Features**: Version range comparisons for Phoenix (v9..v11), numerical sorting, ADR partial ID normalization, topic categorization for lessons, chronological timeline sorting
+
+#### Sprint 4 RED (January 22, 2026)
+- **Test Files Created**: agent-identity.test.ts (~12 tests), rate-limit.test.ts (~12 tests), knowledge-index.test.ts (~9 tests), mcp-server.test.ts (~17 tests)
+- **Stub Files Created**: agent-identity.ts, rate-limit.ts, middleware/index.ts, src/index.ts (McpServer), tools/index.ts
+- **All middleware/integration tests failing with "Not implemented"**
 
 ---
 
