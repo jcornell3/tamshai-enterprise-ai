@@ -45,10 +45,10 @@ export class FailuresResource {
     }
 
     // Search for failure-related documents
-    const documents = this.index.searchByType(
-      ['failure-analysis', 'debugging-log'],
-      topic
-    );
+    const documents = this.index.searchByType([
+      'failure-analysis',
+      'debugging-log',
+    ]);
 
     // Filter by topic (case-insensitive match in content or metadata)
     const filtered = documents.filter((doc) => {
