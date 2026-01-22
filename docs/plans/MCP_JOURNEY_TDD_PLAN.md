@@ -1,9 +1,10 @@
 # MCP Journey Server - TDD Plan
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Created**: January 21, 2026
+**Updated**: January 22, 2026
 **Author**: Tamshai-QA (Claude-QA)
-**Status**: DRAFT - Awaiting Approval
+**Status**: IN PROGRESS - Sprint 3 RED Complete
 **Related**: [PROJECT_JOURNEY_AGENT.md](./PROJECT_JOURNEY_AGENT.md)
 
 ---
@@ -46,6 +47,45 @@ This document defines the Test-Driven Development (TDD) plan for the **mcp-journ
 - **90% diff coverage** on all new code (enforced by Codecov)
 - **Type coverage**: 85%+ (via typescript-coverage-report)
 - **Integration tests**: Minimum 10% of total test count
+
+---
+
+## Progress Tracking
+
+### Current Status: Sprint 3 RED Complete
+
+| Sprint | RED Phase | GREEN Phase | Tests | Status |
+|--------|-----------|-------------|-------|--------|
+| Sprint 1 | ✅ Complete | ✅ Complete | 78 | **DONE** |
+| Sprint 2 | ✅ Complete | ✅ Complete | 74 | **DONE** |
+| Sprint 3 | ✅ Complete | ⏳ Pending | 45 | **RED COMPLETE** |
+| Sprint 4 | ⏳ Pending | ⏳ Pending | ~35 | Not Started |
+
+### Test Count Summary
+
+| Phase | Passing | Failing | Total |
+|-------|---------|---------|-------|
+| Sprint 1 (Indexer) | 78 | 0 | 78 |
+| Sprint 2 (Tools) | 74 | 0 | 74 |
+| Sprint 3 (Resources) | 15 | 45 | 60 |
+| **Current Total** | **167** | **45** | **212** |
+
+### Sprint Completion Log
+
+#### Sprint 1 GREEN (January 21, 2026)
+- **Commit**: `0f17bf7` - feat(mcp-journey): Complete Sprint 1 GREEN phase - indexer implementation
+- **Implementation**: markdown-parser.ts (375 lines), json-ld-extractor.ts (148 lines), embedding-generator.ts (264 lines), index-builder.ts (441 lines)
+- **Key Features**: Frontmatter extraction with date normalization, JSON-LD parsing, Gemini embeddings with caching, SQLite FTS5 search
+
+#### Sprint 2 GREEN (January 22, 2026)
+- **Commit**: `509dbea` - feat(mcp-journey): Complete Sprint 2 GREEN phase - MCP tools
+- **Implementation**: query-failures.ts (159 lines), lookup-adr.ts (210 lines), search-journey.ts (163 lines), get-context.ts (213 lines), list-pivots.ts (170 lines)
+- **Key Features**: Input sanitization, ADR ID validation, semantic search with embeddings, date range filtering, component grouping
+
+#### Sprint 3 RED (January 22, 2026)
+- **Test Files Created**: failures.test.ts (10 tests), decisions.test.ts (11 tests), evolution.test.ts (12 tests), lessons.test.ts (10 tests), phoenix.test.ts (15 tests)
+- **Stub Files Created**: failures.ts, decisions.ts, evolution.ts, lessons.ts, phoenix.ts, index.ts
+- **All 45 resource tests failing with "Not implemented"**
 
 ---
 
