@@ -890,20 +890,20 @@ resource "google_storage_bucket" "static_website" {
 
 These steps must be completed **before** a regional outage occurs.
 
-#### Step 1: Update Keycloak Realm with DR Domains
+#### Step 1: Pre-Configure Cloudflare DNS
 
-```bash
-# Edit keycloak/realm-export.json to add DR redirect URIs
-# Then apply to production Keycloak
+In Cloudflare dashboard, create these records (required before domain verification):
 
-./keycloak/scripts/sync-realm.sh prod
-```
+| Type | Name | Target | Proxy | Status |
+|------|------|--------|-------|--------|
+| CNAME | `auth-dr` | `ghs.googlehosted.com` | Yes | Active (ready for DR) |
+| CNAME | `api` | `mcp-gateway-fn44nd7wba-uc.a.run.app` | Yes | Active (will update during DR) |
 
 #### Step 2: Verify DR Domain in Google Search Console
 
 1. Go to [Google Search Console](https://search.google.com/search-console)
 2. Add property: `auth-dr.tamshai.com`
-3. Verify via DNS TXT record in Cloudflare
+3. Verify via DNS (CNAME record from Step 1 satisfies verification)
 
 #### Step 3: Create DR Domain Mapping in us-west1
 
@@ -917,14 +917,14 @@ gcloud run domain-mappings create \
   --service=keycloak
 ```
 
-#### Step 4: Pre-Configure Cloudflare DNS
+#### Step 4: Update Keycloak Realm with DR Domains
 
-In Cloudflare dashboard, create these records:
+```bash
+# The realm-export.json already has DR redirect URIs (committed)
+# Apply to production Keycloak
 
-| Type | Name | Target | Proxy | Status |
-|------|------|--------|-------|--------|
-| CNAME | `auth-dr` | `ghs.googlehosted.com` | Yes | Active (ready for DR) |
-| CNAME | `api` | `mcp-gateway-fn44nd7wba-uc.a.run.app` | Yes | Active (will update during DR) |
+./keycloak/scripts/sync-realm.sh prod
+```
 
 #### Step 5: Convert Static Website Bucket to Multi-Regional
 
@@ -1056,38 +1056,34 @@ When us-central1 recovers:
 
 #### Phase 1: Pre-Evacuation Setup (Do Now)
 
-**Keycloak Configuration**
-- [ ] Edit `keycloak/realm-export.json`:
-  - [ ] Add `https://prod-dr.tamshai.com/*` to all client `redirectUris`
-  - [ ] Add `https://prod-dr.tamshai.com` to all client `webOrigins`
-  - [ ] Add `https://auth-dr.tamshai.com/*` to `post.logout.redirect.uris`
-- [ ] Run `./keycloak/scripts/sync-realm.sh prod` to apply changes
-- [ ] Verify in Keycloak Admin UI that DR URIs are present
+**1. Cloudflare DNS (Do First)**
+- [ ] Create CNAME: `auth-dr` → `ghs.googlehosted.com` (proxied)
+- [ ] Verify `api.tamshai.com` CNAME exists and note current target
 
-**Domain Verification**
+**2. Domain Verification**
 - [ ] Add `auth-dr.tamshai.com` to Google Search Console
-- [ ] Add DNS TXT verification record in Cloudflare
+- [ ] Verify via DNS (CNAME from step 1 satisfies verification)
 - [ ] Complete domain verification
 
-**Domain Mapping**
+**3. Domain Mapping**
 - [ ] Create domain mapping: `gcloud run domain-mappings create --domain=auth-dr.tamshai.com --region=us-west1 --service=keycloak`
 - [ ] Wait for SSL certificate provisioning (~15-30 minutes)
 - [ ] Verify: `curl -I https://auth-dr.tamshai.com` returns valid SSL
 
-**Cloudflare DNS**
-- [ ] Create CNAME: `auth-dr` → `ghs.googlehosted.com` (proxied)
-- [ ] Verify `api.tamshai.com` CNAME exists and note current target
+**4. Keycloak Configuration**
+- [x] Edit `keycloak/realm-export.json` (DONE - committed)
+- [ ] Run `./keycloak/scripts/sync-realm.sh prod` to apply changes
+- [ ] Verify in Keycloak Admin UI that DR URIs are present
 
-**Static Website Bucket**
-- [ ] Add `static_website_location` variable to `modules/storage/variables.tf`
-- [ ] Update `modules/storage/main.tf` to use variable
+**5. Static Website Bucket**
+- [x] Add `static_website_location` variable to `modules/storage/variables.tf` (DONE - committed)
+- [x] Update `modules/storage/main.tf` to use variable (DONE - committed)
 - [ ] Schedule maintenance window for bucket migration
-- [ ] Apply: `terraform apply -var="static_website_location=US"`
+- [ ] Apply: `terraform apply` (bucket will use multi-regional "US" by default)
 - [ ] Verify `prod.tamshai.com` still loads correctly
 
-**Web Portal Auth Config**
-- [ ] Update `clients/web/packages/auth/src/config.ts`:
-  - [ ] Add `prod-dr.tamshai.com` to `prodHosts` array
+**6. Web Portal Auth Config**
+- [x] Update `clients/web/packages/auth/src/config.ts` (DONE - committed)
 - [ ] Test locally with mocked hostname
 
 #### Phase 2: Validation Testing
