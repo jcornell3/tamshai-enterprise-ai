@@ -334,6 +334,92 @@ phase6_verify() {
 }
 
 # =============================================================================
+# PHASE 7: DNS CONFIGURATION GUIDANCE
+# =============================================================================
+
+phase7_dns_guidance() {
+    log_phase "7" "DNS CONFIGURATION"
+
+    cd "$TF_DIR"
+
+    local gateway_url keycloak_url portal_url
+    gateway_url=$(terraform output -raw mcp_gateway_url 2>/dev/null || echo "")
+    keycloak_url=$(terraform output -raw keycloak_url 2>/dev/null || echo "")
+    portal_url=$(terraform output -raw web_portal_url 2>/dev/null || echo "")
+
+    # Extract hostnames without https://
+    local gateway_host="${gateway_url#https://}"
+    local keycloak_host="${keycloak_url#https://}"
+    local portal_host="${portal_url#https://}"
+
+    log_step "New service URLs for DNS configuration:"
+    log_info "MCP Gateway: $gateway_host"
+    log_info "Keycloak: $keycloak_host"
+    log_info "Web Portal: $portal_host"
+
+    echo ""
+    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║                       MANUAL DNS UPDATES REQUIRED                            ║${NC}"
+    echo -e "${YELLOW}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${YELLOW}║                                                                              ║${NC}"
+    echo -e "${YELLOW}║  1. API Domain (Cloudflare):                                                 ║${NC}"
+    echo -e "${YELLOW}║     api.tamshai.com CNAME → ${gateway_host}${NC}"
+    echo -e "${YELLOW}║                                                                              ║${NC}"
+    echo -e "${YELLOW}║  2. Keycloak Domain:                                                         ║${NC}"
+    echo -e "${YELLOW}║     ⚠️  auth.tamshai.com CANNOT be remapped during regional outage!          ║${NC}"
+    echo -e "${YELLOW}║     The domain mapping is bound to the dead region.                          ║${NC}"
+    echo -e "${YELLOW}║                                                                              ║${NC}"
+    echo -e "${YELLOW}║     Options:                                                                 ║${NC}"
+    echo -e "${YELLOW}║     a) Use pre-configured auth-dr.tamshai.com (recommended)                  ║${NC}"
+    echo -e "${YELLOW}║     b) Use raw Cloud Run URL: ${keycloak_host}${NC}"
+    echo -e "${YELLOW}║     c) Wait for primary region recovery                                      ║${NC}"
+    echo -e "${YELLOW}║                                                                              ║${NC}"
+    echo -e "${YELLOW}║  3. Web Portal (if domain-mapped):                                           ║${NC}"
+    echo -e "${YELLOW}║     Update CNAME or rebuild with new Keycloak URL:                           ║${NC}"
+    echo -e "${YELLOW}║     VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth                       ║${NC}"
+    echo -e "${YELLOW}║                                                                              ║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Check if Cloudflare API token is available
+    if [ -n "${CF_API_TOKEN:-}" ] && [ -n "${CF_ZONE_ID:-}" ]; then
+        log_step "Cloudflare credentials detected - attempting automatic DNS update for api.tamshai.com..."
+
+        # Get current record ID
+        local record_id
+        record_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=api.tamshai.com&type=CNAME" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" | jq -r '.result[0].id // empty')
+
+        if [ -n "$record_id" ]; then
+            local update_result
+            update_result=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${record_id}" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{
+                    \"type\": \"CNAME\",
+                    \"name\": \"api\",
+                    \"content\": \"${gateway_host}\",
+                    \"proxied\": true
+                }")
+
+            if echo "$update_result" | jq -e '.success' &>/dev/null; then
+                log_success "api.tamshai.com DNS updated automatically!"
+            else
+                log_warn "DNS update failed: $(echo "$update_result" | jq -r '.errors[0].message // "Unknown error"')"
+                log_info "Please update DNS manually in Cloudflare dashboard"
+            fi
+        else
+            log_warn "Could not find api.tamshai.com record in Cloudflare"
+            log_info "Please update DNS manually in Cloudflare dashboard"
+        fi
+    else
+        log_info "Set CF_API_TOKEN and CF_ZONE_ID for automatic DNS updates"
+    fi
+
+    log_success "DNS guidance complete"
+}
+
+# =============================================================================
 # SUMMARY
 # =============================================================================
 
@@ -396,6 +482,7 @@ main() {
     phase4_deploy_services
     phase5_configure_test_user
     phase6_verify
+    phase7_dns_guidance
 
     local end_time duration_min
     end_time=$(date +%s)
