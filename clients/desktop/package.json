@@ -2,7 +2,7 @@
   "name": "tamshai-ai-desktop",
   "version": "0.1.0",
   "overrides": {
-    "tar": "7.5.3"
+    "tar": "7.5.4"
   },
   "description": "Tamshai AI Assistant - Cross-platform Desktop Client",
   "main": "dist/main/index.js",
@@ -37,7 +37,7 @@
     "@typescript-eslint/parser": "^6.13.0",
     "@vitejs/plugin-react": "^4.2.0",
     "electron": "^39.2.7",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^26.5.0",
     "electron-updater": "^6.1.7",
     "electron-vite": "^5.0.0",
     "eslint": "^8.54.0",
@@ -59,7 +59,10 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "resources/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -67,17 +70,27 @@
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "resources/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Office",
       "icon": "resources/icon.png"
     },
-    "protocols": [{
-      "name": "tamshai-ai",
-      "schemes": ["tamshai-ai"]
-    }]
+    "protocols": [
+      {
+        "name": "tamshai-ai",
+        "schemes": [
+          "tamshai-ai"
+        ]
+      }
+    ]
   }
 }
