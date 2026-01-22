@@ -60,31 +60,33 @@ We use **Test-Driven Development (TDD)** for all service application code. This 
 
 | Metric | Coverage | Target | Status |
 |--------|----------|--------|--------|
-| **Overall** | 80.8%+ | 70-80% | ✅ Target Achieved |
-| Statements | 80.8%+ | 70% | ✅ Excellent |
-| Branches | 81%+ | 70% | ✅ Excellent |
-| Functions | 80%+ | 70% | ✅ Excellent |
-| Lines | 81.28%+ | 70% | ✅ Excellent |
+| **Overall** | 81.6% | 70-80% | ✅ Target Achieved |
+| Statements | 81.6% | 70% | ✅ Excellent |
+| Branches | 71.7% | 70% | ✅ Good |
+| Functions | 82.5% | 70% | ✅ Excellent |
+| Lines | 81.8% | 70% | ✅ Excellent |
 
-**Progress:** +49.28pp improvement from 31.52% (original baseline)
+**Note:** Overall coverage is a weighted average by lines of code across MCP Gateway (6,371 LOC) and MCP Journey (3,521 LOC).
+
+**Progress:** +50.1pp improvement from 31.52% (original baseline)
 
 **Total Tests:**
-- **MCP Gateway:** 497 unit tests (80.8% coverage)
+- **MCP Gateway:** 451 unit tests (73% coverage)
 - **MCP Journey:** 260 tests (97.21% coverage)
 - **Code Simplification TDD:** ~397 tests (Shell, Flutter, React, MCP servers)
 - **Integration Tests:** 96 tests (89 passed, 7 skipped)
-- **Estimated Total:** 1,250+ tests across all projects
+- **Estimated Total:** 1,200+ tests across all projects
 
 ---
 
 ### 1.2 MCP Gateway (Services/mcp-gateway)
 
-**Overall:** 80.8% statements, 81.28% lines (target was 78%+) ✅
+**Overall:** 73% statements, 65% branch, 74% functions, 73% lines ✅
 
 **Phase 5-8 Refactoring Complete (January 2026):**
 - Extracted 12+ testable modules from monolithic index.ts
 - index.ts reduced from 1,533 lines to ~525 lines (mostly wiring)
-- 497 tests total
+- 451 tests total (19 test suites)
 
 **Module Breakdown (Post-Refactoring):**
 
