@@ -34,3 +34,17 @@ output "static_website_url" {
   description = "Public URL for static website"
   value       = try("https://storage.googleapis.com/${google_storage_bucket.static_website[0].name}/index.html", null)
 }
+
+# =============================================================================
+# BACKUP BUCKET OUTPUTS (Regional Evacuation Support)
+# =============================================================================
+
+output "backup_bucket_name" {
+  description = "Name of the multi-regional backup bucket for disaster recovery"
+  value       = try(google_storage_bucket.backups[0].name, null)
+}
+
+output "backup_bucket_url" {
+  description = "URL of the backup bucket (gs://bucket-name)"
+  value       = try(google_storage_bucket.backups[0].url, null)
+}

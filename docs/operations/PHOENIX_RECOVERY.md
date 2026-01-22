@@ -727,6 +727,72 @@ gcloud storage buckets delete gs://prod.tamshai.com --quiet
 
 **Note**: `phoenix_mode=true` should only be used during full environment rebuilds.
 
+### Scenario 14: Regional Outage - Complete Region Unavailable (Prod)
+
+**Symptoms**:
+- GCP Console shows region status "Outage" or "Degraded"
+- `gcloud` commands to us-central1 timeout or return 503
+- `terraform plan` hangs on state refresh
+- All production services unreachable
+
+**Root Cause**: Complete regional outage in us-central1. This is the ultimate disaster recovery scenario - the entire region is unavailable, meaning terraform cannot communicate with existing resources.
+
+**Status**: ✅ **REGIONAL EVACUATION AVAILABLE** (January 2026)
+
+The `evacuate-region.sh` script implements the "Amnesia" approach: creates a fresh Terraform state in the target region, bypassing the unreachable primary region entirely.
+
+**CRITICAL DECISION**: Do NOT attempt `terraform destroy` against a dead region. It will hang indefinitely. Move directly to evacuation.
+
+**Recovery**:
+```bash
+# Single-command regional evacuation to Oregon (us-west1)
+./scripts/gcp/evacuate-region.sh us-west1 us-west1-b recovery-$(date +%Y%m%d)
+
+# Or with explicit environment ID
+./scripts/gcp/evacuate-region.sh us-west1 us-west1-b my-recovery-stack
+```
+
+**Expected Duration**: 15-25 minutes (much faster than same-region rebuild)
+
+**What the Script Does**:
+1. Initializes fresh Terraform state at `gcp/recovery/<ENV_ID>`
+2. Deploys all infrastructure to the new region
+3. Regenerates service account key and updates GitHub secret
+4. Triggers Cloud Run deployment workflow
+5. Configures test-user.journey TOTP
+6. Runs verification tests
+
+**Evacuation Regions (Priority Order)**:
+
+| Priority | Region | Zone | Rationale |
+|----------|--------|------|-----------|
+| 1 | us-west1 | us-west1-b | Same cost, no hurricane risk, closest to CA team |
+| 2 | us-east1 | us-east1-b | Same cost, but hurricane zone (June-Nov) |
+| 3 | us-east5 | us-east5-b | Same cost, newer region |
+
+**Post-Recovery**:
+1. Update DNS records if not using global load balancer
+2. Verify E2E tests pass: `cd tests/e2e && npm run test:login:prod`
+3. Notify stakeholders of new service URLs
+4. Once primary region recovers, clean up orphaned resources
+
+**Data Restoration** (if needed):
+```bash
+# Restore from multi-regional backup bucket
+./scripts/db/restore-from-gcs.sh --bucket=tamshai-prod-backups-<project-id>
+```
+
+**Technical Details**:
+- Uses `env_id` variable for resource namespacing (avoids global name collisions)
+- Fresh state prefix: `gcp/recovery/<ENV_ID>` (doesn't touch primary state)
+- Dynamic resource naming: VPC, Cloud SQL, etc. all get `-<ENV_ID>` suffix
+- Multi-regional backup bucket survives regional outages
+
+**References**:
+- `docs/plans/GCP-REGION-FAILURE-SCENARIO.md` - Full implementation plan
+- `scripts/gcp/evacuate-region.sh` - Evacuation script
+- `infrastructure/terraform/gcp/variables.tf` - env_id, recovery_mode variables
+
 ## Recovery Checklist
 
 Use this checklist after any Phoenix recovery:
@@ -900,5 +966,5 @@ gh workflow run deploy-to-gcp.yml --ref main
 
 ---
 
-*Last Updated: January 21, 2026*
-*Status: Active - Updated with Issues #36, #37 fixes from v10/v11 rebuilds (13 disaster recovery scenarios)*
+*Last Updated: January 22, 2026*
+*Status: Active - Updated with regional evacuation capability (14 disaster recovery scenarios)*

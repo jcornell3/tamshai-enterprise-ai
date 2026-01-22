@@ -156,6 +156,10 @@ module "storage" {
   static_website_domain      = var.static_website_domain
   cicd_service_account_email = module.security.cicd_service_account_email
 
+  # Regional evacuation support: multi-regional backup bucket for disaster recovery
+  enable_backup_bucket  = true
+  backup_retention_days = 90
+
   depends_on = [module.security]
 }
 
@@ -245,4 +249,56 @@ module "cloudrun" {
   web_portal_service_account = module.security.mcp_gateway_service_account_email
 
   depends_on = [module.database, module.security, module.networking]
+}
+
+# =============================================================================
+# AUTO-RESTORE FOR REGIONAL EVACUATION
+# =============================================================================
+# This resource triggers automatic data restoration when deploying to a
+# recovery region. Only runs when:
+#   1. env_id != "primary" (this is a recovery deployment)
+#   2. source_backup_bucket is set (backup location specified)
+#   3. recovery_mode is true (explicitly in recovery mode)
+#
+# The restore script imports Cloud SQL data from the multi-regional backup bucket.
+
+resource "null_resource" "auto_restore_on_recovery" {
+  count = local.is_recovery && var.source_backup_bucket != "" && var.recovery_mode ? 1 : 0
+
+  # Re-run if backup bucket changes
+  triggers = {
+    backup_bucket = var.source_backup_bucket
+    instance_name = local.postgres_instance_name
+  }
+
+  provisioner "local-exec" {
+    command     = <<-EOT
+      echo "=============================================="
+      echo "AUTO-RESTORE: Regional Evacuation Data Restore"
+      echo "=============================================="
+      echo "Instance: ${local.postgres_instance_name}"
+      echo "Backup Bucket: ${var.source_backup_bucket}"
+      echo ""
+      echo "Checking for restore script..."
+
+      if [ -f "${path.root}/../../scripts/db/restore-from-gcs.sh" ]; then
+        echo "Running restore script..."
+        "${path.root}/../../scripts/db/restore-from-gcs.sh" \
+          --instance="${local.postgres_instance_name}" \
+          --bucket="${var.source_backup_bucket}" \
+          --project="${var.project_id}"
+      else
+        echo "WARNING: Restore script not found."
+        echo "Manual restore required from: gs://${var.source_backup_bucket}"
+        echo ""
+        echo "To restore manually:"
+        echo "  gcloud sql import sql ${local.postgres_instance_name} \\"
+        echo "    gs://${var.source_backup_bucket}/latest/tamshai_hr.sql \\"
+        echo "    --database=tamshai_hr"
+      fi
+    EOT
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [module.database, module.cloudrun]
 }

@@ -50,3 +50,19 @@ variable "cicd_service_account_email" {
   type        = string
   default     = ""
 }
+
+# =============================================================================
+# REGIONAL EVACUATION SUPPORT
+# =============================================================================
+
+variable "enable_backup_bucket" {
+  description = "Enable multi-regional backup bucket for disaster recovery. Stores Cloud SQL exports for cross-region restore."
+  type        = bool
+  default     = false
+}
+
+variable "backup_retention_days" {
+  description = "Number of days to retain backups before automatic deletion"
+  type        = number
+  default     = 90
+}

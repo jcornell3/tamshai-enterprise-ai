@@ -188,3 +188,82 @@ resource "google_storage_bucket_iam_member" "static_website_cicd_bucket_reader" 
   role   = "roles/storage.legacyBucketReader"
   member = "serviceAccount:${var.cicd_service_account_email}"
 }
+
+# =============================================================================
+# MULTI-REGIONAL BACKUP BUCKET (Regional Evacuation Support)
+# =============================================================================
+# This bucket stores Cloud SQL exports and other critical data backups.
+# Located in multi-regional "US" so it survives any single regional outage.
+# Used by evacuate-region.sh to restore data in the recovery region.
+
+resource "google_storage_bucket" "backups" {
+  count = var.enable_backup_bucket ? 1 : 0
+
+  name     = "tamshai-${var.environment}-backups-${var.project_id}"
+  location = "US" # Multi-regional for disaster recovery
+  project  = var.project_id
+
+  uniform_bucket_level_access = true
+  force_destroy               = false # Never auto-delete backup bucket
+
+  public_access_prevention = "enforced" # Security: Prevent public access
+
+  versioning {
+    enabled = true # Keep multiple versions of backups
+  }
+
+  logging {
+    log_bucket        = google_storage_bucket.logs.name
+    log_object_prefix = "backups/"
+  }
+
+  # Lifecycle rules for backup retention
+  lifecycle_rule {
+    condition {
+      age = var.backup_retention_days
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Keep noncurrent versions for 30 days (rollback capability)
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = 30
+      with_state                 = "ANY"
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  labels = {
+    environment = var.environment
+    purpose     = "disaster-recovery-backups"
+  }
+}
+
+# Grant CI/CD service account write access to backup bucket (for automated backups)
+resource "google_storage_bucket_iam_member" "backups_cicd_writer" {
+  count = var.enable_backup_bucket && var.cicd_service_account_email != "" ? 1 : 0
+
+  bucket = google_storage_bucket.backups[0].name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${var.cicd_service_account_email}"
+}
+
+# Grant Cloud SQL service agent access (for native Cloud SQL export to GCS)
+# Cloud SQL exports require the SQL service agent to write to the bucket
+resource "google_storage_bucket_iam_member" "backups_cloudsql_writer" {
+  count = var.enable_backup_bucket ? 1 : 0
+
+  bucket = google_storage_bucket.backups[0].name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
+}
+
+# Data source to get project number for Cloud SQL service agent
+data "google_project" "current" {
+  project_id = var.project_id
+}
