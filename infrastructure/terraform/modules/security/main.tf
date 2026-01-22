@@ -532,6 +532,7 @@ resource "google_secret_manager_secret_iam_member" "cloudbuild_prod_user_passwor
 }
 
 # Grant Cloud Build SA the Cloud SQL Client role (for proxy connections)
+#checkov:skip=CKV_GCP_46:Compute Engine default SA used intentionally for Cloud Build. Custom SA would add complexity without security benefit in this controlled environment.
 resource "google_project_iam_member" "cloudbuild_cloudsql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
