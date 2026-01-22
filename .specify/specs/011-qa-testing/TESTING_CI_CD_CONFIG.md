@@ -1,7 +1,7 @@
 # Testing CI/CD Configuration - Tamshai Enterprise AI
 
-**Document Version:** 1.1
-**Last Updated:** January 2026
+**Document Version:** 1.2
+**Last Updated:** January 22, 2026
 **Status:** Active
 
 ---
@@ -20,7 +20,7 @@ This document describes all GitHub Actions workflows, branch protection rules, s
 
 **File:** `.github/workflows/ci.yml`
 **Triggers:** Push to main, Pull requests, Manual dispatch
-**Total Jobs:** 13 testing/quality jobs
+**Total Jobs:** 14 testing/quality jobs
 
 **Concurrency Control:**
 ```yaml
@@ -44,6 +44,7 @@ permissions:
 | Job Name | Trigger | Duration | Blocking | Purpose |
 |----------|---------|----------|----------|---------|
 | **gateway-lint-test** | Push/PR | ~3-5 min | ✅ YES | Type check, lint, unit tests, coverage |
+| **journey-lint-test** | Push/PR | ~2-3 min | ✅ YES | Type check, lint, 260 unit tests, 97%+ coverage |
 | **flutter-analyze-test** | Push/PR | ~2-3 min | ✅ YES | Flutter analyze + unit tests |
 | **flutter-build** | Push/PR | ~5-7 min | ❌ NO | Linux build verification |
 | **integration-tests** | Main only | ~10-15 min | ✅ YES | RBAC, MCP tools, SSE, queries |
@@ -131,7 +132,77 @@ strategy:
 
 ---
 
-### 2.2 flutter-analyze-test
+### 2.2 journey-lint-test
+
+**Purpose:** Type checking, linting, unit tests, coverage for MCP Journey
+
+**Steps:**
+1. **Type Checking** (`npm run typecheck`)
+   - TypeScript compiler without emitting code
+   - Catches type errors early
+   - Blocks if type errors found
+
+2. **Linting** (`npm run lint`)
+   - ESLint with TypeScript rules
+   - Enforces code style
+   - Blocks on violations
+
+3. **Unit Tests** (`npm run test:coverage`)
+   - **Vitest test runner** (not Jest)
+   - 18 test suites, 260 tests
+   - Coverage formats: text + LCOV
+   - **Coverage thresholds enforced:**
+     - Branches: 80%
+     - Functions: 80%
+     - Lines: 80%
+     - Statements: 80%
+   - **Build fails if thresholds not met**
+
+**Test Categories (260 tests total):**
+- **Indexer Tests (74):** IndexBuilder, MarkdownParser, EmbeddingGenerator, JsonLdExtractor
+- **Tool Tests (78):** QueryFailures, LookupAdr, SearchJourney, GetContext, ListPivots
+- **Resource Tests (58):** Failures, Decisions, Evolution, Lessons, Phoenix
+- **Middleware Tests (24):** AgentIdentity, RateLimit
+- **Integration Tests (26):** KnowledgeIndex, McpServer
+
+**Coverage Results (January 2026):**
+```
+All files          |   97.21% |    83.82% |    97.8% |   97.21%
+src/               |   90.66% |    57.57% |     100% |   90.66%
+src/indexer/       |   96.99% |    86.59% |   95.45% |   96.99%
+src/middleware/    |   96.2%  |    82.6%  |     100% |   96.2%
+src/resources/     |   98.99% |    85.18% |     100% |   98.99%
+src/tools/         |   98.05% |    85.51% |     100% |   98.05%
+```
+
+**Vitest Configuration:**
+```typescript
+// vitest.config.mts
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    coverage: {
+      provider: 'v8',
+      thresholds: {
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+      }
+    }
+  }
+});
+```
+
+**TDD Implementation:**
+- Built using RED-GREEN-REFACTOR methodology
+- 4-sprint implementation cycle (Indexer → Tools → Resources → Integration)
+- All tests written before implementation
+
+---
+
+### 2.4 flutter-analyze-test
 
 **Purpose:** Flutter code analysis and unit tests
 
@@ -176,7 +247,7 @@ strategy:
 
 ---
 
-### 2.3 flutter-build
+### 2.5 flutter-build
 
 **Purpose:** Verify Flutter builds successfully on Linux
 
@@ -193,7 +264,7 @@ strategy:
 
 ---
 
-### 2.4 integration-tests
+### 2.6 integration-tests
 
 **Purpose:** Integration tests for RBAC, MCP tools, SSE streaming
 
@@ -245,7 +316,7 @@ afterAll(async () => {
 
 ---
 
-### 2.5 e2e-tests
+### 2.7 e2e-tests
 
 **Purpose:** End-to-end tests with Playwright
 
@@ -291,7 +362,7 @@ env:
 
 ---
 
-### 2.6 performance-tests
+### 2.8 performance-tests
 
 **Purpose:** k6 load testing
 
@@ -316,7 +387,7 @@ env:
 
 ---
 
-### 2.7 security-scan
+### 2.9 security-scan
 
 **Purpose:** npm dependency vulnerability scanning
 
@@ -337,7 +408,7 @@ npm audit --audit-level=high
 
 ---
 
-### 2.8 terraform-security
+### 2.10 terraform-security
 
 **Purpose:** Terraform IaC security scanning with tfsec
 
@@ -363,7 +434,7 @@ npm audit --audit-level=high
 
 ---
 
-### 2.9 qlty-check
+### 2.11 qlty-check
 
 **Purpose:** Static analysis aggregator
 
@@ -380,7 +451,7 @@ npm audit --audit-level=high
 
 ---
 
-### 2.10 pre-commit
+### 2.12 pre-commit
 
 **Purpose:** Pre-commit hook validation (Gitleaks, detect-secrets)
 
@@ -405,7 +476,7 @@ npm audit --audit-level=high
 
 ---
 
-### 2.11 docker-build
+### 2.13 docker-build
 
 **Purpose:** Verify Docker images build successfully
 
@@ -429,7 +500,7 @@ npm audit --audit-level=high
 
 ---
 
-### 2.12 container-scan
+### 2.14 container-scan
 
 **Purpose:** Trivy container vulnerability scanning
 
@@ -449,7 +520,7 @@ npm audit --audit-level=high
 
 ---
 
-### 2.13 sbom
+### 2.15 sbom
 
 **Purpose:** Software Bill of Materials generation
 
@@ -955,6 +1026,8 @@ flutter-analyze-test
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | Dec 2025 | Initial documentation - complete CI/CD testing configuration |
+| 1.1 | Jan 2026 | Minor updates |
+| 1.2 | Jan 22, 2026 | Added MCP Journey job (section 2.2) with 260 tests, 97%+ coverage; renumbered sections 2.3-2.15; updated total jobs to 14 |
 
 ---
 

@@ -1,7 +1,7 @@
 # Test Coverage Strategy - Tamshai Enterprise AI
 
-**Document Version:** 1.3
-**Last Updated:** January 15, 2026
+**Document Version:** 1.4
+**Last Updated:** January 22, 2026
 **Status:** Active
 
 ---
@@ -70,9 +70,10 @@ We use **Test-Driven Development (TDD)** for all service application code. This 
 
 **Total Tests:**
 - **MCP Gateway:** 497 unit tests (80.8% coverage)
+- **MCP Journey:** 260 tests (97.21% coverage) - NEW
 - **Code Simplification TDD:** ~397 tests (Shell, Flutter, React, MCP servers)
 - **Integration Tests:** 96 tests (89 passed, 7 skipped)
-- **Estimated Total:** 900+ tests across all projects
+- **Estimated Total:** 1,250+ tests across all projects
 
 ---
 
@@ -149,7 +150,56 @@ We use **Test-Driven Development (TDD)** for all service application code. This 
 
 ---
 
-### 1.4 Flutter Client (clients/unified_flutter)
+### 1.4 MCP Journey (Services/mcp-journey)
+
+**Overall:** 97.21% statements, 97.21% lines (exceeds 80% target) ✅
+
+**TDD Implementation Complete (January 2026):**
+- Built from scratch using RED-GREEN-REFACTOR methodology
+- 260 tests across 18 test files
+- 4-sprint implementation cycle
+
+**Test Breakdown:**
+
+| Category | Tests | Coverage | Notes |
+|----------|-------|----------|-------|
+| **Indexer** | 74 tests | 96.99% | IndexBuilder, MarkdownParser, EmbeddingGenerator, JsonLdExtractor |
+| **Tools** | 78 tests | 98.05% | QueryFailures, LookupAdr, SearchJourney, GetContext, ListPivots |
+| **Resources** | 58 tests | 98.99% | Failures, Decisions, Evolution, Lessons, Phoenix |
+| **Middleware** | 24 tests | 96.2% | AgentIdentity, RateLimit |
+| **Integration** | 26 tests | 90.66% | KnowledgeIndex, McpServer |
+
+**Module Coverage:**
+
+| Module | Stmts | Branch | Funcs | Lines | Notes |
+|--------|-------|--------|-------|-------|-------|
+| **src/** | 90.66% | 57.57% | 100% | 90.66% | McpServer entry point |
+| **src/indexer/** | 96.99% | 86.59% | 95.45% | 96.99% | Knowledge indexing |
+| **src/middleware/** | 96.2% | 82.6% | 100% | 96.2% | Rate limiting, identity |
+| **src/resources/** | 98.99% | 85.18% | 100% | 98.99% | MCP resource handlers |
+| **src/tools/** | 98.05% | 85.51% | 100% | 98.05% | MCP tool handlers |
+
+**Vitest Thresholds (Enforced):**
+```typescript
+coverage: {
+  thresholds: {
+    statements: 80,
+    branches: 80,
+    functions: 80,
+    lines: 80,
+  }
+}
+```
+
+**Why Excellent Coverage?**
+- Built using strict TDD methodology from inception
+- All tests written before implementation
+- Comprehensive edge case coverage in RED phase
+- Refactor phase verified no coverage regression
+
+---
+
+### 1.5 Flutter Client (clients/unified_flutter)
 
 **Current:** Basic line count metrics
 **Target:** 70% (spec requirement)
@@ -168,7 +218,7 @@ We use **Test-Driven Development (TDD)** for all service application code. This 
 
 ---
 
-### 1.5 Integration Tests
+### 1.6 Integration Tests
 
 **Coverage:** N/A (functional coverage, not line coverage)
 **Status:** ✅ All tests passing (CI run 20642174604)
@@ -808,6 +858,7 @@ start coverage/index.html  # Windows
 | 1.1 | Jan 2026 | Updated coverage from 49% to 54%, added new modules (ai/, auth/, mcp/), updated integration test counts (96 tests) |
 | 1.2 | Jan 2026 | Added TDD methodology section, clarified scope of TDD vs non-TDD code |
 | 1.3 | Jan 15, 2026 | Major update: coverage 54% → 80.8% after Phase 5-8 refactoring, 497 tests in MCP Gateway, updated module breakdown, added Code Simplification TDD test counts (~397 additional tests) |
+| 1.4 | Jan 22, 2026 | Added MCP Journey service (260 tests, 97.21% coverage), renumbered sections 1.5-1.6, updated total test count to 1,250+ |
 
 ---
 
