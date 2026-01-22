@@ -12,6 +12,16 @@ Enterprise-grade AI access system enabling secure Claude AI integration with rol
 
 > **New to the project?** See the [Quick Start Deployment Guide](docs/deployment/QUICK_START.md) for complete prerequisites, dependency installation, and step-by-step setup instructions.
 
+## Background
+
+The project was completely coded by Claude Code, with architectural oversight by Gemini Pro and ChatGPT acted as a compliance officer (security, S-OX, GDPR, SOC-2). But before anyone says this was "vibe-coded", I challenge you. The AIs (as of January 2026) are absolutely great at coding. However, I had to spend two months, 10 hours/day managing these AI junior coders. Issues that I encountered are the AI's desire to take the easiest short-term path, wanting to implement hacks vs true fixes, and a gradual reduction in context windows over time that resulted in poor decisions and outright deviations from project goals. As someone with 40+ years in coding and infrastructure experience, it's absolutely necessary to have senior skills to oversee AI coding, especially with complex full-stack development that requires process inter-dependence and major infrastructure requirements.
+
+The Tamshai Enterprise AI project addresses the critical security gap in deploying Generative AI within the enterprise: maintaining granular data governance. While modern enterprises strictly secure application data using Single Sign-On (SSO) and Group-Based RBAC, standard AI integrations often bypass these controls by accessing data as a high-privileged system user.
+
+This project solves that challenge by implementing **Identity Propagation** between Keycloak (OpenID Connect) and the Model Context Protocol (MCP). Instead of using a shared service account, the system passes the authenticated user's specific identity and group claims directly to the data layer. This enables the enforcement of **Row Level Security (RLS)** for every AI interaction, ensuring that AI agents can only access the specific data resources a user is explicitly authorized to view.
+
+With an architecture vision that I developed, I started this project using GitHub's **Spec-Driven Development (SDD)** to generate a clear set of specs, plans and tasks for Claude Code to implement against. After a month, I added the use of **Test-Driven Development (TDD)** for application (but not infrastructure) development. Now all apps go through a plan/RED phase/GREEN phase process for coding work.
+
 ## Architecture
 
 ```
