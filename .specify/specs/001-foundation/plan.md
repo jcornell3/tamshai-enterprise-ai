@@ -152,4 +152,4 @@
 | CI | ✅ Working | GitHub Actions + Docker Compose |
 | Dev | ✅ Working | Terraform + Docker Compose |
 | VPS/Stage | ✅ Working | Terraform + GitHub Actions (Vault SSH) |
-| GCP/Prod | Ready | Terraform + GKE (not yet deployed) |
+| GCP/Prod | ✅ Complete | Terraform + Cloud Run (Phase 1 deployed) |

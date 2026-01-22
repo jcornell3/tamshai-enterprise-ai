@@ -6,7 +6,7 @@
 [![qlty](https://qlty.sh/badges/jcornell3/tamshai-enterprise-ai/maintainability.svg)](https://qlty.sh/gh/jcornell3/tamshai-enterprise-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Architecture: v1.4](https://img.shields.io/badge/Architecture-v1.4-blue)
-![Status: VPS Staging Deployed](https://img.shields.io/badge/Status-VPS%20Staging%20Deployed-brightgreen)
+![Status: Production Deployed](https://img.shields.io/badge/Status-Production%20Deployed-brightgreen)
 
 Enterprise-grade AI access system enabling secure Claude AI integration with role-based data access. Employees use AI assistants while data access respects existing security boundaries through defense-in-depth architecture.
 
@@ -81,8 +81,10 @@ With an architecture vision that I developed, I started this project using GitHu
 | **API Gateway** | Kong | Rate limiting, JWT validation |
 | **AI Orchestration** | MCP Gateway (Node.js) | Claude API integration, prompt defense |
 | **Databases** | PostgreSQL, MongoDB, Elasticsearch, Redis | Domain data, search, caching |
-| **CI/CD** | GitHub Actions | Automated testing, VPS deployment |
-| **Secrets** | HashiCorp Vault | SSH certificates for VPS access |
+| **CI/CD** | GitHub Actions | Automated testing, multi-environment deployment |
+| **Secrets - VPS** | HashiCorp Vault | SSH certificates for VPS access |
+| **Secrets - GCP** | GCP Secret Manager | API keys, database credentials, service accounts |
+| **Secrets - CI/CD** | GitHub Secrets | Workflow credentials, deployment keys |
 
 ### Multi-Environment Deployment
 
@@ -90,8 +92,8 @@ With an architecture vision that I developed, I started this project using GitHu
 |-------------|----------|--------|--------|
 | **CI** | GitHub Actions | Docker Compose | ✅ Automated |
 | **Dev** | Docker Desktop | Terraform + Docker Compose | ✅ Local |
-| **Stage** | Hetzner Cloud (CPX31) | Terraform + GitHub Actions (Vault SSH) | ✅ Deployed (vps.tamshai.com) |
-| **Prod** | Google Cloud Run | Terraform + Cloud Run | ✅ Phase 1 Complete |
+| **Stage** | Hetzner Cloud (CPX31) | Terraform + GitHub Actions (Vault SSH) | ✅ Deployed |
+| **Prod** | Google Cloud Run | Terraform + Cloud Run | ✅ Deployed |
 
 ## Quick Start
 
@@ -110,112 +112,14 @@ With an architecture vision that I developed, I started this project using GitHu
 | **Terraform** | 1.5+ | Infrastructure deployment | [terraform.io](https://developer.hashicorp.com/terraform/install) |
 | **GitHub CLI** | 2.40+ | CI/CD, workflow triggers | [cli.github.com](https://cli.github.com/) |
 
-#### Windows-Specific Requirements
+#### Flutter Client Requirements
 
-For Flutter Windows desktop development:
-
-1. **Visual Studio 2022** (Community edition is free)
-   - Download: [visualstudio.microsoft.com](https://visualstudio.microsoft.com/downloads/)
-   - Required workloads during installation:
-     - **"Desktop development with C++"**
-     - Windows 10/11 SDK (10.0.19041.0 or later)
-   - Or install via command line:
-     ```powershell
-     winget install Microsoft.VisualStudio.2022.Community
-     # Then run Visual Studio Installer and add C++ workload
-     ```
-
-2. **Flutter Windows Desktop Support**
-   ```powershell
-   flutter doctor          # Verify installation
-   flutter config --enable-windows-desktop
-   ```
-
-#### macOS-Specific Requirements
-
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
-
-# Install CocoaPods (for iOS/macOS)
-sudo gem install cocoapods
-
-# Enable macOS desktop
-flutter config --enable-macos-desktop
-```
-
-#### Linux-Specific Requirements
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install clang cmake ninja-build pkg-config \
-  libgtk-3-dev liblzma-dev libstdc++-12-dev
-
-# Enable Linux desktop
-flutter config --enable-linux-desktop
-```
-
-#### Android Development Requirements
-
-For Flutter Android development (mobile app):
-
-1. **Java Development Kit (JDK) 17**
-   - Download from [Adoptium](https://adoptium.net/temurin/releases/?version=17)
-   - Or via command line:
-     ```bash
-     # Windows (PowerShell) - Download and extract to C:\Users\<username>\Java
-     curl -L -o jdk17.zip "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse?project=jdk"
-
-     # macOS
-     brew install openjdk@17
-
-     # Ubuntu/Debian
-     sudo apt install openjdk-17-jdk
-     ```
-
-2. **Android SDK Command-Line Tools**
-   - Download from [Android Developer](https://developer.android.com/studio#command-line-tools-only)
-   - Extract to `Android/Sdk/cmdline-tools/latest/`
-   - Or via command line:
-     ```bash
-     # Windows - Create SDK directory and download
-     mkdir -p ~/Android/Sdk/cmdline-tools
-     curl -o ~/Android/commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip
-     unzip ~/Android/commandlinetools.zip -d ~/Android/Sdk/cmdline-tools
-     mv ~/Android/Sdk/cmdline-tools/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
-     ```
-
-3. **Install SDK Packages** (requires JAVA_HOME set)
-   ```bash
-   # Set JAVA_HOME (adjust path to your JDK location)
-   export JAVA_HOME="/c/Users/<username>/Java/jdk-17.0.17+10"  # Windows Git Bash
-   # or
-   export JAVA_HOME="$HOME/Java/jdk-17.0.17+10"  # macOS/Linux
-
-   # Install required packages
-   $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME \
-     "platform-tools" "build-tools;34.0.0" "platforms;android-34" "platforms;android-36"
-
-   # Accept all licenses
-   $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME --licenses
-   ```
-
-4. **Configure Flutter**
-   ```bash
-   # Point Flutter to your SDK and JDK
-   flutter config --android-sdk ~/Android/Sdk
-   flutter config --jdk-dir ~/Java/jdk-17.0.17+10
-
-   # Verify setup
-   flutter doctor -v
-   ```
-
-5. **Environment Variables** (add to shell profile)
-   ```bash
-   export ANDROID_HOME="$HOME/Android/Sdk"
-   export JAVA_HOME="$HOME/Java/jdk-17.0.17+10"
-   export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin"
-   ```
+For Flutter desktop/mobile development, see the [Flutter Client Setup Guide](clients/unified_flutter/README.md) for platform-specific requirements:
+- Windows (Visual Studio 2022 with C++ workload)
+- macOS (Xcode Command Line Tools, CocoaPods)
+- Linux (clang, cmake, ninja-build, GTK3)
+- Android (JDK 17, Android SDK)
+- iOS (Xcode, CocoaPods)
 
 #### System Requirements
 
@@ -303,64 +207,14 @@ docker compose up -d
 
 ### Flutter Client Setup
 
+See the [Flutter Client Setup Guide](clients/unified_flutter/README.md) for complete instructions.
+
 ```bash
 cd clients/unified_flutter
-
-# Get dependencies
 flutter pub get
-
-# Generate code (Freezed models)
 flutter pub run build_runner build --delete-conflicting-outputs
-
-# Run on Windows
-flutter run -d windows
-
-# Run on macOS
-flutter run -d macos
-
-# Run on Linux
-flutter run -d linux
-
-# Run on Android (requires connected device or emulator)
-flutter run -d android
-
-# Build Android APK
-flutter build apk --release
-
-# Build Android App Bundle (for Play Store)
-flutter build appbundle --release
+flutter run -d windows  # or macos, linux, android
 ```
-
-### Access Services
-
-**Primary Access** (via Caddy HTTPS proxy):
-| Service | URL | Notes |
-|---------|-----|-------|
-| Main Application | https://www.tamshai.local | Accept self-signed cert |
-| Keycloak Auth | https://www.tamshai.local/auth | SSO login |
-| API Gateway | https://www.tamshai.local/api | Kong-proxied APIs |
-
-**Direct Service Access** (for debugging):
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Keycloak Admin | http://localhost:8180 | admin / admin |
-| MCP Gateway | http://localhost:3100 | JWT required |
-| Kong Gateway | http://localhost:8100 | - |
-| MinIO Console | http://localhost:9102 | minioadmin / minioadmin |
-
-### Test Users
-
-All users: password `[REDACTED-DEV-PASSWORD]`, TOTP secret `[REDACTED-DEV-TOTP]`
-
-| Username | Role | Access |
-|----------|------|--------|
-| eve.thompson | executive | All departments (read) |
-| alice.chen | hr-read, hr-write | HR data |
-| bob.martinez | finance-read, finance-write | Finance data |
-| carol.johnson | sales-read, sales-write | Sales/CRM data |
-| dan.williams | support-read, support-write | Tickets, KB |
-
-**E2E Test User**: `test-user.journey` (exists in all environments, no data access)
 
 ## Project Structure
 
@@ -391,36 +245,6 @@ tamshai-enterprise-ai/
     └── performance/        # k6 performance tests
 ```
 
-## Development
-
-### MCP Gateway
-
-```bash
-cd services/mcp-gateway
-npm install
-npm run dev      # Development with hot reload
-npm run build    # Build TypeScript
-npm test         # Run unit tests
-npm run lint     # Lint code
-```
-
-### Flutter Client
-
-```bash
-cd clients/unified_flutter
-flutter pub get
-flutter run -d windows  # or macos, linux
-flutter test            # Run widget tests
-```
-
-### Integration Tests
-
-```bash
-cd tests/integration
-npm install
-npm test  # Requires running Docker services
-```
-
 ## Deployment
 
 ### CI/CD Pipeline
@@ -434,40 +258,72 @@ The project uses GitHub Actions for automated testing and deployment:
 | `security.yml` | Push/PR | Dependency audit, secret detection |
 | `deploy-vps.yml` | Push to main | Automated VPS deployment via Vault SSH |
 
-### VPS Staging (Current)
+### VPS Staging
 
-The staging environment runs on Hetzner Cloud with automated deployments:
+The staging environment runs on Hetzner Cloud with automated deployments.
 
+**Regular Deployment**:
 ```bash
+# Trigger via GitHub Actions (preferred)
+gh workflow run deploy-vps.yml --ref main
+
 # Manual deployment (if needed)
 cd infrastructure/terraform/vps
 terraform init
 terraform apply
+```
 
-# Or trigger via GitHub Actions
+**Phoenix Rebuild** (complete environment rebuild):
+```bash
+# Full teardown and rebuild of VPS environment
+cd infrastructure/terraform/vps
+terraform destroy -auto-approve  # Destroys VPS completely
+terraform apply -auto-approve    # Creates fresh VPS (~5-10 min for cloud-init)
+
+# Trigger deployment after cloud-init completes
 gh workflow run deploy-vps.yml --ref main
 ```
 
-**Access**: Configured via Cloudflare (see deployment secrets)
+**Access**: `https://vps.tamshai.com` via Cloudflare
 
 See [VPS Deployment Guide](infrastructure/terraform/vps/README.md) for details.
 
 ### GCP Production
 
-Production is deployed on Google Cloud Run with Cloud SQL and Memorystore:
+Production runs on Google Cloud Run with Cloud SQL and Memorystore.
 
+**Regular Deployment**:
 ```bash
+# Trigger via GitHub Actions (preferred)
+gh workflow run deploy-to-gcp.yml --ref main
+
+# Manual deployment
 cd infrastructure/terraform/gcp
 terraform init
 terraform apply -var-file=prod.tfvars
 ```
 
-**Current Production Status**:
-- Phase 1 Complete: Core infrastructure, Cloud Run services, Keycloak
-- MCP Gateway and HR/Finance services operational
+**Phoenix Rebuild** (complete environment rebuild):
+```bash
+# Pre-flight checks (validate state, check costs)
+./scripts/gcp/phoenix-preflight.sh
+
+# Full rebuild (~30-45 minutes)
+./scripts/gcp/phoenix-rebuild.sh
+
+# Post-rebuild: provision users and sample data
+gh workflow run provision-prod-users.yml --ref main
+gh workflow run provision-prod-data.yml --ref main
+```
+
+**Production Services**:
+- All MCP services (Gateway, HR, Finance, Sales, Support) on Cloud Run
+- Cloud SQL PostgreSQL for HR/Finance data
+- Memorystore Redis for caching
+- Keycloak for identity management
 - Automated deployments via GitHub Actions
 
-See [infrastructure/terraform/gcp/README.md](infrastructure/terraform/gcp/README.md) for GCP configuration and [docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md](docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md) for deployment details.
+See [GCP Production Guide](infrastructure/terraform/gcp/README.md) and [Phoenix Runbook](docs/operations/PHOENIX_RUNBOOK.md) for details.
 
 ## Security
 

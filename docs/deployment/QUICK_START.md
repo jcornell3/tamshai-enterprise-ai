@@ -1,8 +1,8 @@
 # Architecture v1.4 - Quick Start Deployment Guide
 
-**Version**: 1.4.2
-**Last Updated**: January 13, 2026
-**Status**: Ready for Deployment
+**Version**: 1.4.3
+**Last Updated**: January 22, 2026
+**Status**: Production Deployed
 
 ---
 
@@ -39,7 +39,7 @@ These tools are **required** for any development or deployment:
 |------------|---------|---------|----------|----------------|
 | **gh** | 2.40+ | GitHub CLI, workflow triggers, secret management | [cli.github.com](https://cli.github.com/) | `gh --version` |
 | **terraform** | 1.5+ | Infrastructure as Code (VPS/GCP deployment) | [terraform.io](https://developer.hashicorp.com/terraform/install) | `terraform --version` |
-| **gcloud** | 500+ | Google Cloud CLI (production only) | [cloud.google.com](https://cloud.google.com/sdk/docs/install) | `gcloud --version` |
+| **gcloud** | 500+ | Google Cloud CLI (production) | [cloud.google.com](https://cloud.google.com/sdk/docs/install) | `gcloud --version` |
 
 ### Flutter Development (REQUIRED for Desktop/Mobile)
 
@@ -47,6 +47,8 @@ These tools are **required** for any development or deployment:
 |------------|---------|---------|----------|----------------|
 | **flutter** | 3.24+ | Flutter SDK | [flutter.dev](https://docs.flutter.dev/get-started/install) | `flutter --version` |
 | **dart** | 3.4+ | Dart SDK (included with Flutter) | Included with Flutter | `dart --version` |
+
+See [Flutter Client Setup Guide](../../clients/unified_flutter/README.md) for platform-specific requirements.
 
 ### SSH & Remote Access (REQUIRED for VPS)
 
@@ -73,7 +75,7 @@ These are available via Docker containers, but local installation helps debuggin
 | **jq** | 1.6+ | JSON parsing in scripts | [jqlang.github.io](https://jqlang.github.io/jq/download/) | `jq --version` |
 | **curl** | 7.80+ | HTTP requests, health checks | Built-in (most systems) | `curl --version` |
 
-### Testing Tools (OPTIONAL)
+### Testing Tools (REQUIRED for E2E and Performance)
 
 | Executable | Version | Purpose | Download | Verify Command |
 |------------|---------|---------|----------|----------------|
@@ -84,7 +86,104 @@ These are available via Docker containers, but local installation helps debuggin
 
 | Executable | Version | Purpose | Download | Verify Command |
 |------------|---------|---------|----------|----------------|
-| **python3** | 3.8+ | Admin utility scripts | [python.org](https://www.python.org/downloads/) | `python3 --version` |
+| **python3** | 3.8+ | Admin utility scripts, Keycloak TOTP reset | [python.org](https://www.python.org/downloads/) | `python3 --version` |
+
+---
+
+## Project Dependencies (npm packages)
+
+The project uses the following key npm packages across services:
+
+### MCP Gateway (`services/mcp-gateway`)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@anthropic-ai/sdk` | ^0.71+ | Claude API integration |
+| `@modelcontextprotocol/sdk` | ^1.25+ | MCP protocol implementation |
+| `express` | ^5.2+ | HTTP server framework |
+| `express-rate-limit` | ^7.1+ | Rate limiting middleware |
+| `ioredis` | ^5.8+ | Redis client for caching |
+| `jsonwebtoken` | ^9.0+ | JWT token validation |
+| `jwks-rsa` | ^3.1+ | JWKS key retrieval |
+| `winston` | ^3.11+ | Logging |
+| `jest` | ^30+ | Unit testing |
+| `supertest` | ^7.1+ | HTTP integration testing |
+| `tsx` | ^4.6+ | TypeScript execution |
+
+### MCP Journey (`services/mcp-journey`)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `better-sqlite3` | ^11.10+ | SQLite database for knowledge index |
+| `express-rate-limit` | ^7.1+ | Rate limiting middleware |
+| `vitest` | ^2.1+ | Unit and integration testing |
+| `supertest` | ^7.1+ | HTTP integration testing |
+
+### E2E Tests (`tests/e2e`)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@playwright/test` | ^1.50+ | Browser automation and E2E testing |
+
+### Performance Tests (`tests/performance`)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `k6` | CLI | Load and performance testing |
+
+### Web Apps (`apps/web`)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `react` | ^18.2+ | UI framework |
+| `react-oidc-context` | ^3.0+ | OIDC authentication |
+| `turbo` | ^2.0+ | Monorepo build orchestration |
+| `vite` | ^6.2+ | Build tool |
+| `tailwindcss` | ^3.4+ | CSS framework |
+
+### Flutter Client (`clients/unified_flutter`)
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `dio` | ^5.4+ | HTTP client |
+| `flutter_secure_storage` | ^9.2+ | Secure token storage |
+| `freezed` | ^2.5+ | Code generation for models |
+| `provider` | ^6.1+ | State management |
+
+---
+
+## GitHub Actions Workflows
+
+The project uses these GitHub Actions workflows:
+
+### CI/CD Workflows
+| Workflow | Purpose | Trigger |
+|----------|---------|---------|
+| `ci.yml` | Lint, type check, unit tests, integration tests | Push/PR to main |
+| `codeql.yml` | Security scanning (SAST) | Push/PR/Weekly |
+| `security.yml` | Dependency audit, secret detection | Push/PR |
+| `deploy-vps.yml` | VPS deployment via Vault SSH | Push to main |
+| `deploy-to-gcp.yml` | GCP Cloud Run deployment | Push to main |
+
+### GCP Production Workflows
+| Workflow | Purpose |
+|----------|---------|
+| `phoenix-build-images.yml` | Build and push container images to Artifact Registry |
+| `provision-prod-users.yml` | Provision corporate users via identity-sync |
+| `provision-prod-data.yml` | Load sample data to production |
+| `recreate-realm-prod.yml` | Reset Keycloak realm configuration |
+| `reset-prod-database.yml` | Reset production databases |
+| `terraform-keycloak-prod.yml` | Apply Keycloak Terraform configuration |
+
+### VPS Staging Workflows
+| Workflow | Purpose |
+|----------|---------|
+| `bootstrap-vps.yml` | Initial VPS provisioning |
+| `setup-vault.yml` | Configure HashiCorp Vault |
+| `populate-vault-secrets.yml` | Load secrets into Vault |
+
+### Utility Workflows
+| Workflow | Purpose |
+|----------|---------|
+| `deploy-migrations-hr.yml` | Run HR database migrations |
+| `deploy-migrations-finance.yml` | Run Finance database migrations |
+| `create-release.yml` | Create GitHub release |
+| `unlock-terraform-state.yml` | Unlock stuck Terraform state |
+| `export-gcp-secrets.yml` | Export secrets from GCP Secret Manager |
 
 ---
 

@@ -65,7 +65,7 @@ No MCP tools are exposed in this phase. This is pure infrastructure setup.
 | **CI** | ✅ Working | GitHub Actions with Docker Compose |
 | **Dev** | ✅ Working | Terraform + Docker Desktop, Caddy HTTPS |
 | **VPS/Stage** | ✅ Working | Terraform + Hetzner Cloud, Vault SSH deployment |
-| **GCP/Prod** | Ready | Terraform infrastructure defined, not yet deployed |
+| **GCP/Prod** | ✅ Complete | Terraform + Cloud Run, Phase 1 deployed |
 
 ### Related ADRs
 - **ADR-006**: Keycloak realm unification via Docker --import-realm
