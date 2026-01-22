@@ -387,6 +387,327 @@ Is us-central1 available?
 
 ---
 
+## DNS Strategy
+
+### Current DNS Configuration
+
+| Domain | Target | Type | Purpose |
+|--------|--------|------|---------|
+| `api.tamshai.com` | `mcp-gateway-fn44nd7wba-uc.a.run.app` | CNAME | MCP Gateway API |
+| `auth.tamshai.com` | `ghs.googlehosted.com` | CNAME | Keycloak (Cloud Run domain mapping) |
+| `prod.tamshai.com` | GCS bucket website | CNAME | Static web portal |
+
+**Note**: The `-uc` suffix in Cloud Run URLs indicates `us-central1`. New deployments in different regions get different URL suffixes (e.g., `-uw` for us-west1).
+
+### DNS Problems During Regional Evacuation
+
+#### Problem 1: Cloud Run URLs Are Region-Specific
+
+When `api.tamshai.com` points to `mcp-gateway-fn44nd7wba-uc.a.run.app`:
+- The URL is **permanently bound** to us-central1
+- A new deployment in us-west1 gets a **different URL** (e.g., `mcp-gateway-xyz123-uw.a.run.app`)
+- The CNAME must be updated to point to the new URL
+
+**Impact**: After evacuation, `api.tamshai.com` will return errors until DNS is updated.
+
+#### Problem 2: `ghs.googlehosted.com` Domain Mappings Are Region-Bound
+
+Cloud Run domain mappings (`google_cloud_run_domain_mapping`) have a critical limitation:
+- The mapping binds a domain to a Cloud Run service **in a specific region**
+- You **cannot** create a domain mapping for `auth.tamshai.com` in us-west1 while the us-central1 mapping exists
+- During an outage, you cannot delete the us-central1 mapping (Terraform state unreachable)
+
+**Impact**: `auth.tamshai.com` cannot be remapped during evacuation without waiting for GCP to recover.
+
+#### Problem 3: OAuth Redirect URIs
+
+Keycloak clients (e.g., `tamshai-website`) have configured redirect URIs:
+```
+https://prod.tamshai.com/callback
+https://api.tamshai.com/callback
+```
+
+If domains change during evacuation, OAuth flows will fail with "Invalid redirect_uri" errors.
+
+### DNS Solution: Recovery Subdomains
+
+**Strategy**: Pre-configure recovery subdomains that can be activated during evacuation.
+
+#### Pre-Configured DNS Records (Cloudflare)
+
+| Domain | Normal State | During Evacuation |
+|--------|--------------|-------------------|
+| `api.tamshai.com` | `mcp-gateway-fn44nd7wba-uc.a.run.app` | Update to new us-west1 URL |
+| `api-dr.tamshai.com` | Not configured (or placeholder) | Points to us-west1 MCP Gateway |
+| `auth.tamshai.com` | `ghs.googlehosted.com` (us-central1 mapping) | **Cannot change** during outage |
+| `auth-dr.tamshai.com` | `ghs.googlehosted.com` (us-west1 mapping) | Active during evacuation |
+| `prod.tamshai.com` | GCS bucket | May need update if bucket recreated |
+
+#### Pre-Configured OAuth Redirect URIs
+
+Update Keycloak clients to accept **both** primary and recovery domains:
+
+```json
+{
+  "clientId": "tamshai-website",
+  "redirectUris": [
+    "https://prod.tamshai.com/*",
+    "https://prod-dr.tamshai.com/*",
+    "https://api.tamshai.com/*",
+    "https://api-dr.tamshai.com/*"
+  ],
+  "webOrigins": [
+    "https://prod.tamshai.com",
+    "https://prod-dr.tamshai.com"
+  ]
+}
+```
+
+**File to update**: `keycloak/realm-export.json`
+
+### DNS Update Procedure During Evacuation
+
+#### Step 1: Get New Cloud Run URLs
+
+After evacuation completes, get the new service URLs:
+
+```bash
+# Get new URLs from Terraform output
+cd infrastructure/terraform/gcp
+terraform output mcp_gateway_url    # e.g., https://mcp-gateway-abc123-uw.a.run.app
+terraform output keycloak_url       # e.g., https://keycloak-def456-uw.a.run.app
+terraform output web_portal_url     # e.g., https://web-portal-ghi789-uw.a.run.app
+```
+
+#### Step 2: Update Cloudflare DNS
+
+**Option A: Update Primary Domains** (if clients can handle brief downtime)
+
+```bash
+# Using Cloudflare API (or manually via dashboard)
+# Update api.tamshai.com CNAME
+curl -X PUT "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${API_RECORD_ID}" \
+  -H "Authorization: Bearer ${CF_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "type": "CNAME",
+    "name": "api",
+    "content": "mcp-gateway-abc123-uw.a.run.app",
+    "proxied": true
+  }'
+```
+
+**Option B: Activate Recovery Domains** (zero-downtime for prepared clients)
+
+```bash
+# Create/update api-dr.tamshai.com
+curl -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+  -H "Authorization: Bearer ${CF_API_TOKEN}" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "type": "CNAME",
+    "name": "api-dr",
+    "content": "mcp-gateway-abc123-uw.a.run.app",
+    "proxied": true
+  }'
+```
+
+#### Step 3: Handle Keycloak Domain Mapping
+
+**The `auth.tamshai.com` domain CANNOT be remapped** during the outage because:
+1. `google_cloud_run_domain_mapping` in us-central1 still "owns" the domain
+2. Creating the same mapping in us-west1 returns: `Domain is already mapped to another service`
+
+**Solutions**:
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Use `auth-dr.tamshai.com` | Works immediately | Clients must know about DR domain |
+| Use raw Cloud Run URL | No domain mapping needed | URL is ugly, changes each deploy |
+| Wait for GCP recovery | No DNS changes | Could be hours/days |
+| Contact GCP Support | May release domain | Slow during major outage |
+
+**Recommended**: Pre-provision `auth-dr.tamshai.com` domain mapping in us-west1:
+
+```terraform
+# In modules/cloudrun/main.tf - add recovery domain mapping
+resource "google_cloud_run_domain_mapping" "keycloak_dr" {
+  count = var.keycloak_dr_domain != "" ? 1 : 0
+
+  name     = var.keycloak_dr_domain  # e.g., "auth-dr.tamshai.com"
+  location = var.region
+  project  = var.project_id
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_service.keycloak.name
+  }
+}
+```
+
+#### Step 4: Update Web Portal Configuration
+
+The web portal needs to know which Keycloak URL to use:
+
+**Build-time configuration** (`clients/web/.env.production`):
+```bash
+# Primary
+VITE_KEYCLOAK_URL=https://auth.tamshai.com/auth
+
+# During evacuation, rebuild with:
+VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth
+```
+
+**Or use runtime configuration** (recommended for DR):
+```typescript
+// In web portal code
+const KEYCLOAK_URL = window.ENV?.KEYCLOAK_URL
+  || import.meta.env.VITE_KEYCLOAK_URL
+  || 'https://auth.tamshai.com/auth';
+```
+
+### DNS Propagation Time
+
+| DNS Provider | Propagation Time | Notes |
+|--------------|------------------|-------|
+| Cloudflare (proxied) | ~30 seconds | Instant for proxied records |
+| Cloudflare (DNS only) | 1-5 minutes | TTL-dependent |
+| Route53 | 1-5 minutes | 60s default TTL |
+| GoDaddy/others | 5-30 minutes | Varies by TTL |
+
+**Cloudflare Advantage**: With proxied records, DNS changes take effect almost immediately because traffic routes through Cloudflare's edge network.
+
+### Testing DNS Failover
+
+#### Test 1: Recovery Domain Pre-Configuration
+
+**Purpose**: Verify recovery domains can be mapped before an outage.
+
+```bash
+# 1. Create domain mapping for auth-dr.tamshai.com in us-west1
+# (requires domain verification in Google Search Console first)
+
+# 2. Add DNS record in Cloudflare pointing to ghs.googlehosted.com
+
+# 3. Verify SSL certificate provisions (may take 15-30 minutes)
+curl -I https://auth-dr.tamshai.com/auth/realms/tamshai-corp
+# Should return 200 OK with valid SSL
+
+# 4. Test OAuth flow with recovery domain
+# Update test client to use auth-dr.tamshai.com
+```
+
+#### Test 2: DNS Update Speed
+
+**Purpose**: Measure actual DNS propagation time.
+
+```bash
+# 1. Note current CNAME target
+dig api.tamshai.com CNAME
+
+# 2. Update CNAME in Cloudflare (via API or dashboard)
+# Start timer
+
+# 3. Poll until new target resolves
+while true; do
+  dig +short api.tamshai.com CNAME | grep -q "new-target" && break
+  sleep 5
+done
+# Stop timer - record propagation time
+```
+
+### DNS Checklist for Evacuation Script
+
+Add to `scripts/gcp/evacuate-region.sh`:
+
+```bash
+# Phase 7: DNS Configuration
+log_phase "7" "DNS CONFIGURATION"
+
+log_step "Getting new service URLs..."
+NEW_GATEWAY_URL=$(terraform output -raw mcp_gateway_url)
+NEW_KEYCLOAK_URL=$(terraform output -raw keycloak_url)
+NEW_PORTAL_URL=$(terraform output -raw web_portal_url)
+
+log_info "New MCP Gateway: $NEW_GATEWAY_URL"
+log_info "New Keycloak: $NEW_KEYCLOAK_URL"
+log_info "New Web Portal: $NEW_PORTAL_URL"
+
+echo ""
+log_warn "╔══════════════════════════════════════════════════════════════════╗"
+log_warn "║                    MANUAL DNS UPDATES REQUIRED                   ║"
+log_warn "╠══════════════════════════════════════════════════════════════════╣"
+log_warn "║ Update the following DNS records in Cloudflare:                  ║"
+log_warn "║                                                                  ║"
+log_warn "║ 1. api.tamshai.com → ${NEW_GATEWAY_URL#https://}                 ║"
+log_warn "║                                                                  ║"
+log_warn "║ 2. auth.tamshai.com CANNOT be changed during outage.            ║"
+log_warn "║    Use auth-dr.tamshai.com instead (pre-configured).            ║"
+log_warn "║                                                                  ║"
+log_warn "║ 3. Rebuild web portal with new Keycloak URL if needed:          ║"
+log_warn "║    VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth           ║"
+log_warn "╚══════════════════════════════════════════════════════════════════╝"
+```
+
+### Long-Term DNS Solutions
+
+#### Option 1: Global Load Balancer (Recommended for Production)
+
+Google Cloud Load Balancer with serverless NEGs provides automatic failover:
+
+```terraform
+# Simplified - full config is more complex
+resource "google_compute_region_network_endpoint_group" "mcp_gateway" {
+  for_each = toset(["us-central1", "us-west1"])
+
+  name                  = "mcp-gateway-neg-${each.key}"
+  region                = each.key
+  network_endpoint_type = "SERVERLESS"
+
+  cloud_run {
+    service = "mcp-gateway"
+  }
+}
+
+resource "google_compute_backend_service" "mcp_gateway" {
+  name = "mcp-gateway-backend"
+
+  dynamic "backend" {
+    for_each = google_compute_region_network_endpoint_group.mcp_gateway
+    content {
+      group = backend.value.id
+    }
+  }
+}
+```
+
+**Pros**: Automatic failover, no DNS changes needed during outage
+**Cons**: ~$18/month for load balancer, more complex setup
+
+#### Option 2: Multi-Region Cloud Run (Future GCP Feature)
+
+GCP has announced plans for multi-region Cloud Run with automatic failover. Monitor for availability.
+
+#### Option 3: Cloudflare Load Balancing
+
+Use Cloudflare's load balancing with health checks:
+
+```
+api.tamshai.com → Cloudflare LB
+                   ├── Pool: us-central1 (primary)
+                   │   └── mcp-gateway-xxx-uc.a.run.app
+                   └── Pool: us-west1 (failover)
+                       └── mcp-gateway-yyy-uw.a.run.app
+```
+
+**Pros**: Works with current Cloud Run setup, fast failover
+**Cons**: Additional Cloudflare cost (~$5/month for basic LB)
+
+---
+
 ## Impact Assessment
 
 ### Breaking Changes
