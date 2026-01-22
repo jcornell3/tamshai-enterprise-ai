@@ -556,15 +556,50 @@ export class IndexBuilder {
   }
 
   /**
-   * Delete a document by ID.
+   * Delete a document by ID or file path.
    */
-  deleteDocument(id: number): boolean {
+  deleteDocument(idOrPath: number | string): boolean {
     this.ensureInitialized();
     const db = this.db!;
 
-    const result = db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+    if (typeof idOrPath === 'number') {
+      const result = db.prepare('DELETE FROM documents WHERE id = ?').run(idOrPath);
+      return result.changes > 0;
+    } else {
+      const result = db
+        .prepare('DELETE FROM documents WHERE file_path = ?')
+        .run(idOrPath);
+      return result.changes > 0;
+    }
+  }
 
-    return result.changes > 0;
+  /**
+   * List all indexed documents.
+   */
+  listDocuments(): IndexedDocument[] {
+    this.ensureInitialized();
+    const db = this.db!;
+
+    const rows = db
+      .prepare(
+        `SELECT d.id, d.file_path, d.title, d.content, d.plain_text,
+                e.embedding, m.metadata_json
+         FROM documents d
+         LEFT JOIN embeddings e ON d.id = e.document_id
+         LEFT JOIN json_ld_metadata m ON d.id = m.document_id
+         ORDER BY d.id`
+      )
+      .all() as Array<{
+      id: number;
+      file_path: string;
+      title: string;
+      content: string;
+      plain_text: string;
+      embedding: Buffer | null;
+      metadata_json: string | null;
+    }>;
+
+    return rows.map((row) => this.mapDocument(row));
   }
 
   /**

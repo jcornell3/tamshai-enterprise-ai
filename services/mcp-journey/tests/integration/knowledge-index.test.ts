@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { KnowledgeIndex } from '@/indexer/index-builder';
+import { IndexBuilder, type KnowledgeIndex } from '@/indexer/index-builder';
 import { MarkdownParser } from '@/indexer/markdown-parser';
 import { EmbeddingGenerator } from '@/indexer/embedding-generator';
 import { JsonLdExtractor } from '@/indexer/json-ld-extractor';
@@ -23,7 +23,7 @@ describe('Knowledge Index Integration', () => {
 
   beforeAll(async () => {
     // Create index with test database
-    index = new KnowledgeIndex({ dbPath: testDbPath });
+    index = new IndexBuilder({ dbPath: testDbPath });
     index.initialize();
 
     // Create a mock embedding generator for tests
@@ -38,12 +38,19 @@ describe('Knowledge Index Integration', () => {
       for (const file of files) {
         const filePath = path.join(adrDir, file);
         const content = fs.readFileSync(filePath, 'utf-8');
-        const parsed = MarkdownParser.parse(content);
+        const parsed = await MarkdownParser.parse(content);
         const jsonLd = JsonLdExtractor.extract(content);
+
+        // Extract title from frontmatter, headings, or filename
+        const headings = parsed.headings || [];
+        const title =
+          parsed.frontmatter?.title ||
+          (headings.length > 0 ? headings[0].text : null) ||
+          file.replace('.md', '');
 
         await index.indexDocument({
           filePath: `docs/adr/${file}`,
-          title: parsed.frontmatter?.title || parsed.headings[0]?.text || 'Untitled',
+          title,
           content: content,
           plainText: parsed.plainText,
           embedding: mockEmbedding,

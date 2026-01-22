@@ -1,5 +1,5 @@
 /**
- * Agent Identity Middleware - Sprint 4 RED Phase Stub
+ * Agent Identity Middleware - Sprint 4 GREEN Phase
  *
  * Wraps all MCP responses with source attribution metadata.
  *
@@ -39,18 +39,75 @@ export type IdentityMiddleware = (
 ) => Promise<unknown>;
 
 /**
+ * Standard disclaimer for all journey responses.
+ */
+const DISCLAIMER =
+  'This response contains historical project documentation that may no longer reflect ' +
+  'the current state of the codebase. Always verify with current source code.';
+
+/**
  * Wrap data with journey identity metadata.
  */
 export function wrapWithIdentity<T>(
   data: T,
   sourceDocs: SourceDocument[]
 ): JourneyResponse<T> {
-  throw new Error('Not implemented');
+  // Extract dates from source documents, filter out those without dates
+  const dates = sourceDocs
+    .filter((doc) => doc.date !== undefined && doc.date !== null)
+    .map((doc) => doc.date as string)
+    .sort((a, b) => a.localeCompare(b));
+
+  return {
+    data,
+    _meta: {
+      source: 'tamshai-project-journey',
+      type: 'historical-documentation',
+      disclaimer: DISCLAIMER,
+      documentDates: dates,
+      generatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Check if a response is an error response.
+ */
+function isErrorResponse(response: unknown): boolean {
+  if (typeof response !== 'object' || response === null) {
+    return false;
+  }
+  const obj = response as Record<string, unknown>;
+  return obj.status === 'error';
 }
 
 /**
  * Create middleware that wraps responses with identity.
  */
 export function createIdentityMiddleware(): IdentityMiddleware {
-  throw new Error('Not implemented');
+  return async (request: McpRequest, next: NextFunction): Promise<unknown> => {
+    // Call the next function with the request
+    const response = await next(request);
+
+    // Don't wrap error responses
+    if (isErrorResponse(response)) {
+      return response;
+    }
+
+    // Wrap successful responses with identity metadata
+    // Extract source documents from the response if available
+    const sourceDocs: SourceDocument[] = [];
+    if (
+      typeof response === 'object' &&
+      response !== null &&
+      'sourceDocs' in response
+    ) {
+      const docs = (response as Record<string, unknown>).sourceDocs;
+      if (Array.isArray(docs)) {
+        sourceDocs.push(...docs);
+      }
+    }
+
+    return wrapWithIdentity(response, sourceDocs);
+  };
 }
