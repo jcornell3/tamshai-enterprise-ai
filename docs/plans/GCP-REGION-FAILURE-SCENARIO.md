@@ -484,33 +484,29 @@ terraform output web_portal_url     # e.g., https://web-portal-ghi789-uw.a.run.a
 **Option A: Update Primary Domains** (if clients can handle brief downtime)
 
 ```bash
-# Using Cloudflare API (or manually via dashboard)
-# Update api.tamshai.com CNAME
-curl -X PUT "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${API_RECORD_ID}" \
+# Using Cloudflare API
+# First, get the record ID for api.tamshai.com
+curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=api.tamshai.com&type=CNAME" \
+  -H "Authorization: Bearer ${CF_API_TOKEN}" | jq '.result[0].id'
+
+# Update api.tamshai.com CNAME (replace RECORD_ID with value from above)
+curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
   -H "Authorization: Bearer ${CF_API_TOKEN}" \
   -H "Content-Type: application/json" \
-  --data '{
-    "type": "CNAME",
-    "name": "api",
-    "content": "mcp-gateway-abc123-uw.a.run.app",
-    "proxied": true
-  }'
+  -d "{\"type\":\"CNAME\",\"name\":\"api\",\"content\":\"mcp-gateway-abc123-uw.a.run.app\",\"proxied\":true}"
 ```
 
-**Option B: Activate Recovery Domains** (zero-downtime for prepared clients)
+**Option B: Create DR CNAME Record**
 
 ```bash
-# Create/update api-dr.tamshai.com
-curl -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+# Create auth-dr.tamshai.com CNAME (for Keycloak DR)
+curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
   -H "Authorization: Bearer ${CF_API_TOKEN}" \
   -H "Content-Type: application/json" \
-  --data '{
-    "type": "CNAME",
-    "name": "api-dr",
-    "content": "mcp-gateway-abc123-uw.a.run.app",
-    "proxied": true
-  }'
+  -d "{\"type\":\"CNAME\",\"name\":\"auth-dr\",\"content\":\"ghs.googlehosted.com\",\"proxied\":true}"
 ```
+
+**Environment Variables**: `CF_API_TOKEN` and `CF_ZONE_ID` are stored as GitHub Secrets and should be exported before running these commands.
 
 #### Step 3: Handle Keycloak Domain Mapping
 
@@ -1104,9 +1100,9 @@ When us-central1 recovers:
 
 #### Phase 3: Operational Readiness
 
-- [ ] Add Cloudflare API credentials to GitHub Secrets (for auto DNS update)
-  - [ ] `CF_API_TOKEN` - API token with DNS edit permissions
-  - [ ] `CF_ZONE_ID` - Zone ID for tamshai.com
+- [x] Add Cloudflare API credentials to GitHub Secrets (for auto DNS update)
+  - [x] `CF_API_TOKEN` - API token with DNS edit permissions
+  - [x] `CF_ZONE_ID` - Zone ID for tamshai.com
 - [ ] Update on-call runbook with evacuation procedure link
 - [ ] Brief on-call team on evacuation script location and usage
 - [ ] Schedule quarterly DR drill
