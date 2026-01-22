@@ -4,7 +4,16 @@
  * Target: 95%+ coverage (pure function, easy to test)
  */
 
-import { loadConfig, safeParseInt } from './index';
+import { loadConfig, loadConfigAsync, safeParseInt } from './index';
+import { VaultClient, getSecretWithFallback } from './vault';
+
+// Mock the vault module
+jest.mock('./vault', () => ({
+  VaultClient: {
+    create: jest.fn(),
+  },
+  getSecretWithFallback: jest.fn(),
+}));
 
 describe('Configuration Module', () => {
   // Store original env vars to restore after tests
@@ -226,6 +235,113 @@ describe('Configuration Module', () => {
     it('should truncate floating point strings', () => {
       expect(safeParseInt('3.14', 0)).toBe(3);
       expect(safeParseInt('99.9', 0)).toBe(99);
+    });
+  });
+
+  describe('loadConfigAsync', () => {
+    const mockVaultClient = { getSecret: jest.fn() };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (VaultClient.create as jest.Mock).mockResolvedValue(mockVaultClient);
+      (getSecretWithFallback as jest.Mock).mockResolvedValue('mock-api-key');
+    });
+
+    it('should load config with Vault integration', async () => {
+      const config = await loadConfigAsync();
+
+      expect(VaultClient.create).toHaveBeenCalled();
+      expect(getSecretWithFallback).toHaveBeenCalledWith(
+        mockVaultClient,
+        'mcp-gateway',
+        'claude_api_key',
+        'CLAUDE_API_KEY',
+        ''
+      );
+      expect(config.claude.apiKey).toBe('mock-api-key');
+    });
+
+    it('should handle null Vault client (Vault not configured)', async () => {
+      (VaultClient.create as jest.Mock).mockResolvedValue(null);
+      (getSecretWithFallback as jest.Mock).mockResolvedValue('env-api-key');
+
+      const config = await loadConfigAsync();
+
+      expect(getSecretWithFallback).toHaveBeenCalledWith(
+        null,
+        'mcp-gateway',
+        'claude_api_key',
+        'CLAUDE_API_KEY',
+        ''
+      );
+      expect(config.claude.apiKey).toBe('env-api-key');
+    });
+
+    it('should use environment variables for non-secret config', async () => {
+      process.env.PORT = '5000';
+      process.env.LOG_LEVEL = 'debug';
+      process.env.KEYCLOAK_URL = 'http://keycloak.test';
+
+      const config = await loadConfigAsync();
+
+      expect(config.port).toBe(5000);
+      expect(config.logLevel).toBe('debug');
+      expect(config.keycloak.url).toBe('http://keycloak.test');
+    });
+
+    it('should handle empty secret from Vault (fallback to empty string)', async () => {
+      (getSecretWithFallback as jest.Mock).mockResolvedValue('');
+
+      const config = await loadConfigAsync();
+
+      expect(config.claude.apiKey).toBe('');
+    });
+
+    it('should handle null secret from Vault (fallback to empty string)', async () => {
+      (getSecretWithFallback as jest.Mock).mockResolvedValue(null);
+
+      const config = await loadConfigAsync();
+
+      expect(config.claude.apiKey).toBe('');
+    });
+
+    it('should include all config properties like loadConfig', async () => {
+      const config = await loadConfigAsync();
+
+      expect(config).toHaveProperty('port');
+      expect(config).toHaveProperty('keycloak');
+      expect(config).toHaveProperty('claude');
+      expect(config).toHaveProperty('mcpServers');
+      expect(config).toHaveProperty('timeouts');
+      expect(config).toHaveProperty('logLevel');
+    });
+
+    it('should use defaults for all MCP servers', async () => {
+      delete process.env.MCP_HR_URL;
+      delete process.env.MCP_FINANCE_URL;
+      delete process.env.MCP_SALES_URL;
+      delete process.env.MCP_SUPPORT_URL;
+
+      const config = await loadConfigAsync();
+
+      expect(config.mcpServers.hr).toBe('http://localhost:3001');
+      expect(config.mcpServers.finance).toBe('http://localhost:3002');
+      expect(config.mcpServers.sales).toBe('http://localhost:3003');
+      expect(config.mcpServers.support).toBe('http://localhost:3004');
+    });
+
+    it('should use defaults for all timeouts', async () => {
+      delete process.env.MCP_READ_TIMEOUT_MS;
+      delete process.env.MCP_WRITE_TIMEOUT_MS;
+      delete process.env.CLAUDE_TIMEOUT_MS;
+      delete process.env.TOTAL_REQUEST_TIMEOUT_MS;
+
+      const config = await loadConfigAsync();
+
+      expect(config.timeouts.mcpRead).toBe(5000);
+      expect(config.timeouts.mcpWrite).toBe(10000);
+      expect(config.timeouts.claude).toBe(60000);
+      expect(config.timeouts.total).toBe(90000);
     });
   });
 });
