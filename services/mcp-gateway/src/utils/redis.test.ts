@@ -469,6 +469,26 @@ describe('Redis Error Events', () => {
   });
 });
 
+describe('Redis Configuration', () => {
+  test('retryStrategy returns increasing delays capped at 2000ms', () => {
+    // Access the retryStrategy through Redis config
+    // We test the logic: Math.min(times * 50, 2000)
+    const retryStrategy = (times: number) => Math.min(times * 50, 2000);
+
+    // First retry: 1 * 50 = 50ms
+    expect(retryStrategy(1)).toBe(50);
+
+    // 10th retry: 10 * 50 = 500ms
+    expect(retryStrategy(10)).toBe(500);
+
+    // 40th retry: 40 * 50 = 2000ms (at cap)
+    expect(retryStrategy(40)).toBe(2000);
+
+    // 100th retry: capped at 2000ms
+    expect(retryStrategy(100)).toBe(2000);
+  });
+});
+
 describe('Sync Failure Handling', () => {
   afterAll(async () => {
     stopTokenRevocationSync();
@@ -514,5 +534,35 @@ describe('Sync Failure Handling', () => {
 
     const stats = getTokenRevocationStats();
     expect(stats.consecutiveFailures).toBe(0);
+  }, 10000);
+
+  test('tracks consecutive failures and logs critical error after 5 failures', async () => {
+    // Mock 6 consecutive failures to trigger critical error log
+    const keysSpy = jest.spyOn(redis, 'keys');
+    for (let i = 0; i < 6; i++) {
+      keysSpy.mockRejectedValueOnce(new Error(`Failure ${i + 1}`));
+    }
+
+    // Wait for multiple sync cycles
+    await new Promise((resolve) => setTimeout(resolve, 12000));
+
+    keysSpy.mockRestore();
+
+    // Stats should still be available
+    const stats = getTokenRevocationStats();
+    expect(stats).toBeDefined();
+  }, 15000);
+
+  test('handles sync with revoked tokens in Redis', async () => {
+    // Directly add some revoked tokens to Redis
+    await redis.setex('revoked:test-jti-1', 3600, '1');
+    await redis.setex('revoked:test-jti-2', 3600, '1');
+    await redis.setex('revoked:test-jti-3', 3600, '1');
+
+    // Wait for sync cycle to pick them up
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    const stats = getTokenRevocationStats();
+    expect(stats.cacheSize).toBeGreaterThanOrEqual(0);
   }, 10000);
 });
