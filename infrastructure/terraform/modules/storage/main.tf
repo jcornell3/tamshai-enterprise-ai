@@ -100,7 +100,7 @@ resource "google_storage_bucket" "public_docs" {
 resource "google_storage_bucket" "static_website" {
   count = var.enable_static_website ? 1 : 0
 
-  name     = var.static_website_domain # e.g., "prod.tamshai.com"
+  name     = var.static_website_domain   # e.g., "prod.tamshai.com"
   location = var.static_website_location # Default: "US" (multi-regional for DR resilience)
   project  = var.project_id
 

@@ -50,9 +50,9 @@ locals {
   # Regional Evacuation: env_id-based naming for resource isolation
   # - "primary" uses standard names (backwards compatible)
   # - "recovery-*" uses suffixed names to avoid global collisions
-  is_recovery    = var.env_id != "primary"
-  name_suffix    = local.is_recovery ? "-${var.env_id}" : ""
-  name_prefix    = "tamshai-${local.environment}${local.name_suffix}"
+  is_recovery = var.env_id != "primary"
+  name_suffix = local.is_recovery ? "-${var.env_id}" : ""
+  name_prefix = "tamshai-${local.environment}${local.name_suffix}"
 
   # Resource naming for regional evacuation
   # These ensure recovery deployments don't conflict with primary
