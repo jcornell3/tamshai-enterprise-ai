@@ -47,6 +47,17 @@ function isDeployedEnvironment(hostname: string): boolean {
 }
 
 /**
+ * GCP Production hostnames (primary and DR)
+ * These use Keycloak on separate Cloud Run URL (not proxied)
+ */
+const GCP_PROD_HOSTS = [
+  'prod.tamshai.com',
+  'prod-dr.tamshai.com',  // DR: Regional evacuation
+  'app.tamshai.com',
+  'app-dr.tamshai.com',   // DR: Regional evacuation
+];
+
+/**
  * Determine environment-specific Keycloak configuration
  */
 function getKeycloakConfig() {
@@ -54,9 +65,11 @@ function getKeycloakConfig() {
   const origin = window.location.origin;
   const basePath = getAppBasePath();
 
-  // GCP Production - Keycloak on separate Cloud Run URL (not proxied)
-  // Includes both prod.tamshai.com and app.tamshai.com (Cloud Run portal)
-  if (hostname === 'prod.tamshai.com' || hostname === 'app.tamshai.com') {
+  // GCP Production (Primary or DR) - Keycloak on separate Cloud Run URL (not proxied)
+  // VITE_KEYCLOAK_URL must be set at build time to point to either:
+  //   - Primary: https://auth.tamshai.com/auth/realms/tamshai-corp
+  //   - DR: https://auth-dr.tamshai.com/auth/realms/tamshai-corp
+  if (GCP_PROD_HOSTS.includes(hostname)) {
     return {
       authority: import.meta.env.VITE_KEYCLOAK_URL,
       client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'web-portal',

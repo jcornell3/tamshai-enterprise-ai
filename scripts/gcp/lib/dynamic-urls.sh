@@ -15,6 +15,10 @@
 #   - gcloud CLI authenticated
 #   - GCP_REGION environment variable (required)
 #
+# DR Mode:
+#   Set DR_MODE=true or ENV_ID=recovery-* to use DR fallback domains:
+#   - auth-dr.tamshai.com instead of auth.tamshai.com
+#
 # =============================================================================
 
 # Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
@@ -35,6 +39,24 @@ log_urls_error() { echo -e "${RED}[urls]${NC} $1"; }
 # Default values
 GCP_REGION="${GCP_REGION}"
 CLOUD_SQL_INSTANCE="${CLOUD_SQL_INSTANCE:-tamshai-prod-postgres}"
+
+# =============================================================================
+# DR MODE DETECTION
+# =============================================================================
+
+# Check if we're in DR (Disaster Recovery) mode
+# Returns 0 (true) if DR mode, 1 (false) otherwise
+is_dr_mode() {
+    # Explicit DR_MODE environment variable
+    if [ "${DR_MODE:-false}" = "true" ]; then
+        return 0
+    fi
+    # Check if ENV_ID indicates a recovery deployment
+    if [[ "${ENV_ID:-primary}" == recovery-* ]]; then
+        return 0
+    fi
+    return 1
+}
 
 # Discover Cloud Run service URL
 # Usage: discover_service_url "service-name"
@@ -57,11 +79,17 @@ discover_service_url() {
 }
 
 # Discover Keycloak URL
+# In DR mode, falls back to auth-dr.tamshai.com instead of auth.tamshai.com
 discover_keycloak_url() {
     local url
     url=$(discover_service_url "keycloak") || {
-        log_urls_warn "Falling back to auth.tamshai.com" >&2
-        echo "https://auth.tamshai.com"
+        if is_dr_mode; then
+            log_urls_warn "DR mode: Falling back to auth-dr.tamshai.com" >&2
+            echo "https://auth-dr.tamshai.com"
+        else
+            log_urls_warn "Falling back to auth.tamshai.com" >&2
+            echo "https://auth.tamshai.com"
+        fi
         return 0
     }
     echo "$url"

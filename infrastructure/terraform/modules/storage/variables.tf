@@ -45,6 +45,17 @@ variable "static_website_domain" {
   default     = "prod.tamshai.com"
 }
 
+variable "static_website_location" {
+  description = <<-EOT
+    Location for static website bucket.
+    - Regional (e.g., "us-central1"): Lower cost, single region
+    - Multi-regional (e.g., "US"): Higher availability, survives regional outages
+    Recommended: "US" for production (DR resilience)
+  EOT
+  type        = string
+  default     = "US" # Multi-regional for DR resilience
+}
+
 variable "cicd_service_account_email" {
   description = "Email of CI/CD service account for deployment permissions"
   type        = string
