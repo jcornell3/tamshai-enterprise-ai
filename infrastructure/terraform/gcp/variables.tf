@@ -140,3 +140,57 @@ variable "phoenix_mode" {
   type        = bool
   default     = false
 }
+
+# =============================================================================
+# REGIONAL EVACUATION (GCP Region Failure Scenario)
+# =============================================================================
+# These variables enable deploying to an alternate region during a regional
+# outage without conflicting with the primary deployment's Terraform state
+# or global resource names.
+#
+# Usage: ./scripts/gcp/evacuate-region.sh us-west1 us-west1-b recovery-01
+# =============================================================================
+
+variable "env_id" {
+  description = <<-EOT
+    Unique identifier for this deployment environment.
+
+    - "primary": Normal production deployment (default)
+    - "recovery-*": Regional evacuation deployment (e.g., "recovery-20260122")
+
+    Used for:
+    - Terraform state isolation (different backend prefix)
+    - Resource naming to avoid global name collisions
+    - Identifying recovery vs primary stacks
+  EOT
+  type        = string
+  default     = "primary"
+}
+
+variable "source_backup_bucket" {
+  description = <<-EOT
+    GCS bucket containing database backups for restoration during regional recovery.
+
+    Leave empty for primary deployments.
+    Set to the multi-regional backup bucket name during recovery (e.g., "tamshai-backups-us").
+
+    When set and env_id != "primary", triggers automatic data restoration.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "recovery_mode" {
+  description = <<-EOT
+    Enable recovery mode for regional evacuation scenarios.
+
+    When true:
+    - Skips operations that would fail against unreachable resources
+    - Enables automatic data restoration from source_backup_bucket
+    - Uses recovery-specific naming for resources
+
+    Should only be true when env_id != "primary".
+  EOT
+  type        = bool
+  default     = false
+}
