@@ -71,6 +71,7 @@ ERROR: Bucket "prod.tamshai.com" already exists (but it's in dead region)
 | `main.tf` | Dynamic resource naming | Avoid global name collisions |
 | `main.tf` | Empty backend block | Enable partial config via CLI |
 | New script | `evacuate-region.sh` | Single-command regional recovery |
+| New script | `cleanup-recovery.sh` | Destroy recovery stack after failback |
 | Backup strategy | Cross-region GCS bucket | Data survives regional outage |
 
 ### Recovery Time Objective (RTO)
@@ -1099,6 +1100,12 @@ When us-central1 recovers:
 - [x] Add Cloudflare API credentials to GitHub Secrets (for auto DNS update)
   - [x] `CF_API_TOKEN` - API token with DNS edit permissions
   - [x] `CF_ZONE_ID` - Zone ID for tamshai.com
+- [x] Create `scripts/gcp/cleanup-recovery.sh` for DR stack destruction (DONE)
+- [x] Create DR CNAME records in Cloudflare (DONE)
+  - [x] `auth-dr.tamshai.com` → `ghs.googlehosted.com`
+  - [x] `api-dr.tamshai.com` → `ghs.googlehosted.com`
+  - [x] `app-dr.tamshai.com` → `ghs.googlehosted.com`
+  - [x] `prod-dr.tamshai.com` → `c.storage.googleapis.com`
 - [ ] Update on-call runbook with evacuation procedure link
 - [ ] Brief on-call team on evacuation script location and usage
 - [ ] Schedule quarterly DR drill
@@ -1158,6 +1165,76 @@ api.tamshai.com → Cloudflare LB
 
 **Pros**: Works with current Cloud Run setup, fast failover
 **Cons**: Additional Cloudflare cost (~$5/month for basic LB)
+
+---
+
+## Failback Procedure
+
+After the primary region recovers, you need to:
+1. Verify the primary stack is healthy
+2. Migrate traffic back to primary
+3. Destroy the recovery stack to avoid ongoing costs
+
+### Script Pair for Regional Evacuation
+
+| Script | Purpose | When to Use |
+|--------|---------|-------------|
+| `evacuate-region.sh` | Create recovery stack in new region | During regional outage |
+| `cleanup-recovery.sh` | Destroy recovery stack | After failback to primary |
+
+### Cleanup Recovery Stack
+
+**Script**: `scripts/gcp/cleanup-recovery.sh`
+
+```bash
+# List available recovery stacks
+./scripts/gcp/cleanup-recovery.sh --list
+
+# Preview destruction (dry run)
+./scripts/gcp/cleanup-recovery.sh recovery-20260122-1430 --dry-run
+
+# Destroy recovery stack
+./scripts/gcp/cleanup-recovery.sh recovery-20260122-1430
+
+# Force destroy (skip confirmations)
+./scripts/gcp/cleanup-recovery.sh recovery-20260122-1430 --force
+```
+
+### Failback Checklist
+
+**Before Failback** (verify primary is healthy):
+- [ ] GCP Status Dashboard shows us-central1 as "Available"
+- [ ] Primary services respond to health checks
+- [ ] Primary database is accessible
+- [ ] E2E tests pass against primary stack
+
+**During Failback**:
+1. [ ] Update DNS CNAMEs to point back to primary URLs
+2. [ ] Wait for DNS propagation (typically < 5 minutes with Cloudflare)
+3. [ ] Verify traffic is flowing to primary
+4. [ ] Monitor error rates for 15-30 minutes
+
+**After Failback** (cleanup):
+1. [ ] Run `./scripts/gcp/cleanup-recovery.sh <ENV_ID>`
+2. [ ] Verify recovery resources are deleted
+3. [ ] Reset DR CNAMEs to placeholder values
+4. [ ] Document incident timeline and lessons learned
+
+### DNS Reversion After Failback
+
+After cleanup, revert DR CNAMEs to their placeholder values:
+
+| CNAME | Revert To | Reason |
+|-------|-----------|--------|
+| `auth-dr.tamshai.com` | `ghs.googlehosted.com` | Placeholder for next evacuation |
+| `api-dr.tamshai.com` | `ghs.googlehosted.com` | Placeholder for next evacuation |
+| `app-dr.tamshai.com` | `ghs.googlehosted.com` | Placeholder for next evacuation |
+| `prod-dr.tamshai.com` | `c.storage.googleapis.com` | Placeholder for next evacuation |
+
+**Note**: The `-dr` CNAMEs should always exist pointing to placeholders. This allows:
+- Domain verification in Google Search Console (one-time setup)
+- Instant remapping during future evacuations
+- No "domain not found" errors if someone accidentally visits DR URLs
 
 ---
 
