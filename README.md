@@ -5,7 +5,7 @@
 [![Security](https://github.com/jcornell3/tamshai-enterprise-ai/actions/workflows/security.yml/badge.svg)](https://github.com/jcornell3/tamshai-enterprise-ai/actions/workflows/security.yml)
 [![qlty](https://qlty.sh/badges/jcornell3/tamshai-enterprise-ai/maintainability.svg)](https://qlty.sh/gh/jcornell3/tamshai-enterprise-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Architecture: v1.4](https://img.shields.io/badge/Architecture-v1.4-blue)
+![Architecture: v1.5](https://img.shields.io/badge/Architecture-v1.5-blue)
 ![Status: Production Deployed](https://img.shields.io/badge/Status-Production%20Deployed-brightgreen)
 
 Enterprise-grade AI access system enabling secure Claude AI integration with role-based data access. Employees use AI assistants while data access respects existing security boundaries through defense-in-depth architecture.
@@ -64,7 +64,10 @@ With an architecture vision that I developed, I started this project using GitHu
 - **Multi-Platform**: Flutter clients for Windows, macOS, Linux, Android
 - **Enterprise Ready**: Audit logging, token revocation, rate limiting
 
-### v1.4 Enhancements (Current)
+### v1.5 Enhancements (Current)
+- **Project Journey Agent**: AI-powered MCP server for project onboarding, knowledge indexing, and contextual assistance
+
+### v1.4 Enhancements
 - **SSE Streaming**: Real-time AI response streaming via Server-Sent Events
 - **Truncation Warnings**: AI-visible warnings when data exceeds query limits
 - **Human-in-the-Loop**: Confirmation flow for destructive operations (delete, update)
@@ -222,27 +225,30 @@ flutter run -d windows  # or macos, linux, android
 tamshai-enterprise-ai/
 ├── services/
 │   ├── mcp-gateway/        # AI orchestration service (Node.js) - Claude API integration
+│   ├── mcp-journey/        # Project Journey Agent - onboarding & knowledge indexing
 │   ├── mcp-hr/             # HR data MCP server (PostgreSQL)
 │   ├── mcp-finance/        # Finance data MCP server (PostgreSQL)
 │   ├── mcp-sales/          # Sales/CRM MCP server (MongoDB)
 │   └── mcp-support/        # Support ticket MCP server (Elasticsearch/MongoDB)
 ├── clients/
 │   ├── unified_flutter/    # Cross-platform Flutter client (Windows/macOS/Linux/Android)
-│   └── web/                # Web client packages (auth, portal)
+│   └── web/                # Web apps monorepo (Turborepo)
+│       ├── apps/           # Portal, HR, Finance, Sales, Support web apps
+│       └── packages/       # Shared packages (auth, ui, tailwind-config)
 ├── apps/
-│   ├── tamshai-website/    # Corporate website (static HTML/CSS)
-│   └── web/                # Web portal applications (HR, Finance, Sales, Support)
+│   └── tamshai-website/    # Corporate website (static HTML/CSS)
 ├── infrastructure/
 │   ├── docker/             # Docker Compose configs for dev/stage
 │   └── terraform/          # IaC for dev, VPS, and GCP deployment
 ├── keycloak/               # Keycloak realm configuration and sync scripts
 ├── sample-data/            # Sample data for development (SQL, JS, NDJSON)
-├── scripts/                # Utility scripts (infra, MCP, testing)
+├── scripts/                # Utility scripts (infra, MCP, testing, GCP, VPS)
 ├── docs/                   # Documentation (architecture, deployment, security)
 └── tests/
     ├── e2e/                # Playwright E2E tests with TOTP support
     ├── integration/        # Integration tests
-    └── performance/        # k6 performance tests
+    ├── performance/        # k6 performance tests
+    └── terraform/          # Terraform validation tests
 ```
 
 ## Deployment
