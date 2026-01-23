@@ -178,6 +178,138 @@ remove_stale_cloudrun_state() {
     log_info "Stale state entries removed"
 }
 
+# =============================================================================
+# COMPREHENSIVE TERRAFORM STATE CLEANUP (from phoenix-rebuild.sh)
+# =============================================================================
+# These functions remove resources from Terraform state that cause issues during
+# destroy operations. Ported from phoenix-rebuild.sh for reuse in DR cleanup.
+#
+# Issue #28: Secrets and IAM bindings must be removed BEFORE terraform destroy
+# Gap #23-25: Service networking and VPC connector state causes circular deps
+# =============================================================================
+
+# Remove all Cloud SQL related resources from terraform state
+# Usage: remove_cloudsql_state
+remove_cloudsql_state() {
+    log_info "Removing Cloud SQL resources from terraform state..."
+    local resources=(
+        'module.database.google_sql_database_instance.postgres'
+        'module.database.google_sql_database.keycloak'
+        'module.database.google_sql_database.keycloak_db'
+        'module.database.google_sql_database.tamshai'
+        'module.database.google_sql_database.hr_db'
+        'module.database.google_sql_database.finance_db'
+        'module.database.google_sql_user.keycloak'
+        'module.database.google_sql_user.keycloak_user'
+        'module.database.google_sql_user.tamshai'
+        'module.database.google_sql_user.tamshai_user'
+        'module.database.google_sql_user.postgres_user'
+    )
+
+    for resource in "${resources[@]}"; do
+        terraform state rm "$resource" 2>/dev/null || true
+    done
+    log_info "Cloud SQL state entries removed"
+}
+
+# Remove all secret IAM binding resources from terraform state (Issue #28)
+# These must be removed BEFORE terraform destroy to avoid "secret not found" errors
+# Usage: remove_secret_iam_bindings_state
+remove_secret_iam_bindings_state() {
+    log_info "Removing secret IAM bindings from terraform state (Issue #28)..."
+    local resources=(
+        # Keycloak-related IAM bindings
+        'module.security.google_secret_manager_secret_iam_member.keycloak_admin_access'
+        'module.security.google_secret_manager_secret_iam_member.keycloak_db_access'
+        # MCP Gateway-related IAM bindings
+        'module.security.google_secret_manager_secret_iam_member.mcp_gateway_anthropic_access'
+        'module.security.google_secret_manager_secret_iam_member.mcp_gateway_client_secret_access'
+        'module.security.google_secret_manager_secret_iam_member.mcp_gateway_jwt_access'
+        # MCP Servers-related IAM bindings
+        'module.security.google_secret_manager_secret_iam_member.mcp_servers_db_access'
+        # Cloud Build-related IAM bindings
+        'module.security.google_secret_manager_secret_iam_member.cloudbuild_db_password'
+        'module.security.google_secret_manager_secret_iam_member.cloudbuild_keycloak_admin'
+        'module.security.google_secret_manager_secret_iam_member.cloudbuild_mcp_hr_client'
+        'module.security.google_secret_manager_secret_iam_member.cloudbuild_prod_user_password'
+        # Provision job-related IAM bindings
+        'module.security.google_secret_manager_secret_iam_member.provision_job_db_password'
+        'module.security.google_secret_manager_secret_iam_member.provision_job_keycloak_admin'
+        'module.security.google_secret_manager_secret_iam_member.provision_job_mcp_hr_client'
+        'module.security.google_secret_manager_secret_iam_member.provision_job_prod_user_password'
+    )
+
+    for resource in "${resources[@]}"; do
+        terraform state rm "$resource" 2>/dev/null || true
+    done
+    log_info "Secret IAM binding state entries removed"
+}
+
+# Remove all secret shell and version resources from terraform state
+# Usage: remove_secret_state
+remove_secret_state() {
+    log_info "Removing secret shells and versions from terraform state..."
+    local resources=(
+        # Secret shells
+        'module.security.google_secret_manager_secret.keycloak_admin_password'
+        'module.security.google_secret_manager_secret.keycloak_db_password'
+        'module.security.google_secret_manager_secret.tamshai_db_password'
+        'module.security.google_secret_manager_secret.anthropic_api_key'
+        'module.security.google_secret_manager_secret.mcp_gateway_client_secret'
+        'module.security.google_secret_manager_secret.jwt_secret'
+        'module.security.google_secret_manager_secret.mcp_hr_service_client_secret'
+        'module.security.google_secret_manager_secret.prod_user_password'
+        # Secret versions
+        'module.security.google_secret_manager_secret_version.keycloak_admin_password'
+        'module.security.google_secret_manager_secret_version.keycloak_db_password'
+        'module.security.google_secret_manager_secret_version.anthropic_api_key'
+        'module.security.google_secret_manager_secret_version.mcp_gateway_client_secret'
+        'module.security.google_secret_manager_secret_version.jwt_secret'
+        'module.security.google_secret_manager_secret_version.mcp_hr_service_client_secret'
+        'module.security.google_secret_manager_secret_version.prod_user_password'
+    )
+
+    for resource in "${resources[@]}"; do
+        terraform state rm "$resource" 2>/dev/null || true
+    done
+    log_info "Secret state entries removed"
+}
+
+# Remove all VPC connector variations from terraform state (Gap #25)
+# Handles different resource naming patterns across terraform versions
+# Usage: remove_vpc_connector_state
+remove_vpc_connector_state() {
+    log_info "Removing VPC connector from terraform state (Gap #25)..."
+    local resources=(
+        'module.networking.google_vpc_access_connector.connector[0]'
+        'module.networking.google_vpc_access_connector.connector'
+        'module.networking.google_vpc_access_connector.serverless_connector[0]'
+        'module.networking.google_vpc_access_connector.serverless_connector'
+    )
+
+    for resource in "${resources[@]}"; do
+        terraform state rm "$resource" 2>/dev/null || true
+    done
+    log_info "VPC connector state entries removed"
+}
+
+# Comprehensive terraform state cleanup - removes all problematic resources
+# Call this BEFORE terraform destroy to prevent common failures
+# Usage: remove_all_problematic_state
+remove_all_problematic_state() {
+    log_info "=== Comprehensive Terraform State Cleanup ==="
+
+    # Order matters: IAM bindings first, then secrets, then infrastructure
+    remove_secret_iam_bindings_state
+    remove_secret_state
+    remove_cloudsql_state
+    remove_service_networking_from_state
+    remove_vpc_connector_state
+    remove_stale_cloudrun_state
+
+    log_info "=== Terraform State Cleanup Complete ==="
+}
+
 # Gap #2: Delete persisted secrets
 delete_persisted_secrets() {
     log_info "Deleting persisted GCP secrets..."
@@ -858,15 +990,46 @@ delete_vpc_network_robust() {
 #     ENV_ID="recovery-20260123"
 #     pre_destroy_cleanup "-recovery-20260123"  # Cloud SQL suffix
 
-# Run all pre-destroy cleanup
-# Usage: pre_destroy_cleanup [cloudsql_suffix]
+# Run all pre-destroy cleanup (enhanced with Phoenix patterns)
+# Usage: pre_destroy_cleanup [cloudsql_suffix] [delete_secrets]
 #   cloudsql_suffix: Optional suffix for Cloud SQL (e.g., "-recovery-20260123")
+#   delete_secrets: Set to "true" to delete secrets before destroy (Issue #28)
+#
+# This function performs cleanup BEFORE terraform destroy to prevent common failures:
+# - Gap #21: Cloud Run jobs with deletion protection
+# - Gap #22: Cloud SQL deletion protection
+# - Gap #38: Cloud Run services holding DB connections
+# - Issue #28: Secrets and IAM bindings that cause destroy failures
 pre_destroy_cleanup() {
     local cloudsql_suffix="${1:-}"
+    local delete_secrets="${2:-false}"
 
     log_info "=== Pre-Destroy Cleanup (NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID) ==="
+
+    # Gap #21: Delete Cloud Run jobs first
     delete_cloud_run_jobs "$cloudsql_suffix"
+
+    # Gap #38: Delete Cloud Run services to release DB connections
+    # This allows Cloud SQL to be deleted without "active connections" errors
+    log_step "Deleting Cloud Run services to release DB connections (Gap #38)..."
+    delete_cloudrun_services
+    log_info "Waiting for connections to close..."
+    sleep 10
+
+    # Gap #22: Disable Cloud SQL deletion protection
     disable_cloudsql_deletion_protection "$cloudsql_suffix"
+
+    # Issue #28: Delete secrets and remove IAM bindings from state BEFORE destroy
+    # This prevents "secret not found" errors during terraform destroy
+    if [[ "$delete_secrets" == "true" ]]; then
+        log_step "Deleting secrets before destroy (Issue #28)..."
+        delete_persisted_secrets_prod
+
+        log_step "Removing secret IAM bindings from terraform state..."
+        remove_secret_iam_bindings_state
+        remove_secret_state
+    fi
+
     log_info "=== Pre-Destroy Cleanup Complete ==="
 }
 
@@ -1088,8 +1251,13 @@ cleanup_leftover_resources() {
     return 0
 }
 
-# Clean up stale terraform state lock
+# Clean up stale terraform state lock (enhanced with Phoenix patterns)
 # Usage: cleanup_terraform_state_lock <bucket> <prefix>
+#
+# This function handles stale terraform locks that can occur when:
+# - A previous terraform operation was interrupted
+# - Network issues caused a lock to not be released
+# - Manual cleanup is needed after a failed deployment
 cleanup_terraform_state_lock() {
     local bucket="$1"
     local prefix="$2"
@@ -1098,8 +1266,25 @@ cleanup_terraform_state_lock() {
     local lock_file="gs://${bucket}/${prefix}/default.tflock"
 
     if gcloud storage cat "$lock_file" &>/dev/null 2>&1; then
-        log_warn "Found stale lock file - removing..."
+        log_warn "Found stale lock file in GCS - attempting cleanup..."
+
+        # Phoenix pattern: Extract lock ID and use terraform force-unlock first
+        local lock_id
+        lock_id=$(gcloud storage cat "$lock_file" 2>/dev/null | grep -o '"ID":"[0-9]*"' | grep -o '[0-9]*' | head -1) || true
+
+        if [[ -n "$lock_id" ]]; then
+            log_info "  Found lock ID: $lock_id"
+            log_info "  Running terraform force-unlock..."
+            terraform force-unlock -force "$lock_id" 2>/dev/null || log_warn "Force unlock may have failed"
+        fi
+
+        # Also delete the lock file directly as backup (in case force-unlock didn't work)
+        log_info "  Removing lock file from GCS..."
         gcloud storage rm "$lock_file" 2>/dev/null || true
+
+        log_info "Terraform state lock cleanup complete"
+    else
+        log_info "No stale terraform state lock found"
     fi
 }
 
