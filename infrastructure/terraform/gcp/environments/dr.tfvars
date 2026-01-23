@@ -42,6 +42,10 @@ phoenix_mode  = true # Required for DR to skip deletion protection
 region = "us-west1"
 zone   = "us-west1-b"
 
+# Fallback zones for capacity issues (Issue #102)
+# Zones are tried in order if the primary zone has capacity issues
+fallback_zones = ["us-west1-a", "us-west1-c"]
+
 # =============================================================================
 # NETWORKING
 # =============================================================================

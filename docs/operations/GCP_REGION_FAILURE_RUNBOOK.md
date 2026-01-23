@@ -1,7 +1,7 @@
 # GCP Regional Failure Runbook
 
 **Last Updated**: January 23, 2026
-**Version**: 1.1.0
+**Version**: 1.2.0
 **Owner**: Platform Team
 
 ## Overview
@@ -123,15 +123,30 @@ timeout 30 gcloud run services list --region=us-central1
 **Options**:
 ```bash
 ./scripts/gcp/evacuate-region.sh --help     # Show usage
+./scripts/gcp/evacuate-region.sh --yes      # Skip confirmation prompts (for automated/CI runs)
+```
+
+> **Tip**: Use `--yes` flag for automated runs or CI/CD pipelines to skip interactive confirmations.
+> The `--yes` flag applies to both the evacuation confirmation AND the pre-cleanup phase (Phase 0.5).
+> All cleanup operations run automatically without additional prompts.
+
+**Environment Variables** (optional overrides):
+```bash
+# Override target region/zone
+GCP_DR_REGION=us-east1 ./scripts/gcp/evacuate-region.sh --yes
+
+# Override fallback zones for capacity issues (Issue #102)
+GCP_DR_FALLBACK_ZONES="us-west1-a us-west1-c" ./scripts/gcp/evacuate-region.sh --yes
 ```
 
 ### Step 3: Monitor Progress
 
-The script executes 7 phases:
+The script executes 8 phases:
 
 | Phase | What It Does | Duration |
 |-------|--------------|----------|
-| 0 | Pre-flight checks | ~1 min |
+| 0 | Pre-flight checks (includes zone capacity validation) | ~1 min |
+| 0.5 | Pre-cleanup (removes leftover resources from failed attempts) | ~2-5 min |
 | 1 | Confirm evacuation | ~30 sec |
 | 2 | Initialize Terraform with fresh state | ~1 min |
 | 3 | Apply Terraform infrastructure | ~10 min |
@@ -139,6 +154,8 @@ The script executes 7 phases:
 | 5 | Restore data from backup (if available) | ~2 min |
 | 6 | Configure Keycloak realm | ~1 min |
 | 7 | DNS configuration guidance | ~1 min |
+
+**Zone Capacity Check (Phase 0)**: The script automatically checks if the requested machine types (e.g., `e2-micro`) are available in the target zone. If capacity is unavailable, it tries fallback zones configured in `dr.tfvars` or environment variables.
 
 ### Step 4: Update DNS
 
@@ -317,6 +334,33 @@ Common issues:
 - **Secret not found**: Secrets are regional; may need to copy to new region
 - **Image not found**: Artifact Registry is regional; images may not exist in new region
 
+### Zone capacity unavailable (e2-micro not available)
+
+**Error**: `The zone 'projects/.../zones/us-west1-b' does not have enough resources available`
+
+**Cause**: GCP zones can have transient capacity issues for specific machine types, especially during regional outages when traffic shifts.
+
+**Automatic Handling**: The evacuation script (Phase 0) automatically checks zone capacity and switches to fallback zones if configured.
+
+**Manual Override**:
+```bash
+# Check which zones have capacity
+for zone in us-west1-a us-west1-b us-west1-c; do
+    gcloud compute machine-types describe e2-micro --zone=$zone 2>/dev/null && echo "$zone: OK" || echo "$zone: UNAVAILABLE"
+done
+
+# Use a different zone
+GCP_DR_ZONE=us-west1-a ./scripts/gcp/evacuate-region.sh --yes
+
+# Or set fallback zones
+GCP_DR_FALLBACK_ZONES="us-west1-a us-west1-c" ./scripts/gcp/evacuate-region.sh --yes
+```
+
+**Prevention**: Configure `fallback_zones` in `dr.tfvars`:
+```hcl
+fallback_zones = ["us-west1-a", "us-west1-c"]
+```
+
 ### Keycloak can't reach database
 
 Cloud SQL private IP is regional. Recovery stack gets a new IP.
@@ -453,6 +497,13 @@ Creates a recovery stack in a new region.
 
 **Environment Variables**:
 - `GCP_PROJECT` or `GCP_PROJECT_ID`: GCP project (auto-detected if not set)
+- `GCP_DR_REGION`: Override target region (default: from dr.tfvars or us-west1)
+- `GCP_DR_ZONE`: Override target zone (default: from dr.tfvars or REGION-b)
+- `GCP_DR_FALLBACK_ZONES`: Space-separated fallback zones for capacity issues
+
+**Flags**:
+- `--yes`, `-y`: Skip interactive confirmations (recommended for automation)
+- `--help`, `-h`: Show usage information
 
 ### cleanup-recovery.sh
 
@@ -601,5 +652,6 @@ Conduct quarterly to maintain readiness.
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.2.0 | Jan 23, 2026 | Tamshai-Dev | Added zone capacity pre-check, fallback zones (GCP_DR_FALLBACK_ZONES), multi-zone cleanup support (Issue #102) |
 | 1.1.0 | Jan 23, 2026 | Tamshai-Dev | Added troubleshooting for SSL delay, Cloud SQL IAM, cleanup issues from evacuation test 13 |
 | 1.0.0 | Jan 22, 2026 | Tamshai-Dev | Initial version with evacuation and failback procedures |

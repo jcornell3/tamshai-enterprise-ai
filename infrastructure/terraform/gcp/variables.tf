@@ -21,6 +21,21 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
+variable "fallback_zones" {
+  description = <<-EOT
+    List of fallback zones to try if the primary zone has capacity issues.
+    Used during DR evacuation when a zone may be temporarily unavailable.
+    Zones are tried in order until one succeeds.
+
+    Example: ["us-west1-a", "us-west1-c"] for us-west1 region
+    Leave empty to use only the primary zone (default behavior).
+
+    Configure via tfvars or GitHub Actions variables for DR scenarios.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 # =============================================================================
 # NETWORKING
 # =============================================================================
