@@ -851,34 +851,50 @@ phase1_5_replicate_images() {
             case "$image_name" in
                 keycloak)
                     # Keycloak uses Dockerfile.cloudbuild (no BuildKit syntax)
-                    # Phoenix Gap #56: Must specify --dockerfile for non-standard Dockerfile name
+                    # Phoenix pattern: Use --config with temp cloudbuild.yaml (--dockerfile flag doesn't exist)
                     log_info "    Building keycloak (Dockerfile.cloudbuild)..."
+                    local keycloak_config="/tmp/keycloak-cloudbuild-$$.yaml"
+                    cat > "$keycloak_config" <<KEYCLOAK_EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${target_image}', '-f', 'Dockerfile.cloudbuild', '.']
+images:
+  - '${target_image}'
+KEYCLOAK_EOF
                     if gcloud builds submit "${PROJECT_ROOT}/keycloak" \
-                        --tag="$target_image" \
-                        --dockerfile=Dockerfile.cloudbuild \
+                        --config="$keycloak_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
                         --quiet 2>&1; then
                         log_success "    Rebuilt keycloak successfully"
                         copy_success=true
                     fi
+                    rm -f "$keycloak_config"
                     ;;
                 web-portal)
                     # Web portal needs repo root context with Dockerfile.prod
-                    # Phoenix Gap #55: Must build from repo root, use -f for Dockerfile path
+                    # Phoenix pattern: Use --config with temp cloudbuild.yaml
                     log_info "    Building web-portal (Dockerfile.prod from repo root)..."
+                    local webportal_config="/tmp/webportal-cloudbuild-$$.yaml"
+                    cat > "$webportal_config" <<WEBPORTAL_EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${target_image}', '-f', 'clients/web/Dockerfile.prod', '.']
+images:
+  - '${target_image}'
+WEBPORTAL_EOF
                     if gcloud builds submit "${PROJECT_ROOT}" \
-                        --tag="$target_image" \
-                        --dockerfile=clients/web/Dockerfile.prod \
+                        --config="$webportal_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
                         --quiet 2>&1; then
                         log_success "    Rebuilt web-portal successfully"
                         copy_success=true
                     fi
+                    rm -f "$webportal_config"
                     ;;
                 mcp-gateway|mcp-hr|mcp-finance|mcp-sales|mcp-support)
-                    # Standard MCP services
+                    # Standard MCP services - can use --tag directly
                     log_info "    Building ${image_name} (standard Dockerfile)..."
                     if gcloud builds submit "${PROJECT_ROOT}/services/${image_name}" \
                         --tag="$target_image" \
@@ -890,16 +906,32 @@ phase1_5_replicate_images() {
                     fi
                     ;;
                 provision-job)
-                    # Provision job is in keycloak directory
+                    # Provision job is at scripts/gcp/provision-job/
+                    # Phoenix pattern: Use minimal build context with --config
                     log_info "    Building provision-job..."
-                    if gcloud builds submit "${PROJECT_ROOT}/keycloak" \
-                        --tag="$target_image" \
+                    local provision_context="/tmp/provision-job-context-$$"
+                    mkdir -p "$provision_context/services" "$provision_context/sample-data" "$provision_context/scripts/gcp"
+                    cp -r "$PROJECT_ROOT/services/mcp-hr" "$provision_context/services/"
+                    cp "$PROJECT_ROOT/sample-data"/*.sql "$provision_context/sample-data/" 2>/dev/null || true
+                    cp -r "$PROJECT_ROOT/scripts/gcp/provision-job" "$provision_context/scripts/gcp/"
+
+                    local provision_config="/tmp/provision-cloudbuild-$$.yaml"
+                    cat > "$provision_config" <<PROVISION_EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${target_image}', '-f', 'scripts/gcp/provision-job/Dockerfile', '.']
+images:
+  - '${target_image}'
+PROVISION_EOF
+                    if gcloud builds submit "$provision_context" \
+                        --config="$provision_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
                         --quiet 2>&1; then
                         log_success "    Rebuilt provision-job successfully"
                         copy_success=true
                     fi
+                    rm -rf "$provision_context" "$provision_config"
                     ;;
                 *)
                     log_warn "    Unknown image type, cannot rebuild: $image_name"
