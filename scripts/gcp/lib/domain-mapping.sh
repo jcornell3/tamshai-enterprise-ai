@@ -225,6 +225,108 @@ wait_for_auth_domain_with_ssl() {
     wait_for_ssl_certificate "$domain" "/auth/realms/${realm}/.well-known/openid-configuration" "$timeout"
 }
 
+# =============================================================================
+# STAGED TERRAFORM DEPLOYMENT (Issue #37 pattern from phoenix-rebuild.sh)
+# =============================================================================
+# Problem: mcp-gateway fails startup probes if Keycloak SSL cert isn't ready.
+# Solution: Deploy in stages - first Keycloak + domain mapping, wait for SSL,
+# then deploy mcp-gateway.
+#
+# This pattern is used by both phoenix-rebuild.sh and evacuate-region.sh.
+# =============================================================================
+
+# Get terraform targets for Stage 1 (everything except mcp-gateway)
+# Returns: Array of -target= arguments for terraform apply
+# Usage: stage1_targets=($(get_stage1_terraform_targets))
+get_stage1_terraform_targets() {
+    cat <<'TARGETS'
+-target=module.networking
+-target=module.database
+-target=module.security
+-target=module.storage
+-target=module.cloudrun.google_artifact_registry_repository.tamshai
+-target=module.cloudrun.google_cloud_run_service.keycloak
+-target=module.cloudrun.google_cloud_run_service.mcp_suite
+-target=module.cloudrun.google_cloud_run_service.web_portal
+-target=module.cloudrun.google_cloud_run_domain_mapping.keycloak
+-target=module.cloudrun.google_cloud_run_service_iam_member.keycloak_public
+-target=module.cloudrun.google_cloud_run_service_iam_member.web_portal_public
+-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_suite_gateway_access
+-target=module.utility_vm
+TARGETS
+}
+
+# Get terraform targets for Stage 2 (mcp-gateway only)
+# Returns: Array of -target= arguments for terraform apply
+# Usage: stage2_targets=($(get_stage2_terraform_targets))
+get_stage2_terraform_targets() {
+    cat <<'TARGETS'
+-target=module.cloudrun.google_cloud_run_service.mcp_gateway
+-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_gateway_public
+TARGETS
+}
+
+# Run staged terraform deployment with SSL certificate wait
+# Usage: staged_terraform_deploy <keycloak_domain> <keycloak_realm> <tf_var_args...>
+#
+# Arguments:
+#   keycloak_domain: The Keycloak domain to wait for SSL (e.g., auth-dr.tamshai.com)
+#   keycloak_realm: The Keycloak realm name (e.g., tamshai-corp)
+#   tf_var_args: Remaining arguments passed to terraform apply as -var= arguments
+#
+# Example:
+#   staged_terraform_deploy "auth-dr.tamshai.com" "tamshai-corp" \
+#       -var="region=us-west1" \
+#       -var="project_id=my-project"
+#
+staged_terraform_deploy() {
+    local keycloak_domain="$1"
+    local keycloak_realm="$2"
+    shift 2
+    local tf_args=("$@")
+
+    log_info "=== Staged Terraform Deployment (Issue #37 pattern) ==="
+    log_info "Stage 1: Deploy Keycloak + MCP Suite (triggers SSL provisioning)"
+    log_info "Stage 2: Wait for SSL certificate on $keycloak_domain"
+    log_info "Stage 3: Deploy mcp-gateway (requires Keycloak JWKS)"
+
+    # Stage 1: Deploy everything except mcp-gateway
+    log_step "Stage 1: Deploying infrastructure (except mcp-gateway)..."
+    local stage1_targets
+    stage1_targets=$(get_stage1_terraform_targets)
+
+    if ! terraform apply -auto-approve ${stage1_targets} "${tf_args[@]}"; then
+        log_error "Stage 1 terraform apply failed"
+        return 1
+    fi
+    log_success "Stage 1 complete - Keycloak and MCP Suite deployed"
+
+    # Stage 2: Wait for SSL certificate
+    log_step "Stage 2: Waiting for SSL certificate on ${keycloak_domain}..."
+    log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
+
+    if ! wait_for_ssl_certificate "$keycloak_domain" "/auth/realms/${keycloak_realm}/.well-known/openid-configuration" 900; then
+        log_warn "SSL certificate not ready after 15 minutes"
+        log_warn "mcp-gateway deployment may fail - consider retrying later"
+        # Don't fail here - let user decide whether to continue
+    fi
+
+    # Stage 3: Deploy mcp-gateway
+    log_step "Stage 3: Deploying mcp-gateway..."
+    local stage2_targets
+    stage2_targets=$(get_stage2_terraform_targets)
+
+    if ! terraform apply -auto-approve ${stage2_targets} "${tf_args[@]}"; then
+        log_error "Stage 3 terraform apply failed (mcp-gateway)"
+        log_error "This usually means Keycloak SSL isn't ready yet"
+        log_error "Wait a few minutes and run: terraform apply ${stage2_targets}"
+        return 1
+    fi
+
+    log_success "=== Staged Deployment Complete ==="
+    return 0
+}
+
 echo "[domain-mapping] Library loaded (KEYCLOAK_DOMAIN=$KEYCLOAK_DOMAIN, KEYCLOAK_REALM=$KEYCLOAK_REALM)"
 
 # Delete domain mapping

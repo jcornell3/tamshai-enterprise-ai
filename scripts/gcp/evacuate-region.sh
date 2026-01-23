@@ -958,100 +958,65 @@ phase2_deploy_infrastructure() {
     log_success "Pre-import complete"
 
     # =============================================================================
-    # Apply infrastructure
+    # Apply infrastructure using staged deployment (Issue #37 pattern)
     # =============================================================================
-    log_step "Applying infrastructure (this may take 15-20 minutes)..."
+    # Problem: mcp-gateway fails startup probes if Keycloak SSL cert isn't ready.
+    # Solution: Deploy in stages - Keycloak first, wait for SSL, then mcp-gateway.
+    # =============================================================================
+    log_step "Applying infrastructure using staged deployment (Issue #37 pattern)..."
     log_info "Cloud SQL instance creation typically takes 10-15 minutes"
+    log_info "SSL certificate provisioning typically takes 10-15 minutes"
 
-    local apply_output
-    local apply_exit_code=0
+    # Common terraform variables for all stages
+    local TF_COMMON_VARS=(
+        -var="region=$NEW_REGION"
+        -var="zone=$NEW_ZONE"
+        -var="env_id=$ENV_ID"
+        -var="project_id=$PROJECT_ID"
+        -var="recovery_mode=true"
+        -var="phoenix_mode=true"
+        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
+    )
 
-    apply_output=$(terraform apply -auto-approve \
-        -var="region=$NEW_REGION" \
-        -var="zone=$NEW_ZONE" \
-        -var="env_id=$ENV_ID" \
-        -var="project_id=$PROJECT_ID" \
-        -var="recovery_mode=true" \
-        -var="phoenix_mode=true" \
-        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}" 2>&1) || apply_exit_code=$?
-
-    if [ $apply_exit_code -ne 0 ]; then
-        # Check if this is a 409 "already exists" error (Issue #11 pattern)
-        if echo "$apply_output" | grep -q "Error 409.*already exists"; then
-            log_warn "Detected 409 conflict - some resources exist but weren't in state"
-            log_info "Attempting auto-recovery by importing and retrying..."
-
-            # Import any resources mentioned in the error
-            if echo "$apply_output" | grep -q "Service account.*already exists"; then
-                log_info "  Re-importing service accounts..."
-                for sa_name in keycloak mcp-gateway mcp-servers cicd provision; do
-                    local sa_id="tamshai-prod-${sa_name}"
-                    local sa_email="${sa_id}@${PROJECT_ID}.iam.gserviceaccount.com"
-                    local tf_resource
-                    case $sa_name in
-                        "keycloak") tf_resource="module.security.google_service_account.keycloak" ;;
-                        "mcp-gateway") tf_resource="module.security.google_service_account.mcp_gateway" ;;
-                        "mcp-servers") tf_resource="module.security.google_service_account.mcp_servers" ;;
-                        "cicd") tf_resource="module.security.google_service_account.cicd" ;;
-                        "provision") tf_resource="module.security.google_service_account.provision_job" ;;
-                    esac
-                    terraform import "${TF_VARS[@]}" "$tf_resource" \
-                        "projects/${PROJECT_ID}/serviceAccounts/${sa_email}" 2>/dev/null || true
-                done
-            fi
-
-            if echo "$apply_output" | grep -q "Secret.*already exists"; then
-                log_info "  Re-importing secrets..."
-                # Already imported above, but retry any that failed
-            fi
-
-            # Retry terraform apply after imports
-            log_step "Retrying terraform apply after import recovery (Issue #11)..."
-            terraform apply -auto-approve \
-                -var="region=$NEW_REGION" \
-                -var="zone=$NEW_ZONE" \
-                -var="env_id=$ENV_ID" \
-                -var="project_id=$PROJECT_ID" \
-                -var="recovery_mode=true" \
-                -var="phoenix_mode=true" \
-                -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}" || {
-                log_error "Terraform apply failed even after import recovery"
-                log_error "Original error output:"
-                echo "$apply_output" | tail -100
-                exit 1
-            }
-            log_success "409 recovery successful - resources imported and apply completed"
-        else
-            log_error "Terraform apply failed:"
-            echo "$apply_output" | tail -50
+    # Use staged deployment from domain-mapping.sh library if available
+    if type staged_terraform_deploy &>/dev/null; then
+        log_info "Using staged_terraform_deploy from domain-mapping.sh library"
+        staged_terraform_deploy "${KEYCLOAK_DR_DOMAIN}" "${KEYCLOAK_REALM}" "${TF_COMMON_VARS[@]}" || {
+            log_error "Staged terraform deployment failed"
             exit 1
-        fi
-    fi
-
-    log_success "Infrastructure deployed to $NEW_REGION"
-
-    # ==========================================================================
-    # Wait for SSL certificate on Keycloak DR domain (Phoenix Issue #37 pattern)
-    # Domain mappings use ghs.googlehosted.com and require SSL certificate
-    # provisioning which takes 10-15 minutes.
-    # ==========================================================================
-    log_step "Waiting for SSL certificate on ${KEYCLOAK_DR_DOMAIN} (Issue #37 pattern)..."
-    log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
-
-    # Use domain-mapping.sh library function if available
-    if type wait_for_ssl_certificate &>/dev/null; then
-        # Set required environment variables for the library
-        export GCP_REGION="$NEW_REGION"
-        export GCP_PROJECT="$PROJECT_ID"
-
-        if wait_for_ssl_certificate "${KEYCLOAK_DR_DOMAIN}" "/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" 900; then
-            log_success "SSL certificate deployed for ${KEYCLOAK_DR_DOMAIN}"
-        else
-            log_warn "SSL certificate not ready yet - services may have startup issues"
-            log_warn "Check: https://console.cloud.google.com/run/domains?project=$PROJECT_ID"
-        fi
+        }
     else
-        # Fallback: Simple polling loop
+        # Fallback: Manual staged deployment
+        log_warn "staged_terraform_deploy not available - using manual staging"
+
+        # Stage 1: Deploy everything EXCEPT mcp-gateway
+        log_step "Stage 1: Deploying infrastructure (except mcp-gateway)..."
+        local stage1_targets=(
+            "-target=module.networking"
+            "-target=module.database"
+            "-target=module.security"
+            "-target=module.storage"
+            "-target=module.cloudrun.google_artifact_registry_repository.tamshai"
+            "-target=module.cloudrun.google_cloud_run_service.keycloak"
+            "-target=module.cloudrun.google_cloud_run_service.mcp_suite"
+            "-target=module.cloudrun.google_cloud_run_service.web_portal"
+            "-target=module.cloudrun.google_cloud_run_domain_mapping.keycloak"
+            "-target=module.cloudrun.google_cloud_run_service_iam_member.keycloak_public"
+            "-target=module.cloudrun.google_cloud_run_service_iam_member.web_portal_public"
+            "-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_suite_gateway_access"
+            "-target=module.utility_vm"
+        )
+
+        terraform apply -auto-approve "${stage1_targets[@]}" "${TF_COMMON_VARS[@]}" || {
+            log_error "Stage 1 terraform apply failed"
+            exit 1
+        }
+        log_success "Stage 1 complete - Keycloak and MCP Suite deployed"
+
+        # Stage 2: Wait for SSL certificate
+        log_step "Stage 2: Waiting for SSL certificate on ${KEYCLOAK_DR_DOMAIN}..."
+        log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
+
         local ssl_timeout=900  # 15 minutes
         local ssl_elapsed=0
         local ssl_interval=30
@@ -1067,9 +1032,26 @@ phase2_deploy_infrastructure() {
         done
 
         if [ $ssl_elapsed -ge $ssl_timeout ]; then
-            log_warn "SSL certificate not ready after 15 minutes - continuing anyway"
+            log_warn "SSL certificate not ready after 15 minutes"
+            log_warn "mcp-gateway deployment may fail - consider retrying later"
         fi
+
+        # Stage 3: Deploy mcp-gateway
+        log_step "Stage 3: Deploying mcp-gateway..."
+        local stage2_targets=(
+            "-target=module.cloudrun.google_cloud_run_service.mcp_gateway"
+            "-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_gateway_public"
+        )
+
+        terraform apply -auto-approve "${stage2_targets[@]}" "${TF_COMMON_VARS[@]}" || {
+            log_error "Stage 3 terraform apply failed (mcp-gateway)"
+            log_error "This usually means Keycloak SSL isn't ready yet"
+            log_error "Wait a few minutes and run: terraform apply ${stage2_targets[*]}"
+            exit 1
+        }
     fi
+
+    log_success "Infrastructure deployed to $NEW_REGION"
 }
 
 # =============================================================================
