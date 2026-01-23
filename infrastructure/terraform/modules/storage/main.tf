@@ -255,8 +255,12 @@ resource "google_storage_bucket_iam_member" "backups_cicd_writer" {
 
 # Grant Cloud SQL service agent access (for native Cloud SQL export to GCS)
 # Cloud SQL exports require the SQL service agent to write to the bucket
+#
+# Issue #102: The Cloud SQL service agent doesn't exist until the first Cloud SQL
+# instance is created. Use enable_cloudsql_backup_iam=false for fresh deployments
+# where Cloud SQL hasn't been created yet.
 resource "google_storage_bucket_iam_member" "backups_cloudsql_writer" {
-  count = var.enable_backup_bucket ? 1 : 0
+  count = var.enable_backup_bucket && var.enable_cloudsql_backup_iam ? 1 : 0
 
   bucket = google_storage_bucket.backups[0].name
   role   = "roles/storage.objectAdmin"

@@ -26,6 +26,7 @@
 #
 # Environment Variables:
 #   GCP_DR_REGION, GCP_DR_ZONE       - Override target region/zone
+#   GCP_DR_FALLBACK_ZONES            - Space-separated fallback zones for capacity issues
 #   KEYCLOAK_DR_DOMAIN               - Override Keycloak domain
 #   GCP_SA_*, GCP_SECRET_*           - Override service account/secret names
 #
@@ -117,6 +118,11 @@ load_tfvars_config() {
     TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
     TFVAR_BACKUP_BUCKET=$(get_tfvar "source_backup_bucket" "$tfvars_file" 2>/dev/null || echo "")
 
+    # Load fallback zones (Issue #102: Zone capacity resilience)
+    # Format in tfvars: fallback_zones = ["us-west1-a", "us-west1-c"]
+    TFVAR_FALLBACK_ZONES=$(grep -E '^fallback_zones\s*=' "$tfvars_file" 2>/dev/null | \
+        sed 's/.*=\s*//' | tr -d '[]"' | tr ',' ' ' || echo "")
+
     return 0
 }
 
@@ -187,6 +193,23 @@ SECRET_JWT="${GCP_SECRET_JWT:-tamshai-prod-jwt-secret}"
 SECRET_MCP_HR_CLIENT="${GCP_SECRET_MCP_HR_CLIENT:-mcp-hr-service-client-secret}"
 SECRET_PROD_USER_PASSWORD="${GCP_SECRET_PROD_USER_PASSWORD:-prod-user-password}"
 
+# Fallback zones for capacity issues (Issue #102)
+# Environment var > tfvars > region-based defaults
+# Format: space-separated list of zones to try if primary zone fails
+if [ -n "$GCP_DR_FALLBACK_ZONES" ]; then
+    FALLBACK_ZONES="$GCP_DR_FALLBACK_ZONES"
+elif [ -n "$TFVAR_FALLBACK_ZONES" ]; then
+    FALLBACK_ZONES="$TFVAR_FALLBACK_ZONES"
+else
+    # Default fallback zones based on region
+    case "$NEW_REGION" in
+        us-west1)  FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-c" ;;
+        us-east1)  FALLBACK_ZONES="${NEW_REGION}-b ${NEW_REGION}-c ${NEW_REGION}-d" ;;
+        us-east5)  FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-b ${NEW_REGION}-c" ;;
+        *)         FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-c" ;;
+    esac
+fi
+
 # Colors and logging (fallback if common.sh not loaded)
 # These are overwritten when lib/common.sh is sourced successfully
 RED='\033[0;31m'
@@ -203,6 +226,58 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# =============================================================================
+# ZONE CAPACITY CHECK (Issue #102)
+# =============================================================================
+# GCP zones can have transient capacity issues for specific machine types.
+# This function checks if a machine type is available in a zone before deployment.
+#
+# Returns: 0 if zone has capacity, 1 if unavailable
+# =============================================================================
+
+check_zone_capacity() {
+    local zone="$1"
+    local machine_type="${2:-e2-micro}"
+
+    # Check if machine type is available in the zone
+    # This uses gcloud compute machine-types describe which returns an error if unavailable
+    if gcloud compute machine-types describe "$machine_type" \
+        --zone="$zone" \
+        --project="$PROJECT_ID" &>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Select a zone with available capacity from the fallback list
+# Updates NEW_ZONE global variable with the first available zone
+select_available_zone() {
+    local machine_type="${1:-e2-micro}"
+    local zones_to_check="$NEW_ZONE $FALLBACK_ZONES"
+
+    log_step "Checking zone capacity for $machine_type..."
+
+    for zone in $zones_to_check; do
+        log_info "  Checking $zone..."
+        if check_zone_capacity "$zone" "$machine_type"; then
+            if [ "$zone" != "$NEW_ZONE" ]; then
+                log_warn "Primary zone $NEW_ZONE unavailable, using fallback: $zone"
+                NEW_ZONE="$zone"
+            fi
+            log_success "Zone $zone has capacity for $machine_type"
+            return 0
+        else
+            log_warn "  Zone $zone: $machine_type unavailable"
+        fi
+    done
+
+    log_error "No zones with $machine_type capacity found!"
+    log_error "Zones checked: $zones_to_check"
+    log_error "Try a different region or wait for capacity to become available"
+    return 1
+}
 
 # =============================================================================
 # PRE-FLIGHT CHECKS
@@ -252,11 +327,20 @@ preflight_checks() {
         ((errors++))
     fi
 
-    # Validate target zone exists
+    # Validate target zone exists and has capacity (Issue #102)
     log_step "Validating target zone: $NEW_ZONE..."
     if ! gcloud compute zones describe "$NEW_ZONE" --project="$PROJECT_ID" &>/dev/null; then
         log_error "Invalid GCP zone: $NEW_ZONE"
         ((errors++))
+    else
+        # Check zone capacity for e2-micro (used by utility VM)
+        # This will update NEW_ZONE to a fallback if needed
+        if ! select_available_zone "e2-micro"; then
+            log_error "No zone with e2-micro capacity available"
+            ((errors++))
+        else
+            log_info "Using zone: $NEW_ZONE"
+        fi
     fi
 
     if [ $errors -gt 0 ]; then
@@ -342,11 +426,13 @@ run_cleanup_leftover_resources() {
     log_info "  NAME_PREFIX: $NAME_PREFIX"
     log_info "  ENV_ID: $ENV_ID"
     log_info "  name_suffix: $name_suffix"
+    log_info "  FALLBACK_ZONES: $FALLBACK_ZONES"
 
     # Call the library function
-    # Arguments: name_suffix, state_bucket, state_prefix
+    # Arguments: name_suffix, state_bucket, state_prefix, fallback_zones
+    # Issue #102: Pass fallback zones for comprehensive instance cleanup across zones
     if type cleanup_leftover_resources &>/dev/null; then
-        cleanup_leftover_resources "$name_suffix" "$STATE_BUCKET" "gcp/recovery/${ENV_ID}" || {
+        cleanup_leftover_resources "$name_suffix" "$STATE_BUCKET" "gcp/recovery/${ENV_ID}" "$FALLBACK_ZONES" || {
             log_error "Cleanup failed - cannot proceed with evacuation"
             exit 1
         }

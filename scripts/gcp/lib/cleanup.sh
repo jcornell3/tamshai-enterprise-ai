@@ -426,11 +426,19 @@ delete_vpc_routes() {
 
 # Delete GCE instances using the VPC subnet
 # NOTE: Compute module doesn't use name_suffix, so instances have fixed names
+#
+# ZONE HANDLING (Issue #102): This function is ZONE-AGNOSTIC within a region.
+# It filters by subnet (regional), discovers each instance's actual zone from
+# metadata, and deletes using the correct zone. This handles cases where:
+#   - Instances were created in fallback zones due to capacity issues
+#   - Multiple deployment attempts used different zones
+#   - Zone changed between pre-flight check and actual deployment
+#
 # Usage: delete_gce_instances_in_vpc
 delete_gce_instances_in_vpc() {
     local subnet_name="${NAME_PREFIX}-subnet"
 
-    log_info "Checking for GCE instances using subnet: $subnet_name"
+    log_info "Checking for GCE instances using subnet: $subnet_name (all zones in region)"
 
     local instances
     instances=$(gcloud compute instances list \
@@ -482,6 +490,60 @@ delete_gce_instances_in_vpc() {
     done
 
     log_warn "Timeout waiting for instance deletion. Some instances may still exist."
+}
+
+# Delete GCE instances by name pattern across ALL zones in the region
+# ZONE HANDLING (Issue #102): Scans all zones for instances matching name pattern.
+# This is a fallback for edge cases where:
+#   - Subnet was deleted but instances weren't
+#   - Instance network reference is broken
+#   - Need to clean up instances across multiple zones (fallback zones)
+#
+# Usage: delete_gce_instances_by_pattern [name_pattern] [zones_to_check]
+#   name_pattern: Glob pattern for instance names (default: "tamshai-*")
+#   zones_to_check: Space-separated zone list (default: all zones in $REGION)
+delete_gce_instances_by_pattern() {
+    local name_pattern="${1:-tamshai-*}"
+    local zones_to_check="${2:-}"
+
+    # If no zones specified, get all zones in the region
+    if [[ -z "$zones_to_check" ]]; then
+        zones_to_check=$(gcloud compute zones list \
+            --filter="region:$REGION" \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null || echo "")
+    fi
+
+    if [[ -z "$zones_to_check" ]]; then
+        log_warn "Could not get zones for region $REGION"
+        return 0
+    fi
+
+    log_info "Scanning for GCE instances matching '$name_pattern' across zones in $REGION..."
+
+    local found_any=false
+    for zone in $zones_to_check; do
+        local instances
+        instances=$(gcloud compute instances list \
+            --filter="name~'${name_pattern}' AND zone:${zone}" \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null || true)
+
+        for instance in $instances; do
+            if [[ -n "$instance" ]]; then
+                found_any=true
+                log_info "  Found instance: $instance (zone: $zone) - deleting..."
+                gcloud compute instances delete "$instance" \
+                    --zone="$zone" \
+                    --project="$PROJECT" \
+                    --quiet 2>/dev/null || log_warn "Failed to delete $instance"
+            fi
+        done
+    done
+
+    if [[ "$found_any" == "false" ]]; then
+        log_info "No GCE instances found matching '$name_pattern'"
+    fi
 }
 
 # Wait for VPC connector deletion (async operation takes 2-3 minutes)
@@ -822,8 +884,9 @@ post_destroy_cleanup() {
 }
 
 # Full cleanup of all resources for an environment
-# Usage: full_environment_cleanup [name_suffix]
+# Usage: full_environment_cleanup [name_suffix] [fallback_zones]
 #   name_suffix: Optional suffix for Cloud SQL/private IP (e.g., "-recovery-20260123")
+#   fallback_zones: Optional space-separated list of zones to check for GCE instances
 #   This is the nuclear option - deletes everything for a recovery stack
 #
 # NAMING PATTERNS (matches Terraform):
@@ -831,8 +894,12 @@ post_destroy_cleanup() {
 #   VPC/networking: NAME_PREFIX (suffix embedded) - "tamshai-prod-recovery-xxx-vpc"
 #   Cloud SQL: suffix at end - "tamshai-prod-postgres-recovery-xxx"
 #   Private IP: suffix at end - "tamshai-prod-private-ip-recovery-xxx"
+#
+# ZONE HANDLING (Issue #102): Scans all zones in region for GCE instances,
+# including fallback zones used due to capacity issues.
 full_environment_cleanup() {
     local name_suffix="${1:-}"
+    local fallback_zones="${2:-}"  # Issue #102: Zone capacity fallback support
 
     log_info "=== Full Environment Cleanup (NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID) ==="
     log_warn "This will delete ALL resources for this environment!"
@@ -852,6 +919,8 @@ full_environment_cleanup() {
     delete_cloud_nat
     delete_cloud_router
     delete_gce_instances_in_vpc
+    # Issue #102: Also scan all zones for orphaned instances (fallback zone support)
+    delete_gce_instances_by_pattern "tamshai-${RESOURCE_PREFIX#tamshai-}-*" "$fallback_zones"
     delete_firewall_rules
     delete_vpc_routes
     delete_vpc_subnets
@@ -895,14 +964,21 @@ has_leftover_resources() {
 
 # Clean up leftover resources from failed deployment attempts
 # This is the main function used by evacuate-region.sh and phoenix-rebuild.sh
-# Usage: cleanup_leftover_resources [name_suffix] [state_bucket] [state_prefix]
+#
+# ZONE HANDLING (Issue #102): This function is zone-agnostic. It scans all zones
+# in the region for GCE instances, handling cases where fallback zones were used
+# due to capacity issues in the primary zone.
+#
+# Usage: cleanup_leftover_resources [name_suffix] [state_bucket] [state_prefix] [fallback_zones]
 #   name_suffix: Suffix for Cloud SQL/private IP (e.g., "-recovery-20260123")
 #   state_bucket: Optional GCS bucket for terraform state lock cleanup
 #   state_prefix: Optional GCS prefix for terraform state lock cleanup
+#   fallback_zones: Optional space-separated list of zones to check (default: all zones in region)
 cleanup_leftover_resources() {
     local name_suffix="${1:-}"
     local state_bucket="${2:-}"
     local state_prefix="${3:-}"
+    local fallback_zones="${4:-}"  # Issue #102: Zone capacity fallback support
 
     log_step "Checking for leftover resources from previous attempts..."
     log_info "NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID"
@@ -979,6 +1055,11 @@ cleanup_leftover_resources() {
     # Step 8.5: Delete GCE instances using the target subnet
     log_step "Deleting GCE instances using target VPC subnet..."
     delete_gce_instances_in_vpc
+
+    # Step 8.6: Fallback - scan all zones for orphaned instances by name pattern
+    # Issue #102: Handle instances in fallback zones or with broken subnet references
+    log_step "Scanning all zones for orphaned GCE instances..."
+    delete_gce_instances_by_pattern "tamshai-${RESOURCE_PREFIX#tamshai-}-*" "$fallback_zones"
 
     # Step 9: Delete subnets
     log_step "Deleting leftover subnets..."

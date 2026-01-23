@@ -83,3 +83,16 @@ variable "backup_retention_days" {
   type        = number
   default     = 90
 }
+
+variable "enable_cloudsql_backup_iam" {
+  description = <<-EOT
+    Enable IAM binding for Cloud SQL service agent to write to backup bucket.
+    Set to false during initial deployment (Cloud SQL service agent doesn't exist yet).
+    Set to true after Cloud SQL has been created at least once in the project.
+
+    The Cloud SQL service agent (service-PROJECT_NUM@gcp-sa-cloud-sql.iam.gserviceaccount.com)
+    is auto-created when the first Cloud SQL instance is created.
+  EOT
+  type        = bool
+  default     = true
+}

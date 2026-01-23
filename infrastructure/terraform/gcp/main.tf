@@ -172,6 +172,13 @@ module "storage" {
   enable_backup_bucket  = true
   backup_retention_days = 90
 
+  # Issue #102: Cloud SQL service agent IAM binding
+  # The service agent (service-PROJECT_NUM@gcp-sa-cloud-sql.iam.gserviceaccount.com)
+  # doesn't exist until Cloud SQL is created. In recovery mode, Cloud SQL may be
+  # created for the first time, so disable this IAM binding to avoid errors.
+  # The backup bucket already exists (multi-regional) and has permissions from primary.
+  enable_cloudsql_backup_iam = !var.recovery_mode
+
   # Dependencies:
   # - security: provides cicd_service_account_email for bucket IAM
   # - database: ensures Cloud SQL service agent exists for backups bucket IAM
