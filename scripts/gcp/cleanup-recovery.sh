@@ -57,12 +57,42 @@ fi
 # CONFIGURATION
 # =============================================================================
 
+# Terraform directory (needed for tfvars loading)
+TF_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
+TFVARS_DIR="$TF_DIR/environments"
+
+# =============================================================================
+# TFVARS CONFIGURATION LOADING
+# =============================================================================
+# Load configuration from dr.tfvars to avoid hardcoded values.
+# Values can be overridden by environment variables.
+# Priority: Environment vars > tfvars > hardcoded defaults
+# =============================================================================
+
+load_tfvars_config() {
+    local tfvars_file="${TFVARS_DIR}/dr.tfvars"
+
+    if [ ! -f "$tfvars_file" ]; then
+        return 1
+    fi
+
+    # Load Keycloak configuration
+    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
+
+    return 0
+}
+
+# Load tfvars configuration (provides defaults)
+load_tfvars_config || true
+
 # GCP Configuration
 PROJECT_ID="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
-STATE_BUCKET="tamshai-terraform-state-prod"
 
-# Terraform directory
-TF_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
+# Bucket names: Environment vars > defaults
+STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
+
+# Keycloak configuration: Environment vars > tfvars > defaults
+KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
 
 # Default options
 FORCE=false
@@ -265,7 +295,7 @@ terraform_destroy() {
         -var="env_id=${ENV_ID}"
         -var="recovery_mode=true"
         -var="phoenix_mode=true"
-        -var="keycloak_domain=auth-dr.tamshai.com"
+        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
         -var="mongodb_atlas_uri=mongodb://placeholder:27017"
         -var="claude_api_key=placeholder"
     )
@@ -353,7 +383,7 @@ dns_guidance() {
     echo ""
     echo "  Option 1: Delete DR DNS records (recommended if not needed)"
     echo "  ─────────────────────────────────────────────────────────────"
-    echo "  Delete: auth-dr.tamshai.com"
+    echo "  Delete: ${KEYCLOAK_DR_DOMAIN}"
     echo "  Delete: api-dr.tamshai.com"
     echo "  Delete: app-dr.tamshai.com"
     echo ""
