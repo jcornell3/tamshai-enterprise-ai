@@ -1,7 +1,7 @@
 # GCP Regional Failure Runbook
 
-**Last Updated**: January 22, 2026
-**Version**: 1.0.0
+**Last Updated**: January 23, 2026
+**Version**: 1.1.0
 **Owner**: Platform Team
 
 ## Overview
@@ -38,15 +38,18 @@ Is us-central1 available?
 
 The Regional Evacuation uses an **"Amnesia" approach**: create a fresh Terraform state in the new region, completely ignoring the unreachable primary region.
 
-### Estimated Duration: 15-25 minutes
+### Estimated Duration: 25-40 minutes
 
 | Phase | Duration | Description |
 |-------|----------|-------------|
 | Pre-flight | 1-2 min | Validate tools, auth, region availability |
 | Terraform | 10-15 min | Create infrastructure in new region |
+| SSL Certificate | 10-15 min | Wait for domain mapping SSL to provision |
 | Deploy | 3-5 min | Deploy containers, configure services |
 | DNS | 2-5 min | Update DNS to point to new region |
 | Verify | 2-3 min | Run health checks and E2E tests |
+
+> **Note**: The SSL certificate provisioning for `auth-dr.tamshai.com` is the longest wait. During this time, mcp-gateway may fail its startup probe. See Troubleshooting section for details.
 
 ---
 
@@ -348,7 +351,63 @@ Ensure you're using the correct ENV_ID:
 ./scripts/gcp/cleanup-recovery.sh --list
 
 # Check state bucket directly
-gsutil ls gs://tamshai-terraform-state-prod/gcp/recovery/
+gcloud storage ls gs://tamshai-terraform-state-prod/gcp/recovery/
+```
+
+### mcp-gateway fails startup probe during terraform apply
+
+**Cause**: SSL certificate for `auth-dr.tamshai.com` domain mapping takes 10-15+ minutes to provision. mcp-gateway tries to fetch JWKS from Keycloak but fails because SSL isn't ready yet.
+
+**Solution**: Wait for SSL certificate to be provisioned, then update the service to trigger a new revision:
+
+```bash
+# Check if SSL is ready (should return JSON, not SSL error)
+curl -sf https://auth-dr.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration
+
+# Once SSL is ready, trigger new mcp-gateway revision
+gcloud run services update mcp-gateway --region=us-west1 \
+    --update-env-vars="RESTART_TRIGGER=$(date +%s)"
+```
+
+**Note**: This is expected behavior. The evacuation script will show a terraform error, but you can continue after SSL is ready.
+
+### Cloud SQL service agent IAM binding fails
+
+**Error**: `Service account service-{number}@gcp-sa-cloud-sql.iam.gserviceaccount.com does not exist`
+
+**Cause**: The Cloud SQL service agent is created asynchronously and may not exist in the expected format immediately.
+
+**Impact**: Non-critical for DR. This only affects Cloud SQL backup exports to GCS, which are not essential during an evacuation.
+
+**Workaround**: Ignore this error during evacuation. The backup IAM binding can be fixed later if needed.
+
+### Cleanup fails with "Producer services still using this connection"
+
+**Cause**: After deleting Cloud SQL, GCP's service networking connection may still have a stale reference.
+
+**Solution**: Remove the stale resources from terraform state and continue:
+
+```bash
+cd infrastructure/terraform/gcp
+terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection'
+terraform state rm 'module.database.google_compute_global_address.private_ip_range'
+
+# Then re-run cleanup
+./scripts/gcp/cleanup-recovery.sh <ENV_ID> --force
+```
+
+### VPC deletion fails with "already being used by address"
+
+**Cause**: The private IP range wasn't deleted when removed from terraform state.
+
+**Solution**: Delete the address manually, then continue cleanup:
+
+```bash
+gcloud compute addresses delete tamshai-prod-private-ip-<ENV_ID> \
+    --global --project=<PROJECT_ID> --quiet
+
+# Then re-run cleanup
+./scripts/gcp/cleanup-recovery.sh <ENV_ID> --force
 ```
 
 ---
@@ -542,4 +601,5 @@ Conduct quarterly to maintain readiness.
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.1.0 | Jan 23, 2026 | Tamshai-Dev | Added troubleshooting for SSL delay, Cloud SQL IAM, cleanup issues from evacuation test 13 |
 | 1.0.0 | Jan 22, 2026 | Tamshai-Dev | Initial version with evacuation and failback procedures |
