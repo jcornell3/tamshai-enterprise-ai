@@ -53,6 +53,10 @@ export GCP_REGION="${GCP_REGION:-us-central1}"
 export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
 
 # Source libraries with graceful fallback
+# Note: common.sh provides logging functions - inline definitions below serve as fallback
+if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+    source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null || true
+fi
 if [ -f "$SCRIPT_DIR/lib/health-checks.sh" ]; then
     source "$SCRIPT_DIR/lib/health-checks.sh" 2>/dev/null || true
 fi
@@ -105,7 +109,8 @@ BACKUP_BUCKET="tamshai-backups-us"  # Multi-regional backup bucket
 # Terraform directory
 TF_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
 
-# Colors
+# Colors and logging (fallback if common.sh not loaded)
+# These are overwritten when lib/common.sh is sourced successfully
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
