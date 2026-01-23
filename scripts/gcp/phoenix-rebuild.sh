@@ -44,12 +44,66 @@ export GCP_REGION="${GCP_REGION:-us-central1}"
 export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
 
 # Source libraries
+source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null || true
 source "$SCRIPT_DIR/lib/secrets.sh"
 source "$SCRIPT_DIR/lib/health-checks.sh"
 source "$SCRIPT_DIR/lib/dynamic-urls.sh"
 source "$SCRIPT_DIR/lib/verify.sh" 2>/dev/null || true
 source "$SCRIPT_DIR/lib/cleanup.sh" 2>/dev/null || true
 source "$SCRIPT_DIR/lib/domain-mapping.sh" 2>/dev/null || true
+
+# Terraform directory (needed for tfvars loading)
+TF_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
+TFVARS_DIR="$TF_DIR/environments"
+
+# =============================================================================
+# TFVARS CONFIGURATION LOADING (Issue #102)
+# =============================================================================
+# Load configuration from prod.tfvars to avoid hardcoded values.
+# Values can be overridden by environment variables.
+# Priority: Environment vars > tfvars > hardcoded defaults
+# =============================================================================
+
+load_tfvars_config() {
+    local tfvars_file="${TFVARS_DIR}/prod.tfvars"
+
+    if [ ! -f "$tfvars_file" ]; then
+        return 1
+    fi
+
+    # Load configuration values
+    TFVAR_REGION=$(get_tfvar "region" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_ZONE=$(get_tfvar "zone" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
+
+    return 0
+}
+
+# Load tfvars configuration
+load_tfvars_config || true
+
+# Apply configuration: Environment vars > tfvars > defaults
+export GCP_REGION="${GCP_REGION:-${TFVAR_REGION:-us-central1}}"
+export GCP_ZONE="${GCP_ZONE:-${TFVAR_ZONE:-${GCP_REGION}-c}}"
+
+# Keycloak domain: env var > tfvars > default
+KEYCLOAK_DOMAIN="${KEYCLOAK_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-${KEYCLOAK_DOMAIN}}}"
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
+
+# Service account names: Environment vars > defaults
+SA_KEYCLOAK="${GCP_SA_KEYCLOAK:-tamshai-prod-keycloak}"
+SA_MCP_GATEWAY="${GCP_SA_MCP_GATEWAY:-tamshai-prod-mcp-gateway}"
+SA_MCP_SERVERS="${GCP_SA_MCP_SERVERS:-tamshai-prod-mcp-servers}"
+SA_CICD="${GCP_SA_CICD:-tamshai-prod-cicd}"
+SA_PROVISION="${GCP_SA_PROVISION:-tamshai-prod-provision}"
+
+# GCP Secret Manager secret names: Environment vars > defaults
+SECRET_KEYCLOAK_ADMIN_PASSWORD="${GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD:-tamshai-prod-keycloak-admin-password}"
+SECRET_KEYCLOAK_DB_PASSWORD="${GCP_SECRET_KEYCLOAK_DB_PASSWORD:-tamshai-prod-keycloak-db-password}"
+SECRET_DB_PASSWORD="${GCP_SECRET_DB_PASSWORD:-tamshai-prod-db-password}"
+SECRET_CLAUDE_API_KEY="${GCP_SECRET_CLAUDE_API_KEY:-tamshai-prod-anthropic-api-key}"
+SECRET_MCP_GATEWAY_CLIENT="${GCP_SECRET_MCP_GATEWAY_CLIENT:-tamshai-prod-mcp-gateway-client-secret}"
+SECRET_JWT="${GCP_SECRET_JWT:-tamshai-prod-jwt-secret}"
 
 # Checkpoint file for resume capability
 CHECKPOINT_FILE="${HOME}/.phoenix-rebuild-progress.json"
@@ -508,13 +562,14 @@ phase_3_destroy() {
     # terraform destroy runs.
     # =============================================================================
     log_step "Pre-emptively deleting secrets (Gap #2 moved before destroy - Issue #28)..."
+    # Use configuration variables for secret names
     for secret in \
-        tamshai-prod-keycloak-admin-password \
-        tamshai-prod-keycloak-db-password \
-        tamshai-prod-db-password \
-        tamshai-prod-anthropic-api-key \
-        tamshai-prod-mcp-gateway-client-secret \
-        tamshai-prod-jwt-secret \
+        "${SECRET_KEYCLOAK_ADMIN_PASSWORD}" \
+        "${SECRET_KEYCLOAK_DB_PASSWORD}" \
+        "${SECRET_DB_PASSWORD}" \
+        "${SECRET_CLAUDE_API_KEY}" \
+        "${SECRET_MCP_GATEWAY_CLIENT}" \
+        "${SECRET_JWT}" \
         mcp-hr-service-client-secret \
         prod-user-password; do
         gcloud secrets delete "$secret" --quiet 2>/dev/null || true
@@ -978,10 +1033,10 @@ phase_6_regenerate_keys() {
     fi
 
     local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
-    local sa_email="tamshai-prod-cicd@${project}.iam.gserviceaccount.com"
+    local sa_email="${SA_CICD}@${project}.iam.gserviceaccount.com"
     local key_file="/tmp/gcp-sa-key-$$.json"
 
-    log_step "Creating new service account key..."
+    log_step "Creating new service account key for ${SA_CICD}..."
 
     # Check if SA exists
     if ! gcloud iam service-accounts describe "$sa_email" &>/dev/null; then
@@ -1061,12 +1116,12 @@ phase_7_cloud_run() {
     local region="${GCP_REGION}"
     local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
 
-    # Check if auth.tamshai.com domain mapping exists but isn't in state
-    if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null 2>&1; then
+    # Check if ${KEYCLOAK_DOMAIN} domain mapping exists but isn't in state
+    if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null 2>&1; then
         if ! terraform state show 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' &>/dev/null 2>&1; then
-            log_info "Importing existing auth.tamshai.com domain mapping..."
+            log_info "Importing existing ${KEYCLOAK_DOMAIN} domain mapping..."
             terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
-                "locations/${region}/namespaces/${project}/domainmappings/auth.tamshai.com" 2>/dev/null || \
+                "locations/${region}/namespaces/${project}/domainmappings/${KEYCLOAK_DOMAIN}" 2>/dev/null || \
                 log_warn "Domain mapping import failed - may already be in state"
         fi
     fi
@@ -1098,16 +1153,16 @@ phase_7_cloud_run() {
     fi
 
     # Issue #35: Wait for SSL certificate BEFORE terraform apply
-    # mcp-gateway startup probes call auth.tamshai.com for JWT validation
+    # mcp-gateway startup probes call ${KEYCLOAK_DOMAIN} for JWT validation
     # If SSL isn't ready, startup probe fails with HTTP 525
     log_step "Checking SSL certificate status before deploying services (Issue #35)..."
-    if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null 2>&1; then
+    if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null 2>&1; then
         log_info "Domain mapping exists - checking if SSL certificate is deployed..."
         local ssl_ready=false
         local max_attempts=30  # 15 minutes max (30 * 30s)
 
         for attempt in $(seq 1 $max_attempts); do
-            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+            if curl -sf "https://${KEYCLOAK_DOMAIN}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
                 log_success "SSL certificate is deployed and working!"
                 ssl_ready=true
                 break
@@ -1156,15 +1211,15 @@ phase_7_cloud_run() {
     }
     log_success "Stage 1 complete - Keycloak and MCP Suite deployed"
 
-    # Stage 2: Wait for SSL certificate on auth.tamshai.com
-    log_step "Stage 2: Waiting for SSL certificate on auth.tamshai.com (Issue #37 fix)..."
+    # Stage 2: Wait for SSL certificate on ${KEYCLOAK_DOMAIN}
+    log_step "Stage 2: Waiting for SSL certificate on ${KEYCLOAK_DOMAIN} (Issue #37 fix)..."
     log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
 
     local ssl_ready=false
     local max_ssl_attempts=45  # 22.5 minutes max (45 * 30s)
 
     for attempt in $(seq 1 $max_ssl_attempts); do
-        if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+        if curl -sf "https://${KEYCLOAK_DOMAIN}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
             log_success "SSL certificate is deployed and working!"
             ssl_ready=true
             break
@@ -1243,11 +1298,11 @@ phase_7_cloud_run() {
             fi
 
             # Import domain mappings if they exist
-            if echo "$apply_output" | grep -q "auth.tamshai.com.*already exists"; then
-                if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null 2>&1; then
-                    log_info "Importing existing auth.tamshai.com domain mapping..."
+            if echo "$apply_output" | grep -q "${KEYCLOAK_DOMAIN}.*already exists"; then
+                if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null 2>&1; then
+                    log_info "Importing existing ${KEYCLOAK_DOMAIN} domain mapping..."
                     terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
-                        "locations/${region}/namespaces/${project}/domainmappings/auth.tamshai.com" 2>/dev/null || true
+                        "locations/${region}/namespaces/${project}/domainmappings/${KEYCLOAK_DOMAIN}" 2>/dev/null || true
                 fi
             fi
 
@@ -1297,20 +1352,20 @@ phase_7_cloud_run() {
             --quiet 2>/dev/null || log_info "IAM binding may already exist"
     fi
 
-    # Gap #35 & #48: Create auth.tamshai.com domain mapping (handle already exists)
-    log_step "Creating auth.tamshai.com domain mapping (Gap #35, #48)..."
+    # Gap #35 & #48: Create ${KEYCLOAK_DOMAIN} domain mapping (handle already exists)
+    log_step "Creating ${KEYCLOAK_DOMAIN} domain mapping (Gap #35, #48)..."
     local region="${GCP_REGION}"
 
     # Gap #48: Domain mapping may already exist from a previous deployment
     # Unlike other resources, domain mappings persist across terraform destroys
-    if gcloud beta run domain-mappings describe --domain=auth.tamshai.com --region="$region" &>/dev/null; then
-        log_info "Domain mapping auth.tamshai.com already exists (Gap #48 - this is expected)"
+    if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null; then
+        log_info "Domain mapping ${KEYCLOAK_DOMAIN} already exists (Gap #48 - this is expected)"
         log_info "Domain mappings persist across Phoenix rebuilds - no action needed"
     else
-        log_info "Creating new domain mapping for auth.tamshai.com..."
+        log_info "Creating new domain mapping for ${KEYCLOAK_DOMAIN}..."
         gcloud beta run domain-mappings create \
             --service=keycloak \
-            --domain=auth.tamshai.com \
+            --domain=${KEYCLOAK_DOMAIN} \
             --region="$region" || log_warn "Domain mapping creation failed - may need manual creation"
     fi
 
@@ -1331,7 +1386,7 @@ phase_7_cloud_run() {
     # First, quick check of GCP status (informational only)
     local mapping_status
     mapping_status=$(gcloud beta run domain-mappings describe \
-        --domain=auth.tamshai.com \
+        --domain=${KEYCLOAK_DOMAIN} \
         --region="$region" \
         --format="value(status.conditions[0].type)" 2>/dev/null || echo "Unknown")
     log_info "GCP domain mapping status: $mapping_status (note: may show Ready before cert is deployed)"
@@ -1342,7 +1397,7 @@ phase_7_cloud_run() {
 
     if type wait_for_ssl_certificate &>/dev/null; then
         # Use the domain-mapping.sh function if available
-        if wait_for_ssl_certificate "auth.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" 900; then
+        if wait_for_ssl_certificate "${KEYCLOAK_DOMAIN}" "/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" 900; then
             log_success "SSL certificate verified - HTTPS is working!"
         else
             log_warn "SSL certificate not verified after 15 minutes"
@@ -1353,7 +1408,7 @@ phase_7_cloud_run() {
         # Fallback: simple curl check
         local ssl_ready=false
         for i in {1..30}; do
-            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+            if curl -sf "https://${KEYCLOAK_DOMAIN}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
                 log_success "SSL certificate deployed and working!"
                 ssl_ready=true
                 break
@@ -1434,7 +1489,7 @@ phase_9_totp() {
     if [ -n "$keycloak_url" ]; then
         log_info "Keycloak URL: $keycloak_url"
         for i in {1..10}; do
-            if curl -sf "${keycloak_url}/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
+            if curl -sf "${keycloak_url}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" > /dev/null 2>&1; then
                 log_success "Keycloak is ready (attempt $i)"
                 break
             fi
@@ -1455,8 +1510,8 @@ phase_9_totp() {
 
     # Get admin password from GCP Secret Manager
     local admin_password
-    admin_password=$(get_gcp_secret "tamshai-prod-keycloak-admin-password") || {
-        log_error "Could not get Keycloak admin password"
+    admin_password=$(get_gcp_secret "${SECRET_KEYCLOAK_ADMIN_PASSWORD}") || {
+        log_error "Could not get Keycloak admin password from ${SECRET_KEYCLOAK_ADMIN_PASSWORD}"
         exit 1
     }
 
@@ -1629,7 +1684,7 @@ main() {
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "Next steps:"
-    echo "  1. Verify services at https://auth.tamshai.com"
+    echo "  1. Verify services at https://${KEYCLOAK_DOMAIN}"
     echo "  2. Run full E2E test suite: cd tests/e2e && npm test"
     echo "  3. Check monitoring dashboards"
     echo ""
