@@ -44,6 +44,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # =============================================================================
+# SOURCE LIBRARIES
+# =============================================================================
+
+# Source common library (provides logging functions)
+# Fallback definitions below in case common.sh is not available
+if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
+    source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null || true
+fi
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 
@@ -61,7 +71,8 @@ KEEP_DNS=false
 LIST_MODE=false
 ENV_ID=""
 
-# Colors
+# Colors and logging (fallback if common.sh not loaded)
+# These are overwritten when lib/common.sh is sourced successfully
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
