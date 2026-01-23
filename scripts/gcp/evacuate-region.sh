@@ -15,16 +15,26 @@
 #
 # Options:
 #   --yes, -y           Skip interactive confirmations (for automated runs)
-#   --region=REGION     Target region (default: us-west1)
-#   --zone=ZONE         Target zone (default: REGION-b)
+#   --region=REGION     Target region (default: from dr.tfvars or us-west1)
+#   --zone=ZONE         Target zone (default: from dr.tfvars or REGION-b)
 #   --env-id=ID         Environment ID (default: recovery-YYYYMMDD-HHMM)
+#   --tfvars=FILE       Use custom tfvars file (default: environments/dr.tfvars)
 #   -h, --help          Show this help message
 #
+# Configuration Priority:
+#   CLI args > Environment vars > tfvars > hardcoded defaults
+#
+# Environment Variables:
+#   GCP_DR_REGION, GCP_DR_ZONE       - Override target region/zone
+#   KEYCLOAK_DR_DOMAIN               - Override Keycloak domain
+#   GCP_SA_*, GCP_SECRET_*           - Override service account/secret names
+#
 # Examples:
-#   ./evacuate-region.sh                                    # us-west1, auto-generated ID
+#   ./evacuate-region.sh                                    # Uses dr.tfvars defaults
 #   ./evacuate-region.sh us-west1 us-west1-b recovery-01    # Specific region and ID
 #   ./evacuate-region.sh us-east1 us-east1-b                # East coast, auto-generated ID
 #   ./evacuate-region.sh --yes us-west1 us-west1-b test-01  # Skip confirmation
+#   GCP_DR_REGION=us-east1 ./evacuate-region.sh             # Override via env var
 #
 # Priority Regions (same cost as us-central1):
 #   1. us-west1 (Oregon)    - Recommended: No hurricane risk, closest to CA team
@@ -71,13 +81,45 @@ fi
 # CONFIGURATION
 # =============================================================================
 
-# Defaults
-NEW_REGION="us-west1"
+# Terraform directory (needed for tfvars loading)
+TF_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
+TFVARS_DIR="$TF_DIR/environments"
+
+# =============================================================================
+# TFVARS CONFIGURATION LOADING
+# =============================================================================
+# Load configuration from dr.tfvars to avoid hardcoded values.
+# Values can be overridden by command-line arguments or environment variables.
+# Priority: CLI args > Environment vars > tfvars > defaults
+# =============================================================================
+
+load_tfvars_config() {
+    local tfvars_file="${TFVARS_DIR}/dr.tfvars"
+
+    if [ ! -f "$tfvars_file" ]; then
+        log_warn "DR tfvars not found: $tfvars_file"
+        log_info "Using default configuration values"
+        return 1
+    fi
+
+    log_info "Loading configuration from: $tfvars_file"
+
+    # Load region configuration
+    TFVAR_REGION=$(get_tfvar "region" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_ZONE=$(get_tfvar "zone" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_BACKUP_BUCKET=$(get_tfvar "source_backup_bucket" "$tfvars_file" 2>/dev/null || echo "")
+
+    return 0
+}
+
+# Defaults (will be overridden by tfvars if available)
+NEW_REGION=""
 NEW_ZONE=""
 ENV_ID=""
 AUTO_YES=false  # Skip interactive confirmations
 
-# Parse arguments (supports both positional and flags)
+# Parse arguments first (supports both positional and flags)
 POSITIONAL_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -85,6 +127,7 @@ while [ $# -gt 0 ]; do
         --region=*) NEW_REGION="${1#*=}"; shift ;;
         --zone=*) NEW_ZONE="${1#*=}"; shift ;;
         --env-id=*) ENV_ID="${1#*=}"; shift ;;
+        --tfvars=*) TFVARS_FILE="${1#*=}"; shift ;;
         -h|--help) head -27 "$0" | tail -22; exit 0 ;;
         -*) echo "Unknown option: $1"; exit 1 ;;
         *) POSITIONAL_ARGS+=("$1"); shift ;;
@@ -97,17 +140,45 @@ if [ ${#POSITIONAL_ARGS[@]} -ge 1 ]; then NEW_REGION="${POSITIONAL_ARGS[0]}"; fi
 if [ ${#POSITIONAL_ARGS[@]} -ge 2 ]; then NEW_ZONE="${POSITIONAL_ARGS[1]}"; fi
 if [ ${#POSITIONAL_ARGS[@]} -ge 3 ]; then ENV_ID="${POSITIONAL_ARGS[2]}"; fi
 
-# Set defaults based on region
-NEW_ZONE="${NEW_ZONE:-${NEW_REGION}-b}"
+# Load tfvars configuration (provides defaults for values not set via CLI)
+load_tfvars_config || true
+
+# Apply configuration priority: CLI args > Environment vars > tfvars > hardcoded defaults
+# Region: CLI > GCP_DR_REGION env > tfvars > us-west1
+NEW_REGION="${NEW_REGION:-${GCP_DR_REGION:-${TFVAR_REGION:-us-west1}}}"
+# Zone: CLI > GCP_DR_ZONE env > tfvars > region-b
+NEW_ZONE="${NEW_ZONE:-${GCP_DR_ZONE:-${TFVAR_ZONE:-${NEW_REGION}-b}}}"
+# Keycloak domain: CLI > KEYCLOAK_DR_DOMAIN env > tfvars > auth-dr.tamshai.com
+KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
+# Keycloak realm: env var > default
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
+
+# ENV_ID: CLI > auto-generated timestamp
 ENV_ID="${ENV_ID:-recovery-$(date +%Y%m%d-%H%M)}"
 
 # GCP Configuration
 PROJECT_ID="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
-STATE_BUCKET="tamshai-terraform-state-prod"
-BACKUP_BUCKET="tamshai-backups-us"  # Multi-regional backup bucket
 
-# Terraform directory
-TF_DIR="$PROJECT_ROOT/infrastructure/terraform/gcp"
+# Bucket names: Environment vars > derived from project
+STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
+BACKUP_BUCKET="${TFVAR_BACKUP_BUCKET:-${GCP_BACKUP_BUCKET:-tamshai-backups-us}}"
+
+# Service account names: Environment vars > defaults
+SA_KEYCLOAK="${GCP_SA_KEYCLOAK:-tamshai-prod-keycloak}"
+SA_MCP_GATEWAY="${GCP_SA_MCP_GATEWAY:-tamshai-prod-mcp-gateway}"
+SA_MCP_SERVERS="${GCP_SA_MCP_SERVERS:-tamshai-prod-mcp-servers}"
+SA_CICD="${GCP_SA_CICD:-tamshai-prod-cicd}"
+SA_PROVISION="${GCP_SA_PROVISION:-tamshai-prod-provision}"
+
+# GCP Secret Manager secret names: Environment vars > defaults
+SECRET_KEYCLOAK_ADMIN_PASSWORD="${GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD:-tamshai-prod-keycloak-admin-password}"
+SECRET_KEYCLOAK_DB_PASSWORD="${GCP_SECRET_KEYCLOAK_DB_PASSWORD:-tamshai-prod-keycloak-db-password}"
+SECRET_DB_PASSWORD="${GCP_SECRET_DB_PASSWORD:-tamshai-prod-db-password}"
+SECRET_CLAUDE_API_KEY="${GCP_SECRET_CLAUDE_API_KEY:-tamshai-prod-anthropic-api-key}"
+SECRET_MCP_GATEWAY_CLIENT="${GCP_SECRET_MCP_GATEWAY_CLIENT:-tamshai-prod-mcp-gateway-client-secret}"
+SECRET_JWT="${GCP_SECRET_JWT:-tamshai-prod-jwt-secret}"
+SECRET_MCP_HR_CLIENT="${GCP_SECRET_MCP_HR_CLIENT:-mcp-hr-service-client-secret}"
+SECRET_PROD_USER_PASSWORD="${GCP_SECRET_PROD_USER_PASSWORD:-prod-user-password}"
 
 # Colors and logging (fallback if common.sh not loaded)
 # These are overwritten when lib/common.sh is sourced successfully
@@ -199,11 +270,20 @@ confirm_evacuation() {
     echo -e "${YELLOW}                    REGIONAL EVACUATION SUMMARY                    ${NC}"
     echo -e "${YELLOW}══════════════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo -e "  ${BLUE}Target Configuration:${NC}"
     echo -e "  Target Region:     ${CYAN}$NEW_REGION${NC}"
     echo -e "  Target Zone:       ${CYAN}$NEW_ZONE${NC}"
     echo -e "  Environment ID:    ${CYAN}$ENV_ID${NC}"
     echo -e "  State Prefix:      ${CYAN}gcp/recovery/$ENV_ID${NC}"
     echo -e "  Project:           ${CYAN}$PROJECT_ID${NC}"
+    echo ""
+    echo -e "  ${BLUE}Keycloak Configuration:${NC}"
+    echo -e "  DR Domain:         ${CYAN}$KEYCLOAK_DR_DOMAIN${NC}"
+    echo -e "  Realm:             ${CYAN}$KEYCLOAK_REALM${NC}"
+    echo ""
+    echo -e "  ${BLUE}Infrastructure:${NC}"
+    echo -e "  State Bucket:      ${CYAN}$STATE_BUCKET${NC}"
+    echo -e "  Backup Bucket:     ${CYAN}$BACKUP_BUCKET${NC}"
     echo ""
     echo -e "${YELLOW}This will create a NEW production stack in $NEW_REGION.${NC}"
     echo -e "${YELLOW}The primary stack (if still running) will NOT be affected.${NC}"
@@ -1027,7 +1107,7 @@ phase2_deploy_infrastructure() {
     log_step "Pre-importing existing global resources (service accounts, secrets)..."
 
     # Common vars for all terraform commands
-    # NOTE: keycloak_domain must be auth-dr.tamshai.com for recovery mode
+    # NOTE: keycloak_domain must use DR domain (e.g., auth-dr.tamshai.com) for recovery mode
     # because domain mappings are region-bound (auth.tamshai.com is bound to us-central1)
     local TF_VARS=(
         -var="region=$NEW_REGION"
@@ -1036,26 +1116,27 @@ phase2_deploy_infrastructure() {
         -var="project_id=$PROJECT_ID"
         -var="recovery_mode=true"
         -var="phoenix_mode=true"
-        -var="keycloak_domain=auth-dr.tamshai.com"
+        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
     )
 
     # Import service accounts if they exist
-    local sa_list=("keycloak" "mcp-gateway" "mcp-servers" "cicd" "provision")
-    for sa_name in "${sa_list[@]}"; do
-        local sa_id="tamshai-prod-${sa_name}"
+    # Service account names come from configuration variables
+    declare -A sa_mapping=(
+        ["keycloak"]="${SA_KEYCLOAK}:module.security.google_service_account.keycloak"
+        ["mcp-gateway"]="${SA_MCP_GATEWAY}:module.security.google_service_account.mcp_gateway"
+        ["mcp-servers"]="${SA_MCP_SERVERS}:module.security.google_service_account.mcp_servers"
+        ["cicd"]="${SA_CICD}:module.security.google_service_account.cicd"
+        ["provision"]="${SA_PROVISION}:module.security.google_service_account.provision_job"
+    )
+
+    for sa_key in "${!sa_mapping[@]}"; do
+        local sa_entry="${sa_mapping[$sa_key]}"
+        local sa_id="${sa_entry%%:*}"
+        local tf_resource="${sa_entry#*:}"
         local sa_email="${sa_id}@${PROJECT_ID}.iam.gserviceaccount.com"
 
         # Check if SA exists in GCP but not in state
         if gcloud iam service-accounts describe "$sa_email" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            local tf_resource
-            case $sa_name in
-                "keycloak") tf_resource="module.security.google_service_account.keycloak" ;;
-                "mcp-gateway") tf_resource="module.security.google_service_account.mcp_gateway" ;;
-                "mcp-servers") tf_resource="module.security.google_service_account.mcp_servers" ;;
-                "cicd") tf_resource="module.security.google_service_account.cicd" ;;
-                "provision") tf_resource="module.security.google_service_account.provision_job" ;;
-            esac
-
             if ! terraform state show "$tf_resource" &>/dev/null 2>&1; then
                 log_info "  Importing existing service account: $sa_id"
                 terraform import "${TF_VARS[@]}" "$tf_resource" \
@@ -1065,15 +1146,16 @@ phase2_deploy_infrastructure() {
     done
 
     # Import secrets if they exist
+    # Secret names come from configuration variables
     local secret_list=(
-        "tamshai-prod-keycloak-admin-password:module.security.google_secret_manager_secret.keycloak_admin_password"
-        "tamshai-prod-keycloak-db-password:module.security.google_secret_manager_secret.keycloak_db_password"
-        "tamshai-prod-db-password:module.security.google_secret_manager_secret.tamshai_db_password"
-        "tamshai-prod-anthropic-api-key:module.security.google_secret_manager_secret.anthropic_api_key"
-        "tamshai-prod-mcp-gateway-client-secret:module.security.google_secret_manager_secret.mcp_gateway_client_secret"
-        "tamshai-prod-jwt-secret:module.security.google_secret_manager_secret.jwt_secret"
-        "mcp-hr-service-client-secret:module.security.google_secret_manager_secret.mcp_hr_service_client_secret"
-        "prod-user-password:module.security.google_secret_manager_secret.prod_user_password"
+        "${SECRET_KEYCLOAK_ADMIN_PASSWORD}:module.security.google_secret_manager_secret.keycloak_admin_password"
+        "${SECRET_KEYCLOAK_DB_PASSWORD}:module.security.google_secret_manager_secret.keycloak_db_password"
+        "${SECRET_DB_PASSWORD}:module.security.google_secret_manager_secret.tamshai_db_password"
+        "${SECRET_CLAUDE_API_KEY}:module.security.google_secret_manager_secret.anthropic_api_key"
+        "${SECRET_MCP_GATEWAY_CLIENT}:module.security.google_secret_manager_secret.mcp_gateway_client_secret"
+        "${SECRET_JWT}:module.security.google_secret_manager_secret.jwt_secret"
+        "${SECRET_MCP_HR_CLIENT}:module.security.google_secret_manager_secret.mcp_hr_service_client_secret"
+        "${SECRET_PROD_USER_PASSWORD}:module.security.google_secret_manager_secret.prod_user_password"
     )
 
     for secret_entry in "${secret_list[@]}"; do
@@ -1177,7 +1259,7 @@ phase2_deploy_infrastructure() {
         -var="project_id=$PROJECT_ID" \
         -var="recovery_mode=true" \
         -var="phoenix_mode=true" \
-        -var="keycloak_domain=auth-dr.tamshai.com" 2>&1) || apply_exit_code=$?
+        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}" 2>&1) || apply_exit_code=$?
 
     if [ $apply_exit_code -ne 0 ]; then
         # Check if this is a 409 "already exists" error (Issue #11 pattern)
@@ -1218,7 +1300,7 @@ phase2_deploy_infrastructure() {
                 -var="project_id=$PROJECT_ID" \
                 -var="recovery_mode=true" \
                 -var="phoenix_mode=true" \
-                -var="keycloak_domain=auth-dr.tamshai.com" || {
+                -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}" || {
                 log_error "Terraform apply failed even after import recovery"
                 log_error "Original error output:"
                 echo "$apply_output" | tail -100
@@ -1235,11 +1317,11 @@ phase2_deploy_infrastructure() {
     log_success "Infrastructure deployed to $NEW_REGION"
 
     # ==========================================================================
-    # Wait for SSL certificate on auth-dr.tamshai.com (Phoenix Issue #37 pattern)
+    # Wait for SSL certificate on Keycloak DR domain (Phoenix Issue #37 pattern)
     # Domain mappings use ghs.googlehosted.com and require SSL certificate
     # provisioning which takes 10-15 minutes.
     # ==========================================================================
-    log_step "Waiting for SSL certificate on auth-dr.tamshai.com (Issue #37 pattern)..."
+    log_step "Waiting for SSL certificate on ${KEYCLOAK_DR_DOMAIN} (Issue #37 pattern)..."
     log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
 
     # Use domain-mapping.sh library function if available
@@ -1248,8 +1330,8 @@ phase2_deploy_infrastructure() {
         export GCP_REGION="$NEW_REGION"
         export GCP_PROJECT="$PROJECT_ID"
 
-        if wait_for_ssl_certificate "auth-dr.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" 900; then
-            log_success "SSL certificate deployed for auth-dr.tamshai.com"
+        if wait_for_ssl_certificate "${KEYCLOAK_DR_DOMAIN}" "/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" 900; then
+            log_success "SSL certificate deployed for ${KEYCLOAK_DR_DOMAIN}"
         else
             log_warn "SSL certificate not ready yet - services may have startup issues"
             log_warn "Check: https://console.cloud.google.com/run/domains?project=$PROJECT_ID"
@@ -1261,8 +1343,8 @@ phase2_deploy_infrastructure() {
         local ssl_interval=30
 
         while [ $ssl_elapsed -lt $ssl_timeout ]; do
-            if curl -sf "https://auth-dr.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
-                log_success "SSL certificate deployed for auth-dr.tamshai.com"
+            if curl -sf "https://${KEYCLOAK_DR_DOMAIN}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+                log_success "SSL certificate deployed for ${KEYCLOAK_DR_DOMAIN}"
                 break
             fi
             log_info "  Waiting for SSL... ($((ssl_elapsed / 60))m elapsed)"
@@ -1283,10 +1365,10 @@ phase2_deploy_infrastructure() {
 phase3_regenerate_key() {
     log_phase "3" "REGENERATE SERVICE ACCOUNT KEY"
 
-    local sa_email="tamshai-prod-cicd@${PROJECT_ID}.iam.gserviceaccount.com"
+    local sa_email="${SA_CICD}@${PROJECT_ID}.iam.gserviceaccount.com"
     local key_file="/tmp/recovery-key-$$.json"
 
-    log_step "Creating new CICD service account key..."
+    log_step "Creating new CICD service account key for ${SA_CICD}..."
     gcloud iam service-accounts keys create "$key_file" \
         --iam-account="$sa_email"
 
@@ -1345,7 +1427,7 @@ phase5_configure_test_user() {
     # Get Keycloak admin password from Secret Manager
     export KEYCLOAK_ADMIN_PASSWORD
     KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest \
-        --secret=tamshai-prod-keycloak-admin-password 2>/dev/null || echo "")
+        --secret="${SECRET_KEYCLOAK_ADMIN_PASSWORD}" 2>/dev/null || echo "")
 
     if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
         log_warn "Could not retrieve Keycloak admin password - skipping TOTP configuration"
@@ -1444,13 +1526,13 @@ phase7_dns_guidance() {
     echo -e "${YELLOW}║     The domain mapping is bound to the dead region.                          ║${NC}"
     echo -e "${YELLOW}║                                                                              ║${NC}"
     echo -e "${YELLOW}║     Options:                                                                 ║${NC}"
-    echo -e "${YELLOW}║     a) Use pre-configured auth-dr.tamshai.com (recommended)                  ║${NC}"
+    echo -e "${YELLOW}║     a) Use pre-configured ${KEYCLOAK_DR_DOMAIN} (recommended)               ║${NC}"
     echo -e "${YELLOW}║     b) Use raw Cloud Run URL: ${keycloak_host}${NC}"
     echo -e "${YELLOW}║     c) Wait for primary region recovery                                      ║${NC}"
     echo -e "${YELLOW}║                                                                              ║${NC}"
     echo -e "${YELLOW}║  3. Web Portal (if domain-mapped):                                           ║${NC}"
     echo -e "${YELLOW}║     Update CNAME or rebuild with new Keycloak URL:                           ║${NC}"
-    echo -e "${YELLOW}║     VITE_KEYCLOAK_URL=https://auth-dr.tamshai.com/auth                       ║${NC}"
+    echo -e "${YELLOW}║     VITE_KEYCLOAK_URL=https://${KEYCLOAK_DR_DOMAIN}/auth                    ║${NC}"
     echo -e "${YELLOW}║                                                                              ║${NC}"
     echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
