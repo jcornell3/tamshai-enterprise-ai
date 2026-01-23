@@ -487,14 +487,17 @@ resource "google_cloud_run_service" "keycloak" {
         }
 
         # Use TCP probe instead of HTTP - Cloud Run will check if port 8080 is listening
+        # Issue #102 fix: Increased timeouts for DR deployments where full database
+        # migrations (148+ change sets) need to run on fresh Cloud SQL instances.
+        # Fresh migrations take ~3-4 minutes, existing instances take ~30 seconds.
         startup_probe {
           tcp_socket {
             port = 8080
           }
           initial_delay_seconds = 30
-          timeout_seconds       = 5
-          period_seconds        = 10
-          failure_threshold     = 12 # 30s + (12 × 10s) = 150s total (2.5 minutes) - extra time for PostgreSQL schema creation
+          timeout_seconds       = 10
+          period_seconds        = 15
+          failure_threshold     = 20 # 30s + (20 × 15s) = 330s total (5.5 minutes) - for fresh DB migrations
         }
       }
 
