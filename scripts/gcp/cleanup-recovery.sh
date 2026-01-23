@@ -288,7 +288,8 @@ terraform_destroy() {
 
     log_step "Planning destruction..."
 
-    local tf_args=(
+    # Note: TF_ARGS is global (not local) so cleanup_networking_resources can access it
+    TF_ARGS=(
         -var="project_id=${PROJECT_ID}"
         -var="region=${RECOVERY_REGION}"
         -var="zone=${RECOVERY_REGION}-b"
@@ -306,7 +307,7 @@ terraform_destroy() {
         echo "  Region:  $RECOVERY_REGION"
         echo "  Project: $PROJECT_ID"
         echo ""
-        terraform plan -destroy "${tf_args[@]}"
+        terraform plan -destroy "${TF_ARGS[@]}"
         log_warn "DRY RUN: No resources were destroyed"
         return 0
     fi
@@ -334,14 +335,96 @@ terraform_destroy() {
             --no-deletion-protection \
             --project="$PROJECT_ID" \
             --quiet 2>/dev/null || log_warn "Could not disable deletion protection (may already be disabled)"
+
+        # Wait for the async operation to complete (Cloud SQL operations are slow)
+        log_info "Waiting for deletion protection to be disabled..."
+        sleep 10
+
+        # Refresh Terraform state to pick up the deletion protection change
+        # Using apply -refresh-only which is more robust than terraform refresh
+        log_step "Refreshing Terraform state (Cloud SQL instance)..."
+        terraform apply -refresh-only -auto-approve \
+            -target=module.database.google_sql_database_instance.postgres \
+            "${TF_ARGS[@]}" || log_warn "State refresh had warnings (continuing anyway)"
     else
         log_info "Cloud SQL instance not found (may already be deleted)"
     fi
 
     log_step "Destroying recovery stack..."
-    terraform destroy -auto-approve "${tf_args[@]}"
+    if ! terraform destroy -auto-approve "${TF_ARGS[@]}"; then
+        # Check if the failure was due to Cloud SQL deletion_protection
+        log_warn "Terraform destroy failed. Checking for Cloud SQL deletion protection issue..."
+
+        if gcloud sql instances describe "$postgres_instance" --project="$PROJECT_ID" &>/dev/null; then
+            log_info "Cloud SQL instance still exists. Attempting manual deletion..."
+
+            # Remove from terraform state
+            log_step "Removing Cloud SQL from Terraform state..."
+            terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
+            terraform state rm 'module.database.google_sql_database.keycloak' 2>/dev/null || true
+            terraform state rm 'module.database.google_sql_database.tamshai' 2>/dev/null || true
+            terraform state rm 'module.database.google_sql_user.keycloak' 2>/dev/null || true
+            terraform state rm 'module.database.google_sql_user.tamshai' 2>/dev/null || true
+
+            # Delete Cloud SQL directly with gcloud (bypasses Terraform state)
+            log_step "Deleting Cloud SQL instance directly..."
+            gcloud sql instances delete "$postgres_instance" \
+                --project="$PROJECT_ID" \
+                --quiet || log_warn "Could not delete Cloud SQL instance"
+
+            # Retry destroy for remaining resources
+            log_step "Retrying terraform destroy for remaining resources..."
+            if ! terraform destroy -auto-approve "${TF_ARGS[@]}"; then
+                log_warn "Terraform destroy failed after Cloud SQL deletion. Handling networking cleanup..."
+                cleanup_networking_resources
+            fi
+        else
+            # Cloud SQL doesn't exist - check for service networking connection issue
+            log_warn "Cloud SQL not found. Checking for service networking connection issue..."
+            cleanup_networking_resources
+        fi
+    fi
 
     log_success "Recovery stack destroyed successfully"
+}
+
+# =============================================================================
+# CLEANUP NETWORKING RESOURCES
+# =============================================================================
+# Handles orphaned networking resources that can block destroy:
+# - Service networking connection (can't be deleted while peering is active)
+# - Global address for VPC peering (blocks VPC deletion)
+# =============================================================================
+
+cleanup_networking_resources() {
+    local private_ip_name="tamshai-prod-private-ip-${ENV_ID}"
+
+    # Remove service networking connection from state (it may still be active)
+    log_step "Removing service networking resources from Terraform state..."
+    terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+    terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+
+    # Delete global address directly (blocks VPC deletion)
+    log_step "Deleting global address directly..."
+    if gcloud compute addresses describe "$private_ip_name" --global --project="$PROJECT_ID" &>/dev/null; then
+        gcloud compute addresses delete "$private_ip_name" \
+            --global \
+            --project="$PROJECT_ID" \
+            --quiet 2>/dev/null || log_warn "Could not delete global address (may be auto-cleaning)"
+    fi
+
+    # Retry destroy for remaining networking resources
+    log_step "Retrying terraform destroy for remaining resources..."
+    local remaining=$(terraform state list 2>/dev/null | wc -l)
+    if [ "$remaining" -gt 0 ]; then
+        terraform destroy -auto-approve "${TF_ARGS[@]}" || {
+            log_error "Terraform destroy still failing. Remaining resources:"
+            terraform state list 2>/dev/null
+            return 1
+        }
+    else
+        log_info "No remaining resources in Terraform state"
+    fi
 }
 
 # =============================================================================
