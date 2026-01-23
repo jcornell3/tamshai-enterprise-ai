@@ -432,8 +432,21 @@ phase2_deploy_infrastructure() {
     # =============================================================================
     # Pre-import global resources that likely already exist
     # This prevents 409 errors during terraform apply (Issue #11 pattern)
+    #
+    # IMPORTANT: terraform import requires the same -var flags as terraform apply
+    # to ensure state consistency with the planned configuration.
     # =============================================================================
     log_step "Pre-importing existing global resources (service accounts, secrets)..."
+
+    # Common vars for all terraform commands
+    local TF_VARS=(
+        -var="region=$NEW_REGION"
+        -var="zone=$NEW_ZONE"
+        -var="env_id=$ENV_ID"
+        -var="project_id=$PROJECT_ID"
+        -var="recovery_mode=true"
+        -var="phoenix_mode=true"
+    )
 
     # Import service accounts if they exist
     local sa_list=("keycloak" "mcp-gateway" "mcp-servers" "cicd" "provision")
@@ -454,7 +467,7 @@ phase2_deploy_infrastructure() {
 
             if ! terraform state show "$tf_resource" &>/dev/null 2>&1; then
                 log_info "  Importing existing service account: $sa_id"
-                terraform import "$tf_resource" \
+                terraform import "${TF_VARS[@]}" "$tf_resource" \
                     "projects/${PROJECT_ID}/serviceAccounts/${sa_email}" 2>/dev/null || true
             fi
         fi
@@ -479,7 +492,7 @@ phase2_deploy_infrastructure() {
         if gcloud secrets describe "$secret_id" --project="$PROJECT_ID" &>/dev/null 2>&1; then
             if ! terraform state show "$tf_resource" &>/dev/null 2>&1; then
                 log_info "  Importing existing secret: $secret_id"
-                terraform import "$tf_resource" \
+                terraform import "${TF_VARS[@]}" "$tf_resource" \
                     "projects/${PROJECT_ID}/secrets/${secret_id}" 2>/dev/null || true
             fi
         fi
@@ -490,7 +503,7 @@ phase2_deploy_infrastructure() {
     if gcloud artifacts repositories describe tamshai --location="$NEW_REGION" --project="$PROJECT_ID" &>/dev/null 2>&1; then
         if ! terraform state show 'module.cloudrun.google_artifact_registry_repository.tamshai' &>/dev/null 2>&1; then
             log_info "  Importing existing Artifact Registry: tamshai"
-            terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+            terraform import "${TF_VARS[@]}" 'module.cloudrun.google_artifact_registry_repository.tamshai' \
                 "projects/${PROJECT_ID}/locations/${NEW_REGION}/repositories/tamshai" 2>/dev/null || true
         fi
     fi
@@ -534,7 +547,7 @@ phase2_deploy_infrastructure() {
                         "cicd") tf_resource="module.security.google_service_account.cicd" ;;
                         "provision") tf_resource="module.security.google_service_account.provision_job" ;;
                     esac
-                    terraform import "$tf_resource" \
+                    terraform import "${TF_VARS[@]}" "$tf_resource" \
                         "projects/${PROJECT_ID}/serviceAccounts/${sa_email}" 2>/dev/null || true
                 done
             fi
