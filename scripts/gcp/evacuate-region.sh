@@ -665,6 +665,17 @@ phase1_init_state() {
     log_info "State bucket: $STATE_BUCKET"
     log_info "State prefix: gcp/recovery/$ENV_ID"
 
+    # Clean up local .terraform directory before switching backends
+    # This is required because:
+    # 1. We're switching to a different GCS state path (recovery vs primary)
+    # 2. Local .terraform/terraform.tfstate contains cached backend config
+    # 3. Windows may hold file locks from interrupted terraform processes
+    # 4. The actual state is safely stored in GCS, not locally
+    if [ -d ".terraform" ]; then
+        log_info "Removing local .terraform directory (switching backends)..."
+        rm -rf .terraform
+    fi
+
     # Use -reconfigure to completely reinitialize with new backend
     terraform init -reconfigure \
         -backend-config="bucket=$STATE_BUCKET" \
