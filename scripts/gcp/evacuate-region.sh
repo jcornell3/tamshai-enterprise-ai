@@ -40,6 +40,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # =============================================================================
+# SOURCE PHOENIX LIBRARIES (Issue #25, #34: Proven patterns for GCP operations)
+# =============================================================================
+# These libraries contain battle-tested functions from 11 Phoenix rebuilds:
+# - health-checks.sh: wait_for_cloudsql, wait_for_keycloak, submit_and_wait_build
+# - secrets.sh: GCP Secret Manager operations
+# - dynamic-urls.sh: Service URL discovery
+# =============================================================================
+
+# Default GCP configuration (needed by libraries)
+export GCP_REGION="${GCP_REGION:-us-central1}"
+export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
+
+# Source libraries with graceful fallback
+if [ -f "$SCRIPT_DIR/lib/health-checks.sh" ]; then
+    source "$SCRIPT_DIR/lib/health-checks.sh" 2>/dev/null || true
+fi
+if [ -f "$SCRIPT_DIR/lib/secrets.sh" ]; then
+    source "$SCRIPT_DIR/lib/secrets.sh" 2>/dev/null || true
+fi
+if [ -f "$SCRIPT_DIR/lib/dynamic-urls.sh" ]; then
+    source "$SCRIPT_DIR/lib/dynamic-urls.sh" 2>/dev/null || true
+fi
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 
@@ -229,43 +253,78 @@ cleanup_leftover_resources() {
         done
 
         # Step 2: Delete VPC Access Connector (takes 2-3 minutes)
+        # IMPORTANT: Connector MUST be deleted BEFORE subnet deletion (connector uses subnet IPs)
         # The connector name uses MD5 hash for long env_ids: tamshai-<8-char-hash>
-        log_step "Deleting leftover VPC connector..."
+        log_step "Deleting leftover VPC connectors..."
+
+        # Find ALL connectors that might be associated with this VPC
+        # (not just the expected names - there may be orphaned connectors)
+        local all_connectors
+        all_connectors=$(gcloud compute networks vpc-access connectors list \
+            --region="${NEW_REGION}" \
+            --project="$PROJECT_ID" \
+            --format="value(name)" 2>/dev/null | grep -E "^tamshai" || true)
+
+        for connector in $all_connectors; do
+            # Check if this connector is in our VPC
+            local connector_network
+            connector_network=$(gcloud compute networks vpc-access connectors describe "$connector" \
+                --region="${NEW_REGION}" --project="$PROJECT_ID" \
+                --format="value(network)" 2>/dev/null || echo "")
+
+            # Extract network name from full path (projects/xxx/global/networks/vpc-name)
+            connector_network="${connector_network##*/}"
+
+            if [ "$connector_network" = "$vpc_name" ]; then
+                log_info "  Found VPC connector '$connector' in VPC '$vpc_name' - deleting..."
+                gcloud compute networks vpc-access connectors delete "$connector" \
+                    --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+                # Wait for deletion (async operation takes 2-3 minutes)
+                local wait_count=0
+                local max_wait=20  # 20 * 15s = 5 minutes max
+                while gcloud compute networks vpc-access connectors describe "$connector" \
+                    --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; do
+                    wait_count=$((wait_count + 1))
+                    if [ $wait_count -ge $max_wait ]; then
+                        log_error "VPC connector '$connector' deletion timeout after 5 minutes"
+                        log_error "Cannot delete subnet while connector exists - aborting"
+                        exit 1
+                    fi
+                    log_info "    Waiting for VPC connector deletion (takes 2-3 minutes)... [$wait_count/$max_wait]"
+                    sleep 15
+                done
+                log_success "  VPC connector '$connector' deleted"
+            fi
+        done
+
+        # Also check for expected connector names that might not be in the list output
         local connector_name
         connector_name="tamshai-$(echo -n "$name_suffix" | md5sum | cut -c1-8)"
         if gcloud compute networks vpc-access connectors describe "$connector_name" \
             --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting VPC connector: $connector_name..."
+            log_info "  Found additional VPC connector: $connector_name..."
             gcloud compute networks vpc-access connectors delete "$connector_name" \
                 --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
 
-            # Wait for deletion (async operation takes 2-3 minutes)
             local wait_count=0
-            local max_wait=20  # 20 * 15s = 5 minutes max
+            local max_wait=20
             while gcloud compute networks vpc-access connectors describe "$connector_name" \
                 --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; do
                 wait_count=$((wait_count + 1))
                 if [ $wait_count -ge $max_wait ]; then
-                    log_warn "VPC connector deletion timeout - continuing anyway"
-                    break
+                    log_error "VPC connector deletion timeout - aborting"
+                    exit 1
                 fi
-                log_info "    Waiting for VPC connector deletion (takes 2-3 minutes)... [$wait_count/$max_wait]"
+                log_info "    Waiting for VPC connector deletion... [$wait_count/$max_wait]"
                 sleep 15
             done
         fi
 
-        # Also check for standard connector name pattern
-        local standard_connector="tamshai-prod${name_suffix}-connector"
-        if gcloud compute networks vpc-access connectors describe "$standard_connector" \
-            --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting VPC connector: $standard_connector..."
-            gcloud compute networks vpc-access connectors delete "$standard_connector" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        fi
-
         # Step 3: Delete Cloud SQL instance (if exists)
+        # Note: Terraform naming is "tamshai-${env}-postgres${suffix}" not "tamshai-${env}${suffix}-postgres"
         log_step "Deleting leftover Cloud SQL instances..."
-        local sql_instance="tamshai-prod${name_suffix}-postgres"
+        local sql_instance="tamshai-prod-postgres${name_suffix}"
         if gcloud sql instances describe "$sql_instance" --project="$PROJECT_ID" &>/dev/null 2>&1; then
             log_info "  Disabling deletion protection..."
             gcloud sql instances patch "$sql_instance" --project="$PROJECT_ID" \
@@ -288,32 +347,66 @@ cleanup_leftover_resources() {
         fi
 
         # Step 4: Delete VPC peering connection (must be done before private IP deletion)
+        # Following phoenix-rebuild.sh Issue #14 pattern:
+        #   - Service networking peerings are always named "servicenetworking-googleapis-com"
+        #   - Use compute API (gcloud compute networks peerings delete) for immediate deletion
+        #   - Service networking API can fail with timing issues even after Cloud SQL is deleted
         log_step "Deleting leftover VPC peering..."
-        if gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT_ID" 2>/dev/null | grep -q "servicenetworking"; then
-            log_info "  Deleting VPC peering for: $vpc_name..."
-            gcloud services vpc-peerings delete \
-                --network="$vpc_name" \
-                --service=servicenetworking.googleapis.com \
-                --project="$PROJECT_ID" \
-                --quiet 2>/dev/null || true
 
-            # Wait for peering deletion
-            local wait_count=0
-            local max_wait=12  # 12 * 10s = 2 minutes max
-            while gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT_ID" 2>/dev/null | grep -q "servicenetworking"; do
-                wait_count=$((wait_count + 1))
-                if [ $wait_count -ge $max_wait ]; then
-                    log_warn "VPC peering deletion timeout - continuing anyway"
-                    break
+        # Check if peering exists (service networking peerings always have this name)
+        local peering_name="servicenetworking-googleapis-com"
+        if gcloud compute networks peerings list \
+            --network="$vpc_name" \
+            --project="$PROJECT_ID" \
+            --format="value(name)" 2>/dev/null | grep -q "$peering_name"; then
+
+            log_info "  Found VPC peering: $peering_name"
+
+            # Use compute API directly (phoenix-rebuild.sh proven pattern)
+            log_info "  Deleting via compute networks peerings API..."
+            if gcloud compute networks peerings delete "$peering_name" \
+                --network="$vpc_name" \
+                --project="$PROJECT_ID" \
+                --quiet 2>/dev/null; then
+                log_success "  VPC peering deleted successfully via compute API"
+            else
+                log_warn "  Compute API returned error - checking if peering still exists..."
+                # Verify deletion
+                if ! gcloud compute networks peerings list \
+                    --network="$vpc_name" \
+                    --project="$PROJECT_ID" \
+                    --format="value(name)" 2>/dev/null | grep -q "$peering_name"; then
+                    log_success "  VPC peering confirmed deleted"
+                else
+                    # Peering still exists - wait and retry (GCP backend timing)
+                    log_info "  Waiting for GCP backend to complete peering deletion..."
+                    local wait_count=0
+                    local max_wait=12  # 12 * 10s = 2 minutes max
+                    while gcloud compute networks peerings list --network="$vpc_name" \
+                        --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | grep -q "$peering_name"; do
+                        wait_count=$((wait_count + 1))
+                        if [ $wait_count -ge $max_wait ]; then
+                            log_error "VPC peering deletion failed after $max_wait attempts"
+                            log_error "Manual cleanup may be required"
+                            exit 1
+                        fi
+                        log_info "    Waiting for peering deletion... [$wait_count/$max_wait]"
+                        # Retry deletion on each loop
+                        gcloud compute networks peerings delete "$peering_name" \
+                            --network="$vpc_name" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+                        sleep 10
+                    done
+                    log_success "  VPC peering deleted successfully"
                 fi
-                log_info "    Waiting for VPC peering deletion... [$wait_count/$max_wait]"
-                sleep 10
-            done
+            fi
+        else
+            log_info "  No VPC peering found"
         fi
 
         # Step 5: Delete private IP addresses
+        # Note: Terraform naming is "tamshai-${env}-private-ip${suffix}" not "tamshai-${env}${suffix}-private-ip"
         log_step "Deleting leftover private IP addresses..."
-        local private_ip_name="tamshai-prod${name_suffix}-private-ip"
+        local private_ip_name="tamshai-prod-private-ip${name_suffix}"
         if gcloud compute addresses describe "$private_ip_name" --global --project="$PROJECT_ID" &>/dev/null 2>&1; then
             log_info "  Deleting: $private_ip_name..."
             gcloud compute addresses delete "$private_ip_name" --global --project="$PROJECT_ID" --quiet 2>/dev/null || true
@@ -352,9 +445,78 @@ cleanup_leftover_resources() {
             gcloud compute firewall-rules delete "$rule" --project="$PROJECT_ID" --quiet 2>/dev/null || true
         done
 
+        # Step 8.5: Delete GCE instances using the target subnet
+        # NOTE: The compute module does NOT support name_suffix, so GCE instances
+        # are named 'tamshai-prod-keycloak' and 'tamshai-prod-mcp-gateway' regardless
+        # of the evacuation suffix. We must delete any instances using the target subnet.
+        log_step "Deleting GCE instances using target VPC subnet..."
+        local subnet_name="tamshai-prod${name_suffix}-subnet"
+
+        # List all instances in all zones for this region that use the target subnet
+        local instances_in_subnet
+        instances_in_subnet=$(gcloud compute instances list \
+            --filter="networkInterfaces.subnetwork:${subnet_name}" \
+            --format="csv[no-heading](name,zone)" \
+            --project="$PROJECT_ID" 2>/dev/null || true)
+
+        if [ -n "$instances_in_subnet" ]; then
+            log_info "  Found GCE instances using subnet $subnet_name:"
+
+            # Use process substitution to avoid subshell variable scoping issues
+            while IFS=',' read -r instance_name instance_zone; do
+                # Extract zone name from full path if needed (format: projects/xxx/zones/zzz)
+                instance_zone="${instance_zone##*/}"
+                log_info "    - $instance_name (zone: $instance_zone)"
+            done <<< "$instances_in_subnet"
+
+            # Delete each instance
+            while IFS=',' read -r instance_name instance_zone; do
+                instance_zone="${instance_zone##*/}"
+
+                if [ -n "$instance_name" ] && [ -n "$instance_zone" ]; then
+                    log_info "  Deleting instance: $instance_name in zone $instance_zone..."
+                    if gcloud compute instances delete "$instance_name" \
+                        --zone="$instance_zone" \
+                        --project="$PROJECT_ID" \
+                        --quiet 2>/dev/null; then
+                        log_success "    Instance $instance_name deleted"
+                    else
+                        log_warn "    Failed to delete $instance_name (may already be deleted)"
+                    fi
+                fi
+            done <<< "$instances_in_subnet"
+
+            # Wait for instance deletions to complete (GCE instance deletion is async)
+            log_info "  Waiting for GCE instance deletions to complete..."
+            local wait_count=0
+            local max_wait=12  # 12 * 10s = 2 minutes max
+            while true; do
+                local remaining
+                remaining=$(gcloud compute instances list \
+                    --filter="networkInterfaces.subnetwork:${subnet_name}" \
+                    --format="value(name)" \
+                    --project="$PROJECT_ID" 2>/dev/null || true)
+
+                if [ -z "$remaining" ]; then
+                    log_success "  All GCE instances in target subnet deleted"
+                    break
+                fi
+
+                wait_count=$((wait_count + 1))
+                if [ $wait_count -ge $max_wait ]; then
+                    log_warn "  Timeout waiting for instance deletion. Remaining: $remaining"
+                    break
+                fi
+                log_info "    Waiting for instances to terminate... [$wait_count/$max_wait]"
+                sleep 10
+            done
+        else
+            log_info "  No GCE instances found using subnet $subnet_name"
+        fi
+
         # Step 9: Delete subnets
         log_step "Deleting leftover subnets..."
-        local subnet_name="tamshai-prod${name_suffix}-subnet"
+        # Note: subnet_name already defined in Step 8.5
         if gcloud compute networks subnets describe "$subnet_name" \
             --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
             log_info "  Deleting subnet: $subnet_name..."
@@ -362,18 +524,120 @@ cleanup_leftover_resources() {
                 --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
         fi
 
-        # Step 10: Delete VPC network (last - everything else must be deleted first)
-        log_step "Deleting leftover VPC network..."
-        if gcloud compute networks describe "$vpc_name" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting VPC: $vpc_name..."
-            gcloud compute networks delete "$vpc_name" --project="$PROJECT_ID" --quiet 2>/dev/null || {
-                log_warn "VPC deletion failed - may have remaining dependencies"
-                log_info "Listing remaining resources in VPC..."
-                gcloud compute networks subnets list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null || true
-                gcloud compute firewall-rules list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null || true
-            }
-        fi
+        # Step 10: Delete routes (can block VPC deletion)
+        log_step "Deleting leftover routes..."
+        local routes
+        routes=$(gcloud compute routes list \
+            --filter="network:$vpc_name" \
+            --format="value(name)" \
+            --project="$PROJECT_ID" 2>/dev/null | grep -v "^default-" || true)
 
+        for route in $routes; do
+            log_info "  Deleting route: $route..."
+            gcloud compute routes delete "$route" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+        done
+
+        # Step 11: Delete VPC network (last - everything else must be deleted first)
+        # Following phoenix-rebuild.sh patterns for robust deletion
+        log_step "Deleting leftover VPC network..."
+
+        local vpc_wait=0
+        local vpc_max_wait=12  # 12 * 10s = 2 minutes max for VPC deletion
+        local vpc_exists=true
+
+        while [ "$vpc_exists" = "true" ]; do
+            # Robust check: look for the VPC by name in the list output
+            # This is more reliable than describe which can fail for various reasons
+            local vpc_check
+            vpc_check=$(gcloud compute networks list \
+                --filter="name=$vpc_name" \
+                --format="value(name)" \
+                --project="$PROJECT_ID" 2>/dev/null || echo "ERROR")
+
+            if [ "$vpc_check" = "ERROR" ]; then
+                log_warn "  GCP API error checking VPC - retrying..."
+                sleep 5
+                continue
+            fi
+
+            if [ -z "$vpc_check" ]; then
+                # VPC does not exist
+                vpc_exists=false
+                log_success "  VPC $vpc_name confirmed deleted"
+                break
+            fi
+
+            # VPC still exists - try to delete
+            vpc_wait=$((vpc_wait + 1))
+            if [ $vpc_wait -ge $vpc_max_wait ]; then
+                log_error "VPC $vpc_name could not be deleted after $vpc_max_wait attempts"
+                log_error ""
+                log_error "Remaining dependencies blocking VPC deletion:"
+                echo ""
+                log_info "Subnets:"
+                gcloud compute networks subnets list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
+                log_info "Firewall rules:"
+                gcloud compute firewall-rules list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
+                log_info "Routes (non-default):"
+                gcloud compute routes list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null | grep -v "^default-" || echo "  (none or error)"
+                log_info "VPC Access Connectors:"
+                gcloud compute networks vpc-access connectors list --region="$NEW_REGION" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
+                log_info "VPC Peerings:"
+                gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
+                echo ""
+                log_error "Cannot proceed with evacuation while leftover VPC exists"
+                log_error "Manual cleanup required, then re-run this script"
+                exit 1
+            fi
+
+            log_info "  Attempting to delete VPC (attempt $vpc_wait/$vpc_max_wait)..."
+
+            # Before trying VPC deletion, force-delete any remaining dependencies
+            # These may have been created by other GCP services (auto-firewall rules, etc.)
+
+            # Force delete remaining firewall rules
+            local remaining_fw
+            remaining_fw=$(gcloud compute firewall-rules list \
+                --filter="network:$vpc_name" \
+                --format="value(name)" \
+                --project="$PROJECT_ID" 2>/dev/null || true)
+            for fw in $remaining_fw; do
+                log_info "    Force-deleting firewall rule: $fw"
+                gcloud compute firewall-rules delete "$fw" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+            done
+
+            # Force delete remaining routes (except default)
+            local remaining_routes
+            remaining_routes=$(gcloud compute routes list \
+                --filter="network:$vpc_name" \
+                --format="value(name)" \
+                --project="$PROJECT_ID" 2>/dev/null | grep -v "^default-" || true)
+            for route in $remaining_routes; do
+                log_info "    Force-deleting route: $route"
+                gcloud compute routes delete "$route" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+            done
+
+            # Force delete remaining subnets
+            local remaining_subnets
+            remaining_subnets=$(gcloud compute networks subnets list \
+                --filter="network:$vpc_name" \
+                --format="value(name,region)" \
+                --project="$PROJECT_ID" 2>/dev/null || true)
+            while IFS=$'\t' read -r subnet_name subnet_region; do
+                if [ -n "$subnet_name" ]; then
+                    log_info "    Force-deleting subnet: $subnet_name in $subnet_region"
+                    gcloud compute networks subnets delete "$subnet_name" \
+                        --region="${subnet_region##*/}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
+                fi
+            done <<< "$remaining_subnets"
+
+            # Now try to delete VPC
+            gcloud compute networks delete "$vpc_name" --project="$PROJECT_ID" --quiet 2>/dev/null || {
+                log_info "    VPC deletion pending - waiting for dependencies to clear..."
+            }
+
+            sleep 10
+        done
         log_success "Leftover resources cleaned up"
     else
         log_info "No leftover VPC found - environment is clean"
@@ -406,7 +670,283 @@ phase1_init_state() {
         -backend-config="bucket=$STATE_BUCKET" \
         -backend-config="prefix=gcp/recovery/$ENV_ID"
 
+    # Clean up stale state entries from previous failed attempts
+    # The pre-cleanup phase deleted actual resources, but the state may still reference them
+    log_step "Cleaning up stale state entries from previous attempts..."
+    local stale_resources
+    stale_resources=$(terraform state list 2>/dev/null || echo "")
+
+    if [ -n "$stale_resources" ]; then
+        log_info "  Found $(echo "$stale_resources" | wc -l) resources in state from previous attempt"
+        log_info "  Removing stale entries for resources deleted during cleanup..."
+
+        # Remove database resources (Cloud SQL was deleted during cleanup)
+        for resource in module.database.google_sql_database_instance.postgres \
+                        module.database.google_sql_database.keycloak_db \
+                        module.database.google_sql_database.hr_db \
+                        module.database.google_sql_database.finance_db \
+                        module.database.google_sql_user.keycloak_user \
+                        module.database.google_sql_user.tamshai_user \
+                        module.database.google_compute_global_address.private_ip_range \
+                        module.database.google_service_networking_connection.private_vpc_connection; do
+            if terraform state show "$resource" &>/dev/null 2>&1; then
+                log_info "    Removing: $resource"
+                terraform state rm "$resource" 2>/dev/null || true
+            fi
+        done
+
+        # Remove networking resources (VPC was deleted during cleanup)
+        for resource in module.networking.google_compute_network.vpc \
+                        module.networking.google_compute_subnetwork.subnet \
+                        module.networking.google_compute_router.router \
+                        module.networking.google_compute_router_nat.nat \
+                        module.networking.google_vpc_access_connector.serverless_connector[0] \
+                        'module.networking.google_vpc_access_connector.serverless_connector[0]' \
+                        module.networking.google_compute_firewall.allow_http \
+                        module.networking.google_compute_firewall.allow_iap_ssh \
+                        module.networking.google_compute_firewall.allow_internal \
+                        module.networking.google_compute_firewall.allow_serverless_connector[0] \
+                        'module.networking.google_compute_firewall.allow_serverless_connector[0]'; do
+            if terraform state show "$resource" &>/dev/null 2>&1; then
+                log_info "    Removing: $resource"
+                terraform state rm "$resource" 2>/dev/null || true
+            fi
+        done
+
+        # Remove Cloud Run resources (deleted during cleanup)
+        for resource in module.cloudrun.google_cloud_run_service.keycloak \
+                        'module.cloudrun.google_cloud_run_service.mcp_suite["hr"]' \
+                        'module.cloudrun.google_cloud_run_service.mcp_suite["finance"]' \
+                        'module.cloudrun.google_cloud_run_service.mcp_suite["sales"]' \
+                        'module.cloudrun.google_cloud_run_service.mcp_suite["support"]' \
+                        module.cloudrun.google_cloud_run_service.web_portal[0] \
+                        'module.cloudrun.google_cloud_run_service.web_portal[0]' \
+                        module.cloudrun.google_artifact_registry_repository.tamshai; do
+            if terraform state show "$resource" &>/dev/null 2>&1; then
+                log_info "    Removing: $resource"
+                terraform state rm "$resource" 2>/dev/null || true
+            fi
+        done
+
+        # NOTE: Storage buckets are SHARED between primary and recovery (no suffix)
+        # They don't need to be removed from state - they should be imported instead
+        # See gcp/main.tf comment: storage buckets are global and should be reused
+
+        log_success "  Stale state entries removed"
+    else
+        log_info "  State is clean (no previous entries found)"
+    fi
+
     log_success "Terraform initialized with fresh state"
+}
+
+# =============================================================================
+# PHASE 1.5: REPLICATE CONTAINER IMAGES TO RECOVERY REGION
+# =============================================================================
+# Artifact Registry is regional, so images built for us-central1 are not available
+# in us-west1. We must copy images from the primary region to the recovery region
+# before deploying Cloud Run services.
+# =============================================================================
+
+phase1_5_replicate_images() {
+    log_phase "1.5" "REPLICATE CONTAINER IMAGES TO RECOVERY REGION"
+
+    local PRIMARY_REGION="${GCP_REGION:-us-central1}"  # Where images currently exist
+    local SOURCE_REGISTRY="${PRIMARY_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai"
+    local TARGET_REGISTRY="${NEW_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai"
+
+    log_info "Source registry: $SOURCE_REGISTRY"
+    log_info "Target registry: $TARGET_REGISTRY"
+
+    # First, ensure the Artifact Registry repository exists in the new region
+    log_step "Creating Artifact Registry repository in $NEW_REGION..."
+    if ! gcloud artifacts repositories describe tamshai \
+        --location="$NEW_REGION" \
+        --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        gcloud artifacts repositories create tamshai \
+            --repository-format=docker \
+            --location="$NEW_REGION" \
+            --project="$PROJECT_ID" \
+            --description="Tamshai container images for regional evacuation"
+        log_success "  Created Artifact Registry repository in $NEW_REGION"
+    else
+        log_info "  Artifact Registry repository already exists in $NEW_REGION"
+    fi
+
+    # List of images to replicate
+    local images=(
+        "keycloak:v2.0.0-postgres"
+        "mcp-gateway:latest"
+        "mcp-hr:latest"
+        "mcp-finance:latest"
+        "mcp-sales:latest"
+        "mcp-support:latest"
+        "web-portal:latest"
+        "provision-job:latest"
+    )
+
+    log_step "Copying container images to recovery region..."
+    local failed_images=()
+
+    for image in "${images[@]}"; do
+        local source_image="${SOURCE_REGISTRY}/${image}"
+        local target_image="${TARGET_REGISTRY}/${image}"
+        local image_name="${image%:*}"
+        local image_tag="${image#*:}"
+        local copy_success=false
+
+        log_info "  Copying: $image"
+
+        # Check if target image already exists (skip if already copied)
+        if gcloud artifacts docker images describe "$target_image" \
+            --project="$PROJECT_ID" &>/dev/null 2>&1; then
+            log_info "    Already exists in target registry (skipping)"
+            continue
+        fi
+
+        # Check if source image exists
+        if gcloud artifacts docker images describe "$source_image" \
+            --project="$PROJECT_ID" &>/dev/null 2>&1; then
+            # Source exists, try to copy
+
+            # Try gcrane first (fastest, preserves manifests)
+            if command -v gcrane &>/dev/null; then
+                if gcrane copy "$source_image" "$target_image" 2>/dev/null; then
+                    log_success "    Copied via gcrane"
+                    copy_success=true
+                else
+                    log_warn "    gcrane copy failed, trying docker method..."
+                fi
+            fi
+
+            # Fallback to docker pull/tag/push
+            if [ "$copy_success" = false ]; then
+                if copy_image_via_docker "$source_image" "$target_image"; then
+                    copy_success=true
+                fi
+            fi
+        else
+            log_warn "    Source image not found, will attempt rebuild..."
+        fi
+
+        # =================================================================
+        # REBUILD FALLBACK (Phoenix pattern Gaps #55-58)
+        # Rebuild in target region if copy fails. Each image type has
+        # different build requirements documented in phoenix-rebuild.sh.
+        # =================================================================
+        if [ "$copy_success" = false ]; then
+            log_warn "  Copy failed, attempting rebuild in target region..."
+
+            case "$image_name" in
+                keycloak)
+                    # Keycloak uses Dockerfile.cloudbuild (no BuildKit syntax)
+                    # Phoenix Gap #56: Must specify --dockerfile for non-standard Dockerfile name
+                    log_info "    Building keycloak (Dockerfile.cloudbuild)..."
+                    if gcloud builds submit "${PROJECT_ROOT}/keycloak" \
+                        --tag="$target_image" \
+                        --dockerfile=Dockerfile.cloudbuild \
+                        --region=global \
+                        --project="$PROJECT_ID" \
+                        --quiet 2>&1; then
+                        log_success "    Rebuilt keycloak successfully"
+                        copy_success=true
+                    fi
+                    ;;
+                web-portal)
+                    # Web portal needs repo root context with Dockerfile.prod
+                    # Phoenix Gap #55: Must build from repo root, use -f for Dockerfile path
+                    log_info "    Building web-portal (Dockerfile.prod from repo root)..."
+                    if gcloud builds submit "${PROJECT_ROOT}" \
+                        --tag="$target_image" \
+                        --dockerfile=clients/web/Dockerfile.prod \
+                        --region=global \
+                        --project="$PROJECT_ID" \
+                        --quiet 2>&1; then
+                        log_success "    Rebuilt web-portal successfully"
+                        copy_success=true
+                    fi
+                    ;;
+                mcp-gateway|mcp-hr|mcp-finance|mcp-sales|mcp-support)
+                    # Standard MCP services
+                    log_info "    Building ${image_name} (standard Dockerfile)..."
+                    if gcloud builds submit "${PROJECT_ROOT}/services/${image_name}" \
+                        --tag="$target_image" \
+                        --region=global \
+                        --project="$PROJECT_ID" \
+                        --quiet 2>&1; then
+                        log_success "    Rebuilt ${image_name} successfully"
+                        copy_success=true
+                    fi
+                    ;;
+                provision-job)
+                    # Provision job is in keycloak directory
+                    log_info "    Building provision-job..."
+                    if gcloud builds submit "${PROJECT_ROOT}/keycloak" \
+                        --tag="$target_image" \
+                        --region=global \
+                        --project="$PROJECT_ID" \
+                        --quiet 2>&1; then
+                        log_success "    Rebuilt provision-job successfully"
+                        copy_success=true
+                    fi
+                    ;;
+                *)
+                    log_warn "    Unknown image type, cannot rebuild: $image_name"
+                    ;;
+            esac
+        fi
+
+        if [ "$copy_success" = false ]; then
+            log_error "  Failed to copy or rebuild: $image"
+            failed_images+=("$image")
+        fi
+    done
+
+    if [ ${#failed_images[@]} -gt 0 ]; then
+        log_warn "Some images could not be copied: ${failed_images[*]}"
+        log_warn "Cloud Run services may fail to deploy until images are available"
+    else
+        log_success "All container images copied to recovery region"
+    fi
+}
+
+# Helper function to copy images using docker commands
+# Issue #34: Added better error handling and debugging output
+copy_image_via_docker() {
+    local source=$1
+    local target=$2
+
+    # Configure docker for Artifact Registry (both source and target regions)
+    local primary_region="${GCP_REGION:-us-central1}"
+    log_info "    Configuring docker for ${primary_region}-docker.pkg.dev..."
+    gcloud auth configure-docker "${primary_region}-docker.pkg.dev" --quiet 2>/dev/null || true
+    log_info "    Configuring docker for ${NEW_REGION}-docker.pkg.dev..."
+    gcloud auth configure-docker "${NEW_REGION}-docker.pkg.dev" --quiet 2>/dev/null || true
+
+    # Pull with verbose output for debugging
+    log_info "    Pulling: $source"
+    if ! docker pull "$source" 2>&1; then
+        log_error "    Failed to pull image: $source"
+        log_error "    Check if the image exists and auth is configured correctly"
+        return 1
+    fi
+
+    # Tag for target registry
+    log_info "    Tagging: $target"
+    if ! docker tag "$source" "$target" 2>&1; then
+        log_error "    Failed to tag image"
+        return 1
+    fi
+
+    # Push to target registry
+    log_info "    Pushing: $target"
+    if ! docker push "$target" 2>&1; then
+        log_error "    Failed to push image to target registry"
+        return 1
+    fi
+
+    log_success "    Copied via docker pull/tag/push"
+    return 0
 }
 
 # =============================================================================
@@ -505,6 +1045,66 @@ phase2_deploy_infrastructure() {
             log_info "  Importing existing Artifact Registry: tamshai"
             terraform import "${TF_VARS[@]}" 'module.cloudrun.google_artifact_registry_repository.tamshai' \
                 "projects/${PROJECT_ID}/locations/${NEW_REGION}/repositories/tamshai" 2>/dev/null || true
+        fi
+    fi
+
+    # =============================================================================
+    # Pre-import storage buckets (they're SHARED, no suffix)
+    # Storage buckets are global resources that should be reused between primary
+    # and recovery deployments. We import them rather than recreate to avoid:
+    # 1. Bucket name conflicts (global namespace)
+    # 2. Data loss (backups bucket contains recovery data!)
+    # 3. 63-char name limit issues with long suffixes
+    # =============================================================================
+    log_step "Pre-importing shared storage buckets..."
+
+    # Logs bucket
+    local logs_bucket="tamshai-prod-logs-${PROJECT_ID}"
+    if gcloud storage buckets describe "gs://${logs_bucket}" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.storage.google_storage_bucket.logs' &>/dev/null 2>&1; then
+            log_info "  Importing existing logs bucket: $logs_bucket"
+            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.logs' \
+                "${PROJECT_ID}/${logs_bucket}" 2>/dev/null || true
+        fi
+    fi
+
+    # Finance docs bucket
+    local finance_bucket="tamshai-prod-finance-docs-${PROJECT_ID}"
+    if gcloud storage buckets describe "gs://${finance_bucket}" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.storage.google_storage_bucket.finance_docs' &>/dev/null 2>&1; then
+            log_info "  Importing existing finance docs bucket: $finance_bucket"
+            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.finance_docs' \
+                "${PROJECT_ID}/${finance_bucket}" 2>/dev/null || true
+        fi
+    fi
+
+    # Public docs bucket
+    local public_bucket="tamshai-prod-public-docs-${PROJECT_ID}"
+    if gcloud storage buckets describe "gs://${public_bucket}" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.storage.google_storage_bucket.public_docs' &>/dev/null 2>&1; then
+            log_info "  Importing existing public docs bucket: $public_bucket"
+            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.public_docs' \
+                "${PROJECT_ID}/${public_bucket}" 2>/dev/null || true
+        fi
+    fi
+
+    # Static website bucket (domain-based)
+    local static_bucket="prod.tamshai.com"
+    if gcloud storage buckets describe "gs://${static_bucket}" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.storage.google_storage_bucket.static_website[0]' &>/dev/null 2>&1; then
+            log_info "  Importing existing static website bucket: $static_bucket"
+            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.static_website[0]' \
+                "${PROJECT_ID}/${static_bucket}" 2>/dev/null || true
+        fi
+    fi
+
+    # Backups bucket (multi-regional, critical for DR!)
+    local backups_bucket="tamshai-prod-backups-${PROJECT_ID}"
+    if gcloud storage buckets describe "gs://${backups_bucket}" &>/dev/null 2>&1; then
+        if ! terraform state show 'module.storage.google_storage_bucket.backups[0]' &>/dev/null 2>&1; then
+            log_info "  Importing existing backups bucket: $backups_bucket"
+            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.backups[0]' \
+                "${PROJECT_ID}/${backups_bucket}" 2>/dev/null || true
         fi
     fi
 
@@ -858,6 +1458,7 @@ main() {
     cleanup_leftover_resources
 
     phase1_init_state
+    phase1_5_replicate_images
     phase2_deploy_infrastructure
     phase3_regenerate_key
     phase4_deploy_services

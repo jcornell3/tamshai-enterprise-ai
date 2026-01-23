@@ -153,6 +153,13 @@ module "storage" {
   project_id  = var.project_id
   region      = var.region
   environment = local.environment
+  # Storage buckets are GLOBAL resources (bucket names are globally unique)
+  # They should be SHARED between primary and recovery deployments:
+  # - Avoids 63-char bucket name limit issues with long env_id suffixes
+  # - Multi-regional backups bucket survives regional outages (no need to recreate)
+  # - Static website bucket is domain-based (can't have suffix)
+  # - Regional buckets (logs, finance, public) can be reused across regions
+  name_suffix = ""
   # Gap #39: Phoenix mode allows force_destroy for complete environment rebuilds
   force_destroy              = var.phoenix_mode # Production: normally false, true during Phoenix rebuild
   enable_versioning          = true
@@ -165,7 +172,11 @@ module "storage" {
   enable_backup_bucket  = true
   backup_retention_days = 90
 
-  depends_on = [module.security]
+  # Dependencies:
+  # - security: provides cicd_service_account_email for bucket IAM
+  # - database: ensures Cloud SQL service agent exists for backups bucket IAM
+  #   (the service agent is auto-created when first Cloud SQL instance is created)
+  depends_on = [module.security, module.database]
 }
 
 # =============================================================================

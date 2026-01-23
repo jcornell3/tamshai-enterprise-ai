@@ -66,6 +66,12 @@ variable "cicd_service_account_email" {
 # REGIONAL EVACUATION SUPPORT
 # =============================================================================
 
+variable "name_suffix" {
+  description = "Suffix to append to resource names for regional evacuation (e.g., '-recovery-20260122'). Leave empty for primary deployment."
+  type        = string
+  default     = ""
+}
+
 variable "enable_backup_bucket" {
   description = "Enable multi-regional backup bucket for disaster recovery. Stores Cloud SQL exports for cross-region restore."
   type        = bool
