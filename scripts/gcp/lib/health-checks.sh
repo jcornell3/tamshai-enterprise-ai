@@ -4,18 +4,27 @@
 # =============================================================================
 #
 # Functions for checking health of GCP services (Cloud Run, Cloud SQL, etc.)
-# Used by Phoenix rebuild to ensure services are ready before proceeding.
+# Used by Phoenix rebuild and DR scripts to ensure services are ready.
+#
+# Supports both primary and recovery environments via name_suffix parameter.
 #
 # Usage:
 #   source /path/to/scripts/gcp/lib/health-checks.sh
 #   wait_for_service "mcp-gateway" 300
-#   wait_for_keycloak 60
+#   wait_for_keycloak 60 "" "tamshai-corp"   # Primary
+#   wait_for_keycloak 60 "https://auth-dr.tamshai.com" "tamshai-corp"  # DR
 #
 # Requirements:
 #   - gcloud CLI authenticated
 #   - curl available
 #   - GCP_REGION environment variable set (required)
 #
+# Optional configuration variables:
+#   KEYCLOAK_DOMAIN - Keycloak domain (default: auth.tamshai.com)
+#   KEYCLOAK_REALM  - Keycloak realm (default: tamshai-corp)
+#   RESOURCE_PREFIX - Resource naming prefix (default: tamshai-prod)
+#
+# Ref: Issue #102 - Unify prod and DR deployments
 # =============================================================================
 
 # Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
@@ -37,6 +46,11 @@ log_health_error() { echo -e "${RED}[health]${NC} $1"; }
 DEFAULT_TIMEOUT=300
 DEFAULT_INTERVAL=10
 GCP_REGION="${GCP_REGION:-us-central1}"
+
+# Configurable defaults (Issue #102)
+KEYCLOAK_DOMAIN="${KEYCLOAK_DOMAIN:-auth.tamshai.com}"
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
+RESOURCE_PREFIX="${RESOURCE_PREFIX:-tamshai-prod}"
 
 # Cloud Run services to check
 # Issue #28: MCP suite services require authentication (only accessible via mcp-gateway)
@@ -138,18 +152,27 @@ wait_for_service() {
 }
 
 # Wait for Keycloak to be fully ready
-# Checks both master realm and tamshai-corp realm
+# Checks both master realm and configured realm
+# Usage: wait_for_keycloak [timeout] [keycloak_url] [realm]
+#   timeout: Wait timeout in seconds (default: 300)
+#   keycloak_url: Optional Keycloak URL (default: auto-detect or https://$KEYCLOAK_DOMAIN)
+#   realm: Realm name (default: $KEYCLOAK_REALM or tamshai-corp)
 wait_for_keycloak() {
     local timeout="${1:-$DEFAULT_TIMEOUT}"
+    local keycloak_url="${2:-}"
+    local realm="${3:-${KEYCLOAK_REALM:-tamshai-corp}}"
 
-    log_health_info "Waiting for Keycloak to be fully ready (timeout: ${timeout}s)..."
+    log_health_info "Waiting for Keycloak to be fully ready (timeout: ${timeout}s, realm: $realm)..."
 
-    local url
-    url=$(get_service_url "keycloak")
+    local url="$keycloak_url"
+    if [ -z "$url" ]; then
+        url=$(get_service_url "keycloak")
+    fi
 
     if [ -z "$url" ]; then
-        # Try auth.tamshai.com as fallback
-        url="https://auth.tamshai.com"
+        # Use configured KEYCLOAK_DOMAIN as fallback
+        url="https://${KEYCLOAK_DOMAIN}"
+        log_health_info "Using configured domain: $url"
     fi
 
     local start_time
@@ -161,12 +184,12 @@ wait_for_keycloak() {
         if curl -sf "${url}/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
             log_health_info "  Master realm is available"
 
-            # Now check tamshai-corp realm
-            if curl -sf "${url}/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
-                log_health_success "Keycloak is fully ready (both realms available)"
+            # Now check configured realm
+            if curl -sf "${url}/auth/realms/${realm}/.well-known/openid-configuration" > /dev/null 2>&1; then
+                log_health_success "Keycloak is fully ready (master + ${realm} realms available)"
                 return 0
             else
-                log_health_info "  Waiting for tamshai-corp realm..."
+                log_health_info "  Waiting for ${realm} realm..."
             fi
         fi
 
@@ -184,9 +207,25 @@ wait_for_keycloak() {
 }
 
 # Wait for Cloud SQL to accept connections
+# Usage: wait_for_cloudsql [instance_name_or_suffix] [timeout]
+#   instance_name_or_suffix: Full instance name OR just the suffix (e.g., "-recovery-20260123")
+#                           If suffix starts with "-", it's appended to RESOURCE_PREFIX-postgres
+#   timeout: Wait timeout in seconds (default: 300)
 wait_for_cloudsql() {
-    local instance_name="${1:-tamshai-prod-postgres}"
+    local instance_arg="${1:-}"
     local timeout="${2:-$DEFAULT_TIMEOUT}"
+
+    # Determine instance name
+    local instance_name
+    if [[ -z "$instance_arg" ]]; then
+        instance_name="${RESOURCE_PREFIX}-postgres"
+    elif [[ "$instance_arg" == -* ]]; then
+        # It's a suffix
+        instance_name="${RESOURCE_PREFIX}-postgres${instance_arg}"
+    else
+        # It's a full instance name
+        instance_name="$instance_arg"
+    fi
 
     log_health_info "Waiting for Cloud SQL instance $instance_name (timeout: ${timeout}s)..."
 

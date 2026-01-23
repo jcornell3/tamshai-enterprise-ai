@@ -64,11 +64,18 @@ export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value p
 
 # Source libraries with graceful fallback
 # Note: common.sh provides logging functions - inline definitions below serve as fallback
+# Issue #102: cleanup.sh and domain-mapping.sh provide reusable functions for DR
 if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
     source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null || true
 fi
+if [ -f "$SCRIPT_DIR/lib/cleanup.sh" ]; then
+    source "$SCRIPT_DIR/lib/cleanup.sh" 2>/dev/null || true
+fi
 if [ -f "$SCRIPT_DIR/lib/health-checks.sh" ]; then
     source "$SCRIPT_DIR/lib/health-checks.sh" 2>/dev/null || true
+fi
+if [ -f "$SCRIPT_DIR/lib/domain-mapping.sh" ]; then
+    source "$SCRIPT_DIR/lib/domain-mapping.sh" 2>/dev/null || true
 fi
 if [ -f "$SCRIPT_DIR/lib/secrets.sh" ]; then
     source "$SCRIPT_DIR/lib/secrets.sh" 2>/dev/null || true

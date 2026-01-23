@@ -1,6 +1,26 @@
 #!/bin/bash
-# Phoenix Rebuild - Domain Mapping Functions
-# Functions for managing Cloud Run domain mappings
+# =============================================================================
+# GCP Domain Mapping Library
+# =============================================================================
+#
+# Functions for managing Cloud Run domain mappings.
+# Supports configurable domains for primary and DR environments.
+#
+# Usage:
+#   source /path/to/scripts/gcp/lib/domain-mapping.sh
+#   create_domain_mapping "auth.tamshai.com" "keycloak"
+#   wait_for_ssl_certificate "auth-dr.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration"
+#
+# Required environment variables:
+#   GCP_REGION  - GCP region (e.g., us-central1)
+#   GCP_PROJECT - GCP project ID
+#
+# Optional configuration variables:
+#   KEYCLOAK_DOMAIN - Keycloak domain (default: auth.tamshai.com)
+#   KEYCLOAK_REALM  - Keycloak realm (default: tamshai-corp)
+#
+# Ref: Issue #102 - Unify prod and DR deployments
+# =============================================================================
 
 # Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
 set -eo pipefail
@@ -12,15 +32,21 @@ set -eo pipefail
 REGION="$GCP_REGION"
 PROJECT="$GCP_PROJECT"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# Configurable defaults (Issue #102)
+KEYCLOAK_DOMAIN="${KEYCLOAK_DOMAIN:-auth.tamshai.com}"
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+# Colors for output (use common.sh if available, otherwise define locally)
+if ! type log_info &>/dev/null; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    NC='\033[0m'
+
+    log_info() { echo -e "${GREEN}[domain]${NC} $1"; }
+    log_warn() { echo -e "${YELLOW}[domain]${NC} $1"; }
+    log_error() { echo -e "${RED}[domain]${NC} $1"; }
+fi
 
 # =============================================================================
 # DOMAIN MAPPING FUNCTIONS (Gap #35, #36)
@@ -105,17 +131,28 @@ wait_for_domain_reachable() {
     return 1
 }
 
-# Create auth.tamshai.com domain mapping for Keycloak
+# Create auth domain mapping for Keycloak
+# Usage: create_auth_domain_mapping [domain] [service_name]
+#   domain: Keycloak domain (default: $KEYCLOAK_DOMAIN)
+#   service_name: Cloud Run service name (default: keycloak)
 create_auth_domain_mapping() {
-    create_domain_mapping "auth.tamshai.com" "keycloak"
+    local domain="${1:-${KEYCLOAK_DOMAIN}}"
+    local service="${2:-keycloak}"
+    create_domain_mapping "$domain" "$service"
 }
 
-# Wait for auth.tamshai.com to be fully routable and reachable
+# Wait for auth domain to be fully routable and reachable
+# Usage: wait_for_auth_domain [timeout] [domain] [realm]
+#   timeout: Wait timeout in seconds (default: 600)
+#   domain: Keycloak domain (default: $KEYCLOAK_DOMAIN)
+#   realm: Keycloak realm (default: $KEYCLOAK_REALM)
 wait_for_auth_domain() {
     local timeout="${1:-600}"  # Default 10 minutes
+    local domain="${2:-${KEYCLOAK_DOMAIN}}"
+    local realm="${3:-${KEYCLOAK_REALM}}"
 
-    wait_for_domain_routable "auth.tamshai.com" "$timeout" || return 1
-    wait_for_domain_reachable "auth.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" "$timeout" || return 1
+    wait_for_domain_routable "$domain" "$timeout" || return 1
+    wait_for_domain_reachable "$domain" "/auth/realms/${realm}/.well-known/openid-configuration" "$timeout" || return 1
 }
 
 # =============================================================================
@@ -169,18 +206,26 @@ wait_for_ssl_certificate() {
     return 1
 }
 
-# Wait for auth.tamshai.com with full certificate verification
+# Wait for auth domain with full certificate verification
+# Usage: wait_for_auth_domain_with_ssl [timeout] [domain] [realm]
+#   timeout: Wait timeout in seconds (default: 900)
+#   domain: Keycloak domain (default: $KEYCLOAK_DOMAIN)
+#   realm: Keycloak realm (default: $KEYCLOAK_REALM)
 wait_for_auth_domain_with_ssl() {
     local timeout="${1:-900}"  # Default 15 minutes for full cert deployment
+    local domain="${2:-${KEYCLOAK_DOMAIN}}"
+    local realm="${3:-${KEYCLOAK_REALM}}"
 
-    log_info "Waiting for auth.tamshai.com with SSL certificate verification..."
+    log_info "Waiting for ${domain} with SSL certificate verification..."
 
     # First check GCP status (fast check, informational only)
-    wait_for_domain_routable "auth.tamshai.com" 60 || true  # Don't fail on this
+    wait_for_domain_routable "$domain" 60 || true  # Don't fail on this
 
     # The real check - wait for SSL to actually work
-    wait_for_ssl_certificate "auth.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" "$timeout"
+    wait_for_ssl_certificate "$domain" "/auth/realms/${realm}/.well-known/openid-configuration" "$timeout"
 }
+
+echo "[domain-mapping] Library loaded (KEYCLOAK_DOMAIN=$KEYCLOAK_DOMAIN, KEYCLOAK_REALM=$KEYCLOAK_REALM)"
 
 # Delete domain mapping
 delete_domain_mapping() {
