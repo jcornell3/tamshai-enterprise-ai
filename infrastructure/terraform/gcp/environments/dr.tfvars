@@ -27,7 +27,7 @@
 
 env_id        = "recovery"
 recovery_mode = true
-phoenix_mode  = true  # Required for DR to skip deletion protection
+phoenix_mode  = true # Required for DR to skip deletion protection
 
 # =============================================================================
 # REGION CONFIGURATION
@@ -62,7 +62,7 @@ database_tier = "db-f1-micro"
 # Utility VM disabled in DR - Redis not needed for basic operations
 
 enable_utility_vm      = false
-keycloak_min_instances = "1"  # Keep warm during DR
+keycloak_min_instances = "1" # Keep warm during DR
 
 # =============================================================================
 # DOMAIN CONFIGURATION
@@ -81,7 +81,7 @@ keycloak_min_instances = "1"  # Keep warm during DR
 # =============================================================================
 
 keycloak_domain       = "auth-dr.tamshai.com"
-static_website_domain = ""  # Not needed during DR - use primary bucket
+static_website_domain = "" # Not needed during DR - use primary bucket
 
 # API Gateway domain (DNS CNAME - update after evacuation)
 # api_domain = "api-dr.tamshai.com"

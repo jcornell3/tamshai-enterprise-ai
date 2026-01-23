@@ -33,10 +33,26 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Region and Zone
   GCP_REGION: ${{ vars.GCP_REGION }}
   GCP_ZONE: ${{ vars.GCP_ZONE }}
+  # Infrastructure
   GCP_POSTGRES_INSTANCE: ${{ vars.GCP_POSTGRES_INSTANCE }}
   GCP_VPC_CONNECTOR: ${{ vars.GCP_VPC_CONNECTOR }}
+  # Service Accounts
+  GCP_SA_MCP_GATEWAY: ${{ vars.GCP_SA_MCP_GATEWAY }}
+  GCP_SA_MCP_SERVERS: ${{ vars.GCP_SA_MCP_SERVERS }}
+  GCP_SA_KEYCLOAK: ${{ vars.GCP_SA_KEYCLOAK }}
+  # GCP Secret Manager secret names
+  GCP_SECRET_CLAUDE_API_KEY: ${{ vars.GCP_SECRET_CLAUDE_API_KEY }}
+  GCP_SECRET_DB_PASSWORD: ${{ vars.GCP_SECRET_DB_PASSWORD }}
+  GCP_SECRET_MONGODB_URI: ${{ vars.GCP_SECRET_MONGODB_URI }}
+  GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD: ${{ vars.GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD }}
+  GCP_SECRET_KEYCLOAK_DB_PASSWORD: ${{ vars.GCP_SECRET_KEYCLOAK_DB_PASSWORD }}
+  # Keycloak
+  KEYCLOAK_DOMAIN: ${{ vars.KEYCLOAK_DOMAIN }}
+  KEYCLOAK_REALM: ${{ vars.KEYCLOAK_REALM }}
+  # Artifact Registry
   AR_REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
 
 jobs:
@@ -96,14 +112,14 @@ jobs:
           POSTGRES_IP=$(gcloud sql instances describe ${{ env.GCP_POSTGRES_INSTANCE }} \
             --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
 
-          # Use auth.tamshai.com as the canonical Keycloak URL for token validation
-          # (Cloud Run URL is internal, auth.tamshai.com is the public endpoint)
-          KEYCLOAK_PUBLIC_URL="https://auth.tamshai.com"
+          # Use domain as the canonical Keycloak URL for token validation
+          # (Cloud Run URL is internal, domain is the public endpoint)
+          KEYCLOAK_PUBLIC_URL="https://${{ env.KEYCLOAK_DOMAIN }}"
 
           # Output values (empty strings are OK - services may not exist yet)
           echo "keycloak_url=${KEYCLOAK_URL:-$KEYCLOAK_PUBLIC_URL}" >> $GITHUB_OUTPUT
-          echo "keycloak_issuer=${KEYCLOAK_PUBLIC_URL}/auth/realms/tamshai-corp" >> $GITHUB_OUTPUT
-          echo "jwks_uri=${KEYCLOAK_PUBLIC_URL}/auth/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
+          echo "keycloak_issuer=${KEYCLOAK_PUBLIC_URL}/auth/realms/${{ env.KEYCLOAK_REALM }}" >> $GITHUB_OUTPUT
+          echo "jwks_uri=${KEYCLOAK_PUBLIC_URL}/auth/realms/${{ env.KEYCLOAK_REALM }}/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
           echo "mcp_gateway_url=${MCP_GATEWAY_URL}" >> $GITHUB_OUTPUT
           echo "mcp_hr_url=${MCP_HR_URL}" >> $GITHUB_OUTPUT
           echo "mcp_finance_url=${MCP_FINANCE_URL}" >> $GITHUB_OUTPUT
@@ -182,23 +198,23 @@ jobs:
           MCP_SALES_URL="${{ needs.discover-urls.outputs.mcp_sales_url }}"
           MCP_SUPPORT_URL="${{ needs.discover-urls.outputs.mcp_support_url }}"
 
-          # Fallback to auth.tamshai.com for Keycloak (always available)
-          KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://auth.tamshai.com/auth/realms/tamshai-corp}"
-          JWKS_URI="${JWKS_URI:-https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs}"
+          # Fallback to domain for Keycloak (always available)
+          KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/${{ env.KEYCLOAK_REALM }}}"
+          JWKS_URI="${JWKS_URI:-https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/${{ env.KEYCLOAK_REALM }}/protocol/openid-connect/certs}"
 
           gcloud run deploy mcp-gateway \
             --image=${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
-            --service-account=tamshai-prod-mcp-gateway@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --service-account=${{ env.GCP_SA_MCP_GATEWAY }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
             --memory=1Gi \
             --cpu=1 \
             --timeout=300 \
-            --set-secrets=CLAUDE_API_KEY=tamshai-prod-anthropic-api-key:latest \
-            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://auth.tamshai.com/auth,KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER},JWKS_URI=${JWKS_URI},MCP_HR_URL=${MCP_HR_URL},MCP_FINANCE_URL=${MCP_FINANCE_URL},MCP_SALES_URL=${MCP_SALES_URL},MCP_SUPPORT_URL=${MCP_SUPPORT_URL},TOKEN_REVOCATION_FAIL_OPEN=true,MCP_READ_TIMEOUT_MS=30000,MCP_WRITE_TIMEOUT_MS=60000"
+            --set-secrets=CLAUDE_API_KEY=${{ env.GCP_SECRET_CLAUDE_API_KEY }}:latest \
+            --set-env-vars="NODE_ENV=production,KEYCLOAK_URL=https://${{ env.KEYCLOAK_DOMAIN }}/auth,KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER},JWKS_URI=${JWKS_URI},MCP_HR_URL=${MCP_HR_URL},MCP_FINANCE_URL=${MCP_FINANCE_URL},MCP_SALES_URL=${MCP_SALES_URL},MCP_SUPPORT_URL=${MCP_SUPPORT_URL},TOKEN_REVOCATION_FAIL_OPEN=true,MCP_READ_TIMEOUT_MS=30000,MCP_WRITE_TIMEOUT_MS=60000"
 
       - name: Health Check
         run: |
@@ -260,7 +276,7 @@ jobs:
             --image=${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
-            --service-account=tamshai-prod-mcp-servers@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --service-account=${{ env.GCP_SA_MCP_SERVERS }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
@@ -270,7 +286,7 @@ jobs:
             --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_POSTGRES_INSTANCE }} \
             --vpc-connector=${{ env.GCP_VPC_CONNECTOR }} \
             --vpc-egress=private-ranges-only \
-            --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest,MONGODB_URI=tamshai-prod-mongodb-uri:latest \
+            --set-secrets=POSTGRES_PASSWORD=${{ env.GCP_SECRET_DB_PASSWORD }}:latest,MONGODB_URI=${{ env.GCP_SECRET_MONGODB_URI }}:latest \
             --set-env-vars="NODE_ENV=production,POSTGRES_HOST=/cloudsql/${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_POSTGRES_INSTANCE }},POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
 
   deploy-mcp-mongodb:
@@ -321,7 +337,7 @@ jobs:
             --image=${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
-            --service-account=tamshai-prod-mcp-servers@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --service-account=${{ env.GCP_SA_MCP_SERVERS }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
@@ -330,7 +346,7 @@ jobs:
             --timeout=300 \
             --vpc-connector=${{ env.GCP_VPC_CONNECTOR }} \
             --vpc-egress=all-traffic \
-            --set-secrets=MONGODB_URI=tamshai-prod-mongodb-uri:latest \
+            --set-secrets=MONGODB_URI=${{ env.GCP_SECRET_MONGODB_URI }}:latest \
             --set-env-vars="NODE_ENV=production,MONGODB_DB=${{ matrix.db_name }}${{ matrix.backend && format(',SUPPORT_DATA_BACKEND={0}', matrix.backend) || '' }}"
 
   deploy-keycloak:
@@ -399,7 +415,7 @@ jobs:
             --image=${{ env.AR_REPO }}/keycloak:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
-            --service-account=tamshai-prod-keycloak@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --service-account=${{ env.GCP_SA_KEYCLOAK }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances=1 \
             --max-instances=2 \
@@ -408,14 +424,14 @@ jobs:
             --timeout=600 \
             --vpc-connector=${{ env.GCP_VPC_CONNECTOR }} \
             --vpc-egress=private-ranges-only \
-            --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
-            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://${POSTGRES_IP}:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth,KC_DB_POOL_MAX_SIZE=10,KC_DB_POOL_MIN_SIZE=2"
+            --set-secrets=KEYCLOAK_ADMIN_PASSWORD=${{ env.GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD }}:latest,KC_DB_PASSWORD=${{ env.GCP_SECRET_KEYCLOAK_DB_PASSWORD }}:latest \
+            --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://${POSTGRES_IP}:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=${{ env.KEYCLOAK_DOMAIN }},KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth,KC_DB_POOL_MAX_SIZE=10,KC_DB_POOL_MIN_SIZE=2"
 
       - name: Health Check
         run: |
           echo "Waiting for Keycloak to be healthy..."
           for i in {1..12}; do
-            if curl -sf "https://auth.tamshai.com/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
+            if curl -sf "https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
               echo "Keycloak is healthy!"
               exit 0
             fi
@@ -443,8 +459,8 @@ jobs:
         run: |
           echo "Waiting for Keycloak to be fully ready..."
           for i in {1..6}; do
-            # Check master realm (always exists) - tamshai-corp may be deleted and reimported
-            if curl -sf "https://auth.tamshai.com/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
+            # Check master realm (always exists) - ${{ env.KEYCLOAK_REALM }} may be deleted and reimported
+            if curl -sf "https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               break
             fi
@@ -453,7 +469,7 @@ jobs:
           done
 
           # Final check
-          if ! curl -sf "https://auth.tamshai.com/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
+          if ! curl -sf "https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/master/.well-known/openid-configuration" > /dev/null 2>&1; then
             echo "ERROR: Keycloak not ready after 60 seconds"
             exit 1
           fi
@@ -487,7 +503,7 @@ jobs:
 
           # Fetch admin password from GCP Secret Manager
           echo "Fetching admin password from GCP Secret Manager..."
-          KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
+          KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=${{ env.GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD }})
           if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
             echo "ERROR: Could not fetch admin password from Secret Manager"
             exit 1
@@ -497,7 +513,7 @@ jobs:
 
           # Get admin token with verbose error handling
           echo "Requesting admin token from Keycloak..."
-          TOKEN_RESPONSE=$(curl -s -X POST "https://auth.tamshai.com/auth/realms/master/protocol/openid-connect/token" \
+          TOKEN_RESPONSE=$(curl -s -X POST "https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             --data-urlencode "username=admin" \
             --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
@@ -518,7 +534,7 @@ jobs:
           echo "Admin token obtained successfully"
 
           # Get test-user.journey user ID
-          USER_ID=$(curl -sf "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users?username=test-user.journey" \
+          USER_ID=$(curl -sf "https://${{ env.KEYCLOAK_DOMAIN }}/auth/admin/realms/${{ env.KEYCLOAK_REALM }}/users?username=test-user.journey" \
             -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
 
           if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
@@ -535,7 +551,7 @@ jobs:
           fi
           # Use jq for proper JSON encoding (handles special chars like @)
           PASSWORD_JSON=$(jq -n --arg pass "$TEST_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
-          RESET_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "https://auth.tamshai.com/auth/admin/realms/tamshai-corp/users/${USER_ID}/reset-password" \
+          RESET_RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT "https://${{ env.KEYCLOAK_DOMAIN }}/auth/admin/realms/${{ env.KEYCLOAK_REALM }}/users/${USER_ID}/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "$PASSWORD_JSON")
@@ -566,8 +582,8 @@ jobs:
         run: |
           echo "Waiting for Keycloak to reimport realm..."
           for i in {1..12}; do
-            if curl -sf "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" > /dev/null 2>&1; then
-              echo "Realm tamshai-corp is available!"
+            if curl -sf "https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/${{ env.KEYCLOAK_REALM }}/.well-known/openid-configuration" > /dev/null 2>&1; then
+              echo "Realm ${{ env.KEYCLOAK_REALM }} is available!"
               break
             fi
             echo "Attempt $i/12: Realm not ready yet, waiting 10s..."
@@ -576,14 +592,14 @@ jobs:
 
       - name: Sync Realm Configuration
         env:
-          KEYCLOAK_URL: https://auth.tamshai.com/auth
+          KEYCLOAK_URL: https://${{ env.KEYCLOAK_DOMAIN }}/auth
           KEYCLOAK_ADMIN: admin
         run: |
           echo "Running realm sync directly from GitHub Actions runner..."
           echo "This eliminates Cloud Run Job overhead (container pull + JVM startup)"
 
           # Fetch secrets from GCP Secret Manager (single source of truth for prod)
-          export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-keycloak-admin-password)
+          export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=${{ env.GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD }})
           export MCP_HR_SERVICE_CLIENT_SECRET=$(gcloud secrets versions access latest --secret=mcp-hr-service-client-secret)
 
           # Make script executable and run it
@@ -656,8 +672,8 @@ jobs:
               --format="value(status.url)" 2>/dev/null || echo "")
           fi
 
-          # Use auth.tamshai.com for Keycloak (always available via domain mapping)
-          KEYCLOAK_URL="https://auth.tamshai.com/auth/realms/tamshai-corp"
+          # Use domain for Keycloak (always available via domain mapping)
+          KEYCLOAK_URL="https://${{ env.KEYCLOAK_DOMAIN }}/auth/realms/${{ env.KEYCLOAK_REALM }}"
 
           echo "Building web-portal with:"
           echo "  KEYCLOAK_URL: $KEYCLOAK_URL"
@@ -683,7 +699,7 @@ jobs:
             --image=${{ env.AR_REPO }}/web-portal:${{ github.sha }} \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
-            --service-account=tamshai-prod-mcp-gateway@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --service-account=${{ env.GCP_SA_MCP_GATEWAY }}@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --allow-unauthenticated \
             --min-instances=0 \
             --max-instances=2 \
