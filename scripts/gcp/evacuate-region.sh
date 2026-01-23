@@ -311,436 +311,57 @@ confirm_evacuation() {
 # =============================================================================
 # PRE-CLEANUP: REMOVE LEFTOVER RESOURCES FROM FAILED ATTEMPTS
 # =============================================================================
-# Similar to phoenix-rebuild.sh pre-destroy cleanup, this phase removes any
-# leftover GCP resources from previous failed evacuation attempts.
+# Uses the common cleanup library (lib/cleanup.sh) to remove any leftover GCP
+# resources from previous failed evacuation attempts.
 #
 # This is necessary because:
 # 1. Terraform may have created some resources before failing
 # 2. The fresh state file doesn't know about these orphaned resources
 # 3. Re-running terraform apply will fail with "already exists" errors
+#
+# The library function handles all resource types in the correct dependency order.
 # =============================================================================
 
-cleanup_leftover_resources() {
+run_cleanup_leftover_resources() {
     log_phase "0.5" "PRE-CLEANUP: REMOVE LEFTOVER RESOURCES"
 
     local name_suffix="-${ENV_ID}"
-    local vpc_name="tamshai-prod${name_suffix}-vpc"
 
-    log_step "Checking for leftover resources from previous attempts..."
-    log_info "Looking for resources with suffix: $name_suffix"
+    # Set up environment for library functions
+    # NAME_PREFIX includes suffix for VPC naming: tamshai-prod-recovery-xxx
+    # ENV_ID is just the ID part: recovery-xxx
+    export NAME_PREFIX="tamshai-prod${name_suffix}"
+    export RESOURCE_PREFIX="tamshai-prod"
+    export ENV_ID="${ENV_ID}"
+    export GCP_REGION="${NEW_REGION}"
+    export GCP_PROJECT="${PROJECT_ID}"
+    export REGION="${NEW_REGION}"
+    export PROJECT="${PROJECT_ID}"
 
-    # Check if VPC exists (primary indicator of leftover resources)
-    if gcloud compute networks describe "$vpc_name" --project="$PROJECT_ID" &>/dev/null; then
-        log_warn "Found leftover VPC: $vpc_name"
-        log_info "Cleaning up leftover resources from failed evacuation attempt..."
+    log_info "Cleanup configuration:"
+    log_info "  NAME_PREFIX: $NAME_PREFIX"
+    log_info "  ENV_ID: $ENV_ID"
+    log_info "  name_suffix: $name_suffix"
 
-        # Step 1: Delete Cloud Run services (release DB connections)
-        log_step "Deleting leftover Cloud Run services..."
-        local services=("keycloak" "mcp-gateway" "mcp-hr" "mcp-finance" "mcp-sales" "mcp-support" "web-portal")
-        for svc in "${services[@]}"; do
-            if gcloud run services describe "$svc" --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-                log_info "  Deleting $svc..."
-                gcloud run services delete "$svc" --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-            fi
-        done
-
-        # Step 2: Delete VPC Access Connector (takes 2-3 minutes)
-        # IMPORTANT: Connector MUST be deleted BEFORE subnet deletion (connector uses subnet IPs)
-        # The connector name uses MD5 hash for long env_ids: tamshai-<8-char-hash>
-        log_step "Deleting leftover VPC connectors..."
-
-        # Find ALL connectors that might be associated with this VPC
-        # (not just the expected names - there may be orphaned connectors)
-        local all_connectors
-        all_connectors=$(gcloud compute networks vpc-access connectors list \
-            --region="${NEW_REGION}" \
-            --project="$PROJECT_ID" \
-            --format="value(name)" 2>/dev/null | grep -E "^tamshai" || true)
-
-        for connector in $all_connectors; do
-            # Check if this connector is in our VPC
-            local connector_network
-            connector_network=$(gcloud compute networks vpc-access connectors describe "$connector" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" \
-                --format="value(network)" 2>/dev/null || echo "")
-
-            # Extract network name from full path (projects/xxx/global/networks/vpc-name)
-            connector_network="${connector_network##*/}"
-
-            if [ "$connector_network" = "$vpc_name" ]; then
-                log_info "  Found VPC connector '$connector' in VPC '$vpc_name' - deleting..."
-                gcloud compute networks vpc-access connectors delete "$connector" \
-                    --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-
-                # Wait for deletion (async operation takes 2-3 minutes)
-                local wait_count=0
-                local max_wait=20  # 20 * 15s = 5 minutes max
-                while gcloud compute networks vpc-access connectors describe "$connector" \
-                    --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; do
-                    wait_count=$((wait_count + 1))
-                    if [ $wait_count -ge $max_wait ]; then
-                        log_error "VPC connector '$connector' deletion timeout after 5 minutes"
-                        log_error "Cannot delete subnet while connector exists - aborting"
-                        exit 1
-                    fi
-                    log_info "    Waiting for VPC connector deletion (takes 2-3 minutes)... [$wait_count/$max_wait]"
-                    sleep 15
-                done
-                log_success "  VPC connector '$connector' deleted"
-            fi
-        done
-
-        # Also check for expected connector names that might not be in the list output
-        local connector_name
-        connector_name="tamshai-$(echo -n "$name_suffix" | md5sum | cut -c1-8)"
-        if gcloud compute networks vpc-access connectors describe "$connector_name" \
-            --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Found additional VPC connector: $connector_name..."
-            gcloud compute networks vpc-access connectors delete "$connector_name" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-
-            local wait_count=0
-            local max_wait=20
-            while gcloud compute networks vpc-access connectors describe "$connector_name" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; do
-                wait_count=$((wait_count + 1))
-                if [ $wait_count -ge $max_wait ]; then
-                    log_error "VPC connector deletion timeout - aborting"
-                    exit 1
-                fi
-                log_info "    Waiting for VPC connector deletion... [$wait_count/$max_wait]"
-                sleep 15
-            done
-        fi
-
-        # Step 3: Delete Cloud SQL instance (if exists)
-        # Note: Terraform naming is "tamshai-${env}-postgres${suffix}" not "tamshai-${env}${suffix}-postgres"
-        log_step "Deleting leftover Cloud SQL instances..."
-        local sql_instance="tamshai-prod-postgres${name_suffix}"
-        if gcloud sql instances describe "$sql_instance" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Disabling deletion protection..."
-            gcloud sql instances patch "$sql_instance" --project="$PROJECT_ID" \
-                --no-deletion-protection --quiet 2>/dev/null || true
-            log_info "  Deleting Cloud SQL: $sql_instance..."
-            gcloud sql instances delete "$sql_instance" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-
-            # Wait for Cloud SQL deletion
-            local sql_wait=0
-            local sql_max_wait=18  # 18 * 10s = 3 minutes max
-            while gcloud sql instances describe "$sql_instance" --project="$PROJECT_ID" &>/dev/null 2>&1; do
-                sql_wait=$((sql_wait + 1))
-                if [ $sql_wait -ge $sql_max_wait ]; then
-                    log_warn "Cloud SQL deletion timeout - continuing anyway"
-                    break
-                fi
-                log_info "    Waiting for Cloud SQL deletion... [$sql_wait/$sql_max_wait]"
-                sleep 10
-            done
-        fi
-
-        # Step 4: Delete VPC peering connection (must be done before private IP deletion)
-        # Following phoenix-rebuild.sh Issue #14 pattern:
-        #   - Service networking peerings are always named "servicenetworking-googleapis-com"
-        #   - Use compute API (gcloud compute networks peerings delete) for immediate deletion
-        #   - Service networking API can fail with timing issues even after Cloud SQL is deleted
-        log_step "Deleting leftover VPC peering..."
-
-        # Check if peering exists (service networking peerings always have this name)
-        local peering_name="servicenetworking-googleapis-com"
-        if gcloud compute networks peerings list \
-            --network="$vpc_name" \
-            --project="$PROJECT_ID" \
-            --format="value(name)" 2>/dev/null | grep -q "$peering_name"; then
-
-            log_info "  Found VPC peering: $peering_name"
-
-            # Use compute API directly (phoenix-rebuild.sh proven pattern)
-            log_info "  Deleting via compute networks peerings API..."
-            if gcloud compute networks peerings delete "$peering_name" \
-                --network="$vpc_name" \
-                --project="$PROJECT_ID" \
-                --quiet 2>/dev/null; then
-                log_success "  VPC peering deleted successfully via compute API"
-            else
-                log_warn "  Compute API returned error - checking if peering still exists..."
-                # Verify deletion
-                if ! gcloud compute networks peerings list \
-                    --network="$vpc_name" \
-                    --project="$PROJECT_ID" \
-                    --format="value(name)" 2>/dev/null | grep -q "$peering_name"; then
-                    log_success "  VPC peering confirmed deleted"
-                else
-                    # Peering still exists - wait and retry (GCP backend timing)
-                    log_info "  Waiting for GCP backend to complete peering deletion..."
-                    local wait_count=0
-                    local max_wait=12  # 12 * 10s = 2 minutes max
-                    while gcloud compute networks peerings list --network="$vpc_name" \
-                        --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | grep -q "$peering_name"; do
-                        wait_count=$((wait_count + 1))
-                        if [ $wait_count -ge $max_wait ]; then
-                            log_error "VPC peering deletion failed after $max_wait attempts"
-                            log_error "Manual cleanup may be required"
-                            exit 1
-                        fi
-                        log_info "    Waiting for peering deletion... [$wait_count/$max_wait]"
-                        # Retry deletion on each loop
-                        gcloud compute networks peerings delete "$peering_name" \
-                            --network="$vpc_name" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-                        sleep 10
-                    done
-                    log_success "  VPC peering deleted successfully"
-                fi
-            fi
-        else
-            log_info "  No VPC peering found"
-        fi
-
-        # Step 5: Delete private IP addresses
-        # Note: Terraform naming is "tamshai-${env}-private-ip${suffix}" not "tamshai-${env}${suffix}-private-ip"
-        log_step "Deleting leftover private IP addresses..."
-        local private_ip_name="tamshai-prod-private-ip${name_suffix}"
-        if gcloud compute addresses describe "$private_ip_name" --global --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting: $private_ip_name..."
-            gcloud compute addresses delete "$private_ip_name" --global --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        fi
-
-        # Step 6: Delete Cloud NAT
-        log_step "Deleting leftover Cloud NAT..."
-        local nat_name="tamshai-prod${name_suffix}-nat"
-        local router_name="tamshai-prod${name_suffix}-router"
-        if gcloud compute routers nats describe "$nat_name" --router="$router_name" \
-            --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting NAT: $nat_name..."
-            gcloud compute routers nats delete "$nat_name" --router="$router_name" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        fi
-
-        # Step 7: Delete Cloud Router
-        log_step "Deleting leftover Cloud Router..."
-        if gcloud compute routers describe "$router_name" \
-            --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting router: $router_name..."
-            gcloud compute routers delete "$router_name" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        fi
-
-        # Step 8: Delete firewall rules
-        log_step "Deleting leftover firewall rules..."
-        local firewall_rules
-        firewall_rules=$(gcloud compute firewall-rules list \
-            --filter="network:$vpc_name" \
-            --format="value(name)" \
-            --project="$PROJECT_ID" 2>/dev/null)
-
-        for rule in $firewall_rules; do
-            log_info "  Deleting firewall rule: $rule..."
-            gcloud compute firewall-rules delete "$rule" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        done
-
-        # Step 8.5: Delete GCE instances using the target subnet
-        # NOTE: The compute module does NOT support name_suffix, so GCE instances
-        # are named 'tamshai-prod-keycloak' and 'tamshai-prod-mcp-gateway' regardless
-        # of the evacuation suffix. We must delete any instances using the target subnet.
-        log_step "Deleting GCE instances using target VPC subnet..."
-        local subnet_name="tamshai-prod${name_suffix}-subnet"
-
-        # List all instances in all zones for this region that use the target subnet
-        local instances_in_subnet
-        instances_in_subnet=$(gcloud compute instances list \
-            --filter="networkInterfaces.subnetwork:${subnet_name}" \
-            --format="csv[no-heading](name,zone)" \
-            --project="$PROJECT_ID" 2>/dev/null || true)
-
-        if [ -n "$instances_in_subnet" ]; then
-            log_info "  Found GCE instances using subnet $subnet_name:"
-
-            # Use process substitution to avoid subshell variable scoping issues
-            while IFS=',' read -r instance_name instance_zone; do
-                # Extract zone name from full path if needed (format: projects/xxx/zones/zzz)
-                instance_zone="${instance_zone##*/}"
-                log_info "    - $instance_name (zone: $instance_zone)"
-            done <<< "$instances_in_subnet"
-
-            # Delete each instance
-            while IFS=',' read -r instance_name instance_zone; do
-                instance_zone="${instance_zone##*/}"
-
-                if [ -n "$instance_name" ] && [ -n "$instance_zone" ]; then
-                    log_info "  Deleting instance: $instance_name in zone $instance_zone..."
-                    if gcloud compute instances delete "$instance_name" \
-                        --zone="$instance_zone" \
-                        --project="$PROJECT_ID" \
-                        --quiet 2>/dev/null; then
-                        log_success "    Instance $instance_name deleted"
-                    else
-                        log_warn "    Failed to delete $instance_name (may already be deleted)"
-                    fi
-                fi
-            done <<< "$instances_in_subnet"
-
-            # Wait for instance deletions to complete (GCE instance deletion is async)
-            log_info "  Waiting for GCE instance deletions to complete..."
-            local wait_count=0
-            local max_wait=12  # 12 * 10s = 2 minutes max
-            while true; do
-                local remaining
-                remaining=$(gcloud compute instances list \
-                    --filter="networkInterfaces.subnetwork:${subnet_name}" \
-                    --format="value(name)" \
-                    --project="$PROJECT_ID" 2>/dev/null || true)
-
-                if [ -z "$remaining" ]; then
-                    log_success "  All GCE instances in target subnet deleted"
-                    break
-                fi
-
-                wait_count=$((wait_count + 1))
-                if [ $wait_count -ge $max_wait ]; then
-                    log_warn "  Timeout waiting for instance deletion. Remaining: $remaining"
-                    break
-                fi
-                log_info "    Waiting for instances to terminate... [$wait_count/$max_wait]"
-                sleep 10
-            done
-        else
-            log_info "  No GCE instances found using subnet $subnet_name"
-        fi
-
-        # Step 9: Delete subnets
-        log_step "Deleting leftover subnets..."
-        # Note: subnet_name already defined in Step 8.5
-        if gcloud compute networks subnets describe "$subnet_name" \
-            --region="${NEW_REGION}" --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "  Deleting subnet: $subnet_name..."
-            gcloud compute networks subnets delete "$subnet_name" \
-                --region="${NEW_REGION}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        fi
-
-        # Step 10: Delete routes (can block VPC deletion)
-        log_step "Deleting leftover routes..."
-        local routes
-        routes=$(gcloud compute routes list \
-            --filter="network:$vpc_name" \
-            --format="value(name)" \
-            --project="$PROJECT_ID" 2>/dev/null | grep -v "^default-" || true)
-
-        for route in $routes; do
-            log_info "  Deleting route: $route..."
-            gcloud compute routes delete "$route" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-        done
-
-        # Step 11: Delete VPC network (last - everything else must be deleted first)
-        # Following phoenix-rebuild.sh patterns for robust deletion
-        log_step "Deleting leftover VPC network..."
-
-        local vpc_wait=0
-        local vpc_max_wait=12  # 12 * 10s = 2 minutes max for VPC deletion
-        local vpc_exists=true
-
-        while [ "$vpc_exists" = "true" ]; do
-            # Robust check: look for the VPC by name in the list output
-            # This is more reliable than describe which can fail for various reasons
-            local vpc_check
-            vpc_check=$(gcloud compute networks list \
-                --filter="name=$vpc_name" \
-                --format="value(name)" \
-                --project="$PROJECT_ID" 2>/dev/null || echo "ERROR")
-
-            if [ "$vpc_check" = "ERROR" ]; then
-                log_warn "  GCP API error checking VPC - retrying..."
-                sleep 5
-                continue
-            fi
-
-            if [ -z "$vpc_check" ]; then
-                # VPC does not exist
-                vpc_exists=false
-                log_success "  VPC $vpc_name confirmed deleted"
-                break
-            fi
-
-            # VPC still exists - try to delete
-            vpc_wait=$((vpc_wait + 1))
-            if [ $vpc_wait -ge $vpc_max_wait ]; then
-                log_error "VPC $vpc_name could not be deleted after $vpc_max_wait attempts"
-                log_error ""
-                log_error "Remaining dependencies blocking VPC deletion:"
-                echo ""
-                log_info "Subnets:"
-                gcloud compute networks subnets list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
-                log_info "Firewall rules:"
-                gcloud compute firewall-rules list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
-                log_info "Routes (non-default):"
-                gcloud compute routes list --filter="network:$vpc_name" --project="$PROJECT_ID" 2>/dev/null | grep -v "^default-" || echo "  (none or error)"
-                log_info "VPC Access Connectors:"
-                gcloud compute networks vpc-access connectors list --region="$NEW_REGION" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
-                log_info "VPC Peerings:"
-                gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT_ID" 2>/dev/null || echo "  (none or error)"
-                echo ""
-                log_error "Cannot proceed with evacuation while leftover VPC exists"
-                log_error "Manual cleanup required, then re-run this script"
-                exit 1
-            fi
-
-            log_info "  Attempting to delete VPC (attempt $vpc_wait/$vpc_max_wait)..."
-
-            # Before trying VPC deletion, force-delete any remaining dependencies
-            # These may have been created by other GCP services (auto-firewall rules, etc.)
-
-            # Force delete remaining firewall rules
-            local remaining_fw
-            remaining_fw=$(gcloud compute firewall-rules list \
-                --filter="network:$vpc_name" \
-                --format="value(name)" \
-                --project="$PROJECT_ID" 2>/dev/null || true)
-            for fw in $remaining_fw; do
-                log_info "    Force-deleting firewall rule: $fw"
-                gcloud compute firewall-rules delete "$fw" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-            done
-
-            # Force delete remaining routes (except default)
-            local remaining_routes
-            remaining_routes=$(gcloud compute routes list \
-                --filter="network:$vpc_name" \
-                --format="value(name)" \
-                --project="$PROJECT_ID" 2>/dev/null | grep -v "^default-" || true)
-            for route in $remaining_routes; do
-                log_info "    Force-deleting route: $route"
-                gcloud compute routes delete "$route" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-            done
-
-            # Force delete remaining subnets
-            local remaining_subnets
-            remaining_subnets=$(gcloud compute networks subnets list \
-                --filter="network:$vpc_name" \
-                --format="value(name,region)" \
-                --project="$PROJECT_ID" 2>/dev/null || true)
-            while IFS=$'\t' read -r subnet_name subnet_region; do
-                if [ -n "$subnet_name" ]; then
-                    log_info "    Force-deleting subnet: $subnet_name in $subnet_region"
-                    gcloud compute networks subnets delete "$subnet_name" \
-                        --region="${subnet_region##*/}" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-                fi
-            done <<< "$remaining_subnets"
-
-            # Now try to delete VPC
-            gcloud compute networks delete "$vpc_name" --project="$PROJECT_ID" --quiet 2>/dev/null || {
-                log_info "    VPC deletion pending - waiting for dependencies to clear..."
-            }
-
-            sleep 10
-        done
-        log_success "Leftover resources cleaned up"
+    # Call the library function
+    # Arguments: name_suffix, state_bucket, state_prefix
+    if type cleanup_leftover_resources &>/dev/null; then
+        cleanup_leftover_resources "$name_suffix" "$STATE_BUCKET" "gcp/recovery/${ENV_ID}" || {
+            log_error "Cleanup failed - cannot proceed with evacuation"
+            exit 1
+        }
     else
-        log_info "No leftover VPC found - environment is clean"
-    fi
+        log_error "cleanup_leftover_resources function not found - is lib/cleanup.sh loaded?"
+        log_error "Falling back to manual VPC check only..."
 
-    # Also clean up any stale terraform state locks
-    log_step "Checking for stale terraform state locks..."
-    local lock_file="gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/default.tflock"
-    if gcloud storage cat "$lock_file" &>/dev/null 2>&1; then
-        log_warn "Found stale lock file - removing..."
-        gcloud storage rm "$lock_file" 2>/dev/null || true
+        local vpc_name="${NAME_PREFIX}-vpc"
+        if gcloud compute networks describe "$vpc_name" --project="$PROJECT_ID" &>/dev/null; then
+            log_error "Found leftover VPC: $vpc_name"
+            log_error "Library not loaded - cannot clean up automatically"
+            log_error "Please ensure lib/cleanup.sh is available and re-run"
+            exit 1
+        fi
+        log_info "No leftover VPC found - environment is clean"
     fi
 }
 
@@ -1638,7 +1259,7 @@ main() {
 
     preflight_checks
     confirm_evacuation
-    cleanup_leftover_resources
+    run_cleanup_leftover_resources
 
     phase1_init_state
     phase1_5_replicate_images

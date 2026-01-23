@@ -6,18 +6,30 @@
 # Functions for pre-destroy and post-destroy cleanup.
 # Supports both primary (no suffix) and recovery (with suffix) environments.
 #
+# NAMING CONVENTION (matches Terraform):
+#   Cloud Run services: NO suffix - always "mcp-gateway", "keycloak", etc.
+#   VPC resources: NAME_PREFIX + type - "tamshai-prod-vpc" or "tamshai-prod-recovery-xxx-vpc"
+#   Cloud SQL: RESOURCE_PREFIX + "-postgres" + suffix - "tamshai-prod-postgres-recovery-xxx"
+#
 # Usage:
 #   source /path/to/scripts/gcp/lib/cleanup.sh
-#   delete_cloudsql_instance ""                    # Primary: tamshai-prod-postgres
-#   delete_cloudsql_instance "-recovery-20260123"  # Recovery: tamshai-prod-postgres-recovery-20260123
+#
+#   # Primary environment
+#   NAME_PREFIX="tamshai-prod" delete_vpc_network       # Deletes tamshai-prod-vpc
+#   delete_cloudsql_instance ""                          # Deletes tamshai-prod-postgres
+#
+#   # Recovery environment
+#   NAME_PREFIX="tamshai-prod-recovery-xxx" delete_vpc_network  # Deletes tamshai-prod-recovery-xxx-vpc
+#   delete_cloudsql_instance "-recovery-xxx"                     # Deletes tamshai-prod-postgres-recovery-xxx
 #
 # Required environment variables:
 #   GCP_REGION  - GCP region (e.g., us-central1)
 #   GCP_PROJECT - GCP project ID
 #
 # Optional configuration variables (set before sourcing or use defaults):
-#   RESOURCE_PREFIX - Resource naming prefix (default: tamshai-prod)
-#   SECRET_* variables for secret names
+#   RESOURCE_PREFIX - Base resource prefix without suffix (default: tamshai-prod)
+#   NAME_PREFIX     - Full name prefix including suffix (default: $RESOURCE_PREFIX)
+#   ENV_ID          - Environment ID for connector MD5 hash (default: primary)
 #
 # Ref: Issue #102 - Unify prod and DR deployments
 # =============================================================================
@@ -32,8 +44,12 @@ set -eo pipefail
 REGION="$GCP_REGION"
 PROJECT="$GCP_PROJECT"
 
-# Resource naming prefix (configurable for different environments)
+# Resource naming (configurable for different environments)
+# RESOURCE_PREFIX: Base prefix without any suffix (e.g., "tamshai-prod")
+# NAME_PREFIX: Full prefix including any suffix (e.g., "tamshai-prod-recovery-xxx")
 RESOURCE_PREFIX="${RESOURCE_PREFIX:-tamshai-prod}"
+NAME_PREFIX="${NAME_PREFIX:-${RESOURCE_PREFIX}}"
+ENV_ID="${ENV_ID:-primary}"
 
 # Colors for output (use common.sh if available, otherwise define locally)
 if ! type log_info &>/dev/null; then
@@ -114,6 +130,8 @@ remove_service_networking_from_state() {
 }
 
 # Gap #24: Delete orphaned private IP address
+# NOTE: Private IP is created by database module with pattern: tamshai-prod-private-ip${suffix}
+# (Same pattern as Cloud SQL: suffix at end)
 # Usage: delete_orphaned_private_ip [name_suffix]
 #   name_suffix: Optional suffix for recovery environments (e.g., "-recovery-20260123")
 delete_orphaned_private_ip() {
@@ -203,16 +221,14 @@ delete_cloudsql_instance() {
 # =============================================================================
 
 # Gap #11, #27, #29: Delete failed Cloud Run services
-# Usage: delete_failed_cloudrun_services [name_suffix]
-#   name_suffix: Optional suffix for recovery environments (e.g., "-recovery-20260123")
+# NOTE: Cloud Run services have NO suffix in Terraform - same names for prod and DR
+# Usage: delete_failed_cloudrun_services
 delete_failed_cloudrun_services() {
-    local name_suffix="${1:-}"
-    local base_services=(keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal)
+    local services=(keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal)
 
-    log_info "Checking for failed Cloud Run services (suffix: '${name_suffix:-none}')"
+    log_info "Checking for failed Cloud Run services"
 
-    for base_svc in "${base_services[@]}"; do
-        local svc="${base_svc}${name_suffix}"
+    for svc in "${services[@]}"; do
         local status
         status=$(gcloud run services describe "$svc" --region="$REGION" --project="$PROJECT" --format="value(status.conditions[0].status)" 2>/dev/null || echo "NOT_FOUND")
 
@@ -223,18 +239,15 @@ delete_failed_cloudrun_services() {
     done
 }
 
-# Delete all Cloud Run services for an environment
-# Usage: delete_cloudrun_services [name_suffix]
-#   name_suffix: Optional suffix for recovery environments (e.g., "-recovery-20260123")
+# Delete all Cloud Run services
+# NOTE: Cloud Run services have NO suffix in Terraform - same names for prod and DR
+# Usage: delete_cloudrun_services
 delete_cloudrun_services() {
-    local name_suffix="${1:-}"
-    local base_services=(keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal)
+    local services=(keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal)
 
-    log_info "Deleting Cloud Run services (suffix: '${name_suffix:-none}')"
+    log_info "Deleting Cloud Run services"
 
-    for base_svc in "${base_services[@]}"; do
-        local svc="${base_svc}${name_suffix}"
-
+    for svc in "${services[@]}"; do
         if gcloud run services describe "$svc" --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
             log_info "Deleting service: $svc"
             gcloud run services delete "$svc" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $svc"
@@ -245,12 +258,28 @@ delete_cloudrun_services() {
 # =============================================================================
 # VPC CLEANUP FUNCTIONS (Issue #102)
 # =============================================================================
+# NOTE: VPC resources use NAME_PREFIX (which includes any suffix)
+# Terraform naming: ${name_prefix}-vpc, ${name_prefix}-subnet, etc.
+# Example: NAME_PREFIX="tamshai-prod-recovery-xxx" → "tamshai-prod-recovery-xxx-vpc"
 
-# Delete VPC connector
-# Usage: delete_vpc_connector [name_suffix]
+# Delete VPC connector (battle-tested pattern from phoenix-rebuild.sh)
+# NOTE: VPC connector uses different naming for prod vs DR:
+#   - Primary: tamshai-prod-connector (hardcoded in prod terraform)
+#   - DR: tamshai-<md5(suffix)[0:8]> (MD5 hash for long suffixes, max 25 chars)
+# Usage: delete_vpc_connector
 delete_vpc_connector() {
-    local name_suffix="${1:-}"
-    local connector_name="${RESOURCE_PREFIX}-conn${name_suffix}"
+    local connector_name
+
+    # Match Terraform's naming patterns
+    if [[ "$ENV_ID" == "primary" ]] || [[ -z "$ENV_ID" ]]; then
+        # Primary environment uses hardcoded connector name (battle-tested)
+        connector_name="${RESOURCE_PREFIX}-connector"
+    else
+        # DR environment uses MD5 hash (max 25 chars for connector name)
+        local suffix_hash
+        suffix_hash=$(echo -n "-${ENV_ID}" | md5sum | cut -c1-8)
+        connector_name="tamshai-${suffix_hash}"
+    fi
 
     log_info "Checking for VPC connector: $connector_name"
 
@@ -264,10 +293,9 @@ delete_vpc_connector() {
 }
 
 # Delete VPC peering connection
-# Usage: delete_vpc_peering [name_suffix]
+# Usage: delete_vpc_peering
 delete_vpc_peering() {
-    local name_suffix="${1:-}"
-    local vpc_name="${RESOURCE_PREFIX}-vpc${name_suffix}"
+    local vpc_name="${NAME_PREFIX}-vpc"
 
     log_info "Checking for VPC peering on: $vpc_name"
 
@@ -283,10 +311,9 @@ delete_vpc_peering() {
 }
 
 # Delete firewall rules for VPC
-# Usage: delete_firewall_rules [name_suffix]
+# Usage: delete_firewall_rules
 delete_firewall_rules() {
-    local name_suffix="${1:-}"
-    local vpc_name="${RESOURCE_PREFIX}-vpc${name_suffix}"
+    local vpc_name="${NAME_PREFIX}-vpc"
 
     log_info "Deleting firewall rules for VPC: $vpc_name"
 
@@ -305,10 +332,9 @@ delete_firewall_rules() {
 }
 
 # Delete VPC subnets
-# Usage: delete_vpc_subnets [name_suffix]
+# Usage: delete_vpc_subnets
 delete_vpc_subnets() {
-    local name_suffix="${1:-}"
-    local subnet_name="${RESOURCE_PREFIX}-subnet${name_suffix}"
+    local subnet_name="${NAME_PREFIX}-subnet"
 
     log_info "Checking for subnet: $subnet_name"
 
@@ -322,10 +348,9 @@ delete_vpc_subnets() {
 }
 
 # Delete VPC network
-# Usage: delete_vpc_network [name_suffix]
+# Usage: delete_vpc_network
 delete_vpc_network() {
-    local name_suffix="${1:-}"
-    local vpc_name="${RESOURCE_PREFIX}-vpc${name_suffix}"
+    local vpc_name="${NAME_PREFIX}-vpc"
 
     log_info "Checking for VPC network: $vpc_name"
 
@@ -338,55 +363,663 @@ delete_vpc_network() {
     gcloud compute networks delete "$vpc_name" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $vpc_name"
 }
 
+# Delete Cloud NAT
+# Usage: delete_cloud_nat
+delete_cloud_nat() {
+    local nat_name="${NAME_PREFIX}-nat"
+    local router_name="${NAME_PREFIX}-router"
+
+    log_info "Checking for Cloud NAT: $nat_name"
+
+    if ! gcloud compute routers nats describe "$nat_name" --router="$router_name" \
+        --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
+        log_info "Cloud NAT not found: $nat_name"
+        return 0
+    fi
+
+    log_info "Deleting Cloud NAT: $nat_name"
+    gcloud compute routers nats delete "$nat_name" --router="$router_name" \
+        --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $nat_name"
+}
+
+# Delete Cloud Router
+# Usage: delete_cloud_router
+delete_cloud_router() {
+    local router_name="${NAME_PREFIX}-router"
+
+    log_info "Checking for Cloud Router: $router_name"
+
+    if ! gcloud compute routers describe "$router_name" \
+        --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
+        log_info "Cloud Router not found: $router_name"
+        return 0
+    fi
+
+    log_info "Deleting Cloud Router: $router_name"
+    gcloud compute routers delete "$router_name" \
+        --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $router_name"
+}
+
+# Delete custom routes for VPC (excludes default routes)
+# Usage: delete_vpc_routes
+delete_vpc_routes() {
+    local vpc_name="${NAME_PREFIX}-vpc"
+
+    log_info "Deleting custom routes for VPC: $vpc_name"
+
+    local routes
+    routes=$(gcloud compute routes list \
+        --filter="network:$vpc_name" \
+        --format="value(name)" \
+        --project="$PROJECT" 2>/dev/null | grep -v "^default-" || true)
+
+    if [[ -z "$routes" ]]; then
+        log_info "No custom routes found for $vpc_name"
+        return 0
+    fi
+
+    for route in $routes; do
+        log_info "Deleting route: $route"
+        gcloud compute routes delete "$route" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $route"
+    done
+}
+
+# Delete GCE instances using the VPC subnet
+# NOTE: Compute module doesn't use name_suffix, so instances have fixed names
+# Usage: delete_gce_instances_in_vpc
+delete_gce_instances_in_vpc() {
+    local subnet_name="${NAME_PREFIX}-subnet"
+
+    log_info "Checking for GCE instances using subnet: $subnet_name"
+
+    local instances
+    instances=$(gcloud compute instances list \
+        --filter="networkInterfaces.subnetwork:${subnet_name}" \
+        --format="csv[no-heading](name,zone)" \
+        --project="$PROJECT" 2>/dev/null || true)
+
+    if [[ -z "$instances" ]]; then
+        log_info "No GCE instances found using subnet $subnet_name"
+        return 0
+    fi
+
+    log_info "Found GCE instances using subnet $subnet_name"
+
+    # Delete each instance
+    while IFS=',' read -r instance_name instance_zone; do
+        # Extract zone name from full path if needed
+        instance_zone="${instance_zone##*/}"
+
+        if [[ -n "$instance_name" ]] && [[ -n "$instance_zone" ]]; then
+            log_info "  Deleting instance: $instance_name (zone: $instance_zone)"
+            gcloud compute instances delete "$instance_name" \
+                --zone="$instance_zone" \
+                --project="$PROJECT" \
+                --quiet 2>/dev/null || log_warn "Failed to delete $instance_name"
+        fi
+    done <<< "$instances"
+
+    # Wait for deletions to complete
+    log_info "Waiting for GCE instance deletions to complete..."
+    local wait_count=0
+    local max_wait=12  # 2 minutes max
+
+    while [[ $wait_count -lt $max_wait ]]; do
+        local remaining
+        remaining=$(gcloud compute instances list \
+            --filter="networkInterfaces.subnetwork:${subnet_name}" \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null || true)
+
+        if [[ -z "$remaining" ]]; then
+            log_info "All GCE instances deleted"
+            return 0
+        fi
+
+        wait_count=$((wait_count + 1))
+        log_info "  Waiting for instances to terminate... [$wait_count/$max_wait]"
+        sleep 10
+    done
+
+    log_warn "Timeout waiting for instance deletion. Some instances may still exist."
+}
+
+# Wait for VPC connector deletion (async operation takes 2-3 minutes)
+# Usage: wait_for_vpc_connector_deletion <connector_name> [timeout_attempts]
+wait_for_vpc_connector_deletion() {
+    local connector_name="$1"
+    local max_wait="${2:-20}"  # Default 20 * 15s = 5 minutes
+    local wait_count=0
+
+    while gcloud compute networks vpc-access connectors describe "$connector_name" \
+        --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; do
+        wait_count=$((wait_count + 1))
+        if [[ $wait_count -ge $max_wait ]]; then
+            log_error "VPC connector '$connector_name' deletion timeout after $((max_wait * 15 / 60)) minutes"
+            return 1
+        fi
+        log_info "  Waiting for VPC connector deletion (takes 2-3 minutes)... [$wait_count/$max_wait]"
+        sleep 15
+    done
+
+    log_info "VPC connector '$connector_name' deleted"
+    return 0
+}
+
+# Delete VPC connector with wait (battle-tested pattern from phoenix-rebuild.sh)
+# Gap #25: VPC connector deletion is async - takes 2-3 minutes
+# MUST complete before subnet deletion (connector uses subnet IPs)
+# Usage: delete_vpc_connector_and_wait
+delete_vpc_connector_and_wait() {
+    local connector_name
+    local vpc_name="${NAME_PREFIX}-vpc"
+
+    # Determine expected connector name based on environment
+    if [[ "$ENV_ID" == "primary" ]] || [[ -z "$ENV_ID" ]]; then
+        # Primary: hardcoded name (battle-tested in phoenix-rebuild.sh)
+        connector_name="${RESOURCE_PREFIX}-connector"
+    else
+        # DR: MD5 hash pattern
+        local suffix_hash
+        suffix_hash=$(echo -n "-${ENV_ID}" | md5sum | cut -c1-8)
+        connector_name="tamshai-${suffix_hash}"
+    fi
+
+    log_info "Checking for VPC connector: $connector_name"
+
+    # First check expected connector name
+    if gcloud compute networks vpc-access connectors describe "$connector_name" \
+        --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
+        log_info "VPC connector exists - deleting..."
+        gcloud compute networks vpc-access connectors delete "$connector_name" \
+            --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || {
+            log_warn "VPC connector deletion initiated (async operation)"
+        }
+
+        # Wait for deletion (battle-tested timing from phoenix-rebuild.sh)
+        wait_for_vpc_connector_deletion "$connector_name" || return 1
+        log_info "VPC connector deleted from GCP"
+    else
+        log_info "VPC connector does not exist in GCP - skipping deletion"
+    fi
+
+    # Also scan for any orphaned connectors in this VPC
+    log_info "Scanning for orphaned VPC connectors in: $vpc_name"
+
+    local all_connectors
+    all_connectors=$(gcloud compute networks vpc-access connectors list \
+        --region="$REGION" \
+        --project="$PROJECT" \
+        --format="value(name)" 2>/dev/null | grep -E "^tamshai" || true)
+
+    for connector in $all_connectors; do
+        # Check if this connector is in our VPC
+        local connector_network
+        connector_network=$(gcloud compute networks vpc-access connectors describe "$connector" \
+            --region="$REGION" --project="$PROJECT" \
+            --format="value(network)" 2>/dev/null || echo "")
+
+        # Extract network name from full path
+        connector_network="${connector_network##*/}"
+
+        if [[ "$connector_network" == "$vpc_name" ]]; then
+            log_info "Found orphaned VPC connector '$connector' in VPC '$vpc_name' - deleting..."
+            gcloud compute networks vpc-access connectors delete "$connector" \
+                --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || true
+
+            wait_for_vpc_connector_deletion "$connector" || return 1
+        fi
+    done
+
+    return 0
+}
+
+# =============================================================================
+# STORAGE BUCKET CLEANUP (Gap #39 from phoenix-rebuild.sh)
+# =============================================================================
+# Storage buckets must be emptied before terraform destroy (force_destroy=false)
+
+# Empty a storage bucket
+# Usage: empty_storage_bucket <bucket_name>
+empty_storage_bucket() {
+    local bucket="$1"
+
+    if gcloud storage ls "gs://${bucket}" &>/dev/null 2>&1; then
+        log_info "Emptying bucket: gs://${bucket}..."
+        gcloud storage rm -r "gs://${bucket}/**" 2>/dev/null || log_info "  Bucket ${bucket} already empty or does not exist"
+    fi
+}
+
+# Empty all known storage buckets (battle-tested from phoenix-rebuild.sh Gap #39)
+# Usage: empty_all_storage_buckets
+empty_all_storage_buckets() {
+    log_info "Emptying storage buckets before destroy (Gap #39)..."
+
+    # Known bucket patterns (adjust based on your terraform)
+    local buckets=(
+        "prod.tamshai.com"
+        "${RESOURCE_PREFIX}-finance-docs"
+        "${RESOURCE_PREFIX}-finance-docs-${PROJECT}"
+        "${RESOURCE_PREFIX}-logs"
+    )
+
+    for bucket in "${buckets[@]}"; do
+        empty_storage_bucket "$bucket"
+    done
+}
+
+# =============================================================================
+# SECRET CLEANUP (Gap #2, Issue #28 from phoenix-rebuild.sh)
+# =============================================================================
+# Secrets persist across terraform destroy, causing 409 conflicts on next apply.
+# Must delete secrets BEFORE terraform destroy to avoid IAM binding failures.
+
+# Delete a single secret
+# Usage: delete_secret <secret_name>
+delete_secret() {
+    local secret="$1"
+    gcloud secrets delete "$secret" --project="$PROJECT" --quiet 2>/dev/null && \
+        log_info "Deleted secret: $secret" || true
+}
+
+# Delete all known secrets (battle-tested from phoenix-rebuild.sh Gap #2 + Issue #28)
+# Usage: delete_persisted_secrets_prod
+delete_persisted_secrets_prod() {
+    log_info "Deleting persisted GCP secrets (Gap #2 + Issue #28)..."
+
+    # Secret names from configuration variables (if set) or defaults
+    local secrets=(
+        "${SECRET_KEYCLOAK_ADMIN_PASSWORD:-${RESOURCE_PREFIX}-keycloak-admin-password}"
+        "${SECRET_KEYCLOAK_DB_PASSWORD:-${RESOURCE_PREFIX}-keycloak-db-password}"
+        "${SECRET_DB_PASSWORD:-${RESOURCE_PREFIX}-db-password}"
+        "${SECRET_CLAUDE_API_KEY:-${RESOURCE_PREFIX}-anthropic-api-key}"
+        "${SECRET_MCP_GATEWAY_CLIENT:-${RESOURCE_PREFIX}-mcp-gateway-client-secret}"
+        "${SECRET_JWT:-${RESOURCE_PREFIX}-jwt-secret}"
+        "mcp-hr-service-client-secret"
+        "prod-user-password"
+        "${RESOURCE_PREFIX}-mongodb-uri"
+    )
+
+    for secret in "${secrets[@]}"; do
+        delete_secret "$secret"
+    done
+}
+
+# Delete VPC peering using services API (battle-tested in phoenix-rebuild.sh)
+# Issue #14: Service networking peerings MUST use the services API, not compute API
+# Usage: delete_vpc_peering_robust
+delete_vpc_peering_robust() {
+    local vpc_name="${NAME_PREFIX}-vpc"
+
+    log_info "Checking for VPC peering on: $vpc_name"
+
+    # Check if service networking peering exists (battle-tested pattern from prod)
+    if ! gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; then
+        log_info "No service networking VPC peering found"
+        return 0
+    fi
+
+    log_info "Found service networking VPC peering - deleting..."
+
+    # Use services API (phoenix-rebuild.sh proven pattern - Issue #14 fix)
+    if gcloud services vpc-peerings delete \
+        --network="$vpc_name" \
+        --service=servicenetworking.googleapis.com \
+        --project="$PROJECT" \
+        --quiet 2>/dev/null; then
+        log_info "VPC peering deletion initiated"
+    else
+        log_warn "VPC peering deletion command may have failed - checking status..."
+    fi
+
+    # Wait for peering deletion (async operation)
+    local wait_count=0
+    local max_wait=12  # 12 * 10s = 2 minutes max
+
+    while gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; do
+        wait_count=$((wait_count + 1))
+        if [[ $wait_count -ge $max_wait ]]; then
+            log_warn "VPC peering deletion timeout - may need manual cleanup"
+            return 1
+        fi
+        log_info "  Waiting for VPC peering deletion... [$wait_count/$max_wait]"
+        sleep 10
+    done
+
+    # Verify deletion
+    if ! gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; then
+        log_info "VPC peering deleted from GCP"
+        return 0
+    else
+        log_warn "VPC peering may still exist"
+        return 1
+    fi
+}
+
+# Delete VPC network with retry and dependency cleanup
+# Usage: delete_vpc_network_robust
+delete_vpc_network_robust() {
+    local vpc_name="${NAME_PREFIX}-vpc"
+    local max_wait=12  # 2 minutes max
+    local wait_count=0
+
+    log_info "Deleting VPC network: $vpc_name"
+
+    while [[ $wait_count -lt $max_wait ]]; do
+        # Check if VPC exists
+        local vpc_check
+        vpc_check=$(gcloud compute networks list \
+            --filter="name=$vpc_name" \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null || echo "ERROR")
+
+        if [[ "$vpc_check" == "ERROR" ]]; then
+            log_warn "GCP API error checking VPC - retrying..."
+            sleep 5
+            continue
+        fi
+
+        if [[ -z "$vpc_check" ]]; then
+            log_info "VPC $vpc_name confirmed deleted"
+            return 0
+        fi
+
+        wait_count=$((wait_count + 1))
+
+        # Force delete any remaining dependencies
+        log_info "Cleaning remaining dependencies (attempt $wait_count/$max_wait)..."
+
+        # Force delete remaining firewall rules
+        local remaining_fw
+        remaining_fw=$(gcloud compute firewall-rules list \
+            --filter="network:$vpc_name" \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null || true)
+        for fw in $remaining_fw; do
+            log_info "  Force-deleting firewall rule: $fw"
+            gcloud compute firewall-rules delete "$fw" --project="$PROJECT" --quiet 2>/dev/null || true
+        done
+
+        # Force delete remaining routes (except default)
+        local remaining_routes
+        remaining_routes=$(gcloud compute routes list \
+            --filter="network:$vpc_name" \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null | grep -v "^default-" || true)
+        for route in $remaining_routes; do
+            log_info "  Force-deleting route: $route"
+            gcloud compute routes delete "$route" --project="$PROJECT" --quiet 2>/dev/null || true
+        done
+
+        # Force delete remaining subnets
+        local remaining_subnets
+        remaining_subnets=$(gcloud compute networks subnets list \
+            --filter="network:$vpc_name" \
+            --format="value(name,region)" \
+            --project="$PROJECT" 2>/dev/null || true)
+        while IFS=$'\t' read -r subnet_name subnet_region; do
+            if [[ -n "$subnet_name" ]]; then
+                log_info "  Force-deleting subnet: $subnet_name"
+                gcloud compute networks subnets delete "$subnet_name" \
+                    --region="${subnet_region##*/}" --project="$PROJECT" --quiet 2>/dev/null || true
+            fi
+        done <<< "$remaining_subnets"
+
+        # Try to delete VPC
+        gcloud compute networks delete "$vpc_name" --project="$PROJECT" --quiet 2>/dev/null || {
+            log_info "  VPC deletion pending - waiting for dependencies to clear..."
+        }
+
+        sleep 10
+    done
+
+    log_error "VPC $vpc_name could not be deleted after $max_wait attempts"
+    log_error "Remaining dependencies:"
+    gcloud compute networks subnets list --filter="network:$vpc_name" --project="$PROJECT" 2>/dev/null || true
+    gcloud compute firewall-rules list --filter="network:$vpc_name" --project="$PROJECT" 2>/dev/null || true
+    return 1
+}
+
 # =============================================================================
 # COMPOSITE FUNCTIONS
 # =============================================================================
+#
+# IMPORTANT: Before calling these functions, set NAME_PREFIX and ENV_ID:
+#
+#   Primary environment:
+#     NAME_PREFIX="tamshai-prod"
+#     ENV_ID="primary"
+#     pre_destroy_cleanup ""  # Cloud SQL suffix is empty
+#
+#   Recovery environment:
+#     NAME_PREFIX="tamshai-prod-recovery-20260123"
+#     ENV_ID="recovery-20260123"
+#     pre_destroy_cleanup "-recovery-20260123"  # Cloud SQL suffix
 
 # Run all pre-destroy cleanup
-# Usage: pre_destroy_cleanup [name_suffix]
+# Usage: pre_destroy_cleanup [cloudsql_suffix]
+#   cloudsql_suffix: Optional suffix for Cloud SQL (e.g., "-recovery-20260123")
 pre_destroy_cleanup() {
-    local name_suffix="${1:-}"
+    local cloudsql_suffix="${1:-}"
 
-    log_info "=== Pre-Destroy Cleanup (suffix: '${name_suffix:-none}') ==="
-    delete_cloud_run_jobs "$name_suffix"
-    disable_cloudsql_deletion_protection "$name_suffix"
+    log_info "=== Pre-Destroy Cleanup (NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID) ==="
+    delete_cloud_run_jobs "$cloudsql_suffix"
+    disable_cloudsql_deletion_protection "$cloudsql_suffix"
     log_info "=== Pre-Destroy Cleanup Complete ==="
 }
 
 # Run all post-destroy cleanup
 # Usage: post_destroy_cleanup [name_suffix]
+#   name_suffix: Optional suffix for Cloud SQL/private IP (e.g., "-recovery-20260123")
 post_destroy_cleanup() {
     local name_suffix="${1:-}"
 
-    log_info "=== Post-Destroy Cleanup (suffix: '${name_suffix:-none}') ==="
+    log_info "=== Post-Destroy Cleanup (NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID) ==="
     delete_cloudsql_instance "$name_suffix"
     delete_cloud_run_jobs "$name_suffix"
-    delete_orphaned_private_ip "$name_suffix"
+    delete_orphaned_private_ip "$name_suffix"  # Same suffix pattern as Cloud SQL
     log_info "=== Post-Destroy Cleanup Complete ==="
 }
 
 # Full cleanup of all resources for an environment
 # Usage: full_environment_cleanup [name_suffix]
+#   name_suffix: Optional suffix for Cloud SQL/private IP (e.g., "-recovery-20260123")
 #   This is the nuclear option - deletes everything for a recovery stack
+#
+# NAMING PATTERNS (matches Terraform):
+#   Cloud Run: NO suffix - same names for prod and DR
+#   VPC/networking: NAME_PREFIX (suffix embedded) - "tamshai-prod-recovery-xxx-vpc"
+#   Cloud SQL: suffix at end - "tamshai-prod-postgres-recovery-xxx"
+#   Private IP: suffix at end - "tamshai-prod-private-ip-recovery-xxx"
 full_environment_cleanup() {
     local name_suffix="${1:-}"
 
-    log_info "=== Full Environment Cleanup (suffix: '${name_suffix:-none}') ==="
+    log_info "=== Full Environment Cleanup (NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID) ==="
     log_warn "This will delete ALL resources for this environment!"
 
     # Order matters - delete in dependency order
-    delete_cloudrun_services "$name_suffix"
+    # Cloud Run services have NO suffix (same for prod and DR)
+    delete_cloudrun_services
     delete_cloud_run_jobs "$name_suffix"
+
+    # Cloud SQL and private IP use suffix at end
     disable_cloudsql_deletion_protection "$name_suffix"
     delete_cloudsql_instance "$name_suffix"
-    delete_vpc_connector "$name_suffix"
-    delete_vpc_peering "$name_suffix"
-    delete_firewall_rules "$name_suffix"
-    delete_vpc_subnets "$name_suffix"
+
+    # VPC resources use NAME_PREFIX (suffix already embedded)
+    delete_vpc_connector_and_wait
+    delete_vpc_peering_robust
+    delete_cloud_nat
+    delete_cloud_router
+    delete_gce_instances_in_vpc
+    delete_firewall_rules
+    delete_vpc_routes
+    delete_vpc_subnets
     delete_orphaned_private_ip "$name_suffix"
-    delete_vpc_network "$name_suffix"
+    delete_vpc_network_robust
 
     log_info "=== Full Environment Cleanup Complete ==="
 }
 
-echo "[cleanup] Library loaded (RESOURCE_PREFIX=$RESOURCE_PREFIX)"
+# =============================================================================
+# LEFTOVER RESOURCE CLEANUP (for evacuate-region.sh and phoenix-rebuild.sh)
+# =============================================================================
+# Cleans up leftover resources from failed deployment attempts.
+# This is necessary because:
+#   1. Terraform may have created some resources before failing
+#   2. A fresh state file doesn't know about these orphaned resources
+#   3. Re-running terraform apply will fail with "already exists" errors
+#
+# Usage:
+#   # Set environment first
+#   export NAME_PREFIX="tamshai-prod-recovery-20260123"
+#   export ENV_ID="recovery-20260123"
+#   export GCP_REGION="us-west1"
+#   export GCP_PROJECT="my-project"
+#
+#   # Then call the function
+#   cleanup_leftover_resources "-recovery-20260123"
+# =============================================================================
+
+# Check if leftover resources exist (VPC is the primary indicator)
+# Usage: has_leftover_resources
+# Returns: 0 if leftover resources exist, 1 if clean
+has_leftover_resources() {
+    local vpc_name="${NAME_PREFIX}-vpc"
+
+    if gcloud compute networks describe "$vpc_name" --project="$PROJECT" &>/dev/null 2>&1; then
+        return 0  # Found leftover resources
+    fi
+    return 1  # Clean
+}
+
+# Clean up leftover resources from failed deployment attempts
+# This is the main function used by evacuate-region.sh and phoenix-rebuild.sh
+# Usage: cleanup_leftover_resources [name_suffix] [state_bucket] [state_prefix]
+#   name_suffix: Suffix for Cloud SQL/private IP (e.g., "-recovery-20260123")
+#   state_bucket: Optional GCS bucket for terraform state lock cleanup
+#   state_prefix: Optional GCS prefix for terraform state lock cleanup
+cleanup_leftover_resources() {
+    local name_suffix="${1:-}"
+    local state_bucket="${2:-}"
+    local state_prefix="${3:-}"
+
+    log_step "Checking for leftover resources from previous attempts..."
+    log_info "NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID"
+
+    if ! has_leftover_resources; then
+        log_info "No leftover VPC found - environment is clean"
+
+        # Still check for stale terraform state locks
+        if [[ -n "$state_bucket" ]] && [[ -n "$state_prefix" ]]; then
+            cleanup_terraform_state_lock "$state_bucket" "$state_prefix"
+        fi
+        return 0
+    fi
+
+    local vpc_name="${NAME_PREFIX}-vpc"
+    log_warn "Found leftover VPC: $vpc_name"
+    log_info "Cleaning up leftover resources from failed deployment attempt..."
+
+    # Step 1: Delete Cloud Run services (release DB connections)
+    # NOTE: Cloud Run services have NO suffix
+    log_step "Deleting leftover Cloud Run services..."
+    delete_cloudrun_services
+
+    # Step 2: Delete VPC Access Connector (takes 2-3 minutes, MUST be before subnet)
+    log_step "Deleting leftover VPC connectors..."
+    delete_vpc_connector_and_wait || {
+        log_error "VPC connector deletion failed - cannot proceed"
+        return 1
+    }
+
+    # Step 3: Delete Cloud SQL instance
+    log_step "Deleting leftover Cloud SQL instances..."
+    disable_cloudsql_deletion_protection "$name_suffix"
+
+    local sql_instance="${RESOURCE_PREFIX}-postgres${name_suffix}"
+    if gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; then
+        log_info "Deleting Cloud SQL: $sql_instance..."
+        gcloud sql instances delete "$sql_instance" --project="$PROJECT" --quiet 2>/dev/null || true
+
+        # Wait for Cloud SQL deletion
+        local sql_wait=0
+        local sql_max_wait=18  # 3 minutes max
+        while gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; do
+            sql_wait=$((sql_wait + 1))
+            if [[ $sql_wait -ge $sql_max_wait ]]; then
+                log_warn "Cloud SQL deletion timeout - continuing anyway"
+                break
+            fi
+            log_info "  Waiting for Cloud SQL deletion... [$sql_wait/$sql_max_wait]"
+            sleep 10
+        done
+    fi
+
+    # Step 4: Delete VPC peering (must be before private IP deletion)
+    log_step "Deleting leftover VPC peering..."
+    delete_vpc_peering_robust || log_warn "VPC peering deletion may have failed"
+
+    # Step 5: Delete private IP addresses
+    log_step "Deleting leftover private IP addresses..."
+    delete_orphaned_private_ip "$name_suffix"
+
+    # Step 6: Delete Cloud NAT
+    log_step "Deleting leftover Cloud NAT..."
+    delete_cloud_nat
+
+    # Step 7: Delete Cloud Router
+    log_step "Deleting leftover Cloud Router..."
+    delete_cloud_router
+
+    # Step 8: Delete firewall rules
+    log_step "Deleting leftover firewall rules..."
+    delete_firewall_rules
+
+    # Step 8.5: Delete GCE instances using the target subnet
+    log_step "Deleting GCE instances using target VPC subnet..."
+    delete_gce_instances_in_vpc
+
+    # Step 9: Delete subnets
+    log_step "Deleting leftover subnets..."
+    delete_vpc_subnets
+
+    # Step 10: Delete routes (can block VPC deletion)
+    log_step "Deleting leftover routes..."
+    delete_vpc_routes
+
+    # Step 11: Delete VPC network (last - everything else must be deleted first)
+    log_step "Deleting leftover VPC network..."
+    delete_vpc_network_robust || {
+        log_error "VPC deletion failed"
+        log_error "Cannot proceed with deployment while leftover VPC exists"
+        log_error "Manual cleanup may be required, then re-run this script"
+        return 1
+    }
+
+    log_success "Leftover resources cleaned up"
+
+    # Clean up stale terraform state locks
+    if [[ -n "$state_bucket" ]] && [[ -n "$state_prefix" ]]; then
+        cleanup_terraform_state_lock "$state_bucket" "$state_prefix"
+    fi
+
+    return 0
+}
+
+# Clean up stale terraform state lock
+# Usage: cleanup_terraform_state_lock <bucket> <prefix>
+cleanup_terraform_state_lock() {
+    local bucket="$1"
+    local prefix="$2"
+
+    log_step "Checking for stale terraform state locks..."
+    local lock_file="gs://${bucket}/${prefix}/default.tflock"
+
+    if gcloud storage cat "$lock_file" &>/dev/null 2>&1; then
+        log_warn "Found stale lock file - removing..."
+        gcloud storage rm "$lock_file" 2>/dev/null || true
+    fi
+}
+
+echo "[cleanup] Library loaded (RESOURCE_PREFIX=$RESOURCE_PREFIX, NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID)"
