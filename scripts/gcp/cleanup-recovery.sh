@@ -107,7 +107,7 @@ list_recovery_stacks() {
 
     # List all prefixes under gcp/recovery/
     local stacks
-    stacks=$(gsutil ls "gs://${STATE_BUCKET}/gcp/recovery/" 2>/dev/null | \
+    stacks=$(gcloud storage ls "gs://${STATE_BUCKET}/gcp/recovery/" 2>/dev/null | \
         sed 's|gs://'"${STATE_BUCKET}"'/gcp/recovery/||g' | \
         sed 's|/$||g' | \
         grep -v '^$' || true)
@@ -150,7 +150,7 @@ preflight_checks() {
 
     # Check required tools
     log_step "Checking required tools..."
-    for tool in gcloud terraform gsutil; do
+    for tool in gcloud terraform; do
         if ! command -v $tool &>/dev/null; then
             log_error "Missing required tool: $tool"
             ((errors++))
@@ -186,7 +186,7 @@ preflight_checks() {
 
     # Check if state exists
     log_step "Checking if recovery state exists..."
-    if ! gsutil ls "gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/" &>/dev/null; then
+    if ! gcloud storage ls "gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/" &>/dev/null; then
         log_error "No Terraform state found for ENV_ID: $ENV_ID"
         log_info "Run './cleanup-recovery.sh --list' to see available stacks"
         exit 1
@@ -252,7 +252,9 @@ terraform_destroy() {
         -var="region=${RECOVERY_REGION}"
         -var="zone=${RECOVERY_REGION}-b"
         -var="env_id=${ENV_ID}"
+        -var="recovery_mode=true"
         -var="phoenix_mode=true"
+        -var="keycloak_domain=auth-dr.tamshai.com"
         -var="mongodb_atlas_uri=mongodb://placeholder:27017"
         -var="claude_api_key=placeholder"
     )
@@ -283,6 +285,18 @@ terraform_destroy() {
         exit 1
     fi
 
+    # Disable Cloud SQL deletion protection before destroy
+    local postgres_instance="tamshai-prod-postgres-${ENV_ID}"
+    log_step "Disabling Cloud SQL deletion protection for ${postgres_instance}..."
+    if gcloud sql instances describe "$postgres_instance" --project="$PROJECT_ID" &>/dev/null; then
+        gcloud sql instances patch "$postgres_instance" \
+            --no-deletion-protection \
+            --project="$PROJECT_ID" \
+            --quiet 2>/dev/null || log_warn "Could not disable deletion protection (may already be disabled)"
+    else
+        log_info "Cloud SQL instance not found (may already be deleted)"
+    fi
+
     log_step "Destroying recovery stack..."
     terraform destroy -auto-approve "${tf_args[@]}"
 
@@ -304,7 +318,7 @@ cleanup_state() {
     fi
 
     if confirm "Delete Terraform state from gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/?"; then
-        gsutil -m rm -r "gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/" 2>/dev/null || true
+        gcloud storage rm -r "gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/" 2>/dev/null || true
         log_success "Terraform state removed"
     else
         log_warn "Terraform state retained (manual cleanup required)"
