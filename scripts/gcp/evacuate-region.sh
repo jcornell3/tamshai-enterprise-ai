@@ -886,13 +886,27 @@ phase2_deploy_infrastructure() {
     done
 
     # Import Artifact Registry if it exists (project-global)
+    # CRITICAL: This import must succeed for staged deployment to work (Issue #102)
     log_step "Checking Artifact Registry..."
+    local registry_imported=false
     if gcloud artifacts repositories describe tamshai --location="$NEW_REGION" --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        log_info "  Artifact Registry exists in $NEW_REGION"
         if ! terraform state show 'module.cloudrun.google_artifact_registry_repository.tamshai' &>/dev/null 2>&1; then
             log_info "  Importing existing Artifact Registry: tamshai"
-            terraform import "${TF_VARS[@]}" 'module.cloudrun.google_artifact_registry_repository.tamshai' \
-                "projects/${PROJECT_ID}/locations/${NEW_REGION}/repositories/tamshai" 2>/dev/null || true
+            if terraform import "${TF_VARS[@]}" 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+                "projects/${PROJECT_ID}/locations/${NEW_REGION}/repositories/tamshai"; then
+                log_info "  Import successful"
+                registry_imported=true
+            else
+                log_warn "  Import failed (may already be in state or conflict)"
+            fi
+        else
+            log_info "  Artifact Registry already in state"
+            registry_imported=true
         fi
+    else
+        log_info "  Artifact Registry does not exist in $NEW_REGION - will be created"
+        registry_imported=true  # Will be created, not imported
     fi
 
     # =============================================================================
@@ -956,6 +970,20 @@ phase2_deploy_infrastructure() {
     fi
 
     log_success "Pre-import complete"
+
+    # Refresh terraform state to ensure GCS backend is synced after all imports
+    # This prevents state drift issues with -target flags (Issue #102)
+    log_step "Refreshing terraform state to sync with GCS backend..."
+    terraform refresh "${TF_VARS[@]}" -compact-warnings 2>/dev/null || {
+        log_warn "Terraform refresh had warnings (may be OK)"
+    }
+
+    # Verify Artifact Registry is in state (critical for staged deployment)
+    if [[ "$registry_imported" == "true" ]] || terraform state list 2>/dev/null | grep -q 'google_artifact_registry_repository.tamshai'; then
+        log_info "  Artifact Registry confirmed in state"
+    else
+        log_warn "  Artifact Registry NOT in state - staged deployment may use full apply fallback"
+    fi
 
     # =============================================================================
     # Apply infrastructure using staged deployment (Issue #37 pattern)

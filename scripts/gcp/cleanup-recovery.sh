@@ -53,6 +53,8 @@ if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
     source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null || true
 fi
 
+# Note: cleanup.sh will be sourced in terraform_destroy after GCP_REGION is set
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -327,28 +329,40 @@ terraform_destroy() {
         exit 1
     fi
 
-    # Disable Cloud SQL deletion protection before destroy
-    local postgres_instance="tamshai-prod-postgres-${ENV_ID}"
-    log_step "Disabling Cloud SQL deletion protection for ${postgres_instance}..."
-    if gcloud sql instances describe "$postgres_instance" --project="$PROJECT_ID" &>/dev/null; then
-        gcloud sql instances patch "$postgres_instance" \
-            --no-deletion-protection \
-            --project="$PROJECT_ID" \
-            --quiet 2>/dev/null || log_warn "Could not disable deletion protection (may already be disabled)"
+    # Source cleanup library (now that GCP_REGION is set)
+    export GCP_REGION="${RECOVERY_REGION}"
+    export GCP_PROJECT="${PROJECT_ID}"
+    export NAME_PREFIX="tamshai-prod-${ENV_ID}"
+    export RESOURCE_PREFIX="tamshai-prod"
+    export ENV_ID="${ENV_ID}"
 
-        # Wait for the async operation to complete (Cloud SQL operations are slow)
-        log_info "Waiting for deletion protection to be disabled..."
-        sleep 10
-
-        # Refresh Terraform state to pick up the deletion protection change
-        # Using apply -refresh-only which is more robust than terraform refresh
-        log_step "Refreshing Terraform state (Cloud SQL instance)..."
-        terraform apply -refresh-only -auto-approve \
-            -target=module.database.google_sql_database_instance.postgres \
-            "${TF_ARGS[@]}" || log_warn "State refresh had warnings (continuing anyway)"
-    else
-        log_info "Cloud SQL instance not found (may already be deleted)"
+    if [ -f "$SCRIPT_DIR/lib/cleanup.sh" ]; then
+        source "$SCRIPT_DIR/lib/cleanup.sh" 2>/dev/null || true
+        log_info "Cleanup library loaded"
     fi
+
+    # Pre-destroy cleanup using library functions (if available)
+    local name_suffix="-${ENV_ID}"
+    if type pre_destroy_cleanup &>/dev/null; then
+        log_step "Running pre-destroy cleanup (using library)..."
+        pre_destroy_cleanup "$name_suffix" "false" || log_warn "Pre-destroy cleanup had warnings"
+    else
+        # Fallback: manual Cloud SQL deletion protection disable
+        local postgres_instance="tamshai-prod-postgres${name_suffix}"
+        log_step "Disabling Cloud SQL deletion protection for ${postgres_instance}..."
+        if gcloud sql instances describe "$postgres_instance" --project="$PROJECT_ID" &>/dev/null; then
+            gcloud sql instances patch "$postgres_instance" \
+                --no-deletion-protection \
+                --project="$PROJECT_ID" \
+                --quiet 2>/dev/null || log_warn "Could not disable deletion protection (may already be disabled)"
+        else
+            log_info "Cloud SQL instance not found (may already be deleted)"
+        fi
+    fi
+
+    # Refresh Terraform state to pick up the deletion protection change
+    log_step "Refreshing Terraform state..."
+    terraform apply -refresh-only -auto-approve "${TF_ARGS[@]}" || log_warn "State refresh had warnings (continuing anyway)"
 
     log_step "Destroying recovery stack..."
     if ! terraform destroy -auto-approve "${TF_ARGS[@]}"; then
@@ -397,23 +411,56 @@ terraform_destroy() {
 # =============================================================================
 
 cleanup_networking_resources() {
-    local private_ip_name="tamshai-prod-private-ip-${ENV_ID}"
+    local name_suffix="-${ENV_ID}"
 
-    # Remove service networking connection from state (it may still be active)
-    log_step "Removing service networking resources from Terraform state..."
-    terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
-    terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+    # Use library functions if available (preferred - has Phoenix patterns)
+    if type full_environment_cleanup &>/dev/null; then
+        log_step "Using cleanup library for networking cleanup..."
 
-    # Delete global address directly (blocks VPC deletion)
-    log_step "Deleting global address directly..."
-    if gcloud compute addresses describe "$private_ip_name" --global --project="$PROJECT_ID" &>/dev/null; then
-        gcloud compute addresses delete "$private_ip_name" \
-            --global \
-            --project="$PROJECT_ID" \
-            --quiet 2>/dev/null || log_warn "Could not delete global address (may be auto-cleaning)"
+        # Remove problematic state entries first
+        if type remove_all_problematic_state &>/dev/null; then
+            remove_all_problematic_state
+        fi
+
+        # Delete VPC peering (must be before private IP)
+        if type delete_vpc_peering_robust &>/dev/null; then
+            delete_vpc_peering_robust || log_warn "VPC peering deletion may have failed"
+        fi
+
+        # Delete orphaned private IP
+        if type delete_orphaned_private_ip &>/dev/null; then
+            delete_orphaned_private_ip "$name_suffix"
+        fi
+
+        # Delete VPC connector and wait
+        if type delete_vpc_connector_and_wait &>/dev/null; then
+            delete_vpc_connector_and_wait || log_warn "VPC connector deletion may have failed"
+        fi
+
+        # Delete VPC network with retry
+        if type delete_vpc_network_robust &>/dev/null; then
+            delete_vpc_network_robust || log_warn "VPC deletion may need manual cleanup"
+        fi
+    else
+        # Fallback: inline cleanup (original logic)
+        local private_ip_name="tamshai-prod-private-ip${name_suffix}"
+
+        # Remove service networking connection from state
+        log_step "Removing service networking resources from Terraform state..."
+        terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+        terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+
+        # Delete global address directly
+        log_step "Deleting global address directly..."
+        if gcloud compute addresses describe "$private_ip_name" --global --project="$PROJECT_ID" &>/dev/null; then
+            gcloud compute addresses delete "$private_ip_name" \
+                --global \
+                --project="$PROJECT_ID" \
+                --quiet 2>/dev/null || log_warn "Could not delete global address"
+        fi
     fi
 
-    # Retry destroy for remaining networking resources
+    # Retry destroy for remaining resources
     log_step "Retrying terraform destroy for remaining resources..."
     local remaining=$(terraform state list 2>/dev/null | wc -l)
     if [ "$remaining" -gt 0 ]; then

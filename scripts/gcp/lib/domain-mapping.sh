@@ -290,9 +290,11 @@ staged_terraform_deploy() {
     log_info "Stage 2: Wait for SSL certificate on $keycloak_domain"
     log_info "Stage 3: Deploy mcp-gateway (requires Keycloak JWKS)"
 
-    # Pre-stage: Re-import Artifact Registry if it exists (Issue #102)
-    # This is needed because -target doesn't include pre-imported resources in the plan
-    log_step "Pre-stage: Ensuring Artifact Registry is in state..."
+    # Pre-stage: Verify state is ready for staged deployment (Issue #102)
+    # IMPORTANT: Do NOT import here - the calling script (evacuate-region.sh) handles imports.
+    # Importing twice with GCS backend + -target flags causes state sync issues.
+    # We only verify existing resources are in state and refresh if needed.
+    log_step "Pre-stage: Verifying terraform state is ready..."
     local project_id region
     for arg in "${tf_args[@]}"; do
         case "$arg" in
@@ -300,13 +302,42 @@ staged_terraform_deploy() {
             -var=region=*) region="${arg#-var=region=}" ;;
         esac
     done
+    log_info "  Extracted: project_id=$project_id, region=$region"
+
+    # Refresh state to ensure GCS backend is synced
+    log_info "  Refreshing terraform state..."
+    terraform refresh "${tf_args[@]}" -compact-warnings 2>/dev/null || true
 
     if [[ -n "$project_id" ]] && [[ -n "$region" ]]; then
+        # Check if Artifact Registry exists in GCP
         if gcloud artifacts repositories describe tamshai --location="$region" --project="$project_id" &>/dev/null 2>&1; then
-            log_info "  Artifact Registry exists - ensuring it's in state"
-            terraform import "${tf_args[@]}" 'module.cloudrun.google_artifact_registry_repository.tamshai' \
-                "projects/${project_id}/locations/${region}/repositories/tamshai" 2>/dev/null || true
+            log_info "  Artifact Registry exists in GCP"
+
+            # Check if it's in terraform state after refresh
+            if terraform state list 2>/dev/null | grep -q 'google_artifact_registry_repository.tamshai'; then
+                log_info "  Artifact Registry is in terraform state - proceeding with staged deployment"
+            else
+                log_warn "  Artifact Registry NOT in state despite GCP existing"
+                log_warn "  This may cause a 409 error. Falling back to full terraform apply."
+                log_info "  Running: terraform apply -auto-approve (no -target flags)"
+                if terraform apply -auto-approve "${tf_args[@]}"; then
+                    log_success "Full apply complete"
+                    # After full apply, proceed with SSL wait and mcp-gateway
+                    log_step "Waiting for SSL certificate on ${keycloak_domain}..."
+                    wait_for_ssl_certificate "$keycloak_domain" "/auth/realms/${keycloak_realm}/.well-known/openid-configuration" 900 || true
+                    log_success "=== Deployment Complete (via full apply fallback) ==="
+                    return 0
+                else
+                    log_error "Full terraform apply failed"
+                    return 1
+                fi
+            fi
+        else
+            log_info "  Artifact Registry does not exist in GCP - will be created by Stage 1"
         fi
+    else
+        log_warn "  Could not extract project_id/region from terraform args"
+        log_warn "  tf_args: ${tf_args[*]}"
     fi
 
     # Stage 1: Deploy everything except mcp-gateway
