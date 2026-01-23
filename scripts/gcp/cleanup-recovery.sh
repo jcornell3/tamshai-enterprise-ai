@@ -324,16 +324,20 @@ dns_guidance() {
     fi
 
     echo ""
-    log_info "If you pointed DR CNAMEs to recovery services, revert them now:"
+    log_info "If you pointed DR CNAMEs to recovery services, you can now:"
     echo ""
-    echo "  Cloudflare DNS Updates (revert to placeholder):"
-    echo "  ─────────────────────────────────────────────────"
-    echo "  auth-dr.tamshai.com  → ghs.googlehosted.com (placeholder)"
-    echo "  api-dr.tamshai.com   → ghs.googlehosted.com (placeholder)"
-    echo "  app-dr.tamshai.com   → ghs.googlehosted.com (placeholder)"
-    echo "  prod-dr.tamshai.com  → c.storage.googleapis.com (placeholder)"
+    echo "  Option 1: Delete DR DNS records (recommended if not needed)"
+    echo "  ─────────────────────────────────────────────────────────────"
+    echo "  Delete: auth-dr.tamshai.com"
+    echo "  Delete: api-dr.tamshai.com"
+    echo "  Delete: app-dr.tamshai.com"
     echo ""
-    log_info "The DR CNAMEs should remain pointing to placeholders until next evacuation."
+    echo "  Option 2: Leave pointing to recovery URLs (for quick failback)"
+    echo "  ────────────────────────────────────────────────────────────────"
+    echo "  Keep current values - they'll fail gracefully until next evacuation"
+    echo ""
+    log_info "Note: Production uses direct Cloud Run URLs (e.g., mcp-gateway-xxx.a.run.app),"
+    log_info "NOT ghs.googlehosted.com. DR domains should follow the same pattern."
     echo ""
 }
 

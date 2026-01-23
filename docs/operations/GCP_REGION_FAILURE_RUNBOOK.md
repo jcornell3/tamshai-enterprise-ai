@@ -246,16 +246,19 @@ curl -v https://api.tamshai.com/health 2>&1 | grep "Connected to"
 ./scripts/gcp/cleanup-recovery.sh <ENV_ID> --keep-dns   # Don't show DNS guidance
 ```
 
-### Step 5: Reset DR CNAMEs
+### Step 5: Clean Up DR CNAMEs
 
-After cleanup, ensure DR CNAMEs point to placeholders (ready for next evacuation):
+After cleanup, you have two options for DR CNAMEs:
 
-| CNAME | Should Point To |
-|-------|-----------------|
-| `auth-dr.tamshai.com` | `ghs.googlehosted.com` |
-| `api-dr.tamshai.com` | `ghs.googlehosted.com` |
-| `app-dr.tamshai.com` | `ghs.googlehosted.com` |
-| `prod-dr.tamshai.com` | `c.storage.googleapis.com` |
+**Option 1: Delete DR DNS records** (recommended if not planning immediate re-evacuation)
+- Delete `auth-dr.tamshai.com`
+- Delete `api-dr.tamshai.com`
+- Delete `app-dr.tamshai.com`
+
+**Option 2: Leave as-is** (records will fail gracefully until next evacuation)
+
+> **Important**: Production uses direct Cloud Run URLs (e.g., `mcp-gateway-fn44nd7wba-uc.a.run.app`),
+> NOT `ghs.googlehosted.com`. The DR domains should follow the same pattern during evacuation.
 
 ---
 
