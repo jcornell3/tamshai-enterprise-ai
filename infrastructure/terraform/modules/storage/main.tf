@@ -5,7 +5,7 @@
 #checkov:skip=CKV_GCP_62:Logs bucket does not log itself (recursive logging not recommended)
 #checkov:skip=CKV_GCP_78:Versioning not needed for logs bucket (lifecycle rule deletes after 90 days)
 resource "google_storage_bucket" "logs" {
-  name     = "tamshai-${var.environment}-logs-${var.project_id}"
+  name     = "tamshai-${var.environment}-logs-${var.project_id}${var.name_suffix}"
   location = var.region
   project  = var.project_id
 
@@ -30,7 +30,7 @@ resource "google_storage_bucket" "logs" {
 }
 
 resource "google_storage_bucket" "finance_docs" {
-  name     = "tamshai-${var.environment}-finance-docs-${var.project_id}"
+  name     = "tamshai-${var.environment}-finance-docs-${var.project_id}${var.name_suffix}"
   location = var.region
   project  = var.project_id
 
@@ -66,7 +66,7 @@ resource "google_storage_bucket" "finance_docs" {
 }
 
 resource "google_storage_bucket" "public_docs" {
-  name     = "tamshai-${var.environment}-public-docs-${var.project_id}"
+  name     = "tamshai-${var.environment}-public-docs-${var.project_id}${var.name_suffix}"
   location = var.region
   project  = var.project_id
 
