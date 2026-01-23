@@ -1101,11 +1101,14 @@ When us-central1 recovers:
   - [x] `CF_API_TOKEN` - API token with DNS edit permissions
   - [x] `CF_ZONE_ID` - Zone ID for tamshai.com
 - [x] Create `scripts/gcp/cleanup-recovery.sh` for DR stack destruction (DONE)
-- [x] Create DR CNAME records in Cloudflare (DONE)
-  - [x] `auth-dr.tamshai.com` → `ghs.googlehosted.com`
-  - [x] `api-dr.tamshai.com` → `ghs.googlehosted.com`
-  - [x] `app-dr.tamshai.com` → `ghs.googlehosted.com`
-  - [x] `prod-dr.tamshai.com` → `c.storage.googleapis.com`
+- [x] DR CNAME strategy documented (matches production pattern)
+  - `api-dr.tamshai.com` → Direct Cloud Run URL (e.g., `mcp-gateway-xxx-uw.a.run.app`)
+    - Matches production: `api.tamshai.com` → `mcp-gateway-fn44nd7wba-uc.a.run.app`
+  - `auth-dr.tamshai.com` → `ghs.googlehosted.com` (requires domain mapping in recovery region)
+    - Matches production: `auth.tamshai.com` → `ghs.googlehosted.com`
+  - `app-dr.tamshai.com` → `ghs.googlehosted.com` (requires domain mapping in recovery region)
+    - Matches production: `app.tamshai.com` → `ghs.googlehosted.com`
+  - **Note**: evacuate-region.sh must create domain mappings for auth-dr and app-dr in the recovery region
 - [ ] Update on-call runbook with evacuation procedure link
 - [ ] Brief on-call team on evacuation script location and usage
 - [ ] Schedule quarterly DR drill
@@ -1222,19 +1225,19 @@ After the primary region recovers, you need to:
 
 ### DNS Reversion After Failback
 
-After cleanup, revert DR CNAMEs to their placeholder values:
+After cleanup, you have two options for DR CNAMEs:
 
-| CNAME | Revert To | Reason |
-|-------|-----------|--------|
-| `auth-dr.tamshai.com` | `ghs.googlehosted.com` | Placeholder for next evacuation |
-| `api-dr.tamshai.com` | `ghs.googlehosted.com` | Placeholder for next evacuation |
-| `app-dr.tamshai.com` | `ghs.googlehosted.com` | Placeholder for next evacuation |
-| `prod-dr.tamshai.com` | `c.storage.googleapis.com` | Placeholder for next evacuation |
+**Option 1: Delete DR DNS records** (recommended)
+- Delete `auth-dr.tamshai.com`, `api-dr.tamshai.com`, `app-dr.tamshai.com`
+- Cleaner approach, no stale records
 
-**Note**: The `-dr` CNAMEs should always exist pointing to placeholders. This allows:
-- Domain verification in Google Search Console (one-time setup)
-- Instant remapping during future evacuations
-- No "domain not found" errors if someone accidentally visits DR URLs
+**Option 2: Leave pointing to recovery URLs** (for quick failback)
+- Records will fail gracefully until next evacuation
+- Useful if planning frequent DR testing
+
+> **Important**: Production uses direct Cloud Run URLs (e.g., `mcp-gateway-fn44nd7wba-uc.a.run.app`),
+> NOT `ghs.googlehosted.com`. The `ghs.googlehosted.com` approach requires Cloud Run domain mappings
+> which are region-bound and add unnecessary complexity. DR domains should use direct Cloud Run URLs.
 
 ---
 

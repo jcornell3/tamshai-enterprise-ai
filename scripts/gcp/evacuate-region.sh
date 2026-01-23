@@ -979,6 +979,8 @@ phase2_deploy_infrastructure() {
     log_step "Pre-importing existing global resources (service accounts, secrets)..."
 
     # Common vars for all terraform commands
+    # NOTE: keycloak_domain must be auth-dr.tamshai.com for recovery mode
+    # because domain mappings are region-bound (auth.tamshai.com is bound to us-central1)
     local TF_VARS=(
         -var="region=$NEW_REGION"
         -var="zone=$NEW_ZONE"
@@ -986,6 +988,7 @@ phase2_deploy_infrastructure() {
         -var="project_id=$PROJECT_ID"
         -var="recovery_mode=true"
         -var="phoenix_mode=true"
+        -var="keycloak_domain=auth-dr.tamshai.com"
     )
 
     # Import service accounts if they exist
@@ -1125,7 +1128,8 @@ phase2_deploy_infrastructure() {
         -var="env_id=$ENV_ID" \
         -var="project_id=$PROJECT_ID" \
         -var="recovery_mode=true" \
-        -var="phoenix_mode=true" 2>&1) || apply_exit_code=$?
+        -var="phoenix_mode=true" \
+        -var="keycloak_domain=auth-dr.tamshai.com" 2>&1) || apply_exit_code=$?
 
     if [ $apply_exit_code -ne 0 ]; then
         # Check if this is a 409 "already exists" error (Issue #11 pattern)
@@ -1165,7 +1169,8 @@ phase2_deploy_infrastructure() {
                 -var="env_id=$ENV_ID" \
                 -var="project_id=$PROJECT_ID" \
                 -var="recovery_mode=true" \
-                -var="phoenix_mode=true" || {
+                -var="phoenix_mode=true" \
+                -var="keycloak_domain=auth-dr.tamshai.com" || {
                 log_error "Terraform apply failed even after import recovery"
                 log_error "Original error output:"
                 echo "$apply_output" | tail -100
@@ -1180,6 +1185,47 @@ phase2_deploy_infrastructure() {
     fi
 
     log_success "Infrastructure deployed to $NEW_REGION"
+
+    # ==========================================================================
+    # Wait for SSL certificate on auth-dr.tamshai.com (Phoenix Issue #37 pattern)
+    # Domain mappings use ghs.googlehosted.com and require SSL certificate
+    # provisioning which takes 10-15 minutes.
+    # ==========================================================================
+    log_step "Waiting for SSL certificate on auth-dr.tamshai.com (Issue #37 pattern)..."
+    log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
+
+    # Use domain-mapping.sh library function if available
+    if type wait_for_ssl_certificate &>/dev/null; then
+        # Set required environment variables for the library
+        export GCP_REGION="$NEW_REGION"
+        export GCP_PROJECT="$PROJECT_ID"
+
+        if wait_for_ssl_certificate "auth-dr.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration" 900; then
+            log_success "SSL certificate deployed for auth-dr.tamshai.com"
+        else
+            log_warn "SSL certificate not ready yet - services may have startup issues"
+            log_warn "Check: https://console.cloud.google.com/run/domains?project=$PROJECT_ID"
+        fi
+    else
+        # Fallback: Simple polling loop
+        local ssl_timeout=900  # 15 minutes
+        local ssl_elapsed=0
+        local ssl_interval=30
+
+        while [ $ssl_elapsed -lt $ssl_timeout ]; do
+            if curl -sf "https://auth-dr.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+                log_success "SSL certificate deployed for auth-dr.tamshai.com"
+                break
+            fi
+            log_info "  Waiting for SSL... ($((ssl_elapsed / 60))m elapsed)"
+            sleep $ssl_interval
+            ssl_elapsed=$((ssl_elapsed + ssl_interval))
+        done
+
+        if [ $ssl_elapsed -ge $ssl_timeout ]; then
+            log_warn "SSL certificate not ready after 15 minutes - continuing anyway"
+        fi
+    fi
 }
 
 # =============================================================================
