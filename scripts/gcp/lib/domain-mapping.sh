@@ -290,6 +290,25 @@ staged_terraform_deploy() {
     log_info "Stage 2: Wait for SSL certificate on $keycloak_domain"
     log_info "Stage 3: Deploy mcp-gateway (requires Keycloak JWKS)"
 
+    # Pre-stage: Re-import Artifact Registry if it exists (Issue #102)
+    # This is needed because -target doesn't include pre-imported resources in the plan
+    log_step "Pre-stage: Ensuring Artifact Registry is in state..."
+    local project_id region
+    for arg in "${tf_args[@]}"; do
+        case "$arg" in
+            -var=project_id=*) project_id="${arg#-var=project_id=}" ;;
+            -var=region=*) region="${arg#-var=region=}" ;;
+        esac
+    done
+
+    if [[ -n "$project_id" ]] && [[ -n "$region" ]]; then
+        if gcloud artifacts repositories describe tamshai --location="$region" --project="$project_id" &>/dev/null 2>&1; then
+            log_info "  Artifact Registry exists - ensuring it's in state"
+            terraform import "${tf_args[@]}" 'module.cloudrun.google_artifact_registry_repository.tamshai' \
+                "projects/${project_id}/locations/${region}/repositories/tamshai" 2>/dev/null || true
+        fi
+    fi
+
     # Stage 1: Deploy everything except mcp-gateway
     log_step "Stage 1: Deploying infrastructure (except mcp-gateway)..."
     local stage1_targets
