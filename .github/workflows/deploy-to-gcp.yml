@@ -34,6 +34,9 @@ concurrency:
 
 env:
   GCP_REGION: ${{ vars.GCP_REGION }}
+  GCP_ZONE: ${{ vars.GCP_ZONE }}
+  GCP_POSTGRES_INSTANCE: ${{ vars.GCP_POSTGRES_INSTANCE }}
+  GCP_VPC_CONNECTOR: ${{ vars.GCP_VPC_CONNECTOR }}
   AR_REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/tamshai
 
 jobs:
@@ -90,7 +93,7 @@ jobs:
             --format="value(status.url)" 2>/dev/null || echo "")
 
           # Cloud SQL private IP
-          POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres \
+          POSTGRES_IP=$(gcloud sql instances describe ${{ env.GCP_POSTGRES_INSTANCE }} \
             --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
 
           # Use auth.tamshai.com as the canonical Keycloak URL for token validation
@@ -264,11 +267,11 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --timeout=300 \
-            --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres \
-            --vpc-connector=tamshai-prod-connector \
+            --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_POSTGRES_INSTANCE }} \
+            --vpc-connector=${{ env.GCP_VPC_CONNECTOR }} \
             --vpc-egress=private-ranges-only \
             --set-secrets=POSTGRES_PASSWORD=tamshai-prod-db-password:latest,MONGODB_URI=tamshai-prod-mongodb-uri:latest \
-            --set-env-vars="NODE_ENV=production,POSTGRES_HOST=/cloudsql/${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:tamshai-prod-postgres,POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
+            --set-env-vars="NODE_ENV=production,POSTGRES_HOST=/cloudsql/${{ secrets.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_POSTGRES_INSTANCE }},POSTGRES_PORT=5432,POSTGRES_DB=${{ matrix.db_name }},POSTGRES_USER=tamshai"
 
   deploy-mcp-mongodb:
     needs: detect-changes
@@ -325,7 +328,7 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --timeout=300 \
-            --vpc-connector=tamshai-prod-connector \
+            --vpc-connector=${{ env.GCP_VPC_CONNECTOR }} \
             --vpc-egress=all-traffic \
             --set-secrets=MONGODB_URI=tamshai-prod-mongodb-uri:latest \
             --set-env-vars="NODE_ENV=production,MONGODB_DB=${{ matrix.db_name }}${{ matrix.backend && format(',SUPPORT_DATA_BACKEND={0}', matrix.backend) || '' }}"
@@ -383,7 +386,7 @@ jobs:
           # Validate IP format (x.x.x.x) or query Cloud SQL directly
           if ! [[ "$POSTGRES_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Discovery unavailable or invalid, querying Cloud SQL directly..."
-            POSTGRES_IP=$(gcloud sql instances describe tamshai-prod-postgres --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
+            POSTGRES_IP=$(gcloud sql instances describe ${{ env.GCP_POSTGRES_INSTANCE }} --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "")
             if ! [[ "$POSTGRES_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "ERROR: Could not determine PostgreSQL IP"
               exit 1
@@ -403,7 +406,7 @@ jobs:
             --memory=1Gi \
             --cpu=1 \
             --timeout=600 \
-            --vpc-connector=tamshai-prod-connector \
+            --vpc-connector=${{ env.GCP_VPC_CONNECTOR }} \
             --vpc-egress=private-ranges-only \
             --set-secrets=KEYCLOAK_ADMIN_PASSWORD=tamshai-prod-keycloak-admin-password:latest,KC_DB_PASSWORD=tamshai-prod-keycloak-db-password:latest \
             --set-env-vars="KEYCLOAK_ADMIN=admin,KC_DB=postgres,KC_DB_URL=jdbc:postgresql://${POSTGRES_IP}:5432/keycloak,KC_DB_USERNAME=keycloak,KC_HOSTNAME=auth.tamshai.com,KC_HOSTNAME_STRICT=false,KC_HTTP_PORT=8080,KC_PROXY=edge,KC_PROXY_HEADERS=xforwarded,KC_HTTP_RELATIVE_PATH=/auth,KC_DB_POOL_MAX_SIZE=10,KC_DB_POOL_MIN_SIZE=2"
