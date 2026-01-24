@@ -553,4 +553,56 @@ submit_and_wait_build() {
     return 1
 }
 
+# =============================================================================
+# Gap #52: Keycloak Cold Start Mitigation
+# =============================================================================
+# Keycloak Cloud Run cold starts take 30-60 seconds. Before running TOTP or
+# realm sync operations, we should "warm up" Keycloak to avoid timeout errors.
+#
+# Used by both phoenix-rebuild.sh and evacuate-region.sh before sync operations.
+# =============================================================================
+
+# Warm up Keycloak to avoid cold start timeouts (Gap #52)
+# Usage: warmup_keycloak [keycloak_url] [realm] [max_attempts]
+#   keycloak_url: Optional Keycloak URL (default: auto-detect or https://$KEYCLOAK_DOMAIN)
+#   realm: Realm name (default: $KEYCLOAK_REALM or tamshai-corp)
+#   max_attempts: Number of warmup attempts (default: 5)
+warmup_keycloak() {
+    local keycloak_url="${1:-}"
+    local realm="${2:-${KEYCLOAK_REALM:-tamshai-corp}}"
+    local max_attempts="${3:-5}"
+    local wait_seconds=15
+
+    log_health_info "Warming up Keycloak (Gap #52 - cold start mitigation)..."
+
+    # Get Keycloak URL if not provided
+    local url="$keycloak_url"
+    if [ -z "$url" ]; then
+        url=$(get_service_url "keycloak")
+    fi
+    if [ -z "$url" ]; then
+        url="https://${KEYCLOAK_DOMAIN:-auth.tamshai.com}"
+    fi
+
+    log_health_info "  URL: $url"
+    log_health_info "  Realm: $realm"
+    log_health_info "  Max attempts: $max_attempts"
+
+    for attempt in $(seq 1 "$max_attempts"); do
+        if curl -sf "${url}/auth/realms/${realm}/.well-known/openid-configuration" -o /dev/null 2>/dev/null; then
+            log_health_success "Keycloak is warm and responding (attempt $attempt)"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$max_attempts" ]; then
+            log_health_info "  Waiting for Keycloak warmup (attempt $attempt/$max_attempts)..."
+            sleep $wait_seconds
+        fi
+    done
+
+    log_health_warn "Keycloak warmup incomplete after $max_attempts attempts"
+    log_health_warn "Proceeding anyway - operations may timeout if still cold"
+    return 1
+}
+
 echo "[health-checks] Library loaded"

@@ -1157,12 +1157,23 @@ phase4_deploy_services() {
 }
 
 # =============================================================================
-# PHASE 5: CONFIGURE TEST USER
+# PHASE 5: CONFIGURE USERS (Test User + Corporate Users)
 # =============================================================================
 
-phase5_configure_test_user() {
-    log_phase "5" "CONFIGURE TEST USER"
+phase5_configure_users() {
+    log_phase "5" "CONFIGURE USERS"
 
+    # =========================================================================
+    # Step 1: Warm up Keycloak (Gap #52 - cold start mitigation)
+    # =========================================================================
+    log_step "Warming up Keycloak before user configuration (Gap #52)..."
+    local keycloak_url
+    keycloak_url="https://${KEYCLOAK_DR_DOMAIN}"
+    warmup_keycloak "$keycloak_url" "${KEYCLOAK_REALM}" 5 || true
+
+    # =========================================================================
+    # Step 2: Configure TOTP for test-user.journey
+    # =========================================================================
     log_step "Configuring TOTP for test-user.journey..."
 
     # Get Keycloak admin password from Secret Manager
@@ -1173,15 +1184,32 @@ phase5_configure_test_user() {
     if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
         log_warn "Could not retrieve Keycloak admin password - skipping TOTP configuration"
         log_info "Run manually: ./keycloak/scripts/set-user-totp.sh prod test-user.journey"
-        return 0
+    else
+        # Fetch TOTP secret (Gap #60)
+        if fetch_totp_secret "TEST_USER_TOTP_SECRET_RAW"; then
+            export TEST_USER_TOTP_SECRET_RAW="$TOTP_SECRET"
+        fi
+
+        export AUTO_CONFIRM=true
+        "$PROJECT_ROOT/keycloak/scripts/set-user-totp.sh" prod test-user.journey || {
+            log_warn "TOTP configuration failed - may need manual setup"
+        }
     fi
 
-    export AUTO_CONFIRM=true
-    "$PROJECT_ROOT/keycloak/scripts/set-user-totp.sh" prod test-user.journey || {
-        log_warn "TOTP configuration failed - may need manual setup"
-    }
+    # =========================================================================
+    # Step 3: Provision corporate users (Gap #53 - identity-sync)
+    # =========================================================================
+    log_step "Provisioning corporate users (Gap #53)..."
+    log_info "Corporate users (eve.thompson, alice.chen, etc.) are provisioned via workflow"
 
-    log_success "Test user configured"
+    if trigger_identity_sync "true"; then
+        log_success "Corporate users provisioned successfully"
+    else
+        log_warn "Identity sync failed - corporate users may not exist"
+        log_info "Run manually: gh workflow run provision-prod-users.yml"
+    fi
+
+    log_success "User configuration complete"
 }
 
 # =============================================================================
@@ -1379,7 +1407,7 @@ main() {
     phase2_deploy_infrastructure
     phase3_regenerate_key
     phase4_deploy_services
-    phase5_configure_test_user
+    phase5_configure_users
     phase6_verify
     phase7_dns_guidance
 
