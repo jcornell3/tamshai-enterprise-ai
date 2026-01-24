@@ -1471,23 +1471,8 @@ phase_9_totp() {
     fi
 
     # Gap #52: Warm up Keycloak before TOTP configuration
-    log_step "Warming up Keycloak (Gap #52 - cold start mitigation)..."
-    local keycloak_url
-    keycloak_url=$(gcloud run services describe keycloak --region="${GCP_REGION}" --format="value(status.url)" 2>/dev/null) || {
-        log_warn "Could not get Keycloak URL - skipping warmup"
-    }
-
-    if [ -n "$keycloak_url" ]; then
-        log_info "Keycloak URL: $keycloak_url"
-        for i in {1..10}; do
-            if curl -sf "${keycloak_url}/auth/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration" > /dev/null 2>&1; then
-                log_success "Keycloak is ready (attempt $i)"
-                break
-            fi
-            log_info "Waiting for Keycloak warmup (attempt $i/10)..."
-            sleep 15
-        done
-    fi
+    # Uses shared warmup_keycloak() from lib/health-checks.sh
+    warmup_keycloak "" "${KEYCLOAK_REALM}" 10 || log_warn "Keycloak warmup incomplete"
 
     local totp_script="$PROJECT_ROOT/keycloak/scripts/set-user-totp.sh"
 
@@ -1566,22 +1551,9 @@ phase_10_verify() {
     quick_health_check || log_warn "Some services may not be healthy"
 
     # Gap #53: Trigger identity-sync to provision corporate users
+    # Uses shared trigger_identity_sync() from lib/secrets.sh
     log_step "Triggering identity-sync workflow (Gap #53)..."
-    if gh workflow list --repo jcornell3/tamshai-enterprise-ai 2>/dev/null | grep -q "provision-prod-users"; then
-        log_info "Running provision-prod-users workflow..."
-        gh workflow run provision-prod-users.yml --ref main || log_warn "Could not trigger workflow"
-
-        # Wait for workflow to complete (with timeout)
-        log_info "Waiting for user provisioning workflow to complete..."
-        sleep 10
-        local run_id
-        run_id=$(gh run list --workflow=provision-prod-users.yml --limit=1 --json databaseId -q '.[0].databaseId' 2>/dev/null)
-        if [ -n "$run_id" ]; then
-            timeout 600 gh run watch "$run_id" --exit-status || log_warn "Workflow may not have completed successfully"
-        fi
-    else
-        log_warn "provision-prod-users.yml workflow not found"
-    fi
+    trigger_identity_sync "true" || log_warn "Identity sync may have failed"
 
     log_step "Provisioning users (local script)..."
     # Trigger user provisioning if available

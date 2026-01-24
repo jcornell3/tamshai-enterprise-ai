@@ -175,7 +175,7 @@ wait_for_auth_domain() {
 wait_for_ssl_certificate() {
     local domain="$1"
     local path="${2:-/}"
-    local timeout="${3:-900}"  # Default 15 minutes (certs can take 10-15 min)
+    local timeout="${3:-1350}"  # Default 22.5 minutes (matches phoenix-rebuild.sh: 45×30s)
     local interval=30          # Check every 30 seconds (cert deploys are slow)
     local elapsed=0
 
@@ -208,11 +208,11 @@ wait_for_ssl_certificate() {
 
 # Wait for auth domain with full certificate verification
 # Usage: wait_for_auth_domain_with_ssl [timeout] [domain] [realm]
-#   timeout: Wait timeout in seconds (default: 900)
+#   timeout: Wait timeout in seconds (default: 1350 = 22.5 minutes)
 #   domain: Keycloak domain (default: $KEYCLOAK_DOMAIN)
 #   realm: Keycloak realm (default: $KEYCLOAK_REALM)
 wait_for_auth_domain_with_ssl() {
-    local timeout="${1:-900}"  # Default 15 minutes for full cert deployment
+    local timeout="${1:-1350}"  # Default 22.5 minutes (matches phoenix-rebuild.sh)
     local domain="${2:-${KEYCLOAK_DOMAIN}}"
     local realm="${3:-${KEYCLOAK_REALM}}"
 
@@ -353,8 +353,8 @@ staged_terraform_deploy() {
     log_step "Stage 2: Waiting for SSL certificate on ${keycloak_domain}..."
     log_info "SSL provisioning typically takes 10-15 minutes for new domain mappings"
 
-    if ! wait_for_ssl_certificate "$keycloak_domain" "/auth/realms/${keycloak_realm}/.well-known/openid-configuration" 900; then
-        log_warn "SSL certificate not ready after 15 minutes"
+    if ! wait_for_ssl_certificate "$keycloak_domain" "/auth/realms/${keycloak_realm}/.well-known/openid-configuration" 1350; then
+        log_warn "SSL certificate not ready after 22.5 minutes"
         log_warn "mcp-gateway deployment may fail - consider retrying later"
         # Don't fail here - let user decide whether to continue
     fi

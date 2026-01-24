@@ -455,4 +455,143 @@ ensure_mongodb_uri_iam_binding() {
     fi
 }
 
+# =============================================================================
+# Gap #60: TOTP Secret Fetching
+# =============================================================================
+# The test user TOTP secret is stored in GitHub Secrets. This function fetches
+# it for use in E2E tests and TOTP configuration.
+#
+# Used by both phoenix-rebuild.sh and evacuate-region.sh for TOTP setup.
+# =============================================================================
+
+# Fetch TOTP secret from environment or GitHub Secrets (Gap #60)
+# Usage: fetch_totp_secret [env_var_name]
+#   env_var_name: Environment variable to check first (default: TEST_USER_TOTP_SECRET_RAW)
+# Returns: TOTP secret in TOTP_SECRET variable, exits 1 if not found
+fetch_totp_secret() {
+    local env_var="${1:-TEST_USER_TOTP_SECRET_RAW}"
+    local secret_value="${!env_var:-}"
+
+    log_secrets_info "Fetching TOTP secret (Gap #60)..."
+
+    # Check environment variable first
+    if [ -n "$secret_value" ]; then
+        log_secrets_success "TOTP secret found in environment variable: $env_var"
+        TOTP_SECRET="$secret_value"
+        return 0
+    fi
+
+    log_secrets_info "$env_var not set, attempting to fetch from GitHub Secrets..."
+
+    # Try fetching from GitHub using gh CLI
+    if ! command -v gh &>/dev/null; then
+        log_secrets_error "gh CLI not available and $env_var not set"
+        log_secrets_error "Install gh CLI or set $env_var env var"
+        return 1
+    fi
+
+    if ! gh auth status &>/dev/null 2>&1; then
+        log_secrets_error "gh CLI not authenticated. Run: gh auth login"
+        return 1
+    fi
+
+    # Try to get the secret value via workflow dispatch
+    # Note: GitHub doesn't expose secret values directly, so we check if it exists
+    local secret_exists
+    secret_exists=$(gh secret list 2>/dev/null | grep -c "^${env_var}" || echo "0")
+
+    if [ "$secret_exists" -gt 0 ]; then
+        log_secrets_warn "Secret $env_var exists in GitHub but cannot be fetched directly"
+        log_secrets_info "Pass $env_var as an environment variable when running the script:"
+        log_secrets_info "  export $env_var=\${{ secrets.$env_var }}"
+        return 1
+    else
+        log_secrets_error "Secret $env_var not found in GitHub Secrets"
+        log_secrets_error "Create it with: gh secret set $env_var"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Gap #53: Identity Sync / User Provisioning
+# =============================================================================
+# Corporate users are provisioned via the provision-prod-users workflow.
+# This function triggers that workflow and optionally waits for completion.
+#
+# Used by both phoenix-rebuild.sh and evacuate-region.sh to provision users.
+# =============================================================================
+
+# Trigger identity-sync workflow to provision corporate users (Gap #53)
+# Usage: trigger_identity_sync [wait_for_completion] [repo]
+#   wait_for_completion: true/false - whether to wait for workflow (default: true)
+#   repo: GitHub repo (default: auto-detect from git remote)
+trigger_identity_sync() {
+    local wait_for_completion="${1:-true}"
+    local repo="${2:-}"
+
+    log_secrets_info "Triggering identity-sync workflow (Gap #53)..."
+
+    # Check gh CLI
+    if ! command -v gh &>/dev/null; then
+        log_secrets_error "gh CLI not available - cannot trigger workflow"
+        log_secrets_error "Install gh CLI: https://cli.github.com/"
+        return 1
+    fi
+
+    if ! gh auth status &>/dev/null 2>&1; then
+        log_secrets_error "gh CLI not authenticated. Run: gh auth login"
+        return 1
+    fi
+
+    # Detect repo if not provided
+    if [ -z "$repo" ]; then
+        repo=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null) || repo=""
+        if [ -z "$repo" ]; then
+            repo="jcornell3/tamshai-enterprise-ai"
+            log_secrets_info "Using default repo: $repo"
+        fi
+    fi
+
+    # Check if workflow exists
+    if ! gh workflow list --repo "$repo" 2>/dev/null | grep -q "provision-prod-users"; then
+        log_secrets_warn "provision-prod-users.yml workflow not found in $repo"
+        log_secrets_warn "Corporate users will not be provisioned"
+        return 1
+    fi
+
+    # Trigger the workflow
+    log_secrets_info "Running provision-prod-users workflow..."
+    if ! gh workflow run provision-prod-users.yml --repo "$repo" --ref main; then
+        log_secrets_error "Could not trigger provision-prod-users workflow"
+        return 1
+    fi
+
+    if [ "$wait_for_completion" != "true" ]; then
+        log_secrets_success "Workflow triggered (not waiting for completion)"
+        return 0
+    fi
+
+    # Wait for workflow to start and complete
+    log_secrets_info "Waiting for workflow to start..."
+    sleep 10
+
+    local run_id
+    run_id=$(gh run list --repo "$repo" --workflow=provision-prod-users.yml --limit=1 --json databaseId -q '.[0].databaseId' 2>/dev/null)
+
+    if [ -n "$run_id" ]; then
+        log_secrets_info "Monitoring workflow run: $run_id"
+        if gh run watch "$run_id" --repo "$repo" --exit-status; then
+            log_secrets_success "Identity sync completed successfully"
+            return 0
+        else
+            log_secrets_warn "Identity sync workflow failed or timed out"
+            log_secrets_info "Check: gh run view $run_id --repo $repo"
+            return 1
+        fi
+    else
+        log_secrets_warn "Could not get workflow run ID - check GitHub Actions manually"
+        return 1
+    fi
+}
+
 echo "[secrets] Library loaded"
