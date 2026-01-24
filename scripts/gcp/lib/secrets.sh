@@ -48,7 +48,7 @@ declare -A GITHUB_TO_GCP_MAP=(
     ["PROD_DB_PASSWORD"]="tamshai-prod-db-password"
     ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="tamshai-prod-keycloak-admin-password"
     ["KEYCLOAK_DB_PASSWORD_PROD"]="tamshai-prod-keycloak-db-password"
-    ["MONGODB_URI_PROD"]="tamshai-prod-mongodb-uri"
+    ["MONGODB_ATLAS_URI_PROD"]="tamshai-prod-mongodb-uri"
     ["MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
 )
 

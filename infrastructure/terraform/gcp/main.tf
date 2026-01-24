@@ -170,6 +170,7 @@ module "storage" {
   enable_static_website      = var.static_website_domain != "" # Only enable if domain is set
   static_website_domain      = var.static_website_domain
   cicd_service_account_email = module.security.cicd_service_account_email
+  enable_cicd_iam_bindings   = true # Boolean for plan-time evaluation (avoids count dependency errors)
 
   # Regional evacuation support: multi-regional backup bucket for disaster recovery
   enable_backup_bucket  = true

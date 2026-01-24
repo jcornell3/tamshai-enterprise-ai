@@ -171,7 +171,7 @@ resource "google_storage_bucket_iam_member" "static_website_public" {
 
 # Grant CI/CD service account write access to website bucket
 resource "google_storage_bucket_iam_member" "static_website_cicd" {
-  count = var.enable_static_website && var.cicd_service_account_email != "" ? 1 : 0
+  count = var.enable_static_website && var.enable_cicd_iam_bindings ? 1 : 0
 
   bucket = google_storage_bucket.static_website[0].name
   role   = "roles/storage.objectAdmin"
@@ -182,7 +182,7 @@ resource "google_storage_bucket_iam_member" "static_website_cicd" {
 # storage.objectAdmin provides object operations but NOT storage.buckets.get
 # legacyBucketReader provides storage.buckets.get which rsync needs to read bucket metadata
 resource "google_storage_bucket_iam_member" "static_website_cicd_bucket_reader" {
-  count = var.enable_static_website && var.cicd_service_account_email != "" ? 1 : 0
+  count = var.enable_static_website && var.enable_cicd_iam_bindings ? 1 : 0
 
   bucket = google_storage_bucket.static_website[0].name
   role   = "roles/storage.legacyBucketReader"
@@ -246,7 +246,7 @@ resource "google_storage_bucket" "backups" {
 
 # Grant CI/CD service account write access to backup bucket (for automated backups)
 resource "google_storage_bucket_iam_member" "backups_cicd_writer" {
-  count = var.enable_backup_bucket && var.cicd_service_account_email != "" ? 1 : 0
+  count = var.enable_backup_bucket && var.enable_cicd_iam_bindings ? 1 : 0
 
   bucket = google_storage_bucket.backups[0].name
   role   = "roles/storage.objectAdmin"

@@ -62,6 +62,16 @@ variable "cicd_service_account_email" {
   default     = ""
 }
 
+variable "enable_cicd_iam_bindings" {
+  description = <<-EOT
+    Enable IAM bindings for CI/CD service account on storage buckets.
+    Set to true when cicd_service_account_email is known (normal deployment).
+    Set to false during terraform import operations to avoid count dependency errors.
+  EOT
+  type        = bool
+  default     = true
+}
+
 # =============================================================================
 # REGIONAL EVACUATION SUPPORT
 # =============================================================================
