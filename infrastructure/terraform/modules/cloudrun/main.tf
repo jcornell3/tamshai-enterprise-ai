@@ -590,6 +590,13 @@ resource "google_cloud_run_domain_mapping" "keycloak" {
   timeouts {
     create = "30m"
   }
+
+  # Issue #102: Prevent replacement on import
+  # - metadata: terraform_labels forces replacement
+  # - spec: certificate_mode forces replacement when not in state
+  lifecycle {
+    ignore_changes = [metadata, spec]
+  }
 }
 
 # Map custom domain to MCP Gateway service
@@ -616,6 +623,13 @@ resource "google_cloud_run_domain_mapping" "mcp_gateway" {
   timeouts {
     create = "30m"
   }
+
+  # Issue #102: Prevent replacement on import
+  # - metadata: terraform_labels forces replacement
+  # - spec: certificate_mode forces replacement when not in state
+  lifecycle {
+    ignore_changes = [metadata, spec]
+  }
 }
 
 # Map custom domain to Web Portal service
@@ -641,6 +655,13 @@ resource "google_cloud_run_domain_mapping" "web_portal" {
 
   timeouts {
     create = "30m"
+  }
+
+  # Issue #102: Prevent replacement on import
+  # - metadata: terraform_labels forces replacement
+  # - spec: certificate_mode forces replacement when not in state
+  lifecycle {
+    ignore_changes = [metadata, spec]
   }
 }
 
