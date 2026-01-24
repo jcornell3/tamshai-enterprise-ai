@@ -669,8 +669,18 @@ main() {
         exit 0
     fi
 
-    # Require ENV_ID
+    # Require ENV_ID - but first check if any recovery stacks exist
     if [ -z "$ENV_ID" ]; then
+        # Check if any recovery stacks exist
+        local stacks
+        stacks=$(gcloud storage ls "gs://${STATE_BUCKET}/gcp/recovery/" 2>/dev/null | grep -v '^$' || true)
+
+        if [ -z "$stacks" ]; then
+            log_info "No recovery stacks found - nothing to clean up"
+            exit 0
+        fi
+
+        # Stacks exist but no ENV_ID specified
         log_error "ENV_ID is required"
         echo ""
         echo "Usage: ./cleanup-recovery.sh <ENV_ID> [options]"
