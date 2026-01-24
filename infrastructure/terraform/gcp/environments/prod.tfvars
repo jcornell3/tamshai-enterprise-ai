@@ -47,23 +47,14 @@ keycloak_min_instances = "0"
 # =============================================================================
 # DOMAIN CONFIGURATION
 # =============================================================================
-# These domains are configured in Cloudflare DNS and mapped to Cloud Run services.
-#
-# Domain mapping hierarchy:
-#   keycloak_domain       -> Cloud Run domain mapping (terraform-managed)
-#   static_website_domain -> GCS website bucket (terraform-managed)
-#   api_domain            -> Cloudflare CNAME to mcp-gateway (DNS-only)
-#   app_domain            -> Cloudflare CNAME to web-portal (DNS-only)
+# All domains use Cloud Run domain mappings (CNAME to ghs.googlehosted.com).
+# GCP provisions SSL certificates automatically (takes 10-15 minutes).
 # =============================================================================
 
 keycloak_domain       = "auth.tamshai.com"
+api_domain            = "api.tamshai.com"
+app_domain            = "app.tamshai.com"
 static_website_domain = "prod.tamshai.com"
-
-# API Gateway domain (DNS CNAME - not terraform-managed yet)
-# api_domain = "api.tamshai.com"
-
-# Web Portal domain (DNS CNAME - not terraform-managed yet)
-# app_domain = "app.tamshai.com"
 
 # =============================================================================
 # USER PROVISIONING

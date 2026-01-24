@@ -165,10 +165,25 @@ variable "redis_host" {
 # =============================================================================
 # DOMAIN CONFIGURATION
 # =============================================================================
+# All domains use Cloud Run domain mappings (CNAME to ghs.googlehosted.com).
+# GCP provisions SSL certificates automatically (takes 10-15 minutes).
+# =============================================================================
 
 variable "keycloak_domain" {
-  description = "Keycloak domain (e.g., auth.tamshai.com)"
+  description = "Keycloak domain (e.g., auth.tamshai.com, auth-dr.tamshai.com)"
   type        = string
+}
+
+variable "api_domain" {
+  description = "MCP Gateway API domain (e.g., api.tamshai.com, api-dr.tamshai.com). Empty = no domain mapping."
+  type        = string
+  default     = ""
+}
+
+variable "app_domain" {
+  description = "Web Portal app domain (e.g., app.tamshai.com, app-dr.tamshai.com). Empty = no domain mapping."
+  type        = string
+  default     = ""
 }
 
 # =============================================================================

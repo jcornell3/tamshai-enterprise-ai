@@ -77,24 +77,14 @@ keycloak_min_instances = "1" # Keep warm during DR
 # IMPORTANT: auth.tamshai.com CANNOT be remapped during regional outage!
 # The domain mapping is bound to the dead region. Use auth-dr.tamshai.com.
 #
-# DNS setup required in Cloudflare for DR domains:
-#   auth-dr.tamshai.com   -> ghs.googlehosted.com (Cloud Run domain mapping)
-#   api-dr.tamshai.com    -> CNAME to mcp-gateway URL (after evacuation)
-#   app-dr.tamshai.com    -> CNAME to web-portal URL (after evacuation)
-#   prod-dr.tamshai.com   -> GCS static website (if needed)
+# All domains use Cloud Run domain mappings (CNAME to ghs.googlehosted.com).
+# GCP provisions SSL certificates automatically (takes 10-15 minutes).
 # =============================================================================
 
 keycloak_domain       = "auth-dr.tamshai.com"
+api_domain            = "api-dr.tamshai.com"
+app_domain            = "app-dr.tamshai.com"
 static_website_domain = "" # Not needed during DR - use primary bucket
-
-# API Gateway domain (DNS CNAME - update after evacuation)
-# api_domain = "api-dr.tamshai.com"
-
-# Web Portal domain (DNS CNAME - update after evacuation)
-# app_domain = "app-dr.tamshai.com"
-
-# Marketing site domain (optional for DR)
-# prod_domain = "prod-dr.tamshai.com"
 
 # =============================================================================
 # USER PROVISIONING
