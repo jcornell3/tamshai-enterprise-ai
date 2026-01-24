@@ -986,6 +986,15 @@ phase2_deploy_infrastructure() {
     fi
 
     # =============================================================================
+    # Verify MongoDB URI secret exists (shared function from lib/secrets.sh)
+    # =============================================================================
+    # Uses verify_mongodb_uri_secret() from lib/secrets.sh - same as phoenix-rebuild.sh
+    # =============================================================================
+    if ! verify_mongodb_uri_secret "$PROJECT_ID"; then
+        exit 1
+    fi
+
+    # =============================================================================
     # Apply infrastructure using staged deployment (Issue #37 pattern)
     # =============================================================================
     # Problem: mcp-gateway fails startup probes if Keycloak SSL cert isn't ready.
@@ -1078,6 +1087,14 @@ phase2_deploy_infrastructure() {
             exit 1
         }
     fi
+
+    # =============================================================================
+    # Add MongoDB URI IAM binding (shared function from lib/secrets.sh, Gap #32)
+    # =============================================================================
+    # Uses ensure_mongodb_uri_iam_binding() from lib/secrets.sh - same as phoenix-rebuild.sh
+    # This provides a fallback/safety net in case terraform state gets out of sync.
+    # =============================================================================
+    ensure_mongodb_uri_iam_binding "$PROJECT_ID" || true
 
     log_success "Infrastructure deployed to $NEW_REGION"
 }

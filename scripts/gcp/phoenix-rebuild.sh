@@ -1340,17 +1340,8 @@ phase_7_cloud_run() {
     fi
 
     # Gap #32: Add MongoDB URI IAM binding for MCP servers
-    log_step "Adding MongoDB URI IAM binding (Gap #32)..."
-    local project="${GCP_PROJECT_ID}"
-    local sa_email="tamshai-prod-mcp-servers@${project}.iam.gserviceaccount.com"
-
-    if gcloud secrets describe tamshai-prod-mongodb-uri --project="$project" &>/dev/null; then
-        gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
-            --member="serviceAccount:${sa_email}" \
-            --role="roles/secretmanager.secretAccessor" \
-            --project="$project" \
-            --quiet 2>/dev/null || log_info "IAM binding may already exist"
-    fi
+    # Uses shared function from lib/secrets.sh
+    ensure_mongodb_uri_iam_binding "${GCP_PROJECT_ID}" || true
 
     # Gap #35 & #48: Create ${KEYCLOAK_DOMAIN} domain mapping (handle already exists)
     log_step "Creating ${KEYCLOAK_DOMAIN} domain mapping (Gap #35, #48)..."

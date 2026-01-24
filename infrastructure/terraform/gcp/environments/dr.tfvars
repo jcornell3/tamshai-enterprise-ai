@@ -69,13 +69,6 @@ enable_utility_vm      = false
 keycloak_min_instances = "1" # Keep warm during DR
 
 # =============================================================================
-# EXTERNAL SERVICES
-# =============================================================================
-# MongoDB Atlas not available in DR (secret doesn't exist in recovery state)
-
-enable_mongodb_uri_access = false
-
-# =============================================================================
 # DOMAIN CONFIGURATION
 # =============================================================================
 # DR uses separate domains to avoid conflict with primary (which may still

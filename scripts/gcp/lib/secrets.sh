@@ -389,4 +389,70 @@ ensure_mcp_hr_client_secret() {
     return 0
 }
 
+# =============================================================================
+# MongoDB URI Secret Management (Gap #32)
+# =============================================================================
+# The mongodb-uri secret is a global GCP secret that must exist before terraform.
+# It contains the MongoDB Atlas connection string and is manually created.
+# Both production and DR deployments share this secret.
+#
+# These functions are used by both phoenix-rebuild.sh and evacuate-region.sh
+# to ensure consistent handling of the mongodb-uri secret.
+# =============================================================================
+
+# Verify mongodb-uri secret exists (required before terraform)
+# Returns 0 if exists, 1 if missing (with helpful error message)
+verify_mongodb_uri_secret() {
+    local project="${GCP_PROJECT_ID:-$1}"
+
+    if [ -z "$project" ]; then
+        log_secrets_error "GCP_PROJECT_ID not set"
+        return 1
+    fi
+
+    log_secrets_info "Verifying mongodb-uri secret exists (required for terraform)..."
+
+    if gcloud secrets describe tamshai-prod-mongodb-uri --project="$project" &>/dev/null 2>&1; then
+        log_secrets_success "MongoDB URI secret exists"
+        return 0
+    else
+        log_secrets_error "MongoDB URI secret 'tamshai-prod-mongodb-uri' not found!"
+        log_secrets_error "This secret is required for terraform to succeed."
+        echo ""
+        log_secrets_info "To create it:"
+        echo "  gcloud secrets create tamshai-prod-mongodb-uri --replication-policy=automatic"
+        echo "  echo -n 'mongodb+srv://...' | gcloud secrets versions add tamshai-prod-mongodb-uri --data-file=-"
+        echo ""
+        log_secrets_info "See scripts/gcp/README.md for full MongoDB Atlas setup instructions."
+        return 1
+    fi
+}
+
+# Add IAM binding for MCP servers to access mongodb-uri secret (Gap #32)
+# This is idempotent - safe to call multiple times
+ensure_mongodb_uri_iam_binding() {
+    local project="${GCP_PROJECT_ID:-$1}"
+
+    if [ -z "$project" ]; then
+        log_secrets_error "GCP_PROJECT_ID not set"
+        return 1
+    fi
+
+    log_secrets_info "Adding MongoDB URI IAM binding (Gap #32)..."
+    local sa_email="tamshai-prod-mcp-servers@${project}.iam.gserviceaccount.com"
+
+    if gcloud secrets describe tamshai-prod-mongodb-uri --project="$project" &>/dev/null; then
+        gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
+            --member="serviceAccount:${sa_email}" \
+            --role="roles/secretmanager.secretAccessor" \
+            --project="$project" \
+            --quiet 2>/dev/null || log_secrets_info "IAM binding may already exist"
+        log_secrets_success "MongoDB URI IAM binding verified"
+        return 0
+    else
+        log_secrets_warn "MongoDB URI secret not found - skipping IAM binding"
+        return 1
+    fi
+}
+
 echo "[secrets] Library loaded"
