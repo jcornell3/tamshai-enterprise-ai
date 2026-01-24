@@ -317,19 +317,17 @@ staged_terraform_deploy() {
             if terraform state list 2>/dev/null | grep -q 'google_artifact_registry_repository.tamshai'; then
                 log_info "  Artifact Registry is in terraform state - proceeding with staged deployment"
             else
-                log_warn "  Artifact Registry NOT in state despite GCP existing"
-                log_warn "  This may cause a 409 error. Falling back to full terraform apply."
-                log_info "  Running: terraform apply -auto-approve (no -target flags)"
-                if terraform apply -auto-approve "${tf_args[@]}"; then
-                    log_success "Full apply complete"
-                    # After full apply, proceed with SSL wait and mcp-gateway
-                    log_step "Waiting for SSL certificate on ${keycloak_domain}..."
-                    wait_for_ssl_certificate "$keycloak_domain" "/auth/realms/${keycloak_realm}/.well-known/openid-configuration" 900 || true
-                    log_success "=== Deployment Complete (via full apply fallback) ==="
-                    return 0
+                # Issue #102 Fix: Import the registry instead of falling back to full apply
+                # Full apply would fail with 409 because registry already exists
+                log_warn "  Artifact Registry NOT in state - importing to prevent 409 error"
+                log_info "  Running: terraform import module.cloudrun.google_artifact_registry_repository.tamshai"
+                if terraform import "${tf_args[@]}" \
+                    'module.cloudrun.google_artifact_registry_repository.tamshai' \
+                    "projects/${project_id}/locations/${region}/repositories/tamshai" 2>/dev/null; then
+                    log_success "  Import successful - proceeding with staged deployment"
                 else
-                    log_error "Full terraform apply failed"
-                    return 1
+                    log_warn "  Import failed (may already be in state or resource mismatch)"
+                    log_warn "  Attempting to continue with staged deployment anyway"
                 fi
             fi
         else
