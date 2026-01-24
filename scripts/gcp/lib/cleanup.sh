@@ -324,7 +324,8 @@ delete_persisted_secrets() {
         "tamshai-prod-jwt-secret"
         "mcp-hr-service-client-secret"
         "prod-user-password"
-        "tamshai-prod-mongodb-uri"
+        # NOTE: tamshai-prod-mongodb-uri is NOT deleted - it's manually created
+        # and contains the MongoDB Atlas connection string that persists across rebuilds
     )
 
     for secret in "${secrets[@]}"; do
@@ -824,6 +825,8 @@ delete_persisted_secrets_prod() {
     log_info "Deleting persisted GCP secrets (Gap #2 + Issue #28)..."
 
     # Secret names from configuration variables (if set) or defaults
+    # NOTE: mongodb-uri is NOT deleted - it's manually created with MongoDB Atlas
+    # connection string and should persist across all rebuilds
     local secrets=(
         "${SECRET_KEYCLOAK_ADMIN_PASSWORD:-${RESOURCE_PREFIX}-keycloak-admin-password}"
         "${SECRET_KEYCLOAK_DB_PASSWORD:-${RESOURCE_PREFIX}-keycloak-db-password}"
@@ -833,7 +836,6 @@ delete_persisted_secrets_prod() {
         "${SECRET_JWT:-${RESOURCE_PREFIX}-jwt-secret}"
         "mcp-hr-service-client-secret"
         "prod-user-password"
-        "${RESOURCE_PREFIX}-mongodb-uri"
     )
 
     for secret in "${secrets[@]}"; do
