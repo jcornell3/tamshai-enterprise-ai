@@ -209,3 +209,9 @@ variable "recovery_mode" {
   type        = bool
   default     = false
 }
+
+variable "enable_mongodb_uri_access" {
+  description = "Enable IAM binding for MCP servers to access external mongodb-uri secret. Set to false in DR mode where the secret doesn't exist."
+  type        = bool
+  default     = true
+}

@@ -103,6 +103,9 @@ module "security" {
   # Regional evacuation support: suffix for resource naming
   name_suffix = local.name_suffix
 
+  # MongoDB URI access - disabled in DR mode (secret doesn't exist in recovery state)
+  enable_mongodb_uri_access = var.enable_mongodb_uri_access
+
   # User Provisioning Job configuration
   # Gap #49 Fix: Use enable_provision_job boolean (known at plan time) instead of
   # checking vpc_connector_id (unknown until apply) to avoid count dependency errors
