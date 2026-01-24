@@ -267,8 +267,10 @@ module "cloudrun" {
   # Redis (Utility VM internal IP)
   redis_host = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_internal_ip : "10.0.0.10"
 
-  # Domain configuration
+  # Domain configuration (all use Cloud Run domain mappings via ghs.googlehosted.com)
   keycloak_domain = var.keycloak_domain
+  api_domain      = var.api_domain
+  app_domain      = var.app_domain
 
   # Web Portal configuration
   enable_web_portal          = true

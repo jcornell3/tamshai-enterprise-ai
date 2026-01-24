@@ -1283,65 +1283,27 @@ phase7_dns_guidance() {
     log_info "Web Portal: $portal_host"
 
     echo ""
-    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║                       MANUAL DNS UPDATES REQUIRED                            ║${NC}"
-    echo -e "${YELLOW}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
-    echo -e "${YELLOW}║                                                                              ║${NC}"
-    echo -e "${YELLOW}║  1. API Domain (Cloudflare):                                                 ║${NC}"
-    echo -e "${YELLOW}║     api.tamshai.com CNAME → ${gateway_host}${NC}"
-    echo -e "${YELLOW}║                                                                              ║${NC}"
-    echo -e "${YELLOW}║  2. Keycloak Domain:                                                         ║${NC}"
-    echo -e "${YELLOW}║     ⚠️  auth.tamshai.com CANNOT be remapped during regional outage!          ║${NC}"
-    echo -e "${YELLOW}║     The domain mapping is bound to the dead region.                          ║${NC}"
-    echo -e "${YELLOW}║                                                                              ║${NC}"
-    echo -e "${YELLOW}║     Options:                                                                 ║${NC}"
-    echo -e "${YELLOW}║     a) Use pre-configured ${KEYCLOAK_DR_DOMAIN} (recommended)               ║${NC}"
-    echo -e "${YELLOW}║     b) Use raw Cloud Run URL: ${keycloak_host}${NC}"
-    echo -e "${YELLOW}║     c) Wait for primary region recovery                                      ║${NC}"
-    echo -e "${YELLOW}║                                                                              ║${NC}"
-    echo -e "${YELLOW}║  3. Web Portal (if domain-mapped):                                           ║${NC}"
-    echo -e "${YELLOW}║     Update CNAME or rebuild with new Keycloak URL:                           ║${NC}"
-    echo -e "${YELLOW}║     VITE_KEYCLOAK_URL=https://${KEYCLOAK_DR_DOMAIN}/auth                    ║${NC}"
-    echo -e "${YELLOW}║                                                                              ║${NC}"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                       DR DOMAIN CONFIGURATION                                ║${NC}"
+    echo -e "${GREEN}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}║                                                                              ║${NC}"
+    echo -e "${GREEN}║  All DR domains use Cloud Run domain mappings (terraform-managed).          ║${NC}"
+    echo -e "${GREEN}║  DNS is pre-configured in Cloudflare (CNAME to ghs.googlehosted.com).       ║${NC}"
+    echo -e "${GREEN}║                                                                              ║${NC}"
+    echo -e "${GREEN}║  Domain Mappings Created:                                                    ║${NC}"
+    echo -e "${GREEN}║    auth-dr.tamshai.com → keycloak                                           ║${NC}"
+    echo -e "${GREEN}║    api-dr.tamshai.com  → mcp-gateway                                        ║${NC}"
+    echo -e "${GREEN}║    app-dr.tamshai.com  → web-portal                                         ║${NC}"
+    echo -e "${GREEN}║                                                                              ║${NC}"
+    echo -e "${GREEN}║  SSL certificates are provisioned automatically (10-15 minutes).            ║${NC}"
+    echo -e "${GREEN}║                                                                              ║${NC}"
+    echo -e "${YELLOW}║  ⚠️  Primary domains (auth/api/app.tamshai.com) remain bound to dead region ║${NC}"
+    echo -e "${YELLOW}║  Use DR domains until primary region recovers.                              ║${NC}"
+    echo -e "${GREEN}║                                                                              ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Check if Cloudflare API token is available
-    if [ -n "${CF_API_TOKEN:-}" ] && [ -n "${CF_ZONE_ID:-}" ]; then
-        log_step "Cloudflare credentials detected - attempting automatic DNS update for api.tamshai.com..."
-
-        # Get current record ID
-        local record_id
-        record_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=api.tamshai.com&type=CNAME" \
-            -H "Authorization: Bearer ${CF_API_TOKEN}" | jq -r '.result[0].id // empty')
-
-        if [ -n "$record_id" ]; then
-            local update_result
-            update_result=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${record_id}" \
-                -H "Authorization: Bearer ${CF_API_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data "{
-                    \"type\": \"CNAME\",
-                    \"name\": \"api\",
-                    \"content\": \"${gateway_host}\",
-                    \"proxied\": true
-                }")
-
-            if echo "$update_result" | jq -e '.success' &>/dev/null; then
-                log_success "api.tamshai.com DNS updated automatically!"
-            else
-                log_warn "DNS update failed: $(echo "$update_result" | jq -r '.errors[0].message // "Unknown error"')"
-                log_info "Please update DNS manually in Cloudflare dashboard"
-            fi
-        else
-            log_warn "Could not find api.tamshai.com record in Cloudflare"
-            log_info "Please update DNS manually in Cloudflare dashboard"
-        fi
-    else
-        log_info "Set CF_API_TOKEN and CF_ZONE_ID for automatic DNS updates"
-    fi
-
-    log_success "DNS guidance complete"
+    log_success "DNS configuration complete (terraform-managed)"
 }
 
 # =============================================================================

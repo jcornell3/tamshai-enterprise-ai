@@ -592,6 +592,58 @@ resource "google_cloud_run_domain_mapping" "keycloak" {
   }
 }
 
+# Map custom domain to MCP Gateway service
+resource "google_cloud_run_domain_mapping" "mcp_gateway" {
+  count = var.api_domain != "" ? 1 : 0
+
+  name     = var.api_domain
+  location = var.region
+  project  = var.project_id
+
+  metadata {
+    namespace = var.project_id
+
+    labels = {
+      environment = var.environment
+      service     = "mcp-gateway"
+    }
+  }
+
+  spec {
+    route_name = google_cloud_run_service.mcp_gateway.name
+  }
+
+  timeouts {
+    create = "30m"
+  }
+}
+
+# Map custom domain to Web Portal service
+resource "google_cloud_run_domain_mapping" "web_portal" {
+  count = var.app_domain != "" && var.enable_web_portal ? 1 : 0
+
+  name     = var.app_domain
+  location = var.region
+  project  = var.project_id
+
+  metadata {
+    namespace = var.project_id
+
+    labels = {
+      environment = var.environment
+      service     = "web-portal"
+    }
+  }
+
+  spec {
+    route_name = google_cloud_run_service.web_portal[0].name
+  }
+
+  timeouts {
+    create = "30m"
+  }
+}
+
 # =============================================================================
 # WEB PORTAL (Static SPA with Caddy)
 # =============================================================================
