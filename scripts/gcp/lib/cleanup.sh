@@ -225,8 +225,10 @@ remove_secret_iam_bindings_state() {
         'module.security.google_secret_manager_secret_iam_member.mcp_gateway_anthropic_access'
         'module.security.google_secret_manager_secret_iam_member.mcp_gateway_client_secret_access'
         'module.security.google_secret_manager_secret_iam_member.mcp_gateway_jwt_access'
+        'module.security.google_secret_manager_secret_iam_member.mcp_gateway_mongodb_uri_access[0]'
         # MCP Servers-related IAM bindings
         'module.security.google_secret_manager_secret_iam_member.mcp_servers_db_access'
+        'module.security.google_secret_manager_secret_iam_member.mcp_servers_mongodb_uri_access[0]'
         # Cloud Build-related IAM bindings
         'module.security.google_secret_manager_secret_iam_member.cloudbuild_db_password'
         'module.security.google_secret_manager_secret_iam_member.cloudbuild_keycloak_admin'
@@ -1160,19 +1162,37 @@ cleanup_leftover_resources() {
     log_warn "Found leftover VPC: $vpc_name"
     log_info "Cleaning up leftover resources from failed deployment attempt..."
 
-    # Step 1: Delete Cloud Run services (release DB connections)
+    # =============================================================================
+    # DELETION ORDER - Matches Phoenix rebuild phase 3 (Issue #102)
+    # =============================================================================
+    # The order is critical for avoiding dependency conflicts:
+    #   1. Cloud Run jobs & services (release DB connections)
+    #   2. Storage buckets (Gap #39 - force_destroy may not work)
+    #   3. Cloud SQL + wait (Gap #40 - VPC peering depends on this)
+    #   4. VPC peering + wait (Issue #14 - private IP depends on this)
+    #   5. Private IPs (Gap #24)
+    #   6. Cloud NAT & Router
+    #   7. VPC connector + wait (Gap #25 - takes 2-3 min, blocks subnet)
+    #   8. GCE instances, firewall rules, subnets, routes
+    #   9. VPC network (must be last)
+    # =============================================================================
+
+    # Step 1: Delete Cloud Run jobs
+    log_step "Deleting leftover Cloud Run jobs..."
+    delete_cloud_run_jobs "$name_suffix"
+
+    # Step 2: Delete Cloud Run services (release DB connections)
     # NOTE: Cloud Run services have NO suffix
     log_step "Deleting leftover Cloud Run services..."
     delete_cloudrun_services
+    log_info "Waiting for DB connections to close..."
+    sleep 5
 
-    # Step 2: Delete VPC Access Connector (takes 2-3 minutes, MUST be before subnet)
-    log_step "Deleting leftover VPC connectors..."
-    delete_vpc_connector_and_wait || {
-        log_error "VPC connector deletion failed - cannot proceed"
-        return 1
-    }
+    # Step 3: Empty storage buckets (Gap #39 - force_destroy may not work)
+    log_step "Emptying storage buckets (Gap #39)..."
+    empty_all_storage_buckets
 
-    # Step 3: Delete Cloud SQL instance
+    # Step 4: Delete Cloud SQL instance + wait (Gap #40 + Issue #14)
     log_step "Deleting leftover Cloud SQL instances..."
     disable_cloudsql_deletion_protection "$name_suffix"
 
@@ -1181,7 +1201,7 @@ cleanup_leftover_resources() {
         log_info "Deleting Cloud SQL: $sql_instance..."
         gcloud sql instances delete "$sql_instance" --project="$PROJECT" --quiet 2>/dev/null || true
 
-        # Wait for Cloud SQL deletion
+        # Wait for Cloud SQL deletion (VPC peering cannot be deleted until Cloud SQL is gone)
         local sql_wait=0
         local sql_max_wait=18  # 3 minutes max
         while gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; do
@@ -1195,44 +1215,52 @@ cleanup_leftover_resources() {
         done
     fi
 
-    # Step 4: Delete VPC peering (must be before private IP deletion)
+    # Step 5: Delete VPC peering + wait (Issue #14 - must be before private IP)
     log_step "Deleting leftover VPC peering..."
     delete_vpc_peering_robust || log_warn "VPC peering deletion may have failed"
 
-    # Step 5: Delete private IP addresses
+    # Step 6: Delete private IP addresses (Gap #24 - after VPC peering)
     log_step "Deleting leftover private IP addresses..."
     delete_orphaned_private_ip "$name_suffix"
 
-    # Step 6: Delete Cloud NAT
+    # Step 7: Delete Cloud NAT
     log_step "Deleting leftover Cloud NAT..."
     delete_cloud_nat
 
-    # Step 7: Delete Cloud Router
+    # Step 8: Delete Cloud Router
     log_step "Deleting leftover Cloud Router..."
     delete_cloud_router
 
-    # Step 8: Delete firewall rules
-    log_step "Deleting leftover firewall rules..."
-    delete_firewall_rules
+    # Step 9: Delete VPC Access Connector + wait (Gap #25 - takes 2-3 min, blocks subnet)
+    # NOTE: Moved AFTER Cloud NAT/Router per Phoenix order (connector blocks subnet deletion)
+    log_step "Deleting leftover VPC connectors..."
+    delete_vpc_connector_and_wait || {
+        log_error "VPC connector deletion failed - cannot proceed"
+        return 1
+    }
 
-    # Step 8.5: Delete GCE instances using the target subnet
+    # Step 10: Delete GCE instances using the target subnet
     log_step "Deleting GCE instances using target VPC subnet..."
     delete_gce_instances_in_vpc
 
-    # Step 8.6: Fallback - scan all zones for orphaned instances by name pattern
+    # Step 10.5: Fallback - scan all zones for orphaned instances by name pattern
     # Issue #102: Handle instances in fallback zones or with broken subnet references
     log_step "Scanning all zones for orphaned GCE instances..."
     delete_gce_instances_by_pattern "tamshai-${RESOURCE_PREFIX#tamshai-}-*" "$fallback_zones"
 
-    # Step 9: Delete subnets
+    # Step 11: Delete firewall rules
+    log_step "Deleting leftover firewall rules..."
+    delete_firewall_rules
+
+    # Step 12: Delete subnets
     log_step "Deleting leftover subnets..."
     delete_vpc_subnets
 
-    # Step 10: Delete routes (can block VPC deletion)
+    # Step 13: Delete routes (can block VPC deletion)
     log_step "Deleting leftover routes..."
     delete_vpc_routes
 
-    # Step 11: Delete VPC network (last - everything else must be deleted first)
+    # Step 14: Delete VPC network (last - everything else must be deleted first)
     log_step "Deleting leftover VPC network..."
     delete_vpc_network_robust || {
         log_error "VPC deletion failed"
