@@ -127,3 +127,4 @@ nul
 # Terraform plan files
 *.tfplan
 tfplan
+services/mcp-journey/data/
