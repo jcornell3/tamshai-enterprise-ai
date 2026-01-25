@@ -32,6 +32,7 @@ $output = @{
     "user_password" = ""
     "test_user_password" = ""
     "test_user_totp_secret_raw" = ""
+    "gemini_api_key" = ""
 }
 
 try {
@@ -91,6 +92,12 @@ try {
     $totpSecretFile = Join-Path $tempDir "TEST_USER_TOTP_SECRET_RAW"
     if (Test-Path $totpSecretFile) {
         $output["test_user_totp_secret_raw"] = (Get-Content $totpSecretFile -Raw).Trim()
+    }
+
+    # Read Gemini API key (for mcp-journey)
+    $geminiKeyFile = Join-Path $tempDir "GEMINI_API_KEY"
+    if (Test-Path $geminiKeyFile) {
+        $output["gemini_api_key"] = (Get-Content $geminiKeyFile -Raw).Trim()
     }
 
     # Cleanup temp directory

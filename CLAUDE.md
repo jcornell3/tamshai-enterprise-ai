@@ -854,6 +854,7 @@ sysctl vm.max_map_count
 | MCP Finance | 3102 | Finance MCP |
 | MCP Sales | 3103 | Sales MCP |
 | MCP Support | 3104 | Support MCP |
+| MCP Journey | 3105 | Project History Agent |
 | PostgreSQL | 5433 | Relational DB |
 | MongoDB | 27018 | Document DB |
 | Elasticsearch | 9201 | Search Engine |
