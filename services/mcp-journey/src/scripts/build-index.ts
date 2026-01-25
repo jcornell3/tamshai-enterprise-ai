@@ -11,7 +11,8 @@ import { EmbeddingGenerator } from '../indexer/embedding-generator.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../../../');
+// Use PROJECT_ROOT env var if set (for Docker builds), otherwise default to repo root
+const PROJECT_ROOT = process.env.PROJECT_ROOT || path.resolve(__dirname, '../../../../');
 const DB_PATH = process.env.DB_PATH || './data/journey.db';
 
 // Directories to index

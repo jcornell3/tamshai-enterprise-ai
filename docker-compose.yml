@@ -340,8 +340,8 @@ services:
 
   mcp-journey:
     build:
-      context: ./services/mcp-journey
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/mcp-journey/Dockerfile
     image: ${IMAGE_PREFIX:-}mcp-journey:${IMAGE_TAG:-latest}
     container_name: tamshai-mcp-journey
     restart: unless-stopped

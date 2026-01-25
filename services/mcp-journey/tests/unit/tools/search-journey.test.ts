@@ -188,15 +188,50 @@ describe('SearchJourneyTool', () => {
       expect(result.code).toBe('EMBEDDING_ERROR');
     });
 
-    it('should handle index search failure', async () => {
+    it('should fall back to FTS when semantic search fails', async () => {
       vi.mocked(mockIndex.searchSemantic).mockRejectedValue(
         new Error('DB error')
       );
+      vi.mocked(mockIndex.searchFullText).mockReturnValue([
+        {
+          id: 1,
+          title: 'FTS Result',
+          filePath: 'fts.md',
+          content: '',
+          plainText: 'FTS content',
+          embedding: [],
+          score: 0.8
+        }
+      ]);
 
       const result = await tool.execute({ query: 'test' });
 
-      expect(result.status).toBe('error');
-      expect(result.code).toBe('INDEX_ERROR');
+      expect(result.status).toBe('success');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].title).toBe('FTS Result');
+    });
+
+    it('should fall back to FTS when semantic search returns empty results (no embeddings)', async () => {
+      // Simulates the case when documents have empty embeddings and are filtered out
+      vi.mocked(mockIndex.searchSemantic).mockResolvedValue([]);
+      vi.mocked(mockIndex.searchFullText).mockReturnValue([
+        {
+          id: 1,
+          title: 'FTS Fallback',
+          filePath: 'test.md',
+          content: '',
+          plainText: 'Test content',
+          embedding: [],
+          score: 0.75
+        }
+      ]);
+
+      const result = await tool.execute({ query: 'test' });
+
+      expect(result.status).toBe('success');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].title).toBe('FTS Fallback');
+      expect(mockIndex.searchFullText).toHaveBeenCalled();
     });
   });
 });

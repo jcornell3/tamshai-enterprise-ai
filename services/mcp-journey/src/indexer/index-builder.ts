@@ -406,15 +406,24 @@ export class IndexBuilder {
     }>;
 
     // Calculate similarity for each document
-    const scoredDocs = docs.map((doc) => {
-      const docEmbedding = this.bufferToArray(doc.embedding);
-      const similarity = EmbeddingGenerator.cosineSimilarity(embedding, docEmbedding);
+    // Skip documents with empty or mismatched embeddings
+    const scoredDocs = docs
+      .map((doc) => {
+        const docEmbedding = this.bufferToArray(doc.embedding);
 
-      return {
-        doc,
-        score: similarity,
-      };
-    });
+        // Skip empty embeddings or dimension mismatches
+        if (docEmbedding.length === 0 || docEmbedding.length !== embedding.length) {
+          return null;
+        }
+
+        const similarity = EmbeddingGenerator.cosineSimilarity(embedding, docEmbedding);
+
+        return {
+          doc,
+          score: similarity,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
 
     // Sort by similarity descending and take top N
     scoredDocs.sort((a, b) => b.score - a.score);

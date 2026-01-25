@@ -105,21 +105,32 @@ export class SearchJourneyTool {
       try {
         results = await this.index.searchSemantic(queryEmbedding, { limit });
       } catch (error) {
-        return {
-          status: 'error',
-          code: 'INDEX_ERROR',
-          suggestedAction: `Search failed: ${(error as Error).message}`
-        };
+        // Fall back to FTS if semantic search fails
+        results = [];
       }
 
-      // Also call combined search for hybrid results (if available)
+      // If semantic search returned no results, fall back to full-text search
+      if (results.length === 0) {
+        try {
+          results = this.index.searchFullText(query, { limit });
+        } catch {
+          // If FTS also fails, return empty results
+          results = [];
+        }
+      }
+
+      // Also try combined search for hybrid results (if available)
       try {
-        await this.index.searchCombined({
+        const combinedResults = await this.index.searchCombined({
           query,
           embedding: queryEmbedding,
           weights: { text: 0.3, semantic: 0.7 },
           limit
         } as never);
+        // Merge combined results if we got any
+        if (Array.isArray(combinedResults) && combinedResults.length > 0 && results.length === 0) {
+          results = combinedResults as IndexedDocument[];
+        }
       } catch {
         // Combined search is optional, ignore errors
       }

@@ -366,8 +366,8 @@ services:
 
   mcp-journey:
     build:
-      context: ../../services/mcp-journey
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/mcp-journey/Dockerfile
     container_name: tamshai-mcp-journey
     restart: unless-stopped
     environment:

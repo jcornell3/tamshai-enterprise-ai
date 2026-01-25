@@ -8,21 +8,51 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (from repo root context)
+COPY services/mcp-journey/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
-# Copy source code
-COPY tsconfig.json ./
-COPY src ./src
+# Copy source code (from repo root context)
+COPY services/mcp-journey/tsconfig.json ./
+COPY services/mcp-journey/src ./src
 
 # Build TypeScript
 RUN npm run build
 
 # Prune dev dependencies
 RUN npm prune --production
+
+# =============================================================================
+# INDEXER STAGE - Builds the journey database
+# =============================================================================
+FROM node:20-alpine AS indexer
+
+WORKDIR /indexer
+
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+# Create data directory
+RUN mkdir -p /indexer/data
+
+# Copy project documentation for indexing
+# Note: These paths are relative to the Docker build context (services/mcp-journey)
+# We use the build context from the repo root to access docs
+COPY docs/ ./project-docs/docs/
+COPY .specify/ ./project-docs/.specify/
+COPY CLAUDE.md ./project-docs/CLAUDE.md
+COPY README.md ./project-docs/README.md
+
+# Set environment and run indexer
+ENV DB_PATH=/indexer/data/journey.db
+ENV PROJECT_ROOT=/indexer/project-docs
+
+# Run the build-index script (without embeddings - no API key at build time)
+RUN node dist/scripts/build-index.js || echo "Index build completed with warnings"
 
 # =============================================================================
 # PRODUCTION STAGE
@@ -43,7 +73,10 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
 
-# Create data directory for SQLite database
+# Copy pre-built database from indexer stage
+COPY --from=indexer --chown=nodejs:nodejs /indexer/data/journey.db /app/data/journey.db
+
+# Create data directory if database copy failed
 RUN mkdir -p /app/data && chown nodejs:nodejs /app/data
 
 # Set environment

@@ -263,6 +263,25 @@ describe('IndexBuilder', () => {
 
       expect(Array.isArray(results)).toBe(true);
     });
+
+    it('should skip documents with empty embeddings in semantic search', async () => {
+      // Add a document with empty embedding
+      await builder.indexDocument({
+        filePath: 'docs/empty-embedding.md',
+        title: 'Empty Embedding Doc',
+        content: 'This doc has no embedding',
+        plainText: 'This doc has no embedding',
+        embedding: [], // Empty embedding
+      });
+
+      // Query with a valid 768-dimension embedding
+      const queryEmbedding = new Array(768).fill(0.1);
+      const results = await builder.searchSemantic(queryEmbedding, { limit: 10 });
+
+      // The empty embedding doc should not be in results (filtered out due to dimension mismatch)
+      const emptyEmbedDoc = results.find(r => r.filePath === 'docs/empty-embedding.md');
+      expect(emptyEmbedDoc).toBeUndefined();
+    });
   });
 
   describe('getDocument', () => {
