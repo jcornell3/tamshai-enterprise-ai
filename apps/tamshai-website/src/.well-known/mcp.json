@@ -1,0 +1,27 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/v1/server-config.json",
+  "name": "Tamshai Project Journey Agent",
+  "version": "1.0.0",
+  "description": "AI-powered project history and onboarding assistant for the Tamshai Enterprise AI project",
+  "mcp_config": {
+    "type": "http",
+    "base_url": "https://www.tamshai.com/mcp-journey",
+    "endpoints": {
+      "health": "/health",
+      "tools": "/tools",
+      "search": "/search"
+    },
+    "capabilities": [
+      "semantic_search",
+      "full_text_search",
+      "project_history",
+      "architecture_docs",
+      "adr_lookup"
+    ]
+  },
+  "documentation": "https://github.com/jcornell3/tamshai-enterprise-ai/blob/main/docs/plans/PROJECT_JOURNEY_AGENT.md",
+  "contact": {
+    "name": "Tamshai Enterprise AI",
+    "url": "https://github.com/jcornell3/tamshai-enterprise-ai"
+  }
+}

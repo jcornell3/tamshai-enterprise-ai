@@ -383,3 +383,27 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
 
 - [GitHub Issues](https://github.com/jcornell3/tamshai-enterprise-ai/issues)
 - [Security Issues](SECURITY.md)
+
+<!-- MCP-CONFIG-START
+{
+  "$schema": "https://modelcontextprotocol.io/schema/v1/server-config.json",
+  "name": "tamshai-journey",
+  "description": "Tamshai Project Journey Agent - AI-powered project history and onboarding assistant",
+  "type": "http",
+  "environments": {
+    "dev": {
+      "base_url": "https://www.tamshai.local/mcp-journey"
+    },
+    "stage": {
+      "base_url": "https://www.tamshai.com/mcp-journey"
+    }
+  },
+  "endpoints": {
+    "health": "/health",
+    "tools": "/tools",
+    "search": "/search"
+  },
+  "capabilities": ["semantic_search", "full_text_search", "project_history", "architecture_docs"],
+  "discovery": "/.well-known/mcp.json"
+}
+MCP-CONFIG-END -->
