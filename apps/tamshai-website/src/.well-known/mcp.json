@@ -8,15 +8,48 @@
     "base_url": "https://www.tamshai.com/mcp-journey",
     "endpoints": {
       "health": "/health",
-      "tools": "/tools",
-      "search": "/search"
+      "tools": "/mcp/tools/{toolName}",
+      "resources": "/mcp/resources",
+      "resource": "/mcp/resources/{uri}"
     },
-    "capabilities": [
-      "semantic_search",
-      "full_text_search",
-      "project_history",
-      "architecture_docs",
-      "adr_lookup"
+    "tools": [
+      {
+        "name": "search_journey",
+        "description": "Semantic search across all project documentation",
+        "parameters": {
+          "query": "string (required)",
+          "limit": "number (optional, default 10, max 50)"
+        }
+      },
+      {
+        "name": "query_failures",
+        "description": "Query failure logs by topic",
+        "parameters": {
+          "topic": "string (required)"
+        }
+      },
+      {
+        "name": "lookup_adr",
+        "description": "Look up Architecture Decision Records",
+        "parameters": {
+          "adr_id": "string (required)"
+        }
+      },
+      {
+        "name": "get_context",
+        "description": "Get project context and summary"
+      },
+      {
+        "name": "list_pivots",
+        "description": "List major project pivots and changes"
+      }
+    ],
+    "resources": [
+      "journey://failures/{topic}",
+      "journey://decisions/{adr-id}",
+      "journey://evolution/{component}",
+      "journey://lessons",
+      "journey://phoenix/{version}"
     ]
   },
   "documentation": "https://github.com/jcornell3/tamshai-enterprise-ai/blob/main/docs/plans/PROJECT_JOURNEY_AGENT.md",

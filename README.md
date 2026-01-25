@@ -400,10 +400,10 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
   },
   "endpoints": {
     "health": "/health",
-    "tools": "/tools",
-    "search": "/search"
+    "tools": "/mcp/tools/{toolName}",
+    "resources": "/mcp/resources"
   },
-  "capabilities": ["semantic_search", "full_text_search", "project_history", "architecture_docs"],
+  "tools": ["search_journey", "query_failures", "lookup_adr", "get_context", "list_pivots"],
   "discovery": "/.well-known/mcp.json"
 }
 MCP-CONFIG-END -->
