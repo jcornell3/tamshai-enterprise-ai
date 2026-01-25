@@ -63,6 +63,10 @@ locals {
       url  = "http://localhost:3104"
       port = 3104
     }
+    mcp_journey = {
+      url  = "http://localhost:3105"
+      port = 3105
+    }
     web_portal = {
       url  = "http://localhost:4000"
       port = 4000
@@ -190,6 +194,9 @@ resource "local_file" "docker_env" {
 
     # MCP Gateway
     claude_api_key = var.claude_api_key
+
+    # MCP Journey (Project History Agent)
+    gemini_api_key = var.gemini_api_key
 
     # Environment
     environment = var.environment

@@ -163,8 +163,8 @@ export class GetContextTool {
 
       // Sort documents by date chronologically
       const sortedDocs = [...docs].sort((a, b) => {
-        const dateA = a.metadata?.date || a.metadata?.datePublished || (a as Record<string, unknown>).date || '';
-        const dateB = b.metadata?.date || b.metadata?.datePublished || (b as Record<string, unknown>).date || '';
+        const dateA = a.metadata?.date || a.metadata?.datePublished || (a as unknown as Record<string, unknown>).date || '';
+        const dateB = b.metadata?.date || b.metadata?.datePublished || (b as unknown as Record<string, unknown>).date || '';
         return String(dateA).localeCompare(String(dateB));
       });
 
@@ -172,7 +172,7 @@ export class GetContextTool {
       const timeline: TimelineEntry[] = sortedDocs.map((doc) => ({
         title: doc.title,
         filePath: doc.filePath,
-        date: (doc.metadata?.date || doc.metadata?.datePublished || (doc as Record<string, unknown>).date || undefined) as string | undefined,
+        date: (doc.metadata?.date || doc.metadata?.datePublished || (doc as unknown as Record<string, unknown>).date || undefined) as string | undefined,
         summary: doc.plainText?.substring(0, 150) || undefined
       }));
 

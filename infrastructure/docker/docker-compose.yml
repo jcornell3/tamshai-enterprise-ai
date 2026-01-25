@@ -363,6 +363,26 @@ services:
     networks:
       - tamshai-network
 
+  mcp-journey:
+    build:
+      context: ../../services/mcp-journey
+      dockerfile: Dockerfile
+    container_name: tamshai-mcp-journey
+    environment:
+      NODE_ENV: development
+      PORT: 3105
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: info
+    ports:
+      - "3105:3105"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - tamshai-network
+
   # =============================================================================
   # WEB APPLICATIONS (Frontend)
   # =============================================================================

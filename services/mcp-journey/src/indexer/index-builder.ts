@@ -673,4 +673,59 @@ export class IndexBuilder {
     const words = safe.split(/\s+/).filter((w) => w.length > 0);
     return words.join(' OR ');
   }
+
+  /**
+   * Get evolution history for a component.
+   * TODO: Implement full evolution tracking
+   */
+  getEvolutionHistory(_component: string): Record<string, unknown> | null {
+    // Stub implementation - returns null (component not found)
+    // Full implementation would query documents and build evolution history
+    return null;
+  }
+
+  /**
+   * List all tracked components.
+   * TODO: Implement component tracking
+   */
+  listComponents(): string[] {
+    // Stub implementation - returns empty array
+    // Full implementation would extract components from indexed documents
+    return [];
+  }
+
+  /**
+   * Get documents by type(s).
+   * TODO: Implement document type filtering
+   */
+  getDocumentsByType(types: string[]): IndexedDocument[] {
+    this.ensureInitialized();
+    const db = this.db!;
+
+    if (types.length === 0) {
+      return [];
+    }
+
+    const placeholders = types.map(() => '?').join(', ');
+    const results = db
+      .prepare(
+        `SELECT d.id, d.file_path, d.title, d.content, d.plain_text,
+                e.embedding, m.metadata_json
+         FROM documents d
+         JOIN json_ld_metadata m ON d.id = m.document_id
+         LEFT JOIN embeddings e ON d.id = e.document_id
+         WHERE m.learning_resource_type IN (${placeholders})`
+      )
+      .all(...types) as Array<{
+      id: number;
+      file_path: string;
+      title: string;
+      content: string;
+      plain_text: string;
+      embedding: Buffer | null;
+      metadata_json: string | null;
+    }>;
+
+    return results.map((r) => this.mapDocument(r));
+  }
 }

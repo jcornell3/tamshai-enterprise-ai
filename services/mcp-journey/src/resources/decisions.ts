@@ -117,7 +117,7 @@ export class DecisionsResource {
 
     // If just a number, pad and prefix
     const numMatch = adrId.match(/^(\d+)$/);
-    if (numMatch) {
+    if (numMatch && numMatch[1]) {
       const num = numMatch[1].padStart(3, '0');
       return `ADR-${num}`;
     }

@@ -45,7 +45,7 @@ export class FailuresResource {
     }
 
     // Search for failure-related documents
-    const documents = this.index.searchByType([
+    const documents = this.index.getDocumentsByType([
       'failure-analysis',
       'debugging-log',
     ]);

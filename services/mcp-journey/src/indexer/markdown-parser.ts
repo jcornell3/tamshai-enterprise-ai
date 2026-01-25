@@ -13,7 +13,8 @@
  */
 
 import matter from 'gray-matter';
-import { marked } from 'marked';
+// marked is available for future use in content rendering
+import { marked as _marked } from 'marked';
 import fs from 'fs';
 import path from 'path';
 

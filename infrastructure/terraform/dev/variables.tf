@@ -123,6 +123,17 @@ variable "claude_api_key" {
 }
 
 # =============================================================================
+# Gemini API Configuration (MCP Journey)
+# =============================================================================
+
+variable "gemini_api_key" {
+  description = "Google Gemini API key for MCP Journey embeddings"
+  type        = string
+  sensitive   = true
+  default     = "" # Optional - mcp-journey semantic search disabled if not set
+}
+
+# =============================================================================
 # Docker Compose Configuration
 # =============================================================================
 

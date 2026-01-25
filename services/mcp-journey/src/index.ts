@@ -6,8 +6,9 @@
  * @see docs/plans/MCP_JOURNEY_TDD_PLAN.md
  */
 
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Request, Response } from 'express';
 import { IndexBuilder } from './indexer/index-builder.js';
+import { EmbeddingGenerator } from './indexer/embedding-generator.js';
 import { QueryFailuresTool } from './tools/query-failures.js';
 import { LookupAdrTool } from './tools/lookup-adr.js';
 import { SearchJourneyTool } from './tools/search-journey.js';
@@ -53,10 +54,15 @@ export class McpServer {
     this.app = express();
     this.index = new IndexBuilder({ dbPath: config.dbPath });
 
+    // Initialize embedding generator (optional - uses GEMINI_API_KEY if available)
+    const embeddingGenerator = new EmbeddingGenerator({
+      apiKey: process.env.GEMINI_API_KEY || '',
+    });
+
     // Initialize tools
     this.queryFailuresTool = new QueryFailuresTool(this.index);
     this.lookupAdrTool = new LookupAdrTool(this.index);
-    this.searchJourneyTool = new SearchJourneyTool(this.index);
+    this.searchJourneyTool = new SearchJourneyTool(this.index, embeddingGenerator);
     this.getContextTool = new GetContextTool(this.index);
     this.listPivotsTool = new ListPivotsTool(this.index);
 
@@ -93,7 +99,7 @@ export class McpServer {
     this.app.use('/mcp', burstLimiter);
 
     // Tool endpoints
-    this.app.post('/mcp/tools/:toolName', async (req: Request, res: Response) => {
+    this.app.post('/mcp/tools/:toolName', async (req: Request, res: Response): Promise<void> => {
       const { toolName } = req.params;
       const params = req.body;
 
@@ -103,21 +109,24 @@ export class McpServer {
         switch (toolName) {
           case 'query_failures':
             if (!params.topic) {
-              return res.status(400).json({ error: 'Missing required parameter: topic' });
+              res.status(400).json({ error: 'Missing required parameter: topic' });
+              return;
             }
             result = await this.queryFailuresTool.execute(params);
             break;
 
           case 'lookup_adr':
             if (!params.adr_id) {
-              return res.status(400).json({ error: 'Missing required parameter: adr_id' });
+              res.status(400).json({ error: 'Missing required parameter: adr_id' });
+              return;
             }
             result = await this.lookupAdrTool.execute(params);
             break;
 
           case 'search_journey':
             if (!params.query) {
-              return res.status(400).json({ error: 'Missing required parameter: query' });
+              res.status(400).json({ error: 'Missing required parameter: query' });
+              return;
             }
             result = await this.searchJourneyTool.execute(params);
             break;
@@ -131,7 +140,8 @@ export class McpServer {
             break;
 
           default:
-            return res.status(404).json({ error: `Unknown tool: ${toolName}` });
+            res.status(404).json({ error: `Unknown tool: ${toolName}` });
+            return;
         }
 
         // Wrap successful responses with identity metadata
@@ -157,8 +167,13 @@ export class McpServer {
     });
 
     // Resource read endpoint
-    this.app.get('/mcp/resources/:uri(*)', async (req: Request, res: Response) => {
+    this.app.get('/mcp/resources/:uri(*)', async (req: Request, res: Response): Promise<void> => {
       const uri = req.params.uri;
+
+      if (!uri) {
+        res.status(400).json({ error: 'URI is required' });
+        return;
+      }
 
       try {
         // Parse URI
@@ -170,18 +185,19 @@ export class McpServer {
 
         let result;
 
-        if (failuresMatch) {
+        if (failuresMatch && failuresMatch[1]) {
           result = await this.failuresResource.read({ topic: failuresMatch[1] });
-        } else if (decisionsMatch) {
+        } else if (decisionsMatch && decisionsMatch[1]) {
           result = await this.decisionsResource.read({ 'adr-id': decisionsMatch[1] });
-        } else if (evolutionMatch) {
+        } else if (evolutionMatch && evolutionMatch[1]) {
           result = await this.evolutionResource.read({ component: evolutionMatch[1] });
         } else if (lessonsMatch) {
           result = await this.lessonsResource.read();
-        } else if (phoenixMatch) {
+        } else if (phoenixMatch && phoenixMatch[1]) {
           result = await this.phoenixResource.read({ version: phoenixMatch[1] });
         } else {
-          return res.status(404).json({ error: `Unknown resource URI: ${uri}` });
+          res.status(404).json({ error: `Unknown resource URI: ${uri}` });
+          return;
         }
 
         res.json(result);
@@ -223,3 +239,16 @@ export * from './indexer/json-ld-extractor.js';
 export * from './tools/index.js';
 export * from './resources/index.js';
 export * from './middleware/index.js';
+
+// Start server if this is the main module
+const PORT = parseInt(process.env.PORT || '3105', 10);
+const DB_PATH = process.env.DB_PATH || './data/journey.db';
+
+const server = new McpServer({ port: PORT, dbPath: DB_PATH });
+
+server.start().then(() => {
+  console.log(`MCP Journey server started on port ${PORT}`);
+}).catch((error) => {
+  console.error('Failed to start MCP Journey server:', error);
+  process.exit(1);
+});

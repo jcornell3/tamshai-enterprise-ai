@@ -338,6 +338,33 @@ services:
     networks:
       - tamshai-network
 
+  mcp-journey:
+    build:
+      context: ./services/mcp-journey
+      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:-}mcp-journey:${IMAGE_TAG:-latest}
+    container_name: tamshai-mcp-journey
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3105
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${MCP_JOURNEY_PORT:-3105}:3105"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3105/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tamshai-network
+
   # =============================================================================
   # WEB APPLICATIONS (React/Vite Frontend Apps)
   # =============================================================================

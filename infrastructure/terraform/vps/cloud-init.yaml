@@ -81,6 +81,9 @@ write_files:
       # Stage uses pre-seeded users with group assignments for Phoenix architecture
       KEYCLOAK_REALM=./keycloak/realm-export-stage.json
 
+      # MCP Journey (Project History Agent)
+      GEMINI_API_KEY=${gemini_api_key}
+
       # Identity Sync (HR -> Keycloak provisioning)
       MCP_HR_SERVICE_CLIENT_SECRET=${mcp_hr_service_client_secret}
 

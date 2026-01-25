@@ -102,8 +102,8 @@ export class PhoenixResource {
     const resources: ResourceListItem[] = phoenixDocs
       .map((doc) => {
         const match = doc.filePath.match(/PHOENIX_MANUAL_ACTIONSv(\d+)/);
-        const versionNum = match ? parseInt(match[1], 10) : 0;
-        const version = match ? `v${match[1]}` : doc.title;
+        const versionNum = match && match[1] ? parseInt(match[1], 10) : 0;
+        const version = match && match[1] ? `v${match[1]}` : doc.title;
 
         return {
           uri: `journey://phoenix/${version}`,
@@ -129,7 +129,8 @@ export class PhoenixResource {
       throw new Error('Invalid version range');
     }
 
-    const [startVersion, endVersion] = parts;
+    const startVersion = parts[0]!;
+    const endVersion = parts[1]!;
 
     const normalizedStart = this.normalizeVersion(startVersion);
     const normalizedEnd = this.normalizeVersion(endVersion);

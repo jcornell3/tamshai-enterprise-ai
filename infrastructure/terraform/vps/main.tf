@@ -88,6 +88,13 @@ variable "claude_api_key_stage" {
   sensitive   = true
 }
 
+variable "gemini_api_key_stage" {
+  description = "Google Gemini API key for MCP Journey embeddings (Stage/VPS)"
+  type        = string
+  sensitive   = true
+  default     = "" # Optional - mcp-journey semantic search disabled if not set
+}
+
 variable "github_repo" {
   description = "GitHub repository (owner/repo format for gh CLI, or full URL for git clone)"
   type        = string
@@ -404,6 +411,7 @@ locals {
     github_repo                  = var.github_repo_url
     github_branch                = var.github_branch
     claude_api_key               = replace(var.claude_api_key_stage, "$", "$$") # User-provided, may have special chars
+    gemini_api_key               = replace(var.gemini_api_key_stage, "$", "$$") # User-provided, may have special chars
     postgres_password            = random_password.postgres_password.result
     keycloak_admin_pass          = random_password.keycloak_admin_password.result
     keycloak_db_password         = random_password.keycloak_db_password.result

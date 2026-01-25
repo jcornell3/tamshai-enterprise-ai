@@ -83,6 +83,17 @@ redis_password = "" # No password for dev
 # Format: sk-ant-api03-...
 
 # =============================================================================
+# GEMINI API CONFIGURATION (MCP Journey)
+# =============================================================================
+# Note: OPTIONAL - Set via TF_VAR_gemini_api_key
+#
+# gemini_api_key - Set via TF_VAR_gemini_api_key (optional)
+#
+# Used by mcp-journey for semantic search embeddings.
+# Get your key from: https://makersuite.google.com/app/apikey
+# Format: AIzaSy...
+
+# =============================================================================
 # DEFAULTS (Overridden by TF_VAR_* environment variables)
 # =============================================================================
 
