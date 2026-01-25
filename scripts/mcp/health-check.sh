@@ -50,6 +50,7 @@ declare -A MCP_SERVERS=(
     ["MCP Finance"]="3102"
     ["MCP Sales"]="3103"
     ["MCP Support"]="3104"
+    ["MCP Journey"]="3105"
 )
 
 check_mcp_server() {
