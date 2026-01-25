@@ -177,15 +177,28 @@ describe('SearchJourneyTool', () => {
       expect(result.code).toBe('INVALID_INPUT');
     });
 
-    it('should handle embedding generation failure', async () => {
+    it('should fall back to FTS when embedding generation fails (no API key)', async () => {
       vi.mocked(mockEmbeddingGenerator.generateEmbedding).mockRejectedValue(
-        new Error('Embedding API error')
+        new Error('GEMINI_API_KEY not configured')
       );
+      vi.mocked(mockIndex.searchFullText).mockReturnValue([
+        {
+          id: 1,
+          title: 'FTS Result',
+          filePath: 'fts.md',
+          content: '',
+          plainText: 'FTS content',
+          embedding: [],
+          score: 0.8
+        }
+      ]);
 
       const result = await tool.execute({ query: 'test' });
 
-      expect(result.status).toBe('error');
-      expect(result.code).toBe('EMBEDDING_ERROR');
+      expect(result.status).toBe('success');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].title).toBe('FTS Result');
+      expect(mockIndex.searchFullText).toHaveBeenCalled();
     });
 
     it('should fall back to FTS when semantic search fails', async () => {

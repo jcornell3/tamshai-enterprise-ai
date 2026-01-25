@@ -88,28 +88,27 @@ export class SearchJourneyTool {
     const limit = Math.min(input.limit || DEFAULT_LIMIT, MAX_LIMIT);
 
     try {
-      // Generate embedding for the query
-      let queryEmbedding: number[];
+      // Generate embedding for the query (optional - falls back to FTS if unavailable)
+      let queryEmbedding: number[] | null = null;
       try {
         queryEmbedding = await this.embeddingGenerator.generateEmbedding(query);
-      } catch (error) {
-        return {
-          status: 'error',
-          code: 'EMBEDDING_ERROR',
-          suggestedAction: `Failed to generate embedding: ${(error as Error).message}`
-        };
+      } catch {
+        // Embedding generation failed (e.g., no API key) - will use FTS only
+        queryEmbedding = null;
       }
 
-      // Perform semantic search
-      let results: IndexedDocument[];
-      try {
-        results = await this.index.searchSemantic(queryEmbedding, { limit });
-      } catch (error) {
-        // Fall back to FTS if semantic search fails
-        results = [];
+      // Perform semantic search if embedding is available
+      let results: IndexedDocument[] = [];
+      if (queryEmbedding) {
+        try {
+          results = await this.index.searchSemantic(queryEmbedding, { limit });
+        } catch {
+          // Semantic search failed - will fall back to FTS
+          results = [];
+        }
       }
 
-      // If semantic search returned no results, fall back to full-text search
+      // Fall back to full-text search if no semantic results or no embedding
       if (results.length === 0) {
         try {
           results = this.index.searchFullText(query, { limit });
@@ -119,20 +118,22 @@ export class SearchJourneyTool {
         }
       }
 
-      // Also try combined search for hybrid results (if available)
-      try {
-        const combinedResults = await this.index.searchCombined({
-          query,
-          embedding: queryEmbedding,
-          weights: { text: 0.3, semantic: 0.7 },
-          limit
-        } as never);
-        // Merge combined results if we got any
-        if (Array.isArray(combinedResults) && combinedResults.length > 0 && results.length === 0) {
-          results = combinedResults as IndexedDocument[];
+      // Try combined search if we have an embedding (optional enhancement)
+      if (queryEmbedding) {
+        try {
+          const combinedResults = await this.index.searchCombined({
+            query,
+            embedding: queryEmbedding,
+            weights: { text: 0.3, semantic: 0.7 },
+            limit
+          } as never);
+          // Merge combined results if we got any and original search was empty
+          if (Array.isArray(combinedResults) && combinedResults.length > 0 && results.length === 0) {
+            results = combinedResults as IndexedDocument[];
+          }
+        } catch {
+          // Combined search is optional, ignore errors
         }
-      } catch {
-        // Combined search is optional, ignore errors
       }
 
       // Sort by score descending
