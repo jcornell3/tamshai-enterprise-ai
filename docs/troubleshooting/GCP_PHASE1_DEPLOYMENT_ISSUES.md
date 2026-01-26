@@ -79,7 +79,7 @@ Terraform plan file (`infrastructure/terraform/gcp/tfplan`) committed to public 
 
 3. **API Key Rotation**:
    - User obtained new API key from Anthropic Console
-   - Updated GitHub secret: `ANTHROPIC_API_KEY_PROD`
+   - Updated GitHub secret: `CLAUDE_API_KEY_PROD`
    - Updated GCP Secret Manager (version 3): `tamshai-prod-anthropic-api-key`
    - Updated local `terraform.tfvars` (gitignored)
 

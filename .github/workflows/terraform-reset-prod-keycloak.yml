@@ -63,7 +63,7 @@ jobs:
         working-directory: infrastructure/terraform/gcp
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY_PROD }}
+          TF_VAR_claude_api_key: ${{ secrets.CLAUDE_API_KEY_PROD }}
           TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
         run: |
           echo "📋 Planning database reset..."
@@ -73,7 +73,7 @@ jobs:
         working-directory: infrastructure/terraform/gcp
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
-          TF_VAR_claude_api_key: ${{ secrets.ANTHROPIC_API_KEY_PROD }}
+          TF_VAR_claude_api_key: ${{ secrets.CLAUDE_API_KEY_PROD }}
           TF_VAR_mongodb_atlas_uri: ${{ secrets.MONGODB_ATLAS_URI }}
         run: |
           echo "🚀 Applying database reset..."
