@@ -1251,6 +1251,13 @@ phase_7_cloud_run() {
         return 0
     fi
 
+    # Ensure Cloud SQL Service Agent exists (needed for backups bucket IAM)
+    # This agent is auto-created but can lag behind - force creation to avoid terraform errors
+    log_step "Ensuring Cloud SQL Service Agent exists..."
+    gcloud beta services identity create \
+        --service=sqladmin.googleapis.com \
+        --project="${GCP_PROJECT_ID}" 2>/dev/null || log_warn "Could not create Cloud SQL Service Agent (may already exist)"
+
     # Gap #48: Import existing domain mappings before apply (they persist across Phoenix rebuilds)
     log_step "Checking for existing domain mappings to import (Gap #48)..."
     local region="${GCP_REGION}"
