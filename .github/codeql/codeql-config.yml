@@ -46,6 +46,7 @@ paths-ignore:
 # Note: clients/unified and clients/desktop are deprecated React Native code
 paths:
   - 'services/**'
+  - 'clients/web/**'
   - 'clients/unified_flutter/lib/**'
   - 'clients/unified_flutter/test/**'
   - 'tests/**'
