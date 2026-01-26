@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>From 31% to 86%: How TDD and CI Refactoring Transformed Our Project | Tamshai AI Corp</title>
+    <meta name="description" content="Securing Enterprise AI: Lessons in TDD and Refactoring. How the Tamshai Enterprise AI project went from 31% to 86% test coverage through disciplined TDD.">
+    <link rel="icon" type="image/png" href="../tamshai-favicon.png">
+    <link rel="stylesheet" href="../style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header>
+        <div class="container header-content">
+            <div class="logo">
+                <a href="../index.html">Tamshai AI Corp</a>
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <li class="dropdown">
+                        <a href="#" class="dropbtn">Company &#9662;</a>
+                        <div class="dropdown-content">
+                            <a href="../mission.html">Mission Statement</a>
+                            <a href="../leadership.html">Leadership Team</a>
+                            <a href="../blog.html">Blog</a>
+                        </div>
+                    </li>
+                    <li><a href="../client-login.html" class="btn btn-login">Client Login</a></li>
+                    <li><a href="../employee-login.html" class="btn btn-login">Employee Login</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <article class="blog-post">
+        <div class="container">
+
+            <div class="blog-post-header">
+                <a href="../blog.html" class="blog-back-link">&larr; Back to Blog</a>
+                <div class="blog-post-meta">
+                    <span>January 22, 2026</span>
+                    <span class="meta-separator">|</span>
+                    <span>8 min read</span>
+                </div>
+                <h1>From 31% to 86%: How TDD and CI Refactoring Transformed Our Project</h1>
+                <p class="blog-post-subtitle">Scaling an enterprise AI solution isn't just about the model &mdash; it's about the safety net underneath it.</p>
+                <div class="blog-post-tags">
+                    <span class="blog-tag">Software Development</span>
+                    <span class="blog-tag">TDD</span>
+                    <span class="blog-tag">AI Security</span>
+                    <span class="blog-tag">DevOps</span>
+                    <span class="blog-tag">TypeScript</span>
+                </div>
+            </div>
+
+            <img src="images/image1.jpg" alt="TDD and CI Refactoring - Enterprise AI Testing" class="blog-post-hero-img">
+
+            <div class="blog-post-body">
+
+                <p>In late 2025, the Tamshai Enterprise AI project was moving fast, but our safety net was fraying. We were sitting at a precarious <strong>31.52% test coverage</strong>. For an enterprise platform handling sensitive HR, Finance, and Sales data via AI, "moving fast" was starting to feel like "moving recklessly." We knew that to build a secure, multi-platform solution, we had to stop treating testing as an afterthought and start treating it as our primary development engine.</p>
+
+                <h2>The Shift: Embracing the RED-GREEN-REFACTOR</h2>
+
+                <p>We pivoted to a strict <strong>Test-Driven Development (TDD)</strong> methodology for all our service applications. This wasn't just a policy change; it was a cultural shift in how we write code. By following the classic <strong>RED-GREEN-REFACTOR</strong> cycle, we ensured that every new feature was defined by its tests before a single line of production logic was written.</p>
+
+                <p>"Design quality isn't accidental. By writing tests first, we force ourselves to think about interfaces and edge cases before we get lost in the implementation."</p>
+
+                <h2>The Deep Dive: Refactoring for Testability</h2>
+
+                <p>Our biggest hurdle was the MCP Gateway, which originally housed a monolithic <code>index.ts</code> that was nearly impossible to unit test effectively. To hit our targets, we didn't just add tests &mdash; we re-architected.</p>
+
+                <h3>1. Module Extraction</h3>
+
+                <p>Following our Phase 5-8 refactoring plan, we extracted business logic from the monolith into isolated, testable modules. This allowed us to achieve:</p>
+
+                <ul>
+                    <li>AI/Claude Client: 100% coverage.</li>
+                    <li>Auth/JWT Validation: 94% coverage.</li>
+                    <li>Types/Discriminated Unions: 100% coverage.</li>
+                </ul>
+
+                <h3>2. CI/CD Pipeline Overhaul</h3>
+
+                <p>We overhauled our GitHub Actions to support a <strong>14-job testing matrix</strong>. This pipeline acts as a "Gatekeeper," ensuring that no code reaches <code>main</code> without passing a gauntlet of checks.</p>
+
+                <ul>
+                    <li><strong>Matrix Testing:</strong> We now test across both Node.js 20 and 22 simultaneously.</li>
+                    <li><strong>Security Scanning:</strong> A 5-layer defense-in-depth approach including Gitleaks, CodeQL, and Trivy.</li>
+                    <li><strong>Blocking Gates:</strong> Our CI now enforces a <strong>90% Diff Coverage rule</strong> &mdash; if your new code isn't tested, your PR is blocked.</li>
+                </ul>
+
+                <h2>Visualizing the Security Gap</h2>
+
+                <p>One of the core reasons for this rigorous testing was to solve the "Security Gap" inherent in standard AI integrations.</p>
+
+                <img src="images/image4.png" alt="Security architecture diagram showing identity propagation and row-level security" class="blog-post-img">
+
+                <p>As shown in our architecture, we moved away from insecure system-account access to <strong>Identity Propagation</strong>. The authenticated user's identity and group claims now flow directly to the data layer, enabling <strong>Row Level Security (RLS)</strong> for every interaction. This complexity is exactly why our test coverage needed to be absolute.</p>
+
+                <h2>The Results: By the Numbers</h2>
+
+                <p>As of January 22, 2026, the transformation is clear. We have transitioned from a "bare minimum" testing state to what industry standards call the "Commendable" tier.</p>
+
+                <table class="blog-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Original Baseline</th>
+                            <th>Current Status (Jan 2026)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Overall Statement Coverage</td>
+                            <td>31.52%</td>
+                            <td>86.7%</td>
+                        </tr>
+                        <tr>
+                            <td>Total Tests</td>
+                            <td>~200</td>
+                            <td>1,240+</td>
+                        </tr>
+                        <tr>
+                            <td>MCP Journey Coverage</td>
+                            <td>N/A (New)</td>
+                            <td>97.21%</td>
+                        </tr>
+                        <tr>
+                            <td>Branch Coverage</td>
+                            <td>&lt;30%</td>
+                            <td>79.2%</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <img src="images/image2.jpg" alt="Test coverage results visualization" class="blog-post-img blog-post-img-center" style="max-width: 400px;">
+
+                <h2>Lessons Learned: Why AI Coders Need Senior Oversight</h2>
+
+                <p>An interesting discovery during this journey was the behavior of our AI assistants (Claude, Gemini, and ChatGPT). While the project was completely coded by these assistants, it required <strong>10+ hours a day of senior human oversight</strong>.</p>
+
+                <p>We identified several "AI Junior Coder" pitfalls:</p>
+
+                <ul>
+                    <li><strong>Short-term Thinking:</strong> A preference for the easiest path rather than the most scalable solution.</li>
+                    <li><strong>Hacks Over Fixes:</strong> A tendency to implement workarounds instead of solving root causes.</li>
+                    <li><strong>Context Degradation:</strong> Gradual reduction in decision quality as context windows reached their limits.</li>
+                </ul>
+
+                <img src="images/image3.jpg" alt="AI coding assistant oversight process" class="blog-post-img blog-post-img-center" style="max-width: 600px;">
+
+                <h2>Conclusion: The "So What?"</h2>
+
+                <p>Reaching <strong>86.7% overall coverage</strong> isn't just about vanity metrics. It means that when we refactor our AI query engine or update our RBAC logic, we do so with the confidence of over 1,200 automated sentinels guarding the gates. We've proven that even a legacy monolith can be turned into a high-coverage, modern service through disciplined TDD and modular refactoring.</p>
+
+                <p>What's your team's "sweet spot" for test coverage? Let's discuss the balance between 100% perfection and practical shipping in the comments.</p>
+
+                <hr class="blog-divider">
+
+            </div>
+
+        </div>
+    </article>
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2026 Tamshai Corp. All rights reserved.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
