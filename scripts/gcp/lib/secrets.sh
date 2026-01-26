@@ -632,11 +632,18 @@ trigger_identity_sync() {
         fi
     fi
 
-    # Check if workflow exists
-    if ! gh workflow list --repo "$repo" 2>/dev/null | grep -q "provision-prod-users"; then
-        log_secrets_warn "provision-prod-users.yml workflow not found in $repo"
-        log_secrets_warn "Corporate users will not be provisioned"
-        return 1
+    # Check if workflow exists (retry - GitHub API can be flaky)
+    local workflow_found=false
+    for attempt in 1 2 3; do
+        if gh workflow list --repo "$repo" 2>/dev/null | grep -q "provision-prod-users"; then
+            workflow_found=true
+            break
+        fi
+        [ "$attempt" -lt 3 ] && sleep 5
+    done
+    if [ "$workflow_found" = false ]; then
+        log_secrets_warn "provision-prod-users.yml workflow not found after 3 attempts"
+        log_secrets_info "Attempting to trigger workflow anyway..."
     fi
 
     # Trigger the workflow with parameters
@@ -724,11 +731,18 @@ trigger_sample_data_load() {
         fi
     fi
 
-    # Check if workflow exists
-    if ! gh workflow list --repo "$repo" 2>/dev/null | grep -q "provision-prod-data"; then
-        log_secrets_warn "provision-prod-data.yml workflow not found in $repo"
-        log_secrets_warn "Sample data will not be loaded"
-        return 1
+    # Check if workflow exists (retry - GitHub API can be flaky)
+    local workflow_found=false
+    for attempt in 1 2 3; do
+        if gh workflow list --repo "$repo" 2>/dev/null | grep -q "provision-prod-data"; then
+            workflow_found=true
+            break
+        fi
+        [ "$attempt" -lt 3 ] && sleep 5
+    done
+    if [ "$workflow_found" = false ]; then
+        log_secrets_warn "provision-prod-data.yml workflow not found after 3 attempts"
+        log_secrets_info "Attempting to trigger workflow anyway..."
     fi
 
     # Trigger the workflow with parameters

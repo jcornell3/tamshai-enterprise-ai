@@ -244,6 +244,13 @@ clear_checkpoint() {
 phase_1_preflight() {
     log_phase "1" "Pre-flight Checks"
 
+    # Check PROD_USER_PASSWORD is set (needed for Phase 10 user provisioning)
+    if [ -z "${PROD_USER_PASSWORD:-}" ]; then
+        log_warn "PROD_USER_PASSWORD not set in environment"
+        log_warn "Corporate users will get random passwords after rebuild"
+        log_warn "Set it with: export PROD_USER_PASSWORD=<password>"
+    fi
+
     if [ "$SKIP_PREFLIGHT" = true ]; then
         log_warn "Skipping pre-flight checks (--skip-preflight)"
         save_checkpoint 1 "skipped"

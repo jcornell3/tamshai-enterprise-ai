@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
 **Last Updated**: January 26, 2026
-**Version**: 3.4.0
+**Version**: 3.5.0
 **Owner**: Platform Team
 
 ## Overview
@@ -386,7 +386,15 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 
 ## Post-Phoenix Checklist
 
-- [ ] All E2E tests pass
+### Blocking Requirements (MUST pass before declaring rebuild successful)
+
+- [ ] **User password provisioning complete** — Corporate users provisioned with known `PROD_USER_PASSWORD` (not random Terraform-generated passwords). Verify via Keycloak admin or test login.
+- [ ] **ALL E2E tests pass (6/6)** — Run `npm run test:login:prod` in `tests/e2e/`. Zero failures required. Partial passes are NOT acceptable.
+
+> **These two items are hard blockers.** A Phoenix rebuild is NOT considered successful until both are verified. If either fails, investigate and remediate before declaring the rebuild complete.
+
+### Additional Verification
+
 - [ ] Users can log in with TOTP
 - [ ] MCP services respond to queries
 - [ ] Monitoring dashboards show data
@@ -623,6 +631,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.5.0 | Jan 26, 2026 | Tamshai-Dev | Added blocking requirements: user password provisioning and ALL E2E tests must pass for successful rebuild |
 | 3.4.0 | Jan 26, 2026 | Tamshai-Dev | Added Issue #103 troubleshooting: VPC peering dependency diagnostics and auto-created firewall rule diagnostics |
 | 3.3.0 | Jan 22, 2026 | Tamshai-Dev | Added decision tree and reference to GCP Regional Failure Runbook; added Regional Evacuation Scripts section |
 | 3.2.0 | Jan 21, 2026 | Tamshai-Dev | Added Issues #32, #36, #37 from v10/v11 rebuilds; updated phase table with durations; updated E2E test command; staged Phase 7 with SSL wait |
