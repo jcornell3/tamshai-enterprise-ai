@@ -1583,55 +1583,11 @@ phase_7_cloud_run() {
     # SSL CERTIFICATE VERIFICATION FOR ALL DOMAIN MAPPINGS
     # =============================================================================
     # Issue #102 Fix: Also verify SSL certificates for app and api domains.
-    # Without this, E2E tests fail with HTTP 525 (SSL handshake failed) because
-    # Cloudflare cannot complete the SSL handshake to Cloud Run origins that
-    # don't have managed certificates provisioned yet.
+    # Uses shared wait_for_all_domain_ssl() from lib/domain-mapping.sh.
+    # Without this, E2E tests fail with HTTP 525 (SSL handshake failed).
     # =============================================================================
-    local additional_domains=()
-    if [ -n "${APP_DOMAIN}" ]; then
-        additional_domains+=("${APP_DOMAIN}")
-    fi
-    if [ -n "${API_DOMAIN}" ]; then
-        additional_domains+=("${API_DOMAIN}")
-    fi
-
-    if [ ${#additional_domains[@]} -gt 0 ]; then
-        log_step "Verifying SSL certificates for additional domains (Issue #102 fix)..."
-        for domain in "${additional_domains[@]}"; do
-            # Skip if this domain is the same as KEYCLOAK_DOMAIN (already verified)
-            if [ "$domain" = "${KEYCLOAK_DOMAIN}" ]; then
-                continue
-            fi
-
-            # Check if domain mapping exists
-            if ! gcloud beta run domain-mappings describe --domain="$domain" --region="$region" &>/dev/null 2>&1; then
-                log_info "No domain mapping for $domain - skipping SSL check"
-                continue
-            fi
-
-            log_info "Waiting for SSL certificate on $domain..."
-            local domain_ssl_ready=false
-            local max_domain_attempts=30  # 15 minutes max (30 * 30s)
-
-            for attempt in $(seq 1 $max_domain_attempts); do
-                if curl -sf "https://${domain}/" -o /dev/null 2>/dev/null; then
-                    log_success "SSL certificate for $domain is deployed and working!"
-                    domain_ssl_ready=true
-                    break
-                fi
-                if [ $attempt -eq 1 ]; then
-                    log_info "SSL certificate for $domain not ready yet - starting wait loop..."
-                fi
-                log_info "  Waiting for $domain SSL certificate... (attempt $attempt/$max_domain_attempts)"
-                sleep 30
-            done
-
-            if [ "$domain_ssl_ready" = false ]; then
-                log_warn "SSL certificate for $domain not verified after 15 minutes"
-                log_warn "E2E tests may fail with 525 errors for $domain"
-            fi
-        done
-    fi
+    log_step "Verifying SSL certificates for app and api domains (Issue #102 fix)..."
+    wait_for_all_domain_ssl "${KEYCLOAK_DOMAIN}" "${APP_DOMAIN}" "${API_DOMAIN}" || true
 
     save_checkpoint 7 "completed"
     log_success "Phase 7 complete - Cloud Run services configured"
@@ -1772,38 +1728,16 @@ phase_10_verify() {
     quick_health_check || log_warn "Some services may not be healthy"
 
     # Issue #102: Sync PROD_USER_PASSWORD from GitHub Secrets to GCP Secret Manager
-    # Terraform creates the secret with a random password, but corporate users must
-    # use the password defined in GitHub Secrets so operators know the credential.
-    log_step "Syncing PROD_USER_PASSWORD from GitHub Secrets to GCP Secret Manager..."
-    if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
-        local gh_prod_password
-        gh_prod_password=$(gh secret list --json name -q '.[].name' 2>/dev/null | grep -q "PROD_USER_PASSWORD" && echo "exists" || echo "")
-        if [ "$gh_prod_password" = "exists" ]; then
-            # gh secret get is not available, but we can use the workflow to set it
-            # Instead, read from the environment if the caller exported it
-            if [ -n "${PROD_USER_PASSWORD:-}" ]; then
-                log_info "Updating GCP Secret Manager prod-user-password from environment..."
-                echo -n "$PROD_USER_PASSWORD" | gcloud secrets versions add prod-user-password \
-                    --data-file=- --project="${GCP_PROJECT_ID}" 2>/dev/null && \
-                    log_success "prod-user-password updated in GCP Secret Manager" || \
-                    log_warn "Failed to update prod-user-password in GCP Secret Manager"
-            else
-                log_warn "PROD_USER_PASSWORD not set in environment"
-                log_warn "Corporate users may get a random password from Terraform"
-                log_warn "Set PROD_USER_PASSWORD env var before running phoenix-rebuild.sh"
-                log_warn "Or manually: echo -n 'password' | gcloud secrets versions add prod-user-password --data-file=-"
-            fi
-        else
-            log_warn "PROD_USER_PASSWORD not found in GitHub Secrets"
-        fi
-    else
-        log_warn "gh CLI not available - cannot verify PROD_USER_PASSWORD"
-    fi
+    # Uses shared sync_prod_user_password() from lib/secrets.sh
+    log_step "Syncing PROD_USER_PASSWORD to GCP Secret Manager (Issue #102 fix)..."
+    sync_prod_user_password || log_warn "PROD_USER_PASSWORD sync failed - corporate users may have random password"
 
     # Gap #53: Trigger identity-sync to provision corporate users
     # Uses shared trigger_identity_sync() from lib/secrets.sh
-    log_step "Triggering identity-sync workflow (Gap #53)..."
-    trigger_identity_sync "true" || log_warn "Identity sync may have failed"
+    # Issue #102: Pass force_password_reset=true after fresh Keycloak deployment
+    # to ensure corporate users get the known PROD_USER_PASSWORD
+    log_step "Triggering identity-sync workflow (Gap #53, Issue #102)..."
+    trigger_identity_sync "true" "" "all" "true" || log_warn "Identity sync may have failed"
 
     log_step "Provisioning users (local script)..."
     # Trigger user provisioning if available
@@ -1812,6 +1746,11 @@ phase_10_verify() {
         chmod +x "$provision_script"
         "$provision_script" || log_warn "User provisioning may have failed"
     fi
+
+    # Issue #102: Load sample data (Finance, Sales, Support)
+    # Uses shared trigger_sample_data_load() from lib/secrets.sh
+    log_step "Loading sample data (Finance, Sales, Support)..."
+    trigger_sample_data_load "true" "" "all" || log_warn "Sample data loading may have failed"
 
     log_step "Running E2E login test..."
     cd "$PROJECT_ROOT/tests/e2e"

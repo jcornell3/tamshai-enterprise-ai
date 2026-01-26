@@ -53,6 +53,7 @@ declare -A GITHUB_TO_GCP_MAP=(
     ["KEYCLOAK_DB_PASSWORD_PROD"]="${RESOURCE_PREFIX}-keycloak-db-password"
     ["MONGODB_ATLAS_URI_PROD"]="${RESOURCE_PREFIX}-mongodb-uri"
     ["MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
+    ["PROD_USER_PASSWORD"]="prod-user-password"
 )
 
 # Sanitize secret value (Issue #25 fix)
@@ -393,6 +394,66 @@ ensure_mcp_hr_client_secret() {
 }
 
 # =============================================================================
+# Gap #102: PROD_USER_PASSWORD Sync (Phoenix Rebuild Lesson)
+# =============================================================================
+# Terraform creates the prod-user-password secret with a random value.
+# After Phoenix rebuild or DR evacuation, corporate users must use the known
+# password from GitHub Secrets so operators can log in.
+#
+# This function syncs PROD_USER_PASSWORD from environment to GCP Secret Manager.
+# Used by both phoenix-rebuild.sh and evacuate-region.sh before user provisioning.
+# =============================================================================
+
+# Sync PROD_USER_PASSWORD from environment to GCP Secret Manager
+# Usage: sync_prod_user_password
+#   Reads PROD_USER_PASSWORD from environment variable.
+#   Updates the prod-user-password secret in GCP Secret Manager.
+#   Returns 0 on success, 1 if password not available.
+sync_prod_user_password() {
+    local project="${GCP_PROJECT_ID:-${GCP_PROJECT:-}}"
+    local secret_name="prod-user-password"
+
+    if [ -z "$project" ]; then
+        log_secrets_error "GCP_PROJECT_ID not set - cannot sync prod user password"
+        return 1
+    fi
+
+    log_secrets_info "Syncing PROD_USER_PASSWORD to GCP Secret Manager (Issue #102 fix)..."
+
+    # Check if password is available in environment
+    if [ -n "${PROD_USER_PASSWORD:-}" ]; then
+        log_secrets_info "PROD_USER_PASSWORD found in environment - updating GCP secret..."
+        if ensure_gcp_secret "$secret_name" "$PROD_USER_PASSWORD"; then
+            log_secrets_success "prod-user-password updated in GCP Secret Manager"
+            return 0
+        else
+            log_secrets_error "Failed to update prod-user-password in GCP Secret Manager"
+            return 1
+        fi
+    fi
+
+    # Try to check if GitHub secret exists (informational only - can't read values)
+    if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+        local gh_has_secret
+        gh_has_secret=$(gh secret list --json name -q '.[].name' 2>/dev/null | grep -c "^PROD_USER_PASSWORD$" || echo "0")
+
+        if [ "$gh_has_secret" -gt 0 ]; then
+            log_secrets_warn "PROD_USER_PASSWORD exists in GitHub Secrets but not in environment"
+            log_secrets_warn "Set PROD_USER_PASSWORD env var before running this script:"
+            echo "  export PROD_USER_PASSWORD=\${{ secrets.PROD_USER_PASSWORD }}"
+        else
+            log_secrets_warn "PROD_USER_PASSWORD not found in GitHub Secrets"
+        fi
+    else
+        log_secrets_warn "PROD_USER_PASSWORD not set in environment"
+        log_secrets_warn "Corporate users may get a random Terraform-generated password"
+    fi
+
+    log_secrets_warn "To set manually: echo -n 'password' | gcloud secrets versions add $secret_name --data-file=- --project=$project"
+    return 1
+}
+
+# =============================================================================
 # MongoDB URI Secret Management (Gap #32)
 # =============================================================================
 # The mongodb-uri secret is a global GCP secret that must exist before terraform.
@@ -528,14 +589,27 @@ fetch_totp_secret() {
 # =============================================================================
 
 # Trigger identity-sync workflow to provision corporate users (Gap #53)
-# Usage: trigger_identity_sync [wait_for_completion] [repo]
+# Usage: trigger_identity_sync [wait_for_completion] [repo] [action] [force_password_reset]
 #   wait_for_completion: true/false - whether to wait for workflow (default: true)
 #   repo: GitHub repo (default: auto-detect from git remote)
+#   action: Action to perform (default: all) - verify-only, load-hr-data, sync-users, all
+#   force_password_reset: true/false - reset passwords for existing users (default: false)
+#
+# Phoenix Rebuild Lesson (Issue #102):
+#   After fresh Keycloak deployment, pass force_password_reset=true to ensure
+#   corporate users get the known PROD_USER_PASSWORD instead of Keycloak-generated
+#   random passwords. The entrypoint.sh runs a two-step process:
+#     Step 1: Normal sync (create users)
+#     Step 2: Force password reset (set known passwords)
 trigger_identity_sync() {
     local wait_for_completion="${1:-true}"
     local repo="${2:-}"
+    local action="${3:-all}"
+    local force_password_reset="${4:-false}"
 
     log_secrets_info "Triggering identity-sync workflow (Gap #53)..."
+    log_secrets_info "  Action: $action"
+    log_secrets_info "  Force password reset: $force_password_reset"
 
     # Check gh CLI
     if ! command -v gh &>/dev/null; then
@@ -565,9 +639,14 @@ trigger_identity_sync() {
         return 1
     fi
 
-    # Trigger the workflow
+    # Trigger the workflow with parameters
     log_secrets_info "Running provision-prod-users workflow..."
-    if ! gh workflow run provision-prod-users.yml --repo "$repo" --ref main; then
+    if ! gh workflow run provision-prod-users.yml \
+        --repo "$repo" \
+        --ref main \
+        -f action="$action" \
+        -f dry_run=false \
+        -f force_password_reset="$force_password_reset"; then
         log_secrets_error "Could not trigger provision-prod-users workflow"
         return 1
     fi
@@ -591,6 +670,97 @@ trigger_identity_sync() {
             return 0
         else
             log_secrets_warn "Identity sync workflow failed or timed out"
+            log_secrets_info "Check: gh run view $run_id --repo $repo"
+            return 1
+        fi
+    else
+        log_secrets_warn "Could not get workflow run ID - check GitHub Actions manually"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Gap #102: Sample Data Loading (Phoenix Rebuild Lesson)
+# =============================================================================
+# After Phoenix rebuild or DR evacuation, Finance/Sales/Support sample data
+# must be loaded separately from user provisioning.
+#
+# This triggers the provision-prod-data.yml workflow which loads:
+#   - Finance: Cloud SQL PostgreSQL (via Cloud Run Job with VPC connector)
+#   - Sales: MongoDB Atlas (direct from GitHub Actions)
+#   - Support: MongoDB Atlas (direct from GitHub Actions)
+# =============================================================================
+
+# Trigger sample data loading workflow
+# Usage: trigger_sample_data_load [wait_for_completion] [repo] [data_set]
+#   wait_for_completion: true/false - whether to wait for workflow (default: true)
+#   repo: GitHub repo (default: auto-detect from git remote)
+#   data_set: Data to load (default: all) - all, finance, sales, support
+trigger_sample_data_load() {
+    local wait_for_completion="${1:-true}"
+    local repo="${2:-}"
+    local data_set="${3:-all}"
+
+    log_secrets_info "Triggering sample data load workflow (Issue #102 fix)..."
+    log_secrets_info "  Data set: $data_set"
+
+    # Check gh CLI
+    if ! command -v gh &>/dev/null; then
+        log_secrets_error "gh CLI not available - cannot trigger workflow"
+        return 1
+    fi
+
+    if ! gh auth status &>/dev/null 2>&1; then
+        log_secrets_error "gh CLI not authenticated. Run: gh auth login"
+        return 1
+    fi
+
+    # Detect repo if not provided
+    if [ -z "$repo" ]; then
+        repo=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null) || repo=""
+        if [ -z "$repo" ]; then
+            repo="jcornell3/tamshai-enterprise-ai"
+            log_secrets_info "Using default repo: $repo"
+        fi
+    fi
+
+    # Check if workflow exists
+    if ! gh workflow list --repo "$repo" 2>/dev/null | grep -q "provision-prod-data"; then
+        log_secrets_warn "provision-prod-data.yml workflow not found in $repo"
+        log_secrets_warn "Sample data will not be loaded"
+        return 1
+    fi
+
+    # Trigger the workflow with parameters
+    log_secrets_info "Running provision-prod-data workflow (data_set=$data_set)..."
+    if ! gh workflow run provision-prod-data.yml \
+        --repo "$repo" \
+        --ref main \
+        -f data_set="$data_set" \
+        -f dry_run=false; then
+        log_secrets_error "Could not trigger provision-prod-data workflow"
+        return 1
+    fi
+
+    if [ "$wait_for_completion" != "true" ]; then
+        log_secrets_success "Data load workflow triggered (not waiting for completion)"
+        return 0
+    fi
+
+    # Wait for workflow to start and complete
+    log_secrets_info "Waiting for data load workflow to start..."
+    sleep 10
+
+    local run_id
+    run_id=$(gh run list --repo "$repo" --workflow=provision-prod-data.yml --limit=1 --json databaseId -q '.[0].databaseId' 2>/dev/null)
+
+    if [ -n "$run_id" ]; then
+        log_secrets_info "Monitoring data load workflow run: $run_id"
+        if gh run watch "$run_id" --repo "$repo" --exit-status; then
+            log_secrets_success "Sample data loaded successfully"
+            return 0
+        else
+            log_secrets_warn "Sample data loading workflow failed or timed out"
             log_secrets_info "Check: gh run view $run_id --repo $repo"
             return 1
         fi
