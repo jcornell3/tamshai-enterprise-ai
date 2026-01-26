@@ -3,16 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Title | Tamshai AI Corp</title>
+    <title>Blog | Tamshai AI Corp</title>
+    <link rel="icon" type="image/png" href="tamshai-favicon.png">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <section class="hero" style="height: 50vh;">
+
+    <header>
+        <div class="container header-content">
+            <div class="logo">
+                <a href="index.html">Tamshai AI Corp</a>
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <li class="dropdown">
+                        <a href="#" class="dropbtn">Company &#9662;</a>
+                        <div class="dropdown-content">
+                            <a href="mission.html">Mission Statement</a>
+                            <a href="leadership.html">Leadership Team</a>
+                            <a href="blog.html">Blog</a>
+                        </div>
+                    </li>
+                    <li><a href="client-login.html" class="btn btn-login">Client Login</a></li>
+                    <li><a href="employee-login.html" class="btn btn-login">Employee Login</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero" style="padding: 60px 20px 40px;">
         <div class="container hero-content">
-            <h1>Our Blog</h1> <p style="color: var(--secondary-gold);">Content coming soon.</p>
+            <h1>Blog</h1>
+            <p class="mission-statement">Insights on enterprise AI, security, and software engineering from the Tamshai team.</p>
         </div>
     </section>
 
-    </body>
+    <section class="blog-index">
+        <div class="container">
+
+            <a href="blog/tdd-refactoring.html" class="blog-card">
+                <div class="blog-card-image">
+                    <img src="blog/images/image1.jpg" alt="TDD and CI Refactoring - Enterprise AI Testing">
+                </div>
+                <div class="blog-card-content">
+                    <div class="blog-card-meta">
+                        <span>January 22, 2026</span>
+                        <span class="meta-separator">|</span>
+                        <span>8 min read</span>
+                    </div>
+                    <h2>From 31% to 86%: How TDD and CI Refactoring Transformed Our Project</h2>
+                    <p>Scaling an enterprise AI solution isn't just about the model &mdash; it's about the safety net underneath it. Learn how we transformed our testing culture with TDD and a 14-job CI pipeline.</p>
+                    <div class="blog-card-tags">
+                        <span class="blog-tag">TDD</span>
+                        <span class="blog-tag">AI Security</span>
+                        <span class="blog-tag">DevOps</span>
+                    </div>
+                </div>
+            </a>
+
+        </div>
+    </section>
+
+    <footer>
+        <div class="container footer-content">
+            <p>&copy; 2026 Tamshai Corp. All rights reserved.</p>
+        </div>
+    </footer>
+
+</body>
 </html>
