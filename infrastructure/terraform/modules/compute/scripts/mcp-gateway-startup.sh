@@ -23,7 +23,7 @@ echo "Redis started on port 6379"
 
 # Fetch secrets from Secret Manager at runtime
 ANTHROPIC_API_KEY=$(gcloud secrets versions access latest \
-  --secret="tamshai-${environment}-anthropic-api-key" \
+  --secret="tamshai-${environment}-claude-api-key" \
   --project="${project_id}" 2>/dev/null || echo "")
 
 MCP_GATEWAY_CLIENT_SECRET=$(gcloud secrets versions access latest \
@@ -37,7 +37,7 @@ JWT_SECRET=$(gcloud secrets versions access latest \
 # Check if Anthropic API key is set
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   echo "WARNING: Anthropic API key not set. Add it with:"
-  echo "gcloud secrets versions add tamshai-${environment}-anthropic-api-key --data-file=-"
+  echo "gcloud secrets versions add tamshai-${environment}-claude-api-key --data-file=-"
 fi
 
 # Create environment file for MCP Gateway (in memory tmpfs)

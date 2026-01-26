@@ -247,7 +247,7 @@ module "cloudrun" {
   keycloak_service_account    = module.security.keycloak_service_account_email
 
   # Secrets (use actual Secret Manager names with tamshai-prod- prefix)
-  claude_api_key_secret          = "tamshai-prod-anthropic-api-key"
+  claude_api_key_secret          = "tamshai-prod-claude-api-key"
   keycloak_admin_user_secret     = "keycloak-admin-user" # Not used - admin username is env var
   keycloak_admin_password_secret = "tamshai-prod-keycloak-admin-password"
   keycloak_db_password_secret    = "tamshai-prod-keycloak-db-password"

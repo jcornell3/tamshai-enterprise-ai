@@ -200,7 +200,7 @@ update_all_secrets() {
 
 # GitHub to GCP secret name mapping
 declare -A GITHUB_TO_GCP_MAP=(
-    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-anthropic-api-key"
+    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-claude-api-key"
     ["PROD_DB_PASSWORD"]="tamshai-prod-db-password"
     ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="tamshai-prod-keycloak-admin-password"
     ["KEYCLOAK_DB_PASSWORD_PROD"]="tamshai-prod-keycloak-db-password"

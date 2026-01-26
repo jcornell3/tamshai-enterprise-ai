@@ -101,7 +101,7 @@ SA_PROVISION="${GCP_SA_PROVISION:-tamshai-prod-provision}"
 SECRET_KEYCLOAK_ADMIN_PASSWORD="${GCP_SECRET_KEYCLOAK_ADMIN_PASSWORD:-tamshai-prod-keycloak-admin-password}"
 SECRET_KEYCLOAK_DB_PASSWORD="${GCP_SECRET_KEYCLOAK_DB_PASSWORD:-tamshai-prod-keycloak-db-password}"
 SECRET_DB_PASSWORD="${GCP_SECRET_DB_PASSWORD:-tamshai-prod-db-password}"
-SECRET_CLAUDE_API_KEY="${GCP_SECRET_CLAUDE_API_KEY:-tamshai-prod-anthropic-api-key}"
+SECRET_CLAUDE_API_KEY="${GCP_SECRET_CLAUDE_API_KEY:-tamshai-prod-claude-api-key}"
 SECRET_MCP_GATEWAY_CLIENT="${GCP_SECRET_MCP_GATEWAY_CLIENT:-tamshai-prod-mcp-gateway-client-secret}"
 SECRET_JWT="${GCP_SECRET_JWT:-tamshai-prod-jwt-secret}"
 
@@ -613,6 +613,11 @@ phase_3_destroy() {
     terraform state rm 'module.security.google_secret_manager_secret_version.mcp_hr_service_client_secret' 2>/dev/null || true
     terraform state rm 'module.security.google_secret_manager_secret_version.prod_user_password' 2>/dev/null || true
 
+    # Remove cicd service account from state (has prevent_destroy=true)
+    # The cicd SA persists across Phoenix rebuilds to preserve its key in GitHub Secrets
+    log_step "Removing cicd service account from state (prevent_destroy lifecycle)..."
+    terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
+
     log_step "Running terraform destroy..."
     echo ""
     echo -e "${YELLOW}WARNING: This will DESTROY all GCP infrastructure!${NC}"
@@ -775,6 +780,16 @@ phase_4_infrastructure() {
         log_info "Importing Artifact Registry into Terraform state..."
         terraform import 'module.cloudrun.google_artifact_registry_repository.tamshai' \
             "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/${registry_name}" || log_warn "Import may have failed"
+    fi
+
+    # Import cicd service account (removed from state in Phase 3 due to prevent_destroy)
+    local cicd_email="${SA_CICD}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+    if ! terraform state show 'module.security.google_service_account.cicd' &>/dev/null; then
+        if gcloud iam service-accounts describe "$cicd_email" &>/dev/null 2>&1; then
+            log_info "Importing cicd service account into Terraform state..."
+            terraform import 'module.security.google_service_account.cicd' \
+                "projects/${GCP_PROJECT_ID}/serviceAccounts/${cicd_email}" || log_warn "cicd SA import may have failed"
+        fi
     fi
 
     # Issue #30: Build provision-job BEFORE terraform apply
