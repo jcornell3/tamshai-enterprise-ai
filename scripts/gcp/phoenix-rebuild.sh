@@ -466,35 +466,15 @@ phase_3_destroy() {
     local vpc_name="tamshai-prod-vpc"
 
     # Step 1: Delete VPC Access Connector BEFORE VPC peering (Issue #103)
-    # VPC connectors create auto-subnets that can hold service networking references.
-    # Deleting the connector first reduces the chance of stale references.
+    # Uses shared library function which handles:
+    #   - Primary connector deletion + wait
+    #   - Orphaned connector scan
+    #   - Auto-created firewall rule cleanup (aet-* pattern)
     log_step "Deleting VPC Access Connector (Gap #25 + Issue #103 - before peering)..."
-    local connector_name="tamshai-prod-connector"
-
-    if gcloud compute networks vpc-access connectors describe "$connector_name" \
-        --region="${GCP_REGION}" &>/dev/null; then
-        log_info "VPC connector exists - deleting..."
-        gcloud compute networks vpc-access connectors delete "$connector_name" \
-            --region="${GCP_REGION}" --quiet || {
-            log_warn "VPC connector deletion initiated (async operation)"
-        }
-
-        # Wait for deletion to complete (async operation takes 2-3 minutes)
-        local wait_count=0
-        local max_wait=20  # 20 * 15s = 5 minutes max
-        while gcloud compute networks vpc-access connectors describe "$connector_name" \
-            --region="${GCP_REGION}" &>/dev/null; do
-            wait_count=$((wait_count + 1))
-            if [ $wait_count -ge $max_wait ]; then
-                log_warn "VPC connector deletion timeout - continuing anyway"
-                break
-            fi
-            echo "   Waiting for VPC connector deletion (takes 2-3 minutes)... [$wait_count/$max_wait]"
-            sleep 15
-        done
-        log_success "VPC connector deleted from GCP"
+    if type delete_vpc_connector_and_wait &>/dev/null; then
+        delete_vpc_connector_and_wait || log_warn "VPC connector cleanup had issues — continuing"
     else
-        log_info "VPC connector does not exist in GCP - skipping deletion"
+        log_error "delete_vpc_connector_and_wait not available — cleanup.sh library may not have loaded"
     fi
 
     # Step 2: Remove VPC connector from Terraform state
@@ -652,10 +632,9 @@ phase_3_destroy() {
         log_step "Deleting orphaned private IP (Gap #24)..."
         gcloud compute addresses delete tamshai-prod-private-ip --global --quiet 2>/dev/null || true
 
-        # Gap #25 FIX: Actually delete VPC connector (not just state removal)
-        log_step "Deleting VPC connector (Gap #25 - fallback cleanup)..."
-        gcloud compute networks vpc-access connectors delete "tamshai-prod-connector" \
-            --region="${GCP_REGION}" --quiet 2>/dev/null || true
+        # Gap #25 + Issue #103: Delete VPC connector and auto-created firewall rules
+        log_step "Deleting VPC connector and auto-created firewall rules (Gap #25 + Issue #103 - fallback)..."
+        delete_vpc_connector_and_wait 2>/dev/null || true
         # Also remove from state
         terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
         terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
@@ -751,6 +730,10 @@ phase_3_destroy() {
                     log_warn "  Failed to delete firewall rule $rule"
             done <<< "$fw_rules"
         fi
+
+        # Step 2b: Delete auto-created VPC connector firewall rules (Issue #103)
+        # Network filter misses auto-created aet-* rules — use shared library fallback
+        delete_vpc_connector_firewall_rules 2>/dev/null || true
 
         # Step 3: Delete all subnets in this VPC
         local subnets
