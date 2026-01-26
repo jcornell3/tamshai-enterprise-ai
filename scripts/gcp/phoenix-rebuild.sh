@@ -959,7 +959,7 @@ EOF
     }
 
     log_step "Waiting for Cloud SQL to be ready..."
-    wait_for_cloudsql "tamshai-prod-postgres" 600  # Increased timeout for initial creation
+    wait_for_cloudsql "tamshai-prod-postgres" 1800  # 30 min — Cloud SQL with private networking can take 25+ min
 
     # Gap #26/41: Ensure mcp-hr-service-client-secret has a version
     log_step "Ensuring mcp-hr-service-client-secret has a version (Gap #26/41)..."
