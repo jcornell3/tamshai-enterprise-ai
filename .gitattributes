@@ -23,3 +23,14 @@
 *.gif binary
 *.ico binary
 *.pdf binary
+
+# Flutter/React Native platform code - exclude from language detection
+# Prevents GitHub from detecting Swift and Java-Kotlin as project languages
+# which triggers unnecessary CodeQL language analysis configurations
+clients/unified_flutter/ios/** linguist-generated
+clients/unified_flutter/macos/** linguist-generated
+clients/unified_flutter/android/** linguist-generated
+clients/unified/ios/** linguist-generated
+clients/unified/android/** linguist-generated
+clients/unified/node_modules/** linguist-vendored
+clients/desktop/** linguist-vendored
