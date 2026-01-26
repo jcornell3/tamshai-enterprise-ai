@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
-**Last Updated**: January 22, 2026
-**Version**: 3.3.0
+**Last Updated**: January 26, 2026
+**Version**: 3.4.0
 **Owner**: Platform Team
 
 ## Overview
@@ -307,6 +307,79 @@ jwksUri: https://auth.tamshai.com/auth/realms/tamshai-corp/protocol/openid-conne
 
 **Typical SSL Wait**: 10-17 minutes on fresh rebuild (34 polling attempts in v11).
 
+### Issue #103: VPC Peering Deletion Blocked by Dependencies
+
+**Symptom**: `delete_vpc_peering_robust()` exhausts 20 retries (10 minutes) with error:
+```
+FLOW_SN_DC_RESOURCE_PREVENTING_DELETE_CONNECTION (subject: 171113)
+```
+
+**Cause**: GCP service networking holds stale references after Cloud SQL or VPC connector deletion. Dependencies must be cleaned before peering can be deleted.
+
+**Diagnostic Commands**:
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+
+# Check for Cloud SQL instances (primary blocker)
+gcloud sql instances list --project="$PROJECT_ID" --format="table(name,state)"
+
+# Check for VPC Access Connectors
+gcloud compute networks vpc-access connectors list \
+    --region=us-central1 --project="$PROJECT_ID" --format="table(name,state,network)"
+
+# Check for VPC peering status
+gcloud compute networks peerings list \
+    --network=tamshai-prod-vpc --project="$PROJECT_ID"
+
+# Check for reserved private IP ranges (used by service networking)
+gcloud compute addresses list --global --project="$PROJECT_ID" \
+    --format="table(name,address,prefixLength,purpose,status)"
+
+# Check service networking connections
+gcloud services vpc-peerings list \
+    --network=tamshai-prod-vpc --project="$PROJECT_ID"
+
+# Check for Filestore instances (also use service networking)
+gcloud filestore instances list --project="$PROJECT_ID" 2>/dev/null || echo "Filestore API not enabled"
+```
+
+**Prevention**: Fixed in `cleanup.sh` — `check_and_clean_vpc_peering_dependencies()` now checks and cleans Cloud SQL, VPC connectors, and Filestore before attempting peering deletion. Phase 3 also reorders VPC connector deletion before peering deletion.
+
+### Issue #103: VPC Deletion Blocked by Auto-Created Firewall Rules
+
+**Symptom**: VPC deletion fails after terraform destroy with:
+```
+The network resource 'tamshai-prod-vpc' is already being used by 'aet-uscentral1-tamshai--prod--conn-egrfw'
+```
+
+**Cause**: GCP auto-creates firewall rules for VPC Access Connectors with pattern `aet-<region-no-hyphens>-<sanitized-name>-{egrfw,ingfw}`. These persist even after the connector is deleted and are not managed by Terraform.
+
+**Diagnostic Commands**:
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+
+# List all firewall rules in the VPC
+gcloud compute firewall-rules list \
+    --filter="network:tamshai-prod-vpc" \
+    --project="$PROJECT_ID" --format="table(name,network,direction)"
+
+# Fallback: search by auto-created name pattern (if network filter fails)
+gcloud compute firewall-rules list \
+    --project="$PROJECT_ID" --format="value(name)" | grep -E "^aet-"
+
+# Check VPC for remaining subnets/routers blocking deletion
+gcloud compute networks subnets list \
+    --network=tamshai-prod-vpc --project="$PROJECT_ID"
+gcloud compute routers list \
+    --filter="network:tamshai-prod-vpc" --project="$PROJECT_ID"
+
+# Check overall VPC status
+gcloud compute networks describe tamshai-prod-vpc \
+    --project="$PROJECT_ID" --format="table(name,subnetworks[],peerings[])"
+```
+
+**Prevention**: Fixed in `cleanup.sh` — `delete_vpc_connector_firewall_rules()` now runs after VPC connector deletion to clean up `aet-*` firewall rules with a fallback name-pattern search.
+
 For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-procedures-fallback).
 
 ---
@@ -362,6 +435,7 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 |--------|---------|
 | `scripts/gcp/phoenix-preflight.sh` | Pre-flight validation |
 | `scripts/gcp/phoenix-rebuild.sh` | Main orchestrator |
+| `scripts/gcp/lib/cleanup.sh` | Cleanup functions (VPC, Cloud SQL, connectors, firewall rules) |
 | `scripts/gcp/lib/secrets.sh` | Secret sync functions |
 | `scripts/gcp/lib/health-checks.sh` | Health check functions |
 | `scripts/gcp/lib/dynamic-urls.sh` | URL discovery |
@@ -549,6 +623,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.4.0 | Jan 26, 2026 | Tamshai-Dev | Added Issue #103 troubleshooting: VPC peering dependency diagnostics and auto-created firewall rule diagnostics |
 | 3.3.0 | Jan 22, 2026 | Tamshai-Dev | Added decision tree and reference to GCP Regional Failure Runbook; added Regional Evacuation Scripts section |
 | 3.2.0 | Jan 21, 2026 | Tamshai-Dev | Added Issues #32, #36, #37 from v10/v11 rebuilds; updated phase table with durations; updated E2E test command; staged Phase 7 with SSL wait |
 | 3.1.0 | Jan 20, 2026 | Tamshai-Dev | Added Issues #9, #10, #11 troubleshooting; Phase 7 validates SA key; Phase 8 has 409 recovery |
