@@ -87,10 +87,13 @@ Is us-central1 available?
 
 **Options**:
 ```bash
+./scripts/gcp/phoenix-rebuild.sh --yes          # Skip interactive confirmation (recommended for CI/automated runs)
 ./scripts/gcp/phoenix-rebuild.sh --dry-run      # Preview only
 ./scripts/gcp/phoenix-rebuild.sh --resume       # Resume from checkpoint
 ./scripts/gcp/phoenix-rebuild.sh --phase 5      # Start from specific phase
 ```
+
+> **Tip**: Use `--yes` (or `-y`) to skip the `Type 'PHOENIX' to confirm` prompt. Required for non-interactive/automated runs.
 
 ### Step 3: Monitor Progress
 
