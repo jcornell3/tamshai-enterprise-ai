@@ -771,7 +771,53 @@ delete_vpc_connector_and_wait() {
         fi
     done
 
+    # Issue #103: Clean up auto-created VPC connector firewall rules
+    # GCP auto-creates firewall rules for VPC connectors with pattern:
+    #   aet-<region-no-hyphens>-<sanitized-name>-egrfw
+    #   aet-<region-no-hyphens>-<sanitized-name>-ingfw
+    # These persist after connector deletion and block VPC deletion.
+    delete_vpc_connector_firewall_rules
+
     return 0
+}
+
+# Delete auto-created VPC connector firewall rules (Issue #103)
+# GCP auto-creates firewall rules for VPC Access Connectors that persist
+# even after the connector is deleted. These block VPC network deletion.
+# Pattern: aet-<region>-<name>-{egrfw,ingfw}
+# Usage: delete_vpc_connector_firewall_rules
+delete_vpc_connector_firewall_rules() {
+    local vpc_name="${NAME_PREFIX}-vpc"
+
+    log_info "Checking for auto-created VPC connector firewall rules (Issue #103)..."
+
+    # Find all firewall rules with the auto-created pattern in our VPC
+    local auto_rules
+    auto_rules=$(gcloud compute firewall-rules list \
+        --filter="network:${vpc_name}" \
+        --format="value(name)" \
+        --project="$PROJECT" 2>/dev/null | grep -E "^aet-" || true)
+
+    if [[ -z "$auto_rules" ]]; then
+        # Fallback: search by name pattern without network filter
+        # (network filter can fail for auto-created rules)
+        auto_rules=$(gcloud compute firewall-rules list \
+            --format="value(name)" \
+            --project="$PROJECT" 2>/dev/null | grep -E "^aet-.*${RESOURCE_PREFIX//-/}" || true)
+    fi
+
+    if [[ -z "$auto_rules" ]]; then
+        log_info "No auto-created VPC connector firewall rules found"
+        return 0
+    fi
+
+    log_warn "Found auto-created VPC connector firewall rules:"
+    for rule in $auto_rules; do
+        log_warn "  - $rule"
+        gcloud compute firewall-rules delete "$rule" \
+            --project="$PROJECT" --quiet 2>/dev/null || log_warn "  Failed to delete $rule"
+    done
+    log_info "Auto-created firewall rule cleanup complete"
 }
 
 # =============================================================================
