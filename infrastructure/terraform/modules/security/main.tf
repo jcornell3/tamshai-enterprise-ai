@@ -11,6 +11,10 @@ resource "google_service_account" "keycloak" {
   display_name = "Tamshai Keycloak Service Account"
   description  = "Service account for Keycloak identity provider"
   project      = var.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Service account for MCP Gateway
@@ -19,6 +23,10 @@ resource "google_service_account" "mcp_gateway" {
   display_name = "Tamshai MCP Gateway Service Account"
   description  = "Service account for MCP Gateway AI orchestration"
   project      = var.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Service account for MCP Servers
@@ -27,6 +35,10 @@ resource "google_service_account" "mcp_servers" {
   display_name = "Tamshai MCP Servers Service Account"
   description  = "Service account for domain MCP servers (HR, Finance, Sales, Support)"
   project      = var.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Service account for CI/CD (GitHub Actions)
@@ -35,6 +47,10 @@ resource "google_service_account" "cicd" {
   display_name = "Tamshai CI/CD Service Account"
   description  = "Service account for GitHub Actions CI/CD pipeline"
   project      = var.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # =============================================================================
@@ -558,6 +574,10 @@ resource "google_service_account" "provision_job" {
   display_name = "Tamshai Provisioning Job Service Account"
   description  = "Service account for user provisioning Cloud Run job"
   project      = var.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Grant provisioning job access to secrets
