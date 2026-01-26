@@ -958,6 +958,18 @@ EOF
         terraform apply -auto-approve || log_warn "Terraform apply may be incomplete"
     }
 
+    # Cloud SQL with private networking (ipv4Enabled=false) can take 15-27 minutes.
+    # Root cause: google_service_networking_connection reports "created" at the API level,
+    # but the underlying VPC peering handshake continues propagating internally. Cloud SQL
+    # sits in PENDING_CREATE waiting for the internal IP assignment to complete.
+    #
+    # Diagnostic commands if PENDING_CREATE exceeds 30 minutes:
+    #   gcloud sql operations list --instance=tamshai-prod-postgres --limit=5
+    #   gcloud sql operations describe [OPERATION_ID]   # Look for error/status messages
+    #   gcloud services vpc-peerings list --network=tamshai-prod-vpc
+    #   gcloud compute addresses list --global --filter="purpose=VPC_PEERING"
+    #   # Verify: range >= /24, no overlap with subnet CIDR (10.0.0.0/24)
+    #   # Check Service Agent: service-[PROJECT_NUMBER]@gcp-sa-cloud-sql.iam.gserviceaccount.com
     log_step "Waiting for Cloud SQL to be ready..."
     wait_for_cloudsql "tamshai-prod-postgres" 1800  # 30 min — Cloud SQL with private networking can take 25+ min
 
