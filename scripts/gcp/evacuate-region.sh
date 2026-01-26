@@ -62,6 +62,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Default GCP configuration (needed by libraries)
 export GCP_REGION="${GCP_REGION:-us-central1}"
 export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
+export GCP_PROJECT_ID="${GCP_PROJECT_ID:-${GCP_PROJECT}}"
 
 # Source libraries with graceful fallback
 # Note: common.sh provides logging functions - inline definitions below serve as fallback
@@ -116,6 +117,8 @@ load_tfvars_config() {
     TFVAR_REGION=$(get_tfvar "region" "$tfvars_file" 2>/dev/null || echo "")
     TFVAR_ZONE=$(get_tfvar "zone" "$tfvars_file" 2>/dev/null || echo "")
     TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_APP_DOMAIN=$(get_tfvar "app_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_API_DOMAIN=$(get_tfvar "api_domain" "$tfvars_file" 2>/dev/null || echo "")
     TFVAR_BACKUP_BUCKET=$(get_tfvar "source_backup_bucket" "$tfvars_file" 2>/dev/null || echo "")
 
     # Load fallback zones (Issue #102: Zone capacity resilience)
@@ -163,6 +166,10 @@ NEW_REGION="${NEW_REGION:-${GCP_DR_REGION:-${TFVAR_REGION:-us-west1}}}"
 NEW_ZONE="${NEW_ZONE:-${GCP_DR_ZONE:-${TFVAR_ZONE:-${NEW_REGION}-b}}}"
 # Keycloak domain: CLI > KEYCLOAK_DR_DOMAIN env > tfvars > auth-dr.tamshai.com
 KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
+# App domain: APP_DR_DOMAIN env > tfvars > app-dr.tamshai.com (Issue #102)
+APP_DR_DOMAIN="${APP_DR_DOMAIN:-${TFVAR_APP_DOMAIN:-app-dr.tamshai.com}}"
+# API domain: API_DR_DOMAIN env > tfvars > api-dr.tamshai.com (Issue #102)
+API_DR_DOMAIN="${API_DR_DOMAIN:-${TFVAR_API_DOMAIN:-api-dr.tamshai.com}}"
 # Keycloak realm: env var > default
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 
@@ -368,8 +375,10 @@ confirm_evacuation() {
     echo -e "  State Prefix:      ${CYAN}gcp/recovery/$ENV_ID${NC}"
     echo -e "  Project:           ${CYAN}$PROJECT_ID${NC}"
     echo ""
-    echo -e "  ${BLUE}Keycloak Configuration:${NC}"
-    echo -e "  DR Domain:         ${CYAN}$KEYCLOAK_DR_DOMAIN${NC}"
+    echo -e "  ${BLUE}Domain Configuration:${NC}"
+    echo -e "  Auth Domain:       ${CYAN}$KEYCLOAK_DR_DOMAIN${NC}"
+    echo -e "  App Domain:        ${CYAN}$APP_DR_DOMAIN${NC}"
+    echo -e "  API Domain:        ${CYAN}$API_DR_DOMAIN${NC}"
     echo -e "  Realm:             ${CYAN}$KEYCLOAK_REALM${NC}"
     echo ""
     echo -e "  ${BLUE}Infrastructure:${NC}"
@@ -1096,6 +1105,16 @@ phase2_deploy_infrastructure() {
     # =============================================================================
     ensure_mongodb_uri_iam_binding "$PROJECT_ID" || true
 
+    # =============================================================================
+    # Issue #102: Verify SSL certificates for ALL domain mappings
+    # =============================================================================
+    # Phoenix Rebuild Lesson: Only verifying auth domain SSL caused 4/6 E2E test
+    # failures with HTTP 525. Must verify app and api domains too.
+    # Uses shared wait_for_all_domain_ssl() from lib/domain-mapping.sh.
+    # =============================================================================
+    log_step "Verifying SSL certificates for app and api DR domains (Issue #102 fix)..."
+    wait_for_all_domain_ssl "${KEYCLOAK_DR_DOMAIN}" "${APP_DR_DOMAIN}" "${API_DR_DOMAIN}" || true
+
     log_success "Infrastructure deployed to $NEW_REGION"
 }
 
@@ -1197,16 +1216,43 @@ phase5_configure_users() {
     fi
 
     # =========================================================================
-    # Step 3: Provision corporate users (Gap #53 - identity-sync)
+    # Step 3: Sync PROD_USER_PASSWORD to GCP Secret Manager (Issue #102)
     # =========================================================================
-    log_step "Provisioning corporate users (Gap #53)..."
+    # Phoenix Rebuild Lesson: Terraform creates a random password. After a fresh
+    # Keycloak deployment, corporate users must use the known password from
+    # GitHub Secrets so operators can log in.
+    log_step "Syncing PROD_USER_PASSWORD to GCP Secret Manager (Issue #102 fix)..."
+    sync_prod_user_password || log_warn "PROD_USER_PASSWORD sync failed - corporate users may have random password"
+
+    # =========================================================================
+    # Step 4: Provision corporate users (Gap #53 - identity-sync)
+    # =========================================================================
+    # Phoenix Rebuild Lesson (Issue #102): Pass force_password_reset=true after
+    # fresh Keycloak deployment. The entrypoint.sh runs a two-step process:
+    #   Step 1: Normal sync (create users + clear stale keycloak_user_id)
+    #   Step 2: Force password reset (set known PROD_USER_PASSWORD)
+    log_step "Provisioning corporate users (Gap #53, Issue #102)..."
     log_info "Corporate users (eve.thompson, alice.chen, etc.) are provisioned via workflow"
 
-    if trigger_identity_sync "true"; then
-        log_success "Corporate users provisioned successfully"
+    if trigger_identity_sync "true" "" "all" "true"; then
+        log_success "Corporate users provisioned with force password reset"
     else
         log_warn "Identity sync failed - corporate users may not exist"
-        log_info "Run manually: gh workflow run provision-prod-users.yml"
+        log_info "Run manually: gh workflow run provision-prod-users.yml -f action=all -f force_password_reset=true"
+    fi
+
+    # =========================================================================
+    # Step 5: Load sample data (Finance, Sales, Support) (Issue #102)
+    # =========================================================================
+    # Phoenix Rebuild Lesson: Sample data (Finance via Cloud SQL, Sales/Support
+    # via MongoDB Atlas) must be loaded separately after user provisioning.
+    log_step "Loading sample data (Finance, Sales, Support) (Issue #102 fix)..."
+
+    if trigger_sample_data_load "true" "" "all"; then
+        log_success "Sample data loaded successfully"
+    else
+        log_warn "Sample data loading failed"
+        log_info "Run manually: gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false"
     fi
 
     log_success "User configuration complete"

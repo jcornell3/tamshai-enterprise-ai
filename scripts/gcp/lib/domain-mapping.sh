@@ -226,6 +226,71 @@ wait_for_auth_domain_with_ssl() {
 }
 
 # =============================================================================
+# MULTI-DOMAIN SSL VERIFICATION (Issue #102 Phoenix Rebuild Lesson)
+# =============================================================================
+# After Phoenix rebuild, E2E tests failed with HTTP 525 (SSL handshake failed)
+# because SSL was only verified for auth domain, not app or api domains.
+#
+# This function verifies SSL certificates for ALL custom domain mappings,
+# not just Keycloak. Used by both phoenix-rebuild.sh and evacuate-region.sh.
+# =============================================================================
+
+# Wait for SSL certificates on multiple domains
+# Usage: wait_for_all_domain_ssl <keycloak_domain> [app_domain] [api_domain] [extra_domains...]
+#   Skips domains that are empty, equal to keycloak_domain, or have no domain mapping.
+#   Returns 0 if all domains verified, 1 if any domain failed (non-fatal warning).
+wait_for_all_domain_ssl() {
+    local keycloak_domain="${1:-}"
+    shift
+    local additional_domains=("$@")
+
+    if [ ${#additional_domains[@]} -eq 0 ]; then
+        log_info "No additional domains to verify SSL for"
+        return 0
+    fi
+
+    local region="${GCP_REGION:-us-central1}"
+    local failed=0
+
+    log_info "Verifying SSL certificates for additional domains (Issue #102 fix)..."
+
+    for domain in "${additional_domains[@]}"; do
+        # Skip empty domains
+        if [ -z "$domain" ]; then
+            continue
+        fi
+
+        # Skip if this domain is the same as keycloak_domain (already verified)
+        if [ "$domain" = "$keycloak_domain" ]; then
+            continue
+        fi
+
+        # Check if domain mapping exists
+        if ! gcloud beta run domain-mappings describe --domain="$domain" --region="$region" &>/dev/null 2>&1; then
+            log_info "No domain mapping for $domain - skipping SSL check"
+            continue
+        fi
+
+        log_info "Waiting for SSL certificate on $domain..."
+        if wait_for_ssl_certificate "$domain" "/" 900; then
+            log_info "SSL certificate for $domain is deployed and working"
+        else
+            log_warn "SSL certificate for $domain not verified after 15 minutes"
+            log_warn "E2E tests may fail with 525 errors for $domain"
+            failed=$((failed + 1))
+        fi
+    done
+
+    if [ $failed -gt 0 ]; then
+        log_warn "$failed domain(s) failed SSL verification"
+        return 1
+    fi
+
+    log_info "All additional domain SSL certificates verified"
+    return 0
+}
+
+# =============================================================================
 # STAGED TERRAFORM DEPLOYMENT (Issue #37 pattern from phoenix-rebuild.sh)
 # =============================================================================
 # Problem: mcp-gateway fails startup probes if Keycloak SSL cert isn't ready.

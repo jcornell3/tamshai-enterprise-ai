@@ -1,7 +1,7 @@
 # GCP Regional Failure Runbook
 
-**Last Updated**: January 23, 2026
-**Version**: 1.2.0
+**Last Updated**: January 26, 2026
+**Version**: 1.3.0
 **Owner**: Platform Team
 
 ## Overview
@@ -38,18 +38,20 @@ Is us-central1 available?
 
 The Regional Evacuation uses an **"Amnesia" approach**: create a fresh Terraform state in the new region, completely ignoring the unreachable primary region.
 
-### Estimated Duration: 25-40 minutes
+### Estimated Duration: 35-55 minutes
 
 | Phase | Duration | Description |
 |-------|----------|-------------|
 | Pre-flight | 1-2 min | Validate tools, auth, region availability |
 | Terraform | 10-15 min | Create infrastructure in new region |
-| SSL Certificate | 10-15 min | Wait for domain mapping SSL to provision |
+| SSL Certificate | 10-15 min | Wait for **all** domain mapping SSL certs (auth, app, api) |
 | Deploy | 3-5 min | Deploy containers, configure services |
+| User Provisioning | 5-10 min | Sync passwords, provision users, reset passwords |
+| Sample Data | 3-5 min | Load Finance, Sales, Support data |
 | DNS | 2-5 min | Update DNS to point to new region |
 | Verify | 2-3 min | Run health checks and E2E tests |
 
-> **Note**: The SSL certificate provisioning for `auth-dr.tamshai.com` is the longest wait. During this time, mcp-gateway may fail its startup probe. See Troubleshooting section for details.
+> **Note**: SSL certificate provisioning applies to **all three domains** (`auth-dr`, `app-dr`, `api-dr`). Without verifying all domains, E2E tests fail with HTTP 525 (SSL handshake failed). The script now automatically verifies SSL for all domain mappings before proceeding.
 
 ---
 
@@ -76,14 +78,17 @@ The Regional Evacuation uses an **"Amnesia" approach**: create a fresh Terraform
 - `CF_API_TOKEN`, `CF_ZONE_ID` (for automated DNS)
 - `CLAUDE_API_KEY_PROD`
 - `MONGODB_ATLAS_URI`
+- `PROD_USER_PASSWORD` (corporate user password — synced to GCP Secret Manager during evacuation)
 
 ### Pre-Configured DR Infrastructure
 
 The following should be set up BEFORE any incident:
-- [x] DR CNAME records in Cloudflare (pointing to placeholders)
+- [x] DR CNAME records in Cloudflare (pointing to `ghs.googlehosted.com`)
 - [x] `auth-dr.tamshai.com` domain verified in Google Search Console
+- [x] `app-dr.tamshai.com` and `api-dr.tamshai.com` domain verified in Google Search Console
 - [x] Keycloak realm includes DR redirect URIs
 - [x] Multi-regional backup bucket exists
+- [x] `PROD_USER_PASSWORD` set in GitHub Secrets
 
 ---
 
@@ -148,11 +153,11 @@ The script executes 8 phases:
 | 0 | Pre-flight checks (includes zone capacity validation) | ~1 min |
 | 0.5 | Pre-cleanup (removes leftover resources from failed attempts) | ~2-5 min |
 | 1 | Confirm evacuation | ~30 sec |
-| 2 | Initialize Terraform with fresh state | ~1 min |
-| 3 | Apply Terraform infrastructure | ~10 min |
+| 2 | Initialize Terraform + staged deploy + SSL verification (all domains) | ~15-25 min |
+| 3 | Regenerate service account key | ~1 min |
 | 4 | Trigger GitHub Actions deployment | ~5 min |
-| 5 | Restore data from backup (if available) | ~2 min |
-| 6 | Configure Keycloak realm | ~1 min |
+| 5 | Configure users: TOTP, sync passwords, provision users (force reset), load sample data | ~10 min |
+| 6 | Verify deployment (health checks, E2E tests) | ~3 min |
 | 7 | DNS configuration guidance | ~1 min |
 
 **Zone Capacity Check (Phase 0)**: The script automatically checks if the requested machine types (e.g., `e2-micro`) are available in the target zone. If capacity is unavailable, it tries fallback zones configured in `dr.tfvars` or environment variables.
@@ -196,8 +201,12 @@ KEYCLOAK_URL=https://auth-dr.tamshai.com/auth npm run test:login:prod
 **Final Checkpoints**:
 - [ ] All Cloud Run services show "Ready" in new region
 - [ ] Keycloak accessible at `https://auth-dr.tamshai.com`
+- [ ] App portal accessible at `https://app-dr.tamshai.com` (no HTTP 525)
+- [ ] API accessible at `https://api-dr.tamshai.com` (no HTTP 525)
 - [ ] MCP Gateway health check passes
 - [ ] E2E login test passes
+- [ ] Corporate user (e.g., eve.thompson) can log in with PROD_USER_PASSWORD
+- [ ] Sample data loaded (Finance invoices, Sales customers, Support tickets)
 - [ ] Users can access the application
 
 ---
@@ -398,6 +407,67 @@ Ensure you're using the correct ENV_ID:
 gcloud storage ls gs://tamshai-terraform-state-prod/gcp/recovery/
 ```
 
+### Corporate users can't log in after evacuation
+
+**Error**: Users like eve.thompson get "Invalid credentials" in Keycloak.
+
+**Cause**: One of three issues from the Phoenix rebuild:
+1. `PROD_USER_PASSWORD` not synced from GitHub Secrets to GCP Secret Manager (Terraform creates random password)
+2. Identity sync ran without `force_password_reset=true` (users get Keycloak-generated passwords)
+3. Stale `keycloak_user_id` in PostgreSQL prevented user creation (sync reported 0 pending users)
+
+**Solution**: The evacuation script now handles all three automatically:
+- `sync_prod_user_password()` syncs the known password to GCP Secret Manager
+- `trigger_identity_sync()` passes `force_password_reset=true`
+- `entrypoint.sh` clears stale `keycloak_user_id` values before sync
+
+**Manual Fix** (if automation fails):
+```bash
+# 1. Set the password in GCP Secret Manager
+echo -n "YourKnownPassword" | gcloud secrets versions add prod-user-password --data-file=-
+
+# 2. Trigger provisioning with force password reset
+gh workflow run provision-prod-users.yml -f action=all -f force_password_reset=true -f dry_run=false
+```
+
+### Sample data missing after evacuation
+
+**Error**: Finance invoices, Sales customers, or Support tickets are empty.
+
+**Cause**: Sample data loading was not included in the original evacuation script.
+
+**Solution**: The script now automatically triggers `provision-prod-data.yml` in Phase 5 Step 5.
+
+**Manual Fix**:
+```bash
+# Load all sample data
+gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
+
+# Or load specific data sets
+gh workflow run provision-prod-data.yml -f data_set=finance -f dry_run=false
+gh workflow run provision-prod-data.yml -f data_set=sales -f dry_run=false
+gh workflow run provision-prod-data.yml -f data_set=support -f dry_run=false
+```
+
+### HTTP 525 errors on app-dr or api-dr domains
+
+**Error**: Cloudflare returns "SSL handshake failed" (HTTP 525) for `app-dr.tamshai.com` or `api-dr.tamshai.com`.
+
+**Cause**: SSL certificates for domain mappings take 10-15 minutes to provision. The original script only waited for the auth domain certificate.
+
+**Solution**: The script now verifies SSL certificates for **all three domains** (auth, app, api) using `wait_for_all_domain_ssl()` from `lib/domain-mapping.sh`.
+
+**Manual Check**:
+```bash
+# Check each domain
+curl -sf https://auth-dr.tamshai.com/ -o /dev/null && echo "auth OK" || echo "auth FAIL"
+curl -sf https://app-dr.tamshai.com/ -o /dev/null && echo "app OK" || echo "app FAIL"
+curl -sf https://api-dr.tamshai.com/ -o /dev/null && echo "api OK" || echo "api FAIL"
+
+# If still failing, check domain mapping status
+gcloud beta run domain-mappings list --region=us-west1
+```
+
 ### mcp-gateway fails startup probe during terraform apply
 
 **Cause**: SSL certificate for `auth-dr.tamshai.com` domain mapping takes 10-15+ minutes to provision. mcp-gateway tries to fetch JWKS from Keycloak but fails because SSL isn't ready yet.
@@ -460,7 +530,10 @@ gcloud compute addresses delete tamshai-prod-private-ip-<ENV_ID> \
 
 ### Immediately After Evacuation
 - [ ] All services healthy in recovery region
-- [ ] Users can log in (via auth-dr.tamshai.com)
+- [ ] SSL certificates working for all DR domains (auth-dr, app-dr, api-dr)
+- [ ] test-user.journey can log in (via auth-dr.tamshai.com)
+- [ ] Corporate user (eve.thompson) can log in with PROD_USER_PASSWORD
+- [ ] Sample data loaded (Finance invoices, Sales customers, Support tickets)
 - [ ] Critical business functions operational
 - [ ] Monitoring/alerting configured for new region
 - [ ] Stakeholders notified of regional failover
@@ -500,6 +573,9 @@ Creates a recovery stack in a new region.
 - `GCP_DR_REGION`: Override target region (default: from dr.tfvars or us-west1)
 - `GCP_DR_ZONE`: Override target zone (default: from dr.tfvars or REGION-b)
 - `GCP_DR_FALLBACK_ZONES`: Space-separated fallback zones for capacity issues
+- `PROD_USER_PASSWORD`: Corporate user password (synced to GCP Secret Manager during Phase 5)
+- `APP_DR_DOMAIN`: Override app domain (default: from dr.tfvars or app-dr.tamshai.com)
+- `API_DR_DOMAIN`: Override API domain (default: from dr.tfvars or api-dr.tamshai.com)
 
 **Flags**:
 - `--yes`, `-y`: Skip interactive confirmations (recommended for automation)
@@ -652,6 +728,7 @@ Conduct quarterly to maintain readiness.
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.3.0 | Jan 26, 2026 | Tamshai-Dev | Phoenix rebuild lessons: multi-domain SSL verification, PROD_USER_PASSWORD sync, force password reset, sample data loading, shared library functions (Issue #102) |
 | 1.2.0 | Jan 23, 2026 | Tamshai-Dev | Added zone capacity pre-check, fallback zones (GCP_DR_FALLBACK_ZONES), multi-zone cleanup support (Issue #102) |
 | 1.1.0 | Jan 23, 2026 | Tamshai-Dev | Added troubleshooting for SSL delay, Cloud SQL IAM, cleanup issues from evacuation test 13 |
 | 1.0.0 | Jan 22, 2026 | Tamshai-Dev | Initial version with evacuation and failback procedures |
