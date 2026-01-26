@@ -84,7 +84,7 @@ keycloak_min_instances = "1" # Keep warm during DR
 keycloak_domain       = "auth-dr.tamshai.com"
 api_domain            = "api-dr.tamshai.com"
 app_domain            = "app-dr.tamshai.com"
-static_website_domain = "" # Not needed during DR - use primary bucket
+static_website_domain = "prod-dr.tamshai.com"
 
 # =============================================================================
 # USER PROVISIONING
