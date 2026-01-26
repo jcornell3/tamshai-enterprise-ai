@@ -698,12 +698,30 @@ phase_3_destroy() {
         [ "$verification_failed" != true ] && log_success "Orphaned Cloud SQL deleted"
     fi
 
-    # Check for orphaned VPC — actively delete if found (firewall rules → subnet → VPC)
+    # Check for orphaned VPC — actively delete if found
+    # Deletion order: VMs → firewall rules → subnets → VPC network
     local vpc_name="tamshai-prod-vpc"
     if gcloud compute networks list --format="value(name)" 2>/dev/null | grep -q "tamshai"; then
         log_warn "Orphaned VPC found - cleaning up resources..."
 
-        # Step 1: Delete all firewall rules on this VPC
+        # Step 1: Delete all VM instances on this VPC (they block subnet deletion)
+        local vm_instances
+        vm_instances=$(gcloud compute instances list \
+            --filter="networkInterfaces.network:${vpc_name}" \
+            --format="csv[no-heading](name,zone)" \
+            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+        if [ -n "$vm_instances" ]; then
+            log_info "Deleting VM instances on VPC..."
+            while IFS=',' read -r vm_name vm_zone; do
+                [ -z "$vm_name" ] && continue
+                log_info "  Deleting VM: $vm_name (zone: $vm_zone)"
+                gcloud compute instances delete "$vm_name" \
+                    --zone="$vm_zone" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                    log_warn "  Failed to delete VM $vm_name"
+            done <<< "$vm_instances"
+        fi
+
+        # Step 2: Delete all firewall rules on this VPC
         local fw_rules
         fw_rules=$(gcloud compute firewall-rules list \
             --filter="network:${vpc_name}" \
@@ -711,13 +729,15 @@ phase_3_destroy() {
             --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
         if [ -n "$fw_rules" ]; then
             log_info "Deleting firewall rules..."
-            echo "$fw_rules" | while read -r rule; do
+            while read -r rule; do
+                [ -z "$rule" ] && continue
                 log_info "  Deleting firewall rule: $rule"
-                gcloud compute firewall-rules delete "$rule" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || true
-            done
+                gcloud compute firewall-rules delete "$rule" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                    log_warn "  Failed to delete firewall rule $rule"
+            done <<< "$fw_rules"
         fi
 
-        # Step 2: Delete all subnets in this VPC
+        # Step 3: Delete all subnets in this VPC
         local subnets
         subnets=$(gcloud compute networks subnets list \
             --network="${vpc_name}" \
@@ -725,19 +745,23 @@ phase_3_destroy() {
             --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
         if [ -n "$subnets" ]; then
             log_info "Deleting subnets..."
-            echo "$subnets" | while IFS=',' read -r subnet_name subnet_region; do
+            while IFS=',' read -r subnet_name subnet_region; do
+                [ -z "$subnet_name" ] && continue
                 log_info "  Deleting subnet: $subnet_name (region: $subnet_region)"
                 gcloud compute networks subnets delete "$subnet_name" \
-                    --region="$subnet_region" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || true
-            done
+                    --region="$subnet_region" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                    log_warn "  Failed to delete subnet $subnet_name"
+            done <<< "$subnets"
         fi
 
-        # Step 3: Delete the VPC network
+        # Step 4: Delete the VPC network
         log_info "Deleting VPC network: ${vpc_name}"
-        if gcloud compute networks delete "${vpc_name}" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null; then
+        if gcloud compute networks delete "${vpc_name}" --quiet --project="${GCP_PROJECT_ID}" 2>&1; then
             log_success "Orphaned VPC deleted"
         else
-            log_error "Failed to delete VPC - may have remaining dependencies"
+            log_error "Failed to delete VPC - check remaining dependencies:"
+            gcloud compute networks subnets list --network="${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
+            gcloud compute instances list --filter="networkInterfaces.network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
             verification_failed=true
         fi
     fi
