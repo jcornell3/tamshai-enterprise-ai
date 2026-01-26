@@ -270,13 +270,6 @@ sync_users() {
         return 0
     fi
 
-    # Build sync arguments
-    # --no-redis: Cloud Run Job has no Redis, use no-op queue
-    SYNC_ARGS="--no-redis"
-    if [ "$FORCE_PASSWORD_RESET" = "true" ]; then
-        SYNC_ARGS="$SYNC_ARGS --force-password-reset"
-    fi
-
     # Set environment for identity-sync
     export POSTGRES_HOST=localhost
     export POSTGRES_PORT=5432
@@ -291,13 +284,41 @@ sync_users() {
     export ENVIRONMENT=prod
 
     cd /app/services/mcp-hr
-    echo "[INFO] Running identity-sync..."
-    npx tsx src/scripts/sync-identities.ts $SYNC_ARGS || {
+
+    # Step 0: If force password reset, clear stale keycloak_user_id values.
+    # After a Phoenix rebuild, Keycloak is recreated but PostgreSQL still has
+    # old keycloak_user_id values from the destroyed Keycloak. The sync script
+    # checks keycloak_user_id IS NULL to find pending users, so stale IDs cause
+    # it to think all users are already synced (0 pending) and skip creation.
+    if [ "$FORCE_PASSWORD_RESET" = "true" ]; then
+        echo "[INFO] Clearing stale keycloak_user_id values (force reset implies fresh Keycloak)..."
+        PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c \
+            "UPDATE hr.employees SET keycloak_user_id = NULL WHERE keycloak_user_id IS NOT NULL;" 2>&1 || \
+            echo "[WARN] Could not clear stale keycloak_user_id values"
+    fi
+
+    # Step 1: Always run normal sync first to create/update Keycloak users
+    # --no-redis: Cloud Run Job has no Redis, use no-op queue
+    # After a Phoenix rebuild, Keycloak is fresh and no corporate users exist.
+    # This step creates them and sets keycloak_user_id in PostgreSQL.
+    echo "[INFO] Running identity-sync (create/update users)..."
+    npx tsx src/scripts/sync-identities.ts --no-redis || {
         echo "[ERROR] Identity sync failed"
         exit 1
     }
-
     echo "[OK] User sync completed"
+
+    # Step 2: If force password reset requested, run again with --force-password-reset
+    # This resets passwords for all users that now have keycloak_user_id set.
+    # Must run AFTER normal sync so users exist in Keycloak first.
+    if [ "$FORCE_PASSWORD_RESET" = "true" ]; then
+        echo "[INFO] Running force password reset..."
+        npx tsx src/scripts/sync-identities.ts --no-redis --force-password-reset || {
+            echo "[ERROR] Force password reset failed"
+            exit 1
+        }
+        echo "[OK] Force password reset completed"
+    fi
 }
 
 # -----------------------------------------------------------------------------

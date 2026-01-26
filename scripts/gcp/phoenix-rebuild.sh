@@ -1771,6 +1771,35 @@ phase_10_verify() {
     log_step "Running health checks..."
     quick_health_check || log_warn "Some services may not be healthy"
 
+    # Issue #102: Sync PROD_USER_PASSWORD from GitHub Secrets to GCP Secret Manager
+    # Terraform creates the secret with a random password, but corporate users must
+    # use the password defined in GitHub Secrets so operators know the credential.
+    log_step "Syncing PROD_USER_PASSWORD from GitHub Secrets to GCP Secret Manager..."
+    if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+        local gh_prod_password
+        gh_prod_password=$(gh secret list --json name -q '.[].name' 2>/dev/null | grep -q "PROD_USER_PASSWORD" && echo "exists" || echo "")
+        if [ "$gh_prod_password" = "exists" ]; then
+            # gh secret get is not available, but we can use the workflow to set it
+            # Instead, read from the environment if the caller exported it
+            if [ -n "${PROD_USER_PASSWORD:-}" ]; then
+                log_info "Updating GCP Secret Manager prod-user-password from environment..."
+                echo -n "$PROD_USER_PASSWORD" | gcloud secrets versions add prod-user-password \
+                    --data-file=- --project="${GCP_PROJECT_ID}" 2>/dev/null && \
+                    log_success "prod-user-password updated in GCP Secret Manager" || \
+                    log_warn "Failed to update prod-user-password in GCP Secret Manager"
+            else
+                log_warn "PROD_USER_PASSWORD not set in environment"
+                log_warn "Corporate users may get a random password from Terraform"
+                log_warn "Set PROD_USER_PASSWORD env var before running phoenix-rebuild.sh"
+                log_warn "Or manually: echo -n 'password' | gcloud secrets versions add prod-user-password --data-file=-"
+            fi
+        else
+            log_warn "PROD_USER_PASSWORD not found in GitHub Secrets"
+        fi
+    else
+        log_warn "gh CLI not available - cannot verify PROD_USER_PASSWORD"
+    fi
+
     # Gap #53: Trigger identity-sync to provision corporate users
     # Uses shared trigger_identity_sync() from lib/secrets.sh
     log_step "Triggering identity-sync workflow (Gap #53)..."

@@ -32,7 +32,8 @@ WORKDIR /app
 
 # Copy mcp-hr service (for identity-sync)
 COPY services/mcp-hr/package*.json ./services/mcp-hr/
-RUN cd services/mcp-hr && npm ci --production=false --silent
+RUN cd services/mcp-hr && npm ci --production=false --silent \
+    && chmod +x node_modules/.bin/*
 
 COPY services/mcp-hr/ ./services/mcp-hr/
 
