@@ -1579,6 +1579,60 @@ phase_7_cloud_run() {
         fi
     fi
 
+    # =============================================================================
+    # SSL CERTIFICATE VERIFICATION FOR ALL DOMAIN MAPPINGS
+    # =============================================================================
+    # Issue #102 Fix: Also verify SSL certificates for app and api domains.
+    # Without this, E2E tests fail with HTTP 525 (SSL handshake failed) because
+    # Cloudflare cannot complete the SSL handshake to Cloud Run origins that
+    # don't have managed certificates provisioned yet.
+    # =============================================================================
+    local additional_domains=()
+    if [ -n "${APP_DOMAIN}" ]; then
+        additional_domains+=("${APP_DOMAIN}")
+    fi
+    if [ -n "${API_DOMAIN}" ]; then
+        additional_domains+=("${API_DOMAIN}")
+    fi
+
+    if [ ${#additional_domains[@]} -gt 0 ]; then
+        log_step "Verifying SSL certificates for additional domains (Issue #102 fix)..."
+        for domain in "${additional_domains[@]}"; do
+            # Skip if this domain is the same as KEYCLOAK_DOMAIN (already verified)
+            if [ "$domain" = "${KEYCLOAK_DOMAIN}" ]; then
+                continue
+            fi
+
+            # Check if domain mapping exists
+            if ! gcloud beta run domain-mappings describe --domain="$domain" --region="$region" &>/dev/null 2>&1; then
+                log_info "No domain mapping for $domain - skipping SSL check"
+                continue
+            fi
+
+            log_info "Waiting for SSL certificate on $domain..."
+            local domain_ssl_ready=false
+            local max_domain_attempts=30  # 15 minutes max (30 * 30s)
+
+            for attempt in $(seq 1 $max_domain_attempts); do
+                if curl -sf "https://${domain}/" -o /dev/null 2>/dev/null; then
+                    log_success "SSL certificate for $domain is deployed and working!"
+                    domain_ssl_ready=true
+                    break
+                fi
+                if [ $attempt -eq 1 ]; then
+                    log_info "SSL certificate for $domain not ready yet - starting wait loop..."
+                fi
+                log_info "  Waiting for $domain SSL certificate... (attempt $attempt/$max_domain_attempts)"
+                sleep 30
+            done
+
+            if [ "$domain_ssl_ready" = false ]; then
+                log_warn "SSL certificate for $domain not verified after 15 minutes"
+                log_warn "E2E tests may fail with 525 errors for $domain"
+            fi
+        done
+    fi
+
     save_checkpoint 7 "completed"
     log_success "Phase 7 complete - Cloud Run services configured"
 }
