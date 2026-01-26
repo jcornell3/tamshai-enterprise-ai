@@ -316,15 +316,15 @@ remove_all_problematic_state() {
 delete_persisted_secrets() {
     log_info "Deleting persisted GCP secrets..."
     local secrets=(
-        "tamshai-prod-keycloak-admin-password"
-        "tamshai-prod-keycloak-db-password"
-        "tamshai-prod-db-password"
-        "tamshai-prod-claude-api-key"
-        "tamshai-prod-mcp-gateway-client-secret"
-        "tamshai-prod-jwt-secret"
+        "${RESOURCE_PREFIX}-keycloak-admin-password"
+        "${RESOURCE_PREFIX}-keycloak-db-password"
+        "${RESOURCE_PREFIX}-db-password"
+        "${RESOURCE_PREFIX}-claude-api-key"
+        "${RESOURCE_PREFIX}-mcp-gateway-client-secret"
+        "${RESOURCE_PREFIX}-jwt-secret"
         "mcp-hr-service-client-secret"
         "prod-user-password"
-        # NOTE: tamshai-prod-mongodb-uri is NOT deleted - it's manually created
+        # NOTE: ${RESOURCE_PREFIX}-mongodb-uri is NOT deleted - it's manually created
         # and contains the MongoDB Atlas connection string that persists across rebuilds
     )
 

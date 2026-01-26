@@ -32,23 +32,26 @@ log_secrets_success() { echo -e "${GREEN}[secrets]${NC} $1"; }
 log_secrets_warn() { echo -e "${YELLOW}[secrets]${NC} $1"; }
 log_secrets_error() { echo -e "${RED}[secrets]${NC} $1"; }
 
+# Resource prefix for DR portability (same pattern as cleanup.sh)
+RESOURCE_PREFIX="${RESOURCE_PREFIX:-tamshai-prod}"
+
 # Required GCP secrets for Phoenix rebuild
 REQUIRED_GCP_SECRETS=(
-    "tamshai-prod-claude-api-key"
-    "tamshai-prod-db-password"
-    "tamshai-prod-keycloak-admin-password"
-    "tamshai-prod-keycloak-db-password"
-    "tamshai-prod-mongodb-uri"
+    "${RESOURCE_PREFIX}-claude-api-key"
+    "${RESOURCE_PREFIX}-db-password"
+    "${RESOURCE_PREFIX}-keycloak-admin-password"
+    "${RESOURCE_PREFIX}-keycloak-db-password"
+    "${RESOURCE_PREFIX}-mongodb-uri"
     "mcp-hr-service-client-secret"
 )
 
 # GitHub to GCP secret name mapping
 declare -A GITHUB_TO_GCP_MAP=(
-    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-claude-api-key"
-    ["PROD_DB_PASSWORD"]="tamshai-prod-db-password"
-    ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="tamshai-prod-keycloak-admin-password"
-    ["KEYCLOAK_DB_PASSWORD_PROD"]="tamshai-prod-keycloak-db-password"
-    ["MONGODB_ATLAS_URI_PROD"]="tamshai-prod-mongodb-uri"
+    ["CLAUDE_API_KEY_PROD"]="${RESOURCE_PREFIX}-claude-api-key"
+    ["PROD_DB_PASSWORD"]="${RESOURCE_PREFIX}-db-password"
+    ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="${RESOURCE_PREFIX}-keycloak-admin-password"
+    ["KEYCLOAK_DB_PASSWORD_PROD"]="${RESOURCE_PREFIX}-keycloak-db-password"
+    ["MONGODB_ATLAS_URI_PROD"]="${RESOURCE_PREFIX}-mongodb-uri"
     ["MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
 )
 
@@ -412,16 +415,17 @@ verify_mongodb_uri_secret() {
 
     log_secrets_info "Verifying mongodb-uri secret exists (required for terraform)..."
 
-    if gcloud secrets describe tamshai-prod-mongodb-uri --project="$project" &>/dev/null 2>&1; then
+    local mongodb_secret="${RESOURCE_PREFIX}-mongodb-uri"
+    if gcloud secrets describe "$mongodb_secret" --project="$project" &>/dev/null 2>&1; then
         log_secrets_success "MongoDB URI secret exists"
         return 0
     else
-        log_secrets_error "MongoDB URI secret 'tamshai-prod-mongodb-uri' not found!"
+        log_secrets_error "MongoDB URI secret '${mongodb_secret}' not found!"
         log_secrets_error "This secret is required for terraform to succeed."
         echo ""
         log_secrets_info "To create it:"
-        echo "  gcloud secrets create tamshai-prod-mongodb-uri --replication-policy=automatic"
-        echo "  echo -n 'mongodb+srv://...' | gcloud secrets versions add tamshai-prod-mongodb-uri --data-file=-"
+        echo "  gcloud secrets create ${mongodb_secret} --replication-policy=automatic"
+        echo "  echo -n 'mongodb+srv://...' | gcloud secrets versions add ${mongodb_secret} --data-file=-"
         echo ""
         log_secrets_info "See scripts/gcp/README.md for full MongoDB Atlas setup instructions."
         return 1
@@ -439,10 +443,12 @@ ensure_mongodb_uri_iam_binding() {
     fi
 
     log_secrets_info "Adding MongoDB URI IAM binding (Gap #32)..."
-    local sa_email="tamshai-prod-mcp-servers@${project}.iam.gserviceaccount.com"
+    local sa_name="${GCP_SA_MCP_SERVERS:-${RESOURCE_PREFIX}-mcp-servers}"
+    local sa_email="${sa_name}@${project}.iam.gserviceaccount.com"
+    local mongodb_secret="${RESOURCE_PREFIX}-mongodb-uri"
 
-    if gcloud secrets describe tamshai-prod-mongodb-uri --project="$project" &>/dev/null; then
-        gcloud secrets add-iam-policy-binding tamshai-prod-mongodb-uri \
+    if gcloud secrets describe "$mongodb_secret" --project="$project" &>/dev/null; then
+        gcloud secrets add-iam-policy-binding "$mongodb_secret" \
             --member="serviceAccount:${sa_email}" \
             --role="roles/secretmanager.secretAccessor" \
             --project="$project" \
@@ -594,4 +600,4 @@ trigger_identity_sync() {
     fi
 }
 
-echo "[secrets] Library loaded"
+echo "[secrets] Library loaded (RESOURCE_PREFIX=$RESOURCE_PREFIX)"
