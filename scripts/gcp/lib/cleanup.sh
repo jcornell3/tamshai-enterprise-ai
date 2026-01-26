@@ -846,11 +846,118 @@ delete_persisted_secrets_prod() {
     done
 }
 
+# =============================================================================
+# VPC PEERING DEPENDENCY CHECK (Issue #103)
+# =============================================================================
+# Before attempting VPC peering deletion, check for and clean up ALL resources
+# that use service networking (Cloud SQL, VPC connectors, Filestore, etc.).
+# This prevents the 10-minute retry loop when dependencies are missed.
+#
+# Usage: check_and_clean_vpc_peering_dependencies
+# Returns: 0 if all dependencies cleared, 1 if some couldn't be cleaned
+check_and_clean_vpc_peering_dependencies() {
+    local vpc_name="${NAME_PREFIX}-vpc"
+    local found_deps=0
+
+    log_info "Checking VPC peering dependencies before deletion (Issue #103)..."
+
+    # 1. Check for Cloud SQL instances (primary blocker)
+    log_info "  Checking for Cloud SQL instances..."
+    local sql_instances
+    sql_instances=$(gcloud sql instances list --project="$PROJECT" --format="value(name)" 2>/dev/null || echo "")
+    if [[ -n "$sql_instances" ]]; then
+        log_warn "  Found Cloud SQL instances still using service networking:"
+        for inst in $sql_instances; do
+            log_warn "    - $inst"
+        done
+        log_warn "  Deleting Cloud SQL instances before VPC peering deletion..."
+        for inst in $sql_instances; do
+            # Disable deletion protection first
+            gcloud sql instances patch "$inst" --no-deletion-protection --project="$PROJECT" --quiet 2>/dev/null || true
+            gcloud sql instances delete "$inst" --project="$PROJECT" --quiet 2>/dev/null || {
+                log_error "  Failed to delete Cloud SQL instance: $inst"
+                found_deps=$((found_deps + 1))
+            }
+        done
+        # Wait for Cloud SQL deletion to propagate
+        local sql_wait=0
+        local sql_max=18  # 3 minutes
+        while [[ $sql_wait -lt $sql_max ]]; do
+            local remaining
+            remaining=$(gcloud sql instances list --project="$PROJECT" --format="value(name)" 2>/dev/null || echo "")
+            if [[ -z "$remaining" ]]; then
+                log_info "  All Cloud SQL instances deleted"
+                break
+            fi
+            sql_wait=$((sql_wait + 1))
+            log_info "  Waiting for Cloud SQL deletion... [$sql_wait/$sql_max]"
+            sleep 10
+        done
+    else
+        log_info "  No Cloud SQL instances found"
+    fi
+
+    # 2. Check for VPC Access Connectors (can hold subnet references)
+    log_info "  Checking for VPC Access Connectors..."
+    local connectors
+    connectors=$(gcloud compute networks vpc-access connectors list \
+        --region="$REGION" --project="$PROJECT" \
+        --format="value(name)" 2>/dev/null | grep -E "^tamshai" || true)
+    if [[ -n "$connectors" ]]; then
+        log_warn "  Found VPC Access Connectors:"
+        for conn in $connectors; do
+            local conn_network
+            conn_network=$(gcloud compute networks vpc-access connectors describe "$conn" \
+                --region="$REGION" --project="$PROJECT" \
+                --format="value(network)" 2>/dev/null || echo "")
+            conn_network="${conn_network##*/}"
+            if [[ "$conn_network" == "$vpc_name" ]]; then
+                log_warn "    - $conn (in VPC: $vpc_name) — deleting..."
+                gcloud compute networks vpc-access connectors delete "$conn" \
+                    --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || true
+                wait_for_vpc_connector_deletion "$conn" || {
+                    log_warn "  VPC connector $conn deletion timeout"
+                    found_deps=$((found_deps + 1))
+                }
+            else
+                log_info "    - $conn (in VPC: $conn_network) — not in target VPC, skipping"
+            fi
+        done
+    else
+        log_info "  No VPC Access Connectors found"
+    fi
+
+    # 3. Check for Filestore instances (use service networking)
+    log_info "  Checking for Filestore instances..."
+    local filestore_instances
+    filestore_instances=$(gcloud filestore instances list \
+        --project="$PROJECT" --format="value(name)" 2>/dev/null || echo "API_DISABLED")
+    if [[ "$filestore_instances" == "API_DISABLED" ]] || [[ -z "$filestore_instances" ]]; then
+        log_info "  No Filestore instances found (or API not enabled)"
+    else
+        log_warn "  Found Filestore instances — these may block VPC peering deletion:"
+        for fs in $filestore_instances; do
+            log_warn "    - $fs"
+        done
+        found_deps=$((found_deps + 1))
+    fi
+
+    # 4. Summary
+    if [[ $found_deps -gt 0 ]]; then
+        log_warn "  $found_deps dependency issue(s) found — VPC peering deletion may require retries"
+        return 1
+    fi
+
+    log_info "  All VPC peering dependencies cleared"
+    return 0
+}
+
 # Delete VPC peering using services API (battle-tested in phoenix-rebuild.sh)
 # Issue #14: Service networking peerings MUST use the services API, not compute API
 # GCP may take 5-10 minutes to release the peering after Cloud SQL deletion.
 # The delete command is rejected (not async) when producer services still hold a
 # stale reference, so we must RETRY the delete — not just poll.
+# Issue #103: Now checks dependencies before starting retry loop.
 # Usage: delete_vpc_peering_robust
 delete_vpc_peering_robust() {
     local vpc_name="${NAME_PREFIX}-vpc"
@@ -863,7 +970,15 @@ delete_vpc_peering_robust() {
         return 0
     fi
 
-    log_info "Found service networking VPC peering - deleting..."
+    log_info "Found service networking VPC peering - checking dependencies first..."
+
+    # Issue #103: Check and clean dependencies BEFORE attempting deletion
+    # This prevents wasting 10 minutes in retry loops when a dependency was missed
+    check_and_clean_vpc_peering_dependencies || {
+        log_warn "Some dependencies could not be cleaned — proceeding with retries anyway"
+    }
+
+    log_info "Attempting VPC peering deletion..."
 
     # Attempt deletion with retries. GCP rejects the delete (not just slow async)
     # when Cloud SQL internal cleanup hasn't finished. Retry every 30s for up to 10 min.
