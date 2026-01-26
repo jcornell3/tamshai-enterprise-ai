@@ -1717,6 +1717,23 @@ phase_10_verify() {
     log_step "Running health checks..."
     quick_health_check || log_warn "Some services may not be healthy"
 
+    # Fetch Phoenix secrets from GitHub (PROD_USER_PASSWORD, TEST_USER_PASSWORD,
+    # TEST_USER_TOTP_SECRET, TEST_USER_TOTP_SECRET_RAW) via read-github-secrets.sh
+    local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
+    if [ -f "$secrets_script" ]; then
+        log_step "Fetching Phoenix secrets from GitHub..."
+        local secret_exports
+        if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
+            eval "$secret_exports"
+            log_success "Phoenix secrets loaded into environment"
+        else
+            log_warn "Failed to fetch Phoenix secrets from GitHub"
+            log_warn "PROD_USER_PASSWORD and E2E test secrets may not be available"
+        fi
+    else
+        log_warn "read-github-secrets.sh not found at $secrets_script"
+    fi
+
     # Issue #102: Sync PROD_USER_PASSWORD from GitHub Secrets to GCP Secret Manager
     # Uses shared sync_prod_user_password() from lib/secrets.sh
     log_step "Syncing PROD_USER_PASSWORD to GCP Secret Manager (Issue #102 fix)..."
@@ -1745,7 +1762,13 @@ phase_10_verify() {
     log_step "Running E2E login test..."
     cd "$PROJECT_ROOT/tests/e2e"
     if [ -f "package.json" ]; then
-        npm run test:login:prod 2>/dev/null || log_warn "E2E tests may have failed"
+        # Secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET) already loaded
+        # from read-github-secrets.sh --phoenix earlier in this phase
+        if npm run test:login:prod; then
+            log_success "E2E tests passed"
+        else
+            log_warn "E2E tests failed — check output above for details"
+        fi
     fi
 
     save_checkpoint 10 "completed"

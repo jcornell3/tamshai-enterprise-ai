@@ -1183,6 +1183,25 @@ phase5_configure_users() {
     log_phase "5" "CONFIGURE USERS"
 
     # =========================================================================
+    # Step 0: Fetch Phoenix secrets from GitHub (PROD_USER_PASSWORD,
+    # TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET, TEST_USER_TOTP_SECRET_RAW)
+    # =========================================================================
+    local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
+    if [ -f "$secrets_script" ]; then
+        log_step "Fetching Phoenix secrets from GitHub..."
+        local secret_exports
+        if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
+            eval "$secret_exports"
+            log_success "Phoenix secrets loaded into environment"
+        else
+            log_warn "Failed to fetch Phoenix secrets from GitHub"
+            log_warn "PROD_USER_PASSWORD and E2E test secrets may not be available"
+        fi
+    else
+        log_warn "read-github-secrets.sh not found at $secrets_script"
+    fi
+
+    # =========================================================================
     # Step 1: Warm up Keycloak (Gap #52 - cold start mitigation)
     # =========================================================================
     log_step "Warming up Keycloak before user configuration (Gap #52)..."
@@ -1291,12 +1310,13 @@ phase6_verify() {
     cd "$PROJECT_ROOT/tests/e2e"
 
     if [ -f "package.json" ]; then
-        # Load test credentials
-        eval "$("$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh" --e2e --env 2>/dev/null)" || true
-
-        npx cross-env TEST_ENV=prod playwright test login-journey --project=chromium --workers=1 || {
-            log_warn "E2E tests failed - manual verification required"
-        }
+        # Secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET) already loaded
+        # from read-github-secrets.sh --phoenix in Phase 5
+        if npx cross-env TEST_ENV=prod playwright test login-journey --project=chromium --workers=1; then
+            log_success "E2E tests passed"
+        else
+            log_warn "E2E tests failed — check output above for details"
+        fi
     else
         log_info "E2E tests not available - skipping"
     fi

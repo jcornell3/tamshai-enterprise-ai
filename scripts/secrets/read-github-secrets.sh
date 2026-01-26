@@ -11,7 +11,8 @@
 #
 # Options:
 #   --e2e             Get E2E test secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET)
-#   --phoenix         Get Phoenix rebuild secrets (TEST_USER_TOTP_SECRET_RAW)
+#   --phoenix         Get Phoenix rebuild secrets (PROD_USER_PASSWORD, TEST_USER_PASSWORD,
+#                     TEST_USER_TOTP_SECRET, TEST_USER_TOTP_SECRET_RAW)
 #   --keycloak        Get Keycloak admin password
 #   --user-passwords  Get user passwords (DEV/STAGE/PROD_USER_PASSWORD)
 #   --all             Get all available secrets
