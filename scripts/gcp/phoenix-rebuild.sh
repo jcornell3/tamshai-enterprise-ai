@@ -754,12 +754,30 @@ phase_3_destroy() {
             done <<< "$subnets"
         fi
 
-        # Step 4: Delete the VPC network
+        # Step 4: Delete Cloud Routers (and their NAT gateways) on this VPC
+        local routers
+        routers=$(gcloud compute routers list \
+            --filter="network:${vpc_name}" \
+            --format="csv[no-heading](name,region)" \
+            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+        if [ -n "$routers" ]; then
+            log_info "Deleting Cloud Routers..."
+            while IFS=',' read -r router_name router_region; do
+                [ -z "$router_name" ] && continue
+                log_info "  Deleting router: $router_name (region: $router_region)"
+                gcloud compute routers delete "$router_name" \
+                    --region="$router_region" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                    log_warn "  Failed to delete router $router_name"
+            done <<< "$routers"
+        fi
+
+        # Step 5: Delete the VPC network
         log_info "Deleting VPC network: ${vpc_name}"
         if gcloud compute networks delete "${vpc_name}" --quiet --project="${GCP_PROJECT_ID}" 2>&1; then
             log_success "Orphaned VPC deleted"
         else
-            log_error "Failed to delete VPC - check remaining dependencies:"
+            log_error "Failed to delete VPC - checking remaining dependencies:"
+            gcloud compute routers list --filter="network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
             gcloud compute networks subnets list --network="${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
             gcloud compute instances list --filter="networkInterfaces.network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
             verification_failed=true
