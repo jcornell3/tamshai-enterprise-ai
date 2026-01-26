@@ -75,6 +75,9 @@ load_tfvars_config() {
     TFVAR_REGION=$(get_tfvar "region" "$tfvars_file" 2>/dev/null || echo "")
     TFVAR_ZONE=$(get_tfvar "zone" "$tfvars_file" 2>/dev/null || echo "")
     TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_STATIC_WEBSITE_DOMAIN=$(get_tfvar "static_website_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_APP_DOMAIN=$(get_tfvar "app_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_API_DOMAIN=$(get_tfvar "api_domain" "$tfvars_file" 2>/dev/null || echo "")
 
     return 0
 }
@@ -89,6 +92,11 @@ export GCP_ZONE="${GCP_ZONE:-${TFVAR_ZONE:-${GCP_REGION}-c}}"
 # Keycloak domain: env var > tfvars > default
 KEYCLOAK_DOMAIN="${KEYCLOAK_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-${KEYCLOAK_DOMAIN}}}"
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
+
+# Domain configuration: env var > tfvars > defaults
+STATIC_WEBSITE_DOMAIN="${STATIC_WEBSITE_DOMAIN:-${TFVAR_STATIC_WEBSITE_DOMAIN:-prod.tamshai.com}}"
+APP_DOMAIN="${APP_DOMAIN:-${TFVAR_APP_DOMAIN:-app.tamshai.com}}"
+API_DOMAIN="${API_DOMAIN:-${TFVAR_API_DOMAIN:-api.tamshai.com}}"
 
 # Service account names: Environment vars > defaults
 SA_KEYCLOAK="${GCP_SA_KEYCLOAK:-tamshai-prod-keycloak}"
@@ -390,8 +398,15 @@ phase_3_destroy() {
     fi
 
     # Gap #39: Empty ALL storage buckets BEFORE destroy (force_destroy=false in terraform)
+    # Bucket names derived from variables (supports prod.tamshai.com and prod-dr.tamshai.com)
     log_step "Emptying storage buckets before destroy (Gap #39)..."
-    local buckets=("prod.tamshai.com" "tamshai-prod-finance-docs" "tamshai-prod-finance-docs-${GCP_PROJECT_ID}")
+    local buckets=("${STATIC_WEBSITE_DOMAIN}" "tamshai-prod-finance-docs" "tamshai-prod-finance-docs-${GCP_PROJECT_ID}")
+    # Skip empty bucket names (DR may not have static website domain set)
+    local non_empty_buckets=()
+    for b in "${buckets[@]}"; do
+        [ -n "$b" ] && non_empty_buckets+=("$b")
+    done
+    buckets=("${non_empty_buckets[@]}")
     for bucket in "${buckets[@]}"; do
         if gcloud storage ls "gs://${bucket}" &>/dev/null 2>&1; then
             log_info "  Emptying gs://${bucket}..."
@@ -973,6 +988,13 @@ EOF
     log_step "Waiting for Cloud SQL to be ready..."
     wait_for_cloudsql "tamshai-prod-postgres" 1800  # 30 min — Cloud SQL with private networking can take 25+ min
 
+    # Ensure Cloud SQL Service Agent exists (auto-created but can lag behind instance creation)
+    # This SA is needed for backup bucket IAM bindings (backups_cloudsql_writer)
+    log_step "Ensuring Cloud SQL Service Agent exists..."
+    gcloud beta services identity create \
+        --service=sqladmin.googleapis.com \
+        --project="${GCP_PROJECT_ID}" 2>/dev/null || log_warn "Could not create Cloud SQL Service Agent (may already exist)"
+
     # Gap #26/41: Ensure mcp-hr-service-client-secret has a version
     log_step "Ensuring mcp-hr-service-client-secret has a version (Gap #26/41)..."
     ensure_mcp_hr_client_secret || log_warn "Could not ensure mcp-hr-service-client-secret"
@@ -1244,12 +1266,12 @@ phase_7_cloud_run() {
         fi
     fi
 
-    # Check if app.tamshai.com domain mapping exists
-    if gcloud beta run domain-mappings describe --domain=app.tamshai.com --region="$region" &>/dev/null 2>&1; then
+    # Check if app domain mapping exists (supports app.tamshai.com / app-dr.tamshai.com)
+    if gcloud beta run domain-mappings describe --domain="${APP_DOMAIN}" --region="$region" &>/dev/null 2>&1; then
         if ! terraform state show 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' &>/dev/null 2>&1; then
-            log_info "Importing existing app.tamshai.com domain mapping..."
+            log_info "Importing existing ${APP_DOMAIN} domain mapping..."
             terraform import 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' \
-                "locations/${region}/namespaces/${project}/domainmappings/app.tamshai.com" 2>/dev/null || \
+                "locations/${region}/namespaces/${project}/domainmappings/${APP_DOMAIN}" 2>/dev/null || \
                 log_warn "Domain mapping import failed - may not exist in config"
         fi
     fi
@@ -1268,6 +1290,26 @@ phase_7_cloud_run() {
         fi
     else
         log_info "Artifact Registry does not exist yet - will be created by terraform"
+    fi
+
+    # Import existing static website bucket if it exists but isn't in state
+    # Supports both prod.tamshai.com (prod) and prod-dr.tamshai.com (DR)
+    if [ -n "${STATIC_WEBSITE_DOMAIN}" ]; then
+        log_step "Checking for existing static website bucket to import (${STATIC_WEBSITE_DOMAIN})..."
+        if gcloud storage ls "gs://${STATIC_WEBSITE_DOMAIN}" &>/dev/null 2>&1; then
+            if ! terraform state show 'module.storage.google_storage_bucket.static_website[0]' &>/dev/null 2>&1; then
+                log_info "Importing existing static website bucket: ${STATIC_WEBSITE_DOMAIN}"
+                terraform import 'module.storage.google_storage_bucket.static_website[0]' \
+                    "${STATIC_WEBSITE_DOMAIN}" 2>/dev/null || \
+                    log_warn "Static website bucket import failed - may already be in state"
+            else
+                log_info "Static website bucket already in terraform state"
+            fi
+        else
+            log_info "Static website bucket does not exist yet - will be created by terraform"
+        fi
+    else
+        log_info "No static website domain configured - skipping bucket import"
     fi
 
     # Issue #35: Wait for SSL certificate BEFORE terraform apply
