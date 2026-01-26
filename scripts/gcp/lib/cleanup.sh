@@ -427,7 +427,7 @@ delete_vpc_connector() {
     gcloud compute networks vpc-access connectors delete "$connector_name" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $connector_name"
 }
 
-# Delete VPC peering connection
+# Delete VPC peering connection (simple — use delete_vpc_peering_robust for retry logic)
 # Usage: delete_vpc_peering
 delete_vpc_peering() {
     local vpc_name="${NAME_PREFIX}-vpc"
@@ -437,11 +437,14 @@ delete_vpc_peering() {
     # Delete servicenetworking peering
     if gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q servicenetworking; then
         log_info "Deleting servicenetworking VPC peering..."
-        gcloud services vpc-peerings delete \
+        local output
+        output=$(gcloud services vpc-peerings delete \
             --network="$vpc_name" \
             --service=servicenetworking.googleapis.com \
             --project="$PROJECT" \
-            --quiet 2>/dev/null || log_warn "Failed to delete VPC peering"
+            --quiet 2>&1) || {
+            log_warn "VPC peering deletion failed: $output"
+        }
     fi
 }
 
@@ -845,6 +848,9 @@ delete_persisted_secrets_prod() {
 
 # Delete VPC peering using services API (battle-tested in phoenix-rebuild.sh)
 # Issue #14: Service networking peerings MUST use the services API, not compute API
+# GCP may take 5-10 minutes to release the peering after Cloud SQL deletion.
+# The delete command is rejected (not async) when producer services still hold a
+# stale reference, so we must RETRY the delete — not just poll.
 # Usage: delete_vpc_peering_robust
 delete_vpc_peering_robust() {
     local vpc_name="${NAME_PREFIX}-vpc"
@@ -859,39 +865,54 @@ delete_vpc_peering_robust() {
 
     log_info "Found service networking VPC peering - deleting..."
 
-    # Use services API (phoenix-rebuild.sh proven pattern - Issue #14 fix)
-    if gcloud services vpc-peerings delete \
-        --network="$vpc_name" \
-        --service=servicenetworking.googleapis.com \
-        --project="$PROJECT" \
-        --quiet 2>/dev/null; then
-        log_info "VPC peering deletion initiated"
-    else
-        log_warn "VPC peering deletion command may have failed - checking status..."
-    fi
+    # Attempt deletion with retries. GCP rejects the delete (not just slow async)
+    # when Cloud SQL internal cleanup hasn't finished. Retry every 30s for up to 10 min.
+    local attempt=0
+    local max_attempts=20  # 20 * 30s = 10 minutes max
+    local delete_output=""
 
-    # Wait for peering deletion (async operation)
-    local wait_count=0
-    local max_wait=12  # 12 * 10s = 2 minutes max
+    while true; do
+        attempt=$((attempt + 1))
 
-    while gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; do
-        wait_count=$((wait_count + 1))
-        if [[ $wait_count -ge $max_wait ]]; then
-            log_warn "VPC peering deletion timeout - may need manual cleanup"
+        # Check if peering is already gone
+        if ! gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; then
+            log_info "VPC peering deleted from GCP"
+            return 0
+        fi
+
+        if [[ $attempt -gt $max_attempts ]]; then
+            log_error "VPC peering deletion failed after $max_attempts attempts (10 minutes)"
+            log_error "Last error: $delete_output"
+            log_error "Manual cleanup required: gcloud services vpc-peerings delete --network=$vpc_name --service=servicenetworking.googleapis.com --project=$PROJECT"
             return 1
         fi
-        log_info "  Waiting for VPC peering deletion... [$wait_count/$max_wait]"
-        sleep 10
-    done
 
-    # Verify deletion
-    if ! gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; then
-        log_info "VPC peering deleted from GCP"
-        return 0
-    else
-        log_warn "VPC peering may still exist"
-        return 1
-    fi
+        # Attempt deletion — capture stderr for visibility
+        log_info "  VPC peering delete attempt [$attempt/$max_attempts]..."
+        delete_output=$(gcloud services vpc-peerings delete \
+            --network="$vpc_name" \
+            --service=servicenetworking.googleapis.com \
+            --project="$PROJECT" \
+            --quiet 2>&1) && {
+            log_info "VPC peering deletion initiated successfully"
+            # Give GCP a moment to process, then verify
+            sleep 10
+            if ! gcloud services vpc-peerings list --network="$vpc_name" --project="$PROJECT" 2>/dev/null | grep -q "servicenetworking"; then
+                log_info "VPC peering deleted from GCP"
+                return 0
+            fi
+            log_info "  Peering still exists after delete command — waiting for GCP propagation..."
+        } || {
+            # Delete was rejected — log the reason
+            if echo "$delete_output" | grep -q "RESOURCE_PREVENTING_DELETE"; then
+                log_warn "  GCP producer service still holds stale reference — retrying in 30s..."
+            else
+                log_warn "  VPC peering deletion failed: $delete_output"
+            fi
+        }
+
+        sleep 30
+    done
 }
 
 # Delete VPC network with retry and dependency cleanup

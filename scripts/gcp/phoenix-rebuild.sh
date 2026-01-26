@@ -450,37 +450,13 @@ phase_3_destroy() {
     local vpc_name="tamshai-prod-vpc"
 
     # Step 1: Delete VPC peering connection (Issue #14 - this was the missing step)
+    # Uses shared library function with retry logic (GCP may take 5-10 min after Cloud SQL deletion)
     log_step "Deleting VPC peering connection (Issue #14 fix)..."
-    if gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; then
-        log_info "VPC peering exists - deleting..."
-        gcloud services vpc-peerings delete \
-            --network="$vpc_name" \
-            --service=servicenetworking.googleapis.com \
-            --quiet 2>/dev/null || {
-            log_warn "VPC peering deletion may have failed - checking status..."
-        }
-
-        # Wait for peering deletion (async operation)
-        local wait_count=0
-        local max_wait=12  # 12 * 10s = 2 minutes max
-        while gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; do
-            wait_count=$((wait_count + 1))
-            if [ $wait_count -ge $max_wait ]; then
-                log_warn "VPC peering deletion timeout - may need manual cleanup"
-                break
-            fi
-            echo "   Waiting for VPC peering deletion... [$wait_count/$max_wait]"
-            sleep 10
-        done
-
-        # Verify deletion
-        if ! gcloud services vpc-peerings list --network="$vpc_name" 2>/dev/null | grep -q "servicenetworking"; then
-            log_success "VPC peering deleted from GCP"
-        else
-            log_warn "VPC peering may still exist - continuing anyway"
-        fi
+    if type delete_vpc_peering_robust &>/dev/null; then
+        delete_vpc_peering_robust || log_error "VPC peering deletion failed — post-destroy verification will catch this"
     else
-        log_info "VPC peering does not exist - skipping deletion"
+        log_error "delete_vpc_peering_robust not available — cleanup.sh library may not have loaded"
+        log_error "Check that GCP_PROJECT and GCP_REGION are set before cleanup.sh is sourced"
     fi
 
     # Step 2: Delete private IP addresses (now possible after peering deleted)
