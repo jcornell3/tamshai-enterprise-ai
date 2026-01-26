@@ -34,7 +34,7 @@ log_secrets_error() { echo -e "${RED}[secrets]${NC} $1"; }
 
 # Required GCP secrets for Phoenix rebuild
 REQUIRED_GCP_SECRETS=(
-    "tamshai-prod-anthropic-api-key"
+    "tamshai-prod-claude-api-key"
     "tamshai-prod-db-password"
     "tamshai-prod-keycloak-admin-password"
     "tamshai-prod-keycloak-db-password"
@@ -44,7 +44,7 @@ REQUIRED_GCP_SECRETS=(
 
 # GitHub to GCP secret name mapping
 declare -A GITHUB_TO_GCP_MAP=(
-    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-anthropic-api-key"
+    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-claude-api-key"
     ["PROD_DB_PASSWORD"]="tamshai-prod-db-password"
     ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="tamshai-prod-keycloak-admin-password"
     ["KEYCLOAK_DB_PASSWORD_PROD"]="tamshai-prod-keycloak-db-password"

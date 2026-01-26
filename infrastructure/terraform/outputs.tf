@@ -67,7 +67,7 @@ output "secret_manager_instructions" {
     Run this command and paste your API key when prompted:
 
     echo "sk-ant-api03-YOUR-KEY-HERE" | gcloud secrets versions add \
-      tamshai-${local.environment}-anthropic-api-key --data-file=-
+      tamshai-${local.environment}-claude-api-key --data-file=-
 
     Then restart the MCP Gateway instance:
 
