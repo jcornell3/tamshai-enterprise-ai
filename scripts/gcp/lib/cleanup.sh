@@ -881,10 +881,36 @@ delete_vpc_peering_robust() {
         fi
 
         if [[ $attempt -gt $max_attempts ]]; then
-            log_error "VPC peering deletion failed after $max_attempts attempts (10 minutes)"
+            log_error "Services API failed after $max_attempts attempts (10 minutes)"
             log_error "Last error: $delete_output"
-            log_error "Manual cleanup required: gcloud services vpc-peerings delete --network=$vpc_name --service=servicenetworking.googleapis.com --project=$PROJECT"
-            return 1
+
+            # Fallback: use compute API to force-delete the peering from our side.
+            # The services API asks the producer to release the connection (blocked by
+            # stale Cloud SQL references). The compute API removes the peering directly
+            # from our VPC without waiting for producer cleanup.
+            log_warn "Falling back to compute API (force-delete from consumer side)..."
+            local peering_name
+            peering_name=$(gcloud compute networks peerings list \
+                --network="$vpc_name" --project="$PROJECT" \
+                --format="value(name)" 2>/dev/null | head -1)
+
+            if [[ -n "$peering_name" ]]; then
+                log_info "  Force-deleting peering '$peering_name' via compute API..."
+                local fallback_output
+                fallback_output=$(gcloud compute networks peerings delete "$peering_name" \
+                    --network="$vpc_name" --project="$PROJECT" \
+                    --quiet 2>&1) && {
+                    log_info "VPC peering force-deleted via compute API"
+                    return 0
+                } || {
+                    log_error "Compute API fallback also failed: $fallback_output"
+                    log_error "Manual cleanup required: gcloud compute networks peerings delete $peering_name --network=$vpc_name --project=$PROJECT"
+                    return 1
+                }
+            else
+                log_error "No peering found to force-delete — peering may have been removed by GCP"
+                return 1
+            fi
         fi
 
         # Attempt deletion — capture stderr for visibility
