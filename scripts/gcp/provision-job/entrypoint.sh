@@ -3,10 +3,8 @@
 # User Provisioning Job Entrypoint
 # =============================================================================
 # Environment variables (set by Cloud Run):
-#   ACTION              - verify-only, load-hr-data, sync-users, all
+#   ACTION              - verify-only, load-hr-data, load-finance-data, sync-users, all
 #   DRY_RUN             - true/false
-#
-# NOTE: Finance data loading is handled by provision-prod-data.yml workflow
 #   FORCE_PASSWORD_RESET - true/false
 #   CLOUD_SQL_INSTANCE  - Connection name (project:region:instance)
 #   DB_PASSWORD         - PostgreSQL password
@@ -152,8 +150,46 @@ load_hr_data() {
     echo "[OK] HR data loaded: $EMPLOYEE_COUNT active employees"
 }
 
-# NOTE: Finance data loading is handled by provision-prod-data.yml workflow
-# This job only handles HR data and user sync
+# -----------------------------------------------------------------------------
+# Load Finance sample data
+# -----------------------------------------------------------------------------
+load_finance_data() {
+    if [ "$ACTION" != "load-finance-data" ]; then
+        echo "[SKIP] Action is ${ACTION}, skipping Finance data load"
+        return 0
+    fi
+
+    echo ""
+    echo "=== Loading Finance Sample Data ==="
+
+    if [ "$DRY_RUN" = "true" ]; then
+        echo "[DRY RUN] Would load sample-data/finance-data.sql"
+        echo "File size: $(wc -l < /app/sample-data/finance-data.sql) lines"
+        return 0
+    fi
+
+    # Check if finance data SQL exists
+    if [ ! -f /app/sample-data/finance-data.sql ]; then
+        echo "[WARN] Finance data file not found: /app/sample-data/finance-data.sql"
+        return 0
+    fi
+
+    export PGPASSWORD="$DB_PASSWORD"
+
+    # Create tamshai_finance database if it doesn't exist
+    echo "[INFO] Ensuring tamshai_finance database exists..."
+    psql -h localhost -p 5432 -U tamshai -d postgres -c \
+        "SELECT 1 FROM pg_database WHERE datname = 'tamshai_finance'" | grep -q 1 || \
+        psql -h localhost -p 5432 -U tamshai -d postgres -c "CREATE DATABASE tamshai_finance;" 2>/dev/null || true
+
+    echo "[INFO] Loading Finance data from sample-data/finance-data.sql..."
+    psql -h localhost -p 5432 -U tamshai -d tamshai_finance -f /app/sample-data/finance-data.sql
+
+    # Verify
+    INVOICE_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_finance -t -c \
+        "SELECT COUNT(*) FROM finance.invoices;" 2>/dev/null | tr -d ' \n' || echo "0")
+    echo "[OK] Finance data loaded: $INVOICE_COUNT invoices"
+}
 
 # -----------------------------------------------------------------------------
 # Ensure mcp-hr-service has realm-management permissions for role assignment
@@ -378,6 +414,7 @@ final_verify() {
 start_proxy
 verify_state
 load_hr_data
+load_finance_data
 sync_users
 final_verify
 
