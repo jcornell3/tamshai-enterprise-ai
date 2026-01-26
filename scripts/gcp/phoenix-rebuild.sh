@@ -679,16 +679,67 @@ phase_3_destroy() {
         done
     fi
 
-    # Check for orphaned Cloud SQL
+    # Check for orphaned Cloud SQL — actively delete if found
     if gcloud sql instances list --format="value(name)" 2>/dev/null | grep -q "tamshai"; then
-        log_error "Cloud SQL instance still exists - manual deletion required"
-        verification_failed=true
+        log_warn "Orphaned Cloud SQL instance found - deleting..."
+        gcloud sql instances patch "tamshai-prod-postgres" --no-deletion-protection --quiet 2>/dev/null || true
+        gcloud sql instances delete "tamshai-prod-postgres" --quiet 2>/dev/null || true
+        local sql_wait=0
+        while gcloud sql instances describe "tamshai-prod-postgres" &>/dev/null; do
+            sql_wait=$((sql_wait + 1))
+            if [ $sql_wait -ge 18 ]; then
+                log_error "Cloud SQL deletion timed out after 3 minutes"
+                verification_failed=true
+                break
+            fi
+            echo "   Waiting for Cloud SQL deletion... [$sql_wait/18]"
+            sleep 10
+        done
+        [ "$verification_failed" != true ] && log_success "Orphaned Cloud SQL deleted"
     fi
 
-    # Check for orphaned VPC
+    # Check for orphaned VPC — actively delete if found (firewall rules → subnet → VPC)
+    local vpc_name="tamshai-prod-vpc"
     if gcloud compute networks list --format="value(name)" 2>/dev/null | grep -q "tamshai"; then
-        log_error "VPC still exists - manual deletion required"
-        verification_failed=true
+        log_warn "Orphaned VPC found - cleaning up resources..."
+
+        # Step 1: Delete all firewall rules on this VPC
+        local fw_rules
+        fw_rules=$(gcloud compute firewall-rules list \
+            --filter="network:${vpc_name}" \
+            --format="value(name)" \
+            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+        if [ -n "$fw_rules" ]; then
+            log_info "Deleting firewall rules..."
+            echo "$fw_rules" | while read -r rule; do
+                log_info "  Deleting firewall rule: $rule"
+                gcloud compute firewall-rules delete "$rule" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || true
+            done
+        fi
+
+        # Step 2: Delete all subnets in this VPC
+        local subnets
+        subnets=$(gcloud compute networks subnets list \
+            --network="${vpc_name}" \
+            --format="csv[no-heading](name,region)" \
+            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+        if [ -n "$subnets" ]; then
+            log_info "Deleting subnets..."
+            echo "$subnets" | while IFS=',' read -r subnet_name subnet_region; do
+                log_info "  Deleting subnet: $subnet_name (region: $subnet_region)"
+                gcloud compute networks subnets delete "$subnet_name" \
+                    --region="$subnet_region" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || true
+            done
+        fi
+
+        # Step 3: Delete the VPC network
+        log_info "Deleting VPC network: ${vpc_name}"
+        if gcloud compute networks delete "${vpc_name}" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null; then
+            log_success "Orphaned VPC deleted"
+        else
+            log_error "Failed to delete VPC - may have remaining dependencies"
+            verification_failed=true
+        fi
     fi
 
     # Gap #1b: Remove stale state entries
@@ -767,6 +818,28 @@ phase_4_infrastructure() {
                 "projects/${GCP_PROJECT_ID}/serviceAccounts/${cicd_email}" || log_warn "cicd SA import may have failed"
         fi
     fi
+
+    # Import existing workload service accounts (they survive terraform destroy when state is empty)
+    log_step "Importing existing service accounts into Terraform state..."
+    local sa_imports=(
+        "${SA_KEYCLOAK}:module.security.google_service_account.keycloak"
+        "${SA_MCP_GATEWAY}:module.security.google_service_account.mcp_gateway"
+        "${SA_MCP_SERVERS}:module.security.google_service_account.mcp_servers"
+        "${SA_PROVISION}:module.security.google_service_account.provision_job"
+    )
+    for sa_entry in "${sa_imports[@]}"; do
+        local sa_name="${sa_entry%%:*}"
+        local tf_resource="${sa_entry##*:}"
+        local sa_email="${sa_name}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+        if ! terraform state show "$tf_resource" &>/dev/null 2>&1; then
+            if gcloud iam service-accounts describe "$sa_email" &>/dev/null 2>&1; then
+                log_info "  Importing $sa_name..."
+                terraform import "$tf_resource" \
+                    "projects/${GCP_PROJECT_ID}/serviceAccounts/${sa_email}" 2>/dev/null || \
+                    log_warn "  Import of $sa_name may have failed"
+            fi
+        fi
+    done
 
     # Issue #30: Build provision-job BEFORE terraform apply
     # The provision_users Cloud Run Job in module.security references this image.
