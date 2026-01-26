@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
 **Last Updated**: January 26, 2026
-**Version**: 3.5.0
+**Version**: 3.6.0
 **Owner**: Platform Team
 
 ## Overview
@@ -380,6 +380,30 @@ gcloud compute networks describe tamshai-prod-vpc \
 
 **Prevention**: Fixed in `cleanup.sh` — `delete_vpc_connector_firewall_rules()` now runs after VPC connector deletion to clean up `aet-*` firewall rules with a fallback name-pattern search.
 
+### PROD_USER_PASSWORD Not Available During Rebuild
+
+**Symptom**: `sync_prod_user_password()` warns "not in environment". Corporate users get random Terraform-generated passwords instead of the known `PROD_USER_PASSWORD`.
+
+**Cause**: `PROD_USER_PASSWORD` is a GitHub Secret, not available as a local environment variable. Phase 10 called `sync_prod_user_password()` without first fetching the secret.
+
+**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 10 and `evacuate-region.sh` Phase 5 — now calls `read-github-secrets.sh --phoenix` to fetch `PROD_USER_PASSWORD` (and other Phoenix secrets) from GitHub before the sync step. The `export-test-secrets.yml` workflow's `phoenix` type now includes `PROD_USER_PASSWORD`, `TEST_USER_PASSWORD`, and `TEST_USER_TOTP_SECRET`.
+
+### E2E Tests Fail Silently in Script
+
+**Symptom**: E2E tests report "may have failed" but no output is visible. Manual run with secrets loaded passes 6/6.
+
+**Cause**: Two issues: (1) No test secrets (`TEST_USER_PASSWORD`, `TEST_USER_TOTP_SECRET`) loaded before Playwright execution. (2) `npm run test:login:prod 2>/dev/null` suppressed all output including errors.
+
+**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 10 and `evacuate-region.sh` Phase 6 — Phoenix secrets are now loaded via `read-github-secrets.sh --phoenix` earlier in the phase, and `2>/dev/null` is removed so test output is visible.
+
+### Workflow Detection Reports "Not Found" After Retries
+
+**Symptom**: `trigger_identity_sync()` and `trigger_sample_data_load()` warn "workflow not found after 3 attempts" even though the workflows exist and can be triggered successfully.
+
+**Cause**: `gh workflow list` returns display names (e.g., "Provision Production Users") but the script grepped for filenames (e.g., "provision-prod-users"). The pattern never matches because display names don't contain filenames.
+
+**Prevention**: Fixed in `secrets.sh` — replaced `gh workflow list | grep` with `gh workflow view <filename>`, which accepts workflow filenames directly and returns success/failure without needing to parse display names.
+
 For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-procedures-fallback).
 
 ---
@@ -406,7 +430,8 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 ## Related Documentation
 
 - [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (15-25 min RTO)
-- [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Latest rebuild log (0 manual actions)
+- [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Latest rebuild log (1 manual action)
+- [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Previous rebuild log (0 manual actions)
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)
 - [Identity Sync](./IDENTITY_SYNC.md) - User provisioning
 - [Keycloak Management](./KEYCLOAK_MANAGEMENT.md) - Keycloak operations
@@ -631,6 +656,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.6.0 | Jan 26, 2026 | Tamshai-Dev | Added v12 issues: PROD_USER_PASSWORD fetch, E2E silent failure, workflow detection fix; updated DR script |
 | 3.5.0 | Jan 26, 2026 | Tamshai-Dev | Added blocking requirements: user password provisioning and ALL E2E tests must pass for successful rebuild |
 | 3.4.0 | Jan 26, 2026 | Tamshai-Dev | Added Issue #103 troubleshooting: VPC peering dependency diagnostics and auto-created firewall rule diagnostics |
 | 3.3.0 | Jan 22, 2026 | Tamshai-Dev | Added decision tree and reference to GCP Regional Failure Runbook; added Regional Evacuation Scripts section |
