@@ -892,7 +892,7 @@ delete_vpc_peering_robust() {
             local peering_name
             peering_name=$(gcloud compute networks peerings list \
                 --network="$vpc_name" --project="$PROJECT" \
-                --format="value(name)" 2>/dev/null | head -1)
+                --format="value(peerings.name)" 2>/dev/null | head -1)
 
             if [[ -n "$peering_name" ]]; then
                 log_info "  Force-deleting peering '$peering_name' via compute API..."
