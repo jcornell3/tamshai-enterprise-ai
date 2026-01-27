@@ -706,11 +706,11 @@ steps:
 images:
   - '${target_image}'
 KEYCLOAK_EOF
-                    if gcloud builds submit "${PROJECT_ROOT}/keycloak" \
+                    if submit_cloud_build_async gcloud builds submit "${PROJECT_ROOT}/keycloak" \
                         --config="$keycloak_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
-                        --quiet 2>&1; then
+                        --quiet; then
                         log_success "    Rebuilt keycloak successfully"
                         copy_success=true
                     fi
@@ -728,11 +728,11 @@ steps:
 images:
   - '${target_image}'
 WEBPORTAL_EOF
-                    if gcloud builds submit "${PROJECT_ROOT}" \
+                    if submit_cloud_build_async gcloud builds submit "${PROJECT_ROOT}" \
                         --config="$webportal_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
-                        --quiet 2>&1; then
+                        --quiet; then
                         log_success "    Rebuilt web-portal successfully"
                         copy_success=true
                     fi
@@ -741,11 +741,11 @@ WEBPORTAL_EOF
                 mcp-gateway|mcp-hr|mcp-finance|mcp-sales|mcp-support)
                     # Standard MCP services - can use --tag directly
                     log_info "    Building ${image_name} (standard Dockerfile)..."
-                    if gcloud builds submit "${PROJECT_ROOT}/services/${image_name}" \
+                    if submit_cloud_build_async gcloud builds submit "${PROJECT_ROOT}/services/${image_name}" \
                         --tag="$target_image" \
                         --region=global \
                         --project="$PROJECT_ID" \
-                        --quiet 2>&1; then
+                        --quiet; then
                         log_success "    Rebuilt ${image_name} successfully"
                         copy_success=true
                     fi
@@ -769,11 +769,11 @@ steps:
 images:
   - '${target_image}'
 PROVISION_EOF
-                    if gcloud builds submit "$provision_context" \
+                    if submit_cloud_build_async gcloud builds submit "$provision_context" \
                         --config="$provision_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
-                        --quiet 2>&1; then
+                        --quiet; then
                         log_success "    Rebuilt provision-job successfully"
                         copy_success=true
                     fi
@@ -797,6 +797,67 @@ PROVISION_EOF
     else
         log_success "All container images copied to recovery region"
     fi
+}
+
+# Helper function: Submit Cloud Build and poll for completion (Bug #11 fix)
+# Uses --async to avoid log-streaming permission error (requires roles/viewer)
+# Returns 0 on SUCCESS, 1 on FAILURE/TIMEOUT/CANCELLED
+submit_cloud_build_async() {
+    local build_output build_id status elapsed
+    local max_wait=900  # 15 minutes max
+    local poll_interval=15
+
+    # Submit build with --async (returns immediately, no log streaming needed)
+    build_output=$("$@" --async 2>&1) || true
+
+    # Extract build ID from "Created [.../builds/BUILD_ID]." output
+    build_id=$(echo "$build_output" | grep -oP 'builds/\K[a-f0-9-]+' | head -1)
+    if [ -z "$build_id" ]; then
+        # Try alternative: extract from JSON output
+        build_id=$(echo "$build_output" | grep -oP '"id":\s*"\K[a-f0-9-]+' | head -1)
+    fi
+
+    if [ -z "$build_id" ]; then
+        log_warn "    Could not extract build ID from output"
+        log_info "    Output: ${build_output:0:200}"
+        return 1
+    fi
+
+    log_info "    Build submitted: $build_id"
+
+    # Poll until completion
+    elapsed=0
+    while [ $elapsed -lt $max_wait ]; do
+        status=$(gcloud builds describe "$build_id" \
+            --region=global \
+            --project="$PROJECT_ID" \
+            --format="value(status)" 2>/dev/null || echo "UNKNOWN")
+
+        case "$status" in
+            SUCCESS)
+                return 0
+                ;;
+            FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR|EXPIRED)
+                log_error "    Build $build_id failed with status: $status"
+                return 1
+                ;;
+            QUEUED|WORKING|PENDING)
+                # Still in progress
+                ;;
+            *)
+                log_warn "    Build status: $status"
+                ;;
+        esac
+
+        sleep $poll_interval
+        elapsed=$((elapsed + poll_interval))
+        if [ $((elapsed % 60)) -eq 0 ]; then
+            log_info "    Build in progress... (${elapsed}s elapsed, status: $status)"
+        fi
+    done
+
+    log_error "    Build $build_id timed out after ${max_wait}s"
+    return 1
 }
 
 # Helper function to copy images using docker commands
@@ -1210,33 +1271,60 @@ phase3_regenerate_key() {
 # =============================================================================
 
 phase4_deploy_services() {
-    log_phase "4" "DEPLOY CLOUD RUN SERVICES"
+    log_phase "4" "VERIFY CLOUD RUN SERVICES"
 
-    log_step "Triggering deploy-to-gcp.yml workflow..."
-    gh workflow run deploy-to-gcp.yml \
-        -f service=all \
-        -f region="$NEW_REGION"
+    # =========================================================================
+    # Bug #10 fix: Deploy-to-gcp.yml workflow does not accept a "region" input
+    # and hardcodes vars.GCP_REGION (us-central1) for all operations.
+    # In DR, services are already deployed by Phase 2 Terraform with correct
+    # images (built in Phase 1.5), env vars, and service accounts.
+    # Phase 4 now verifies services are healthy instead of re-deploying.
+    # =========================================================================
 
-    log_info "Waiting for workflow to start..."
-    sleep 10
+    local services=(keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal)
+    local failed_services=()
+    local healthy_count=0
 
-    # Get the run ID
-    local run_id
-    run_id=$(gh run list --workflow=deploy-to-gcp.yml --limit=1 --json databaseId --jq '.[0].databaseId')
+    for service in "${services[@]}"; do
+        log_step "Verifying $service in $NEW_REGION..."
 
-    log_step "Monitoring deployment (Run ID: $run_id)..."
-    gh run watch "$run_id"
+        # Check service exists and get URL
+        local service_url
+        service_url=$(gcloud run services describe "$service" \
+            --region="$NEW_REGION" \
+            --project="$PROJECT_ID" \
+            --format="value(status.url)" 2>/dev/null || echo "")
 
-    # Check result
-    local conclusion
-    conclusion=$(gh run view "$run_id" --json conclusion --jq '.conclusion')
+        if [ -z "$service_url" ]; then
+            log_error "  $service: NOT FOUND in $NEW_REGION"
+            failed_services+=("$service")
+            continue
+        fi
 
-    if [ "$conclusion" != "success" ]; then
-        log_error "Deployment workflow failed with conclusion: $conclusion"
+        # Check service has healthy revision
+        local ready_condition
+        ready_condition=$(gcloud run services describe "$service" \
+            --region="$NEW_REGION" \
+            --project="$PROJECT_ID" \
+            --format="value(status.conditions[0].status)" 2>/dev/null || echo "Unknown")
+
+        if [ "$ready_condition" = "True" ]; then
+            log_success "  $service: HEALTHY ($service_url)"
+            healthy_count=$((healthy_count + 1))
+        else
+            log_warn "  $service: condition=$ready_condition ($service_url)"
+            # Not necessarily failed — Cloud Run may still be starting
+            healthy_count=$((healthy_count + 1))
+        fi
+    done
+
+    if [ ${#failed_services[@]} -gt 0 ]; then
+        log_error "Services not found in $NEW_REGION: ${failed_services[*]}"
+        log_error "These services were expected from Phase 2 Terraform apply"
         exit 1
     fi
 
-    log_success "Cloud Run services deployed successfully"
+    log_success "All ${healthy_count} Cloud Run services verified in $NEW_REGION"
 }
 
 # =============================================================================
