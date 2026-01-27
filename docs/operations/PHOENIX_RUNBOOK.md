@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
-**Last Updated**: January 26, 2026
-**Version**: 3.8.0
+**Last Updated**: January 27, 2026
+**Version**: 3.9.0
 **Owner**: Platform Team
 
 ## Overview
@@ -101,7 +101,7 @@ The script executes 10 phases automatically:
 
 | Phase | What It Does | Duration | Checkpoint |
 |-------|--------------|----------|------------|
-| 1-2 | Pre-flight + Secret sync | ~2 min | Tools, auth, GCP secrets verified |
+| 1-2 | Pre-flight (tools, auth, **GitHub secrets fetch**) + Secret sync | ~2 min | Tools, auth, GCP secrets verified, GitHub secrets loaded |
 | 3 | Pre-destroy cleanup | ~5 min | State locks cleared (Issue #36), services deleted |
 | 4 | Terraform destroy + apply | ~20 min | VPC, Cloud SQL (~13 min), Registry created |
 | 5 | Build container images | ~12 min | All 8 container images built |
@@ -384,9 +384,9 @@ gcloud compute networks describe tamshai-prod-vpc \
 
 **Symptom**: `sync_prod_user_password()` warns "not in environment". Corporate users get random Terraform-generated passwords instead of the known `PROD_USER_PASSWORD`.
 
-**Cause**: `PROD_USER_PASSWORD` is a GitHub Secret, not available as a local environment variable. Phase 10 called `sync_prod_user_password()` without first fetching the secret.
+**Cause**: `PROD_USER_PASSWORD` is a GitHub Secret, not available as a local environment variable.
 
-**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 10 and `evacuate-region.sh` Phase 5 — now calls `read-github-secrets.sh --phoenix` to fetch `PROD_USER_PASSWORD` (and other Phoenix secrets) from GitHub before the sync step. The `export-test-secrets.yml` workflow's `phoenix` type now includes `PROD_USER_PASSWORD`, `TEST_USER_PASSWORD`, and `TEST_USER_TOTP_SECRET`.
+**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 1 (pre-flight) — now calls `read-github-secrets.sh --phoenix --env` at the start of the run to fetch `PROD_USER_PASSWORD` (and other Phoenix secrets: `TEST_USER_PASSWORD`, `TEST_USER_TOTP_SECRET`, `TEST_USER_TOTP_SECRET_RAW`) from GitHub. Phase 10 has a fallback re-fetch if secrets are missing (e.g., when resuming from a checkpoint that skips pre-flight). Similarly, `evacuate-region.sh` fetches in Phase 0 (pre-flight) with fallback in Phase 5.
 
 ### E2E Tests Fail Silently in Script
 
@@ -394,7 +394,7 @@ gcloud compute networks describe tamshai-prod-vpc \
 
 **Cause**: Two issues: (1) No test secrets (`TEST_USER_PASSWORD`, `TEST_USER_TOTP_SECRET`) loaded before Playwright execution. (2) `npm run test:login:prod 2>/dev/null` suppressed all output including errors.
 
-**Prevention**: Fixed in `phoenix-rebuild.sh` Phase 10 and `evacuate-region.sh` Phase 6 — Phoenix secrets are now loaded via `read-github-secrets.sh --phoenix` earlier in the phase, and `2>/dev/null` is removed so test output is visible.
+**Prevention**: Fixed in `phoenix-rebuild.sh` — Phoenix secrets (`TEST_USER_PASSWORD`, `TEST_USER_TOTP_SECRET`) are now fetched from GitHub in Phase 1 (pre-flight) via `read-github-secrets.sh --phoenix --env`, making them available throughout the entire run including Phase 10 E2E tests. The `2>/dev/null` suppression was also removed so test output is visible. Similarly, `evacuate-region.sh` fetches secrets in Phase 0 (pre-flight).
 
 ### Workflow Detection Reports "Not Found" After Retries
 
@@ -453,7 +453,8 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 
 ## Related Documentation
 
-- [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (15-25 min RTO)
+- [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (50-75 min estimated)
+- [GCP Region Failure Run v1](./GCP_REGION_FAILURE_RUNv1.md) - First DR drill log (8 bugs found, 7 fixed in-flight)
 - [Phoenix Manual Actions v14](./PHOENIX_MANUAL_ACTIONSv14.md) - Latest rebuild log (0 manual actions)
 - [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Previous rebuild log (1 manual action)
 - [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Rebuild log (1 manual action)
@@ -682,6 +683,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.9.0 | Jan 27, 2026 | Tamshai-Dev | DR run v1 Bug #8: GitHub secrets now fetched in Phase 1 (pre-flight) instead of Phase 10; updated PROD_USER_PASSWORD and E2E troubleshooting entries |
 | 3.8.0 | Jan 27, 2026 | Tamshai-Dev | v14 rebuild: 0 manual actions; validated v13 fixes (KEYCLOAK_URL, polling, cross-env); documented provision-users Cloud Run Job container failure |
 | 3.7.0 | Jan 26, 2026 | Tamshai-Dev | Added v13 issues: provision-prod-users KEYCLOAK_URL discovery, Cloud Run Job polling Unknown status, E2E cross-env Windows fix; updated related docs |
 | 3.6.0 | Jan 26, 2026 | Tamshai-Dev | Added v12 issues: PROD_USER_PASSWORD fetch, E2E silent failure, workflow detection fix; updated DR script |
