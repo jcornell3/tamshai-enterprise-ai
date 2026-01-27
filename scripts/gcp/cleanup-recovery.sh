@@ -378,11 +378,11 @@ terraform_destroy() {
         empty_all_storage_buckets
     fi
 
-    # Step 3: Delete secrets before destroy to prevent IAM binding errors (Issue #28)
-    if type delete_persisted_secrets_prod &>/dev/null; then
-        log_step "Deleting secrets before destroy (Issue #28)..."
-        delete_persisted_secrets_prod
-    fi
+    # Step 3: DO NOT delete secrets during recovery cleanup (Bug #5)
+    # Secrets (tamshai-prod-*) are shared between prod and DR environments.
+    # Deleting them here would break the running production environment.
+    # Step 4 below removes them from Terraform state so destroy won't fail.
+    log_step "Skipping secret deletion (shared with prod — Bug #5)..."
 
     # Step 4: Remove secret IAM bindings from terraform state (Issue #28)
     if type remove_secret_iam_bindings_state &>/dev/null; then
@@ -435,6 +435,20 @@ terraform_destroy() {
         remove_all_problematic_state
     fi
 
+    # Step 7: Remove shared/protected resources from state (Bug #7)
+    # The CICD service account has prevent_destroy=true and is shared with prod.
+    # Its IAM bindings are project-level and also shared. Remove from state so
+    # terraform destroy won't try to delete them.
+    log_step "Removing shared CICD resources from state (prevent_destroy + shared with prod)..."
+    terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.cicd_run_admin' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.cicd_artifact_registry_writer' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.cicd_cloudsql_viewer' 2>/dev/null || true
+    terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_keycloak_sa' 2>/dev/null || true
+    terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_gateway_sa' 2>/dev/null || true
+    terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_servers_sa' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.cicd_secret_accessor' 2>/dev/null || true
+
     log_success "=== Pre-destroy cleanup complete ==="
 
     # Refresh Terraform state to pick up manual changes
@@ -465,6 +479,26 @@ terraform_destroy() {
     fi
 
     log_success "Recovery stack destroyed successfully"
+
+    # Step 7: Clean up Artifact Registry in recovery region
+    # Images from phase1_5_replicate_images() are created via gcloud (not Terraform)
+    # and persist after terraform destroy. Stale images cause future DR runs to
+    # deploy outdated code if digest comparison is bypassed or unavailable.
+    log_step "Cleaning up Artifact Registry in recovery region..."
+    local registry_repo="tamshai"
+    if gcloud artifacts repositories describe "$registry_repo" \
+        --location="$RECOVERY_REGION" \
+        --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        log_info "  Deleting Artifact Registry repository '$registry_repo' in $RECOVERY_REGION"
+        gcloud artifacts repositories delete "$registry_repo" \
+            --location="$RECOVERY_REGION" \
+            --project="$PROJECT_ID" \
+            --quiet 2>/dev/null && \
+            log_success "  Artifact Registry cleaned up" || \
+            log_warn "  Failed to delete Artifact Registry (manual cleanup may be needed)"
+    else
+        log_info "  No Artifact Registry repository found in $RECOVERY_REGION"
+    fi
 }
 
 # =============================================================================
@@ -614,6 +648,7 @@ show_summary() {
     echo "  ✓ Cloud SQL instance"
     echo "  ✓ VPC networking"
     echo "  ✓ IAM bindings"
+    echo "  ✓ Artifact Registry (recovery region)"
     echo "  ✓ Terraform state"
     echo ""
     log_info "Primary stack remains unaffected."

@@ -912,33 +912,63 @@ check_and_clean_vpc_peering_dependencies() {
     local sql_instances
     sql_instances=$(gcloud sql instances list --project="$PROJECT" --format="value(name)" 2>/dev/null || echo "")
     if [[ -n "$sql_instances" ]]; then
-        log_warn "  Found Cloud SQL instances still using service networking:"
-        for inst in $sql_instances; do
-            log_warn "    - $inst"
-        done
-        log_warn "  Deleting Cloud SQL instances before VPC peering deletion..."
-        for inst in $sql_instances; do
-            # Disable deletion protection first
-            gcloud sql instances patch "$inst" --no-deletion-protection --project="$PROJECT" --quiet 2>/dev/null || true
-            gcloud sql instances delete "$inst" --project="$PROJECT" --quiet 2>/dev/null || {
-                log_error "  Failed to delete Cloud SQL instance: $inst"
-                found_deps=$((found_deps + 1))
-            }
-        done
-        # Wait for Cloud SQL deletion to propagate
-        local sql_wait=0
-        local sql_max=18  # 3 minutes
-        while [[ $sql_wait -lt $sql_max ]]; do
-            local remaining
-            remaining=$(gcloud sql instances list --project="$PROJECT" --format="value(name)" 2>/dev/null || echo "")
-            if [[ -z "$remaining" ]]; then
-                log_info "  All Cloud SQL instances deleted"
-                break
-            fi
-            sql_wait=$((sql_wait + 1))
-            log_info "  Waiting for Cloud SQL deletion... [$sql_wait/$sql_max]"
-            sleep 10
-        done
+        # Bug #6 fix: If ENV_ID is set (recovery cleanup), only delete instances
+        # that contain the ENV_ID suffix. This prevents deleting the production
+        # Cloud SQL instance (tamshai-prod-postgres) during recovery stack cleanup.
+        local filtered_instances=""
+        if [[ -n "${ENV_ID:-}" ]]; then
+            for inst in $sql_instances; do
+                if [[ "$inst" == *"${ENV_ID}"* ]]; then
+                    filtered_instances="${filtered_instances} ${inst}"
+                else
+                    log_info "    - $inst (not matching ENV_ID=$ENV_ID — skipping, belongs to another environment)"
+                fi
+            done
+            filtered_instances="${filtered_instances# }"  # trim leading space
+        else
+            # No ENV_ID (phoenix rebuild) — delete all instances (intended behavior)
+            filtered_instances="$sql_instances"
+        fi
+
+        if [[ -n "$filtered_instances" ]]; then
+            log_warn "  Found Cloud SQL instances still using service networking:"
+            for inst in $filtered_instances; do
+                log_warn "    - $inst"
+            done
+            log_warn "  Deleting Cloud SQL instances before VPC peering deletion..."
+            for inst in $filtered_instances; do
+                # Disable deletion protection first
+                gcloud sql instances patch "$inst" --no-deletion-protection --project="$PROJECT" --quiet 2>/dev/null || true
+                gcloud sql instances delete "$inst" --project="$PROJECT" --quiet 2>/dev/null || {
+                    log_error "  Failed to delete Cloud SQL instance: $inst"
+                    found_deps=$((found_deps + 1))
+                }
+            done
+            # Wait for Cloud SQL deletion to propagate
+            local sql_wait=0
+            local sql_max=18  # 3 minutes
+            while [[ $sql_wait -lt $sql_max ]]; do
+                local remaining
+                remaining=$(gcloud sql instances list --project="$PROJECT" --format="value(name)" 2>/dev/null || echo "")
+                # When ENV_ID is set, only check for matching instances
+                if [[ -n "${ENV_ID:-}" ]]; then
+                    local env_remaining=""
+                    for r in $remaining; do
+                        [[ "$r" == *"${ENV_ID}"* ]] && env_remaining="${env_remaining} ${r}"
+                    done
+                    remaining="${env_remaining# }"
+                fi
+                if [[ -z "$remaining" ]]; then
+                    log_info "  All targeted Cloud SQL instances deleted"
+                    break
+                fi
+                sql_wait=$((sql_wait + 1))
+                log_info "  Waiting for Cloud SQL deletion... [$sql_wait/$sql_max]"
+                sleep 10
+            done
+        else
+            log_info "  No Cloud SQL instances matching ENV_ID=$ENV_ID found"
+        fi
     else
         log_info "  No Cloud SQL instances found"
     fi

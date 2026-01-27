@@ -355,6 +355,23 @@ preflight_checks() {
         exit 1
     fi
 
+    # Fetch ALL GitHub secrets upfront so they're available throughout the run.
+    # This replaces relying on local env vars — always fetches fresh values.
+    local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
+    if [ -f "$secrets_script" ]; then
+        log_step "Fetching GitHub secrets (PROD_USER_PASSWORD, E2E test creds)..."
+        local secret_exports
+        if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
+            eval "$secret_exports"
+            log_success "GitHub secrets loaded into environment"
+        else
+            log_warn "Failed to fetch GitHub secrets — Phase 5 user provisioning may fail"
+            log_warn "Ensure 'gh auth status' is authenticated and export-test-secrets.yml exists"
+        fi
+    else
+        log_warn "read-github-secrets.sh not found at $secrets_script"
+    fi
+
     log_success "All pre-flight checks passed"
 }
 
@@ -616,11 +633,31 @@ phase1_5_replicate_images() {
 
         log_info "  Copying: $image"
 
-        # Check if target image already exists (skip if already copied)
+        # Check if target image already exists AND matches source digest
+        # Stale images from previous DR runs must be replaced with current builds
         if gcloud artifacts docker images describe "$target_image" \
             --project="$PROJECT_ID" &>/dev/null 2>&1; then
-            log_info "    Already exists in target registry (skipping)"
-            continue
+
+            # Get source and target digests for freshness comparison
+            local source_digest target_digest
+            source_digest=$(gcloud artifacts docker images describe "$source_image" \
+                --project="$PROJECT_ID" \
+                --format="value(image_summary.digest)" 2>/dev/null || echo "")
+            target_digest=$(gcloud artifacts docker images describe "$target_image" \
+                --project="$PROJECT_ID" \
+                --format="value(image_summary.digest)" 2>/dev/null || echo "")
+
+            if [[ -n "$source_digest" && "$source_digest" == "$target_digest" ]]; then
+                log_info "    Already exists with matching digest (skipping)"
+                log_info "    Digest: ${source_digest:0:19}..."
+                continue
+            elif [[ -n "$source_digest" && -n "$target_digest" ]]; then
+                log_warn "    Target exists but STALE (digest mismatch) — will re-copy"
+                log_info "    Source: ${source_digest:0:19}..."
+                log_info "    Target: ${target_digest:0:19}..."
+            elif [[ -z "$source_digest" ]]; then
+                log_warn "    Cannot read source digest — will attempt copy anyway"
+            fi
         fi
 
         # Check if source image exists
@@ -841,6 +878,8 @@ phase2_deploy_infrastructure() {
         -var="recovery_mode=true"
         -var="phoenix_mode=true"
         -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
+        -var="app_domain=${APP_DR_DOMAIN}"
+        -var="api_domain=${API_DR_DOMAIN}"
     )
 
     # Import service accounts if they exist
@@ -1023,6 +1062,8 @@ phase2_deploy_infrastructure() {
         -var="recovery_mode=true"
         -var="phoenix_mode=true"
         -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
+        -var="app_domain=${APP_DR_DOMAIN}"
+        -var="api_domain=${API_DR_DOMAIN}"
     )
 
     # Use staged deployment from domain-mapping.sh library if available
@@ -1048,6 +1089,7 @@ phase2_deploy_infrastructure() {
             "-target=module.cloudrun.google_cloud_run_service.mcp_suite"
             "-target=module.cloudrun.google_cloud_run_service.web_portal"
             "-target=module.cloudrun.google_cloud_run_domain_mapping.keycloak"
+            "-target=module.cloudrun.google_cloud_run_domain_mapping.web_portal"
             "-target=module.cloudrun.google_cloud_run_service_iam_member.keycloak_public"
             "-target=module.cloudrun.google_cloud_run_service_iam_member.web_portal_public"
             "-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_suite_gateway_access"
@@ -1087,6 +1129,7 @@ phase2_deploy_infrastructure() {
         log_step "Stage 3: Deploying mcp-gateway..."
         local stage2_targets=(
             "-target=module.cloudrun.google_cloud_run_service.mcp_gateway"
+            "-target=module.cloudrun.google_cloud_run_domain_mapping.mcp_gateway"
             "-target=module.cloudrun.google_cloud_run_service_iam_member.mcp_gateway_public"
         )
 
@@ -1184,22 +1227,22 @@ phase5_configure_users() {
     log_phase "5" "CONFIGURE USERS"
 
     # =========================================================================
-    # Step 0: Fetch Phoenix secrets from GitHub (PROD_USER_PASSWORD,
-    # TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET, TEST_USER_TOTP_SECRET_RAW)
+    # Step 0: Verify GitHub secrets (fetched in Phase 0 pre-flight)
     # =========================================================================
-    local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
-    if [ -f "$secrets_script" ]; then
-        log_step "Fetching Phoenix secrets from GitHub..."
-        local secret_exports
-        if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
-            eval "$secret_exports"
-            log_success "Phoenix secrets loaded into environment"
-        else
-            log_warn "Failed to fetch Phoenix secrets from GitHub"
-            log_warn "PROD_USER_PASSWORD and E2E test secrets may not be available"
+    if [ -z "${PROD_USER_PASSWORD:-}" ]; then
+        log_step "Re-fetching GitHub secrets (not loaded in pre-flight)..."
+        local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
+        if [ -f "$secrets_script" ]; then
+            local secret_exports
+            if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
+                eval "$secret_exports"
+                log_success "GitHub secrets loaded into environment"
+            else
+                log_warn "Failed to fetch GitHub secrets"
+            fi
         fi
     else
-        log_warn "read-github-secrets.sh not found at $secrets_script"
+        log_info "GitHub secrets already loaded from pre-flight"
     fi
 
     # =========================================================================

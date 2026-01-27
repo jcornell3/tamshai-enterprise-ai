@@ -244,11 +244,27 @@ clear_checkpoint() {
 phase_1_preflight() {
     log_phase "1" "Pre-flight Checks"
 
-    # Check PROD_USER_PASSWORD is set (needed for Phase 10 user provisioning)
+    # Fetch ALL GitHub secrets upfront so they're available throughout the run.
+    # This replaces relying on local env vars — always fetches fresh values.
+    local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
+    if [ -f "$secrets_script" ]; then
+        log_step "Fetching GitHub secrets (PROD_USER_PASSWORD, E2E test creds)..."
+        local secret_exports
+        if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
+            eval "$secret_exports"
+            log_success "GitHub secrets loaded into environment"
+        else
+            log_warn "Failed to fetch GitHub secrets — some phases may fail"
+            log_warn "Ensure 'gh auth status' is authenticated and export-test-secrets.yml exists"
+        fi
+    else
+        log_warn "read-github-secrets.sh not found at $secrets_script"
+    fi
+
+    # Verify critical secret was loaded
     if [ -z "${PROD_USER_PASSWORD:-}" ]; then
-        log_warn "PROD_USER_PASSWORD not set in environment"
+        log_warn "PROD_USER_PASSWORD not available after secret fetch"
         log_warn "Corporate users will get random passwords after rebuild"
-        log_warn "Set it with: export PROD_USER_PASSWORD=<password>"
     fi
 
     if [ "$SKIP_PREFLIGHT" = true ]; then
@@ -1719,21 +1735,21 @@ phase_10_verify() {
     log_step "Running health checks..."
     quick_health_check || log_warn "Some services may not be healthy"
 
-    # Fetch Phoenix secrets from GitHub (PROD_USER_PASSWORD, TEST_USER_PASSWORD,
-    # TEST_USER_TOTP_SECRET, TEST_USER_TOTP_SECRET_RAW) via read-github-secrets.sh
-    local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
-    if [ -f "$secrets_script" ]; then
-        log_step "Fetching Phoenix secrets from GitHub..."
-        local secret_exports
-        if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
-            eval "$secret_exports"
-            log_success "Phoenix secrets loaded into environment"
-        else
-            log_warn "Failed to fetch Phoenix secrets from GitHub"
-            log_warn "PROD_USER_PASSWORD and E2E test secrets may not be available"
+    # GitHub secrets were fetched in Phase 1 (pre-flight). Re-fetch only if missing.
+    if [ -z "${PROD_USER_PASSWORD:-}" ]; then
+        log_step "Re-fetching GitHub secrets (not loaded in pre-flight)..."
+        local secrets_script="$PROJECT_ROOT/scripts/secrets/read-github-secrets.sh"
+        if [ -f "$secrets_script" ]; then
+            local secret_exports
+            if secret_exports=$("$secrets_script" --phoenix --env 2>/dev/null); then
+                eval "$secret_exports"
+                log_success "GitHub secrets loaded into environment"
+            else
+                log_warn "Failed to fetch GitHub secrets"
+            fi
         fi
     else
-        log_warn "read-github-secrets.sh not found at $secrets_script"
+        log_info "GitHub secrets already loaded from pre-flight"
     fi
 
     # Issue #102: Sync PROD_USER_PASSWORD from GitHub Secrets to GCP Secret Manager
