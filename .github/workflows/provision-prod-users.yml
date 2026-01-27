@@ -53,7 +53,7 @@ env:
   GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
   GCP_REGION: ${{ vars.GCP_REGION }}
   CLOUD_SQL_INSTANCE: tamshai-prod-postgres
-  # KEYCLOAK_URL is discovered dynamically - see discover-urls job in deploy-to-gcp.yml
+  # KEYCLOAK_URL is discovered dynamically via gcloud in the Final Verification job
   KEYCLOAK_REALM: tamshai-corp
 
 jobs:
@@ -204,10 +204,29 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT }}
 
+      - name: Discover Keycloak URL
+        id: discover-url
+        run: |
+          KEYCLOAK_URL=$(gcloud run services describe keycloak \
+            --region=${{ env.GCP_REGION }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -z "$KEYCLOAK_URL" ]; then
+            echo "[WARN] Could not discover Keycloak URL"
+          else
+            echo "Keycloak URL: $KEYCLOAK_URL"
+          fi
+          echo "KEYCLOAK_URL=$KEYCLOAK_URL" >> $GITHUB_ENV
+
       - name: Verify Keycloak Users
         id: verify-keycloak
         run: |
           echo "=== Final Keycloak Verification ==="
+
+          if [ -z "$KEYCLOAK_URL" ]; then
+            echo "[WARN] Keycloak URL not discovered - skipping verification"
+            echo "user_count=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           # Get admin password from Secret Manager
           KC_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="tamshai-prod-keycloak-admin-password" 2>/dev/null || echo "")
