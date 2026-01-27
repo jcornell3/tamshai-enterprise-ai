@@ -720,6 +720,7 @@ WEBPORTAL_EOF
                     local provision_context="/tmp/provision-job-context-$$"
                     mkdir -p "$provision_context/services" "$provision_context/sample-data" "$provision_context/scripts/gcp"
                     cp -r "$PROJECT_ROOT/services/mcp-hr" "$provision_context/services/"
+                    rm -rf "$provision_context/services/mcp-hr/node_modules"  # Exclude host node_modules — Dockerfile runs npm ci
                     cp "$PROJECT_ROOT/sample-data"/*.sql "$provision_context/sample-data/" 2>/dev/null || true
                     cp -r "$PROJECT_ROOT/scripts/gcp/provision-job" "$provision_context/scripts/gcp/"
 

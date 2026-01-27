@@ -906,6 +906,7 @@ phase_4_infrastructure() {
 
         log_info "Creating minimal build context for provision-job..."
         cp -r "$PROJECT_ROOT/services/mcp-hr" "$build_context/services/"
+        rm -rf "$build_context/services/mcp-hr/node_modules"  # Exclude host node_modules — Dockerfile runs npm ci
         cp "$PROJECT_ROOT/sample-data"/*.sql "$build_context/sample-data/" 2>/dev/null || true
         cp -r "$PROJECT_ROOT/scripts/gcp/provision-job" "$build_context/scripts/gcp/"
 
@@ -1086,6 +1087,7 @@ EOF
         local provision_context="/tmp/provision-job-context-phase5-$$"
         mkdir -p "$provision_context/services" "$provision_context/sample-data" "$provision_context/scripts/gcp"
         cp -r "$PROJECT_ROOT/services/mcp-hr" "$provision_context/services/"
+        rm -rf "$provision_context/services/mcp-hr/node_modules"  # Exclude host node_modules — Dockerfile runs npm ci
         cp "$PROJECT_ROOT/sample-data"/*.sql "$provision_context/sample-data/" 2>/dev/null || true
         cp -r "$PROJECT_ROOT/scripts/gcp/provision-job" "$provision_context/scripts/gcp/"
 
