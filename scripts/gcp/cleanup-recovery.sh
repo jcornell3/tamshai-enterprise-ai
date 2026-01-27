@@ -435,11 +435,18 @@ terraform_destroy() {
         remove_all_problematic_state
     fi
 
-    # Step 7: Remove shared/protected resources from state (Bug #7)
-    # The CICD service account has prevent_destroy=true and is shared with prod.
-    # Its IAM bindings are project-level and also shared. Remove from state so
-    # terraform destroy won't try to delete them.
-    log_step "Removing shared CICD resources from state (prevent_destroy + shared with prod)..."
+    # Step 7: Remove ALL shared/global service accounts from state (Bug #7, Bug #12)
+    # Service accounts are project-level globals shared between primary and recovery.
+    # If left in state, terraform destroy deletes them, changing their UID and
+    # breaking the primary stack's Cloud Run services on next cold start (Bug #12).
+    # Their project-level IAM bindings must also be removed to prevent
+    # terraform destroy from revoking primary stack permissions.
+    #
+    # Note: Secret Manager IAM bindings (google_secret_manager_secret_iam_member.*)
+    # are already handled by Step 4 (remove_secret_iam_bindings_state).
+    log_step "Removing shared global service accounts from state (Bug #7, Bug #12)..."
+
+    # --- CICD service account (Bug #7: has prevent_destroy=true) ---
     terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
     terraform state rm 'module.security.google_project_iam_member.cicd_run_admin' 2>/dev/null || true
     terraform state rm 'module.security.google_project_iam_member.cicd_artifact_registry_writer' 2>/dev/null || true
@@ -448,6 +455,23 @@ terraform_destroy() {
     terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_gateway_sa' 2>/dev/null || true
     terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_servers_sa' 2>/dev/null || true
     terraform state rm 'module.security.google_project_iam_member.cicd_secret_accessor' 2>/dev/null || true
+
+    # --- Keycloak service account (Bug #12) ---
+    terraform state rm 'module.security.google_service_account.keycloak' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.keycloak_cloudsql_client' 2>/dev/null || true
+
+    # --- MCP Gateway service account (Bug #12) ---
+    terraform state rm 'module.security.google_service_account.mcp_gateway' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.mcp_gateway_cloudsql_client' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.mcp_gateway_run_invoker' 2>/dev/null || true
+
+    # --- MCP Servers service account (Bug #12) ---
+    terraform state rm 'module.security.google_service_account.mcp_servers' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.mcp_servers_cloudsql_client' 2>/dev/null || true
+
+    # --- Provision Job service account (Bug #12) ---
+    terraform state rm 'module.security.google_service_account.provision_job' 2>/dev/null || true
+    terraform state rm 'module.security.google_project_iam_member.provision_job_cloudsql_client' 2>/dev/null || true
 
     log_success "=== Pre-destroy cleanup complete ==="
 
