@@ -1,7 +1,7 @@
 # GCP Regional Failure Runbook
 
-**Last Updated**: January 26, 2026
-**Version**: 1.3.0
+**Last Updated**: January 27, 2026
+**Version**: 1.4.0
 **Owner**: Platform Team
 
 ## Overview
@@ -38,20 +38,24 @@ Is us-central1 available?
 
 The Regional Evacuation uses an **"Amnesia" approach**: create a fresh Terraform state in the new region, completely ignoring the unreachable primary region.
 
-### Estimated Duration: 35-55 minutes
+### Estimated Duration: 50-75 minutes
 
 | Phase | Duration | Description |
 |-------|----------|-------------|
-| Pre-flight | 1-2 min | Validate tools, auth, region availability |
-| Terraform | 10-15 min | Create infrastructure in new region |
-| SSL Certificate | 10-15 min | Wait for **all** domain mapping SSL certs (auth, app, api) |
-| Deploy | 3-5 min | Deploy containers, configure services |
-| User Provisioning | 5-10 min | Sync passwords, provision users, reset passwords |
-| Sample Data | 3-5 min | Load Finance, Sales, Support data |
-| DNS | 2-5 min | Update DNS to point to new region |
-| Verify | 2-3 min | Run health checks and E2E tests |
+| Pre-flight (0) | 1-2 min | Validate tools, auth, region, fetch GitHub secrets |
+| Pre-cleanup (0.5) | 2-5 min | Remove leftover resources from failed attempts |
+| Init state (1) | 2-3 min | Fresh Terraform state in recovery prefix |
+| Image replication (1.5) | 2-5 min | Copy container images to recovery region (SHA256 digest comparison) |
+| Infrastructure (2) | 25-35 min | Staged Terraform apply + SSL verification for all domains |
+| SA key regen (3) | ~1 min | Regenerate service account key |
+| Deploy services (4) | 3-5 min | Trigger GitHub Actions Cloud Run deployment |
+| User provisioning (5) | 5-10 min | TOTP config, sync passwords, provision users, load sample data |
+| Verify (6) | 2-3 min | Health checks and E2E tests |
+| DNS guidance (7) | ~1 min | DNS update instructions |
 
-> **Note**: SSL certificate provisioning applies to **all three domains** (`auth-dr`, `app-dr`, `api-dr`). Without verifying all domains, E2E tests fail with HTTP 525 (SSL handshake failed). The script now automatically verifies SSL for all domain mappings before proceeding.
+> **Note**: SSL certificate provisioning applies to **all three domains** (`auth-dr`, `app-dr`, `api-dr`). Without verifying all domains, E2E tests fail with HTTP 525 (SSL handshake failed). The script automatically verifies SSL for all domain mappings before proceeding. Infrastructure (Phase 2) is the longest phase due to SSL wait times.
+
+> **Note**: Durations based on DR run v1 (Jan 2026). Actual times may vary based on GCP provisioning speed and SSL certificate issuance.
 
 ---
 
@@ -78,7 +82,7 @@ The Regional Evacuation uses an **"Amnesia" approach**: create a fresh Terraform
 - `CF_API_TOKEN`, `CF_ZONE_ID` (for automated DNS)
 - `CLAUDE_API_KEY_PROD`
 - `MONGODB_ATLAS_URI`
-- `PROD_USER_PASSWORD` (corporate user password — synced to GCP Secret Manager during evacuation)
+- `PROD_USER_PASSWORD` (corporate user password — fetched automatically by script during pre-flight, synced to GCP Secret Manager during Phase 5)
 
 ### Pre-Configured DR Infrastructure
 
@@ -146,21 +150,29 @@ GCP_DR_FALLBACK_ZONES="us-west1-a us-west1-c" ./scripts/gcp/evacuate-region.sh -
 
 ### Step 3: Monitor Progress
 
-The script executes 8 phases:
+The script executes these phases (confirmation prompt appears between 0.5 and 1):
 
 | Phase | What It Does | Duration |
 |-------|--------------|----------|
-| 0 | Pre-flight checks (includes zone capacity validation) | ~1 min |
+| 0 | Pre-flight checks (tools, auth, zone capacity, **GitHub secrets fetch**) | ~1-2 min |
 | 0.5 | Pre-cleanup (removes leftover resources from failed attempts) | ~2-5 min |
-| 1 | Confirm evacuation | ~30 sec |
-| 2 | Initialize Terraform + staged deploy + SSL verification (all domains) | ~15-25 min |
+| — | Confirmation prompt (auto-skipped with `--yes`) | ~30 sec |
+| 1 | Initialize fresh Terraform state in recovery prefix | ~2-3 min |
+| 1.5 | Replicate container images to recovery region (SHA256 digest comparison) | ~2-5 min |
+| 2 | Staged Terraform apply (infrastructure → domain mappings → services) + SSL verification for all domains | ~25-35 min |
 | 3 | Regenerate service account key | ~1 min |
-| 4 | Trigger GitHub Actions deployment | ~5 min |
-| 5 | Configure users: TOTP, sync passwords, provision users (force reset), load sample data | ~10 min |
+| 4 | Trigger GitHub Actions Cloud Run deployment | ~3-5 min |
+| 5 | Configure users: TOTP, sync passwords, provision users (force reset), load sample data | ~5-10 min |
 | 6 | Verify deployment (health checks, E2E tests) | ~3 min |
 | 7 | DNS configuration guidance | ~1 min |
 
-**Zone Capacity Check (Phase 0)**: The script automatically checks if the requested machine types (e.g., `e2-micro`) are available in the target zone. If capacity is unavailable, it tries fallback zones configured in `dr.tfvars` or environment variables.
+**Pre-flight Details (Phase 0)**:
+- Validates required tools (`gcloud`, `terraform`, `gh`, `jq`, `curl`)
+- Checks GCP and GitHub CLI authentication
+- Validates target region/zone existence and capacity (tries fallback zones if needed)
+- **Fetches all GitHub secrets** (`PROD_USER_PASSWORD`, `TEST_USER_PASSWORD`, `TEST_USER_TOTP_SECRET`, etc.) via `read-github-secrets.sh` — no manual `export` needed
+
+**Image Replication (Phase 1.5)**: Copies container images from the primary region's Artifact Registry to the recovery region. Uses SHA256 digest comparison to detect stale images — if the target image exists but has a different digest than the source, it is re-copied to ensure the recovery stack runs the latest code.
 
 ### Step 4: Update DNS
 
@@ -275,6 +287,13 @@ curl -v https://api.tamshai.com/health 2>&1 | grep "Connected to"
 ./scripts/gcp/cleanup-recovery.sh <ENV_ID> --keep-dns   # Don't show DNS guidance
 ```
 
+**What cleanup handles automatically** (DR run v1 fixes):
+- **Skips production secrets** (Bug #5) — secrets like `tamshai-prod-*` are shared with prod and are NOT deleted; only removed from Terraform state so destroy doesn't fail
+- **Filters by ENV_ID** (Bug #6) — VPC peering dependency cleanup only deletes Cloud SQL instances matching the recovery ENV_ID, not production instances
+- **Removes CICD SA from state** (Bug #7) — the CICD service account has `prevent_destroy` and is shared with prod; removed from state before destroy
+- **Cleans up Artifact Registry** — deletes the recovery region's AR repository after terraform destroy
+- **VPC peering retry + fallback** — retries Services API deletion with compute API fallback if 20/20 peering limit is reached
+
 ### Step 5: Clean Up DR CNAMEs
 
 After cleanup, you have two options for DR CNAMEs:
@@ -341,7 +360,14 @@ gcloud run services logs read mcp-gateway --region=us-west1 --limit=50
 
 Common issues:
 - **Secret not found**: Secrets are regional; may need to copy to new region
-- **Image not found**: Artifact Registry is regional; images may not exist in new region
+- **Image not found**: Artifact Registry is regional; images may not exist in new region. Phase 1.5 automatically replicates images with SHA256 digest comparison, but if it failed, manually copy images:
+
+```bash
+# Copy a single image from primary to recovery region
+SOURCE="us-central1-docker.pkg.dev/${PROJECT_ID}/tamshai/mcp-gateway:latest"
+TARGET="us-west1-docker.pkg.dev/${PROJECT_ID}/tamshai/mcp-gateway:latest"
+gcrane cp "$SOURCE" "$TARGET"
+```
 
 ### Zone capacity unavailable (e2-micro not available)
 
@@ -485,6 +511,31 @@ gcloud run services update mcp-gateway --region=us-west1 \
 
 **Note**: This is expected behavior. The evacuation script will show a terraform error, but you can continue after SSL is ready.
 
+### Cloudflare redirect loop on auth-dr domain (DR run v1 Bug #1)
+
+**Symptom**: mcp-gateway fails startup probe with repeated HTTP 302 redirects when fetching JWKS from `https://auth-dr.tamshai.com/auth/realms/tamshai-corp/protocol/openid-connect/certs`. The service logs show a redirect loop.
+
+**Cause**: Cloudflare proxy (orange cloud) on `auth-dr.tamshai.com` intercepts the HTTPS request from Cloud Run, but the Cloud Run → Cloudflare → Cloud Run path creates a redirect loop. This happens because:
+1. mcp-gateway (in Cloud Run) makes an HTTPS request to `auth-dr.tamshai.com`
+2. Cloudflare receives it and proxies back to Cloud Run's domain mapping
+3. Cloud Run sees the request as HTTP (Cloudflare terminates TLS) and redirects to HTTPS
+4. Repeat indefinitely
+
+**Solution**: Configure the `auth-dr.tamshai.com` JWKS URL to bypass Cloudflare by using the direct Cloud Run URL instead:
+
+```bash
+# Get Keycloak's direct Cloud Run URL
+KEYCLOAK_URL=$(gcloud run services describe keycloak --region=us-west1 --format="value(status.url)")
+
+# Update mcp-gateway to use direct URL for JWKS
+gcloud run services update mcp-gateway --region=us-west1 \
+    --update-env-vars="KEYCLOAK_ISSUER=${KEYCLOAK_URL}/auth/realms/tamshai-corp,JWKS_URI=${KEYCLOAK_URL}/auth/realms/tamshai-corp/protocol/openid-connect/certs"
+```
+
+**Alternative**: Set Cloudflare SSL mode to "Full (strict)" for the `auth-dr` subdomain, or set the DNS record to DNS-only (grey cloud) so traffic goes directly to Cloud Run.
+
+**Prevention**: The evacuation script should configure `JWKS_URI` to use the direct Cloud Run URL for service-to-service communication, reserving the Cloudflare-proxied domain for browser traffic only.
+
 ### Cloud SQL service agent IAM binding fails
 
 **Error**: `Service account service-{number}@gcp-sa-cloud-sql.iam.gserviceaccount.com does not exist`
@@ -497,9 +548,15 @@ gcloud run services update mcp-gateway --region=us-west1 \
 
 ### Cleanup fails with "Producer services still using this connection"
 
-**Cause**: After deleting Cloud SQL, GCP's service networking connection may still have a stale reference.
+**Cause**: After deleting Cloud SQL, GCP's service networking connection may still have a stale reference (Issue #103).
 
-**Solution**: Remove the stale resources from terraform state and continue:
+**Automated Handling**: `cleanup-recovery.sh` now handles this automatically:
+1. Checks and cleans VPC peering dependencies (Cloud SQL, VPC connectors, Filestore) — filtered by ENV_ID to avoid deleting prod resources (Bug #6 fix)
+2. Retries Services API peering deletion up to 20 times (30s intervals)
+3. Falls back to compute API force-delete if 20/20 VPC peering limit is reached
+4. Cleans auto-created firewall rules (`aet-*`) before VPC deletion
+
+**Manual Solution** (if automation fails): Remove the stale resources from terraform state and continue:
 
 ```bash
 cd infrastructure/terraform/gcp
@@ -573,7 +630,7 @@ Creates a recovery stack in a new region.
 - `GCP_DR_REGION`: Override target region (default: from dr.tfvars or us-west1)
 - `GCP_DR_ZONE`: Override target zone (default: from dr.tfvars or REGION-b)
 - `GCP_DR_FALLBACK_ZONES`: Space-separated fallback zones for capacity issues
-- `PROD_USER_PASSWORD`: Corporate user password (synced to GCP Secret Manager during Phase 5)
+- `PROD_USER_PASSWORD`: Fetched automatically from GitHub Secrets during pre-flight (Phase 0) via `read-github-secrets.sh`. No manual `export` needed. Synced to GCP Secret Manager during Phase 5.
 - `APP_DR_DOMAIN`: Override app domain (default: from dr.tfvars or app-dr.tamshai.com)
 - `API_DR_DOMAIN`: Override API domain (default: from dr.tfvars or api-dr.tamshai.com)
 
@@ -623,6 +680,7 @@ When choosing an evacuation region, consider:
 ## Related Documentation
 
 - [Phoenix Runbook](./PHOENIX_RUNBOOK.md) - For rebuilds when region IS available
+- [GCP Region Failure Run v1](./GCP_REGION_FAILURE_RUNv1.md) - First DR drill log (8 bugs found, 7 fixed in-flight)
 - [GCP Region Failure Scenario Plan](../plans/GCP-REGION-FAILURE-SCENARIO.md) - Detailed design
 - [E2E User Tests](../testing/E2E_USER_TESTS.md) - E2E test procedures
 - [Test User Journey](../testing/TEST_USER_JOURNEY.md) - Test user credentials
@@ -679,7 +737,26 @@ terraform init -reconfigure \
     -backend-config="bucket=tamshai-terraform-state-prod" \
     -backend-config="prefix=gcp/recovery/recovery-20260122"
 
-# 2. Destroy
+# 2. Remove shared/protected resources from state (Bug #5, #7)
+# Secrets are shared with prod — do NOT destroy them
+for secret in tamshai-prod-anthropic-api-key tamshai-prod-db-password \
+    tamshai-prod-keycloak-admin-password tamshai-prod-keycloak-db-password \
+    tamshai-prod-mongodb-uri tamshai-prod-user-password mcp-hr-service-client-secret; do
+    terraform state rm "module.security.google_secret_manager_secret.${secret}" 2>/dev/null || true
+    terraform state rm "module.security.google_secret_manager_secret_version.${secret}" 2>/dev/null || true
+done
+
+# CICD service account has prevent_destroy and is shared with prod (Bug #7)
+terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
+terraform state rm 'module.security.google_project_iam_member.cicd_run_admin' 2>/dev/null || true
+terraform state rm 'module.security.google_project_iam_member.cicd_artifact_registry_writer' 2>/dev/null || true
+terraform state rm 'module.security.google_project_iam_member.cicd_cloudsql_viewer' 2>/dev/null || true
+terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_keycloak_sa' 2>/dev/null || true
+terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_gateway_sa' 2>/dev/null || true
+terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_servers_sa' 2>/dev/null || true
+terraform state rm 'module.security.google_project_iam_member.cicd_secret_accessor' 2>/dev/null || true
+
+# 3. Destroy recovery-specific resources
 terraform destroy \
     -var="region=us-west1" \
     -var="zone=us-west1-b" \
@@ -688,9 +765,15 @@ terraform destroy \
     -var="mongodb_atlas_uri=placeholder" \
     -var="claude_api_key=placeholder"
 
-# 3. Clean up state
+# 4. Clean up Artifact Registry in recovery region
+gcloud artifacts repositories delete tamshai \
+    --location=us-west1 --project=$(gcloud config get-value project) --quiet 2>/dev/null || true
+
+# 5. Clean up state prefix
 gsutil -m rm -r gs://tamshai-terraform-state-prod/gcp/recovery/recovery-20260122/
 ```
+
+> **Warning**: Steps 2 is critical. Without removing shared resources from state, `terraform destroy` will either fail (`prevent_destroy` on CICD SA) or delete production secrets and databases. See DR run v1 Bugs #5, #6, #7.
 
 ---
 
@@ -728,6 +811,7 @@ Conduct quarterly to maintain readiness.
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.4.0 | Jan 27, 2026 | Tamshai-Dev | DR run v1 fixes: corrected phase table (added Phase 1.5 image replication), updated durations from actual run, added Bug #1 Cloudflare redirect loop troubleshooting, updated cleanup section (Bugs #5-7: skip prod secrets, ENV_ID filtering, CICD SA state removal, AR cleanup), updated manual cleanup procedure, automatic GitHub secrets fetch in pre-flight (Bug #8) |
 | 1.3.0 | Jan 26, 2026 | Tamshai-Dev | Phoenix rebuild lessons: multi-domain SSL verification, PROD_USER_PASSWORD sync, force password reset, sample data loading, shared library functions (Issue #102) |
 | 1.2.0 | Jan 23, 2026 | Tamshai-Dev | Added zone capacity pre-check, fallback zones (GCP_DR_FALLBACK_ZONES), multi-zone cleanup support (Issue #102) |
 | 1.1.0 | Jan 23, 2026 | Tamshai-Dev | Added troubleshooting for SSL delay, Cloud SQL IAM, cleanup issues from evacuation test 13 |
