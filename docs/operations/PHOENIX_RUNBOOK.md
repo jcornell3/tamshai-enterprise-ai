@@ -454,7 +454,7 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 ## Related Documentation
 
 - [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (15-25 min RTO)
-- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Latest rebuild log (0 manual actions)
+- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Latest rebuild log (1 manual action)
 - [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Previous rebuild log (1 manual action)
 - [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Rebuild log (0 manual actions)
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)

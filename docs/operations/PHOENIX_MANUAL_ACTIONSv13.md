@@ -49,10 +49,10 @@ These issues were identified during v12 and fixed in commit `d3d07c88` prior to 
 | ~22:03 | 8 | Deploy via GitHub Actions | PASS | ~8 min |
 | ~22:11 | 9 | Configure TOTP | PASS | ~2 min |
 | ~22:13 | 10 | Provision & Verify | PARTIAL (3 in-flight issues fixed) | ~10 min |
-| ~22:23 | E2E | End-to-End Tests | PASS (6/6, 25.2s) | ~1 min |
+| ~22:23 | E2E | End-to-End Tests (manual) | PASS (6/6, 25.2s) | ~1 min |
 
 **v13 Total Duration**: ~85 min
-**Manual Actions**: **0** (constraint met: script only, no operator GCP writes)
+**Manual Actions**: **1** (E2E tests run manually due to Windows syntax failure)
 **In-Flight Fixes**: **3** (workflow bugs discovered and fixed during rebuild)
 
 ---
@@ -264,16 +264,18 @@ Phoenix rebuild script ran `npm run test:login:prod` which executes `TEST_ENV=pr
 
 ## E2E Tests
 
-**Result**: **PASS** (6/6, 25.2s)
+**Result**: **PASS** (manual) / **FAIL** (in-script)
 
-After all three in-flight fixes were applied:
+**Manual Run** (after in-script failure due to Windows syntax):
 ```
 6 passed (25.2s)
 ```
 
-All 6 login journey tests passed with proper secrets loaded via `read-github-secrets.sh --phoenix`.
+The in-script E2E run failed with `'TEST_ENV' is not recognized` (Windows cmd.exe cannot parse Unix-style env var prefix). E2E tests were re-run manually with proper secrets and cross-env, passing 6/6.
 
-**Blocking Requirement**: ALL 6 tests must pass for rebuild to be considered successful (PHOENIX_RUNBOOK v3.6.0) — **MET**.
+**Blocking Requirement**: ALL 6 tests must pass for rebuild to be considered successful (PHOENIX_RUNBOOK v3.6.0) — **MET** (manual verification).
+
+**Manual Actions Required**: **1** — E2E tests run manually outside the script
 
 ---
 
@@ -293,7 +295,8 @@ All 6 login journey tests passed with proper secrets loaded via `read-github-sec
 | 8. Deploy via GHA | 0 | 0 |
 | 9. Configure TOTP | 0 | 0 |
 | 10. Verification | 0 | 0 |
-| **TOTAL** | **1** | **0** |
+| E2E Tests | 0 | **1** (manual run) |
+| **TOTAL** | **1** | **1** |
 
 ### Issues Validated
 
@@ -359,6 +362,6 @@ All 6 login journey tests passed with proper secrets loaded via `read-github-sec
 **End of Phoenix v13 Log**
 *Status: COMPLETE*
 *Started: 2026-01-26 ~21:00 UTC*
-*Manual Actions: 0*
-*E2E Tests: 6/6 PASS (25.2s)*
+*Manual Actions: 1 (E2E tests run manually)*
+*E2E Tests: 6/6 PASS (25.2s, manual)*
 *In-Flight Fixes: 3 (provision-prod-users KEYCLOAK_URL, polling Unknown, E2E cross-env)*
