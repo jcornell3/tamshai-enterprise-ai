@@ -314,6 +314,7 @@ get_stage1_terraform_targets() {
 -target=module.cloudrun.google_cloud_run_service.mcp_suite
 -target=module.cloudrun.google_cloud_run_service.web_portal
 -target=module.cloudrun.google_cloud_run_domain_mapping.keycloak
+-target=module.cloudrun.google_cloud_run_domain_mapping.web_portal
 -target=module.cloudrun.google_cloud_run_service_iam_member.keycloak_public
 -target=module.cloudrun.google_cloud_run_service_iam_member.web_portal_public
 -target=module.cloudrun.google_cloud_run_service_iam_member.mcp_suite_gateway_access
@@ -327,6 +328,7 @@ TARGETS
 get_stage2_terraform_targets() {
     cat <<'TARGETS'
 -target=module.cloudrun.google_cloud_run_service.mcp_gateway
+-target=module.cloudrun.google_cloud_run_domain_mapping.mcp_gateway
 -target=module.cloudrun.google_cloud_run_service_iam_member.mcp_gateway_public
 TARGETS
 }
