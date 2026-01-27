@@ -371,6 +371,87 @@ phase_3_destroy() {
         return 0
     fi
 
+    # =============================================================================
+    # Bug #14: Detect and remove recovery VPCs from primary terraform state
+    # =============================================================================
+    # After DR evacuation, the primary terraform state may contain a recovery VPC
+    # (e.g., tamshai-prod-recovery-20260127-1041-vpc). If not removed, terraform
+    # destroy/apply will try to delete it, fail on phantom firewall rules (GCP
+    # eventual consistency), and block ALL resource operations.
+    # =============================================================================
+    log_step "Checking for recovery VPC in primary terraform state (Bug #14)..."
+
+    local state_vpc_name=""
+    state_vpc_name=$(terraform state show 'module.networking.google_compute_network.vpc' 2>/dev/null \
+        | grep -E '^\s+name\s*=' | head -1 | sed 's/.*"\(.*\)".*/\1/' || echo "")
+
+    if [[ -n "$state_vpc_name" && "$state_vpc_name" == *"recovery"* ]]; then
+        log_warn "Recovery VPC found in primary state: $state_vpc_name"
+        log_warn "Removing all networking resources from state to prevent terraform failure..."
+
+        # Remove the recovery VPC and all related networking resources
+        terraform state rm 'module.networking.google_compute_network.vpc' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_subnetwork.subnet' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_router.router' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_router_nat.nat' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector[0]' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector' 2>/dev/null || true
+        terraform state rm 'module.networking.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_global_address.private_ip_range' 2>/dev/null || true
+        terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+        terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+
+        log_success "Recovery VPC removed from primary terraform state"
+    elif [ -n "$state_vpc_name" ]; then
+        log_info "Primary state VPC is correct: $state_vpc_name"
+    else
+        log_info "No VPC found in primary state (clean state)"
+    fi
+
+    # Also scan GCP for orphaned recovery VPCs and attempt cleanup
+    local recovery_vpcs
+    recovery_vpcs=$(gcloud compute networks list \
+        --filter="name~^tamshai-prod-recovery-" \
+        --format="value(name)" \
+        --project="${GCP_PROJECT_ID}" 2>/dev/null) || recovery_vpcs=""
+
+    if [ -n "$recovery_vpcs" ]; then
+        log_warn "Orphaned recovery VPCs found in GCP — attempting cleanup..."
+        while read -r rvpc; do
+            [ -z "$rvpc" ] && continue
+            log_info "  Cleaning up recovery VPC: $rvpc"
+
+            # Delete firewall rules on this VPC
+            local rvpc_fws
+            rvpc_fws=$(gcloud compute firewall-rules list \
+                --filter="network:${rvpc}" \
+                --format="value(name)" \
+                --project="${GCP_PROJECT_ID}" 2>/dev/null) || rvpc_fws=""
+            while read -r fw; do
+                [ -z "$fw" ] && continue
+                gcloud compute firewall-rules delete "$fw" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || true
+            done <<< "$rvpc_fws"
+
+            # Delete subnets
+            local rvpc_subnets
+            rvpc_subnets=$(gcloud compute networks subnets list \
+                --network="$rvpc" \
+                --format="csv[no-heading](name,region)" \
+                --project="${GCP_PROJECT_ID}" 2>/dev/null) || rvpc_subnets=""
+            while IFS=',' read -r sn_name sn_region; do
+                [ -z "$sn_name" ] && continue
+                gcloud compute networks subnets delete "$sn_name" \
+                    --region="$sn_region" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || true
+            done <<< "$rvpc_subnets"
+
+            # Delete the VPC
+            gcloud compute networks delete "$rvpc" --quiet --project="${GCP_PROJECT_ID}" 2>/dev/null || \
+                log_warn "  Could not delete $rvpc — may have phantom firewall references (GCP eventual consistency)"
+        done <<< "$recovery_vpcs"
+    fi
+
     # Pre-destroy cleanup (Gap #21, #22, #38)
     log_step "Running pre-destroy cleanup..."
 
@@ -715,94 +796,102 @@ phase_3_destroy() {
         [ "$verification_failed" != true ] && log_success "Orphaned Cloud SQL deleted"
     fi
 
-    # Check for orphaned VPC — actively delete if found
-    # Deletion order: VMs → firewall rules → subnets → VPC network
-    local vpc_name="tamshai-prod-vpc"
-    if gcloud compute networks list --format="value(name)" 2>/dev/null | grep -q "tamshai"; then
-        log_warn "Orphaned VPC found - cleaning up resources..."
+    # Check for orphaned VPCs — actively delete if found (Bug #14: handles recovery VPCs too)
+    # Deletion order per VPC: VMs → firewall rules → subnets → routers → VPC network
+    local all_tamshai_vpcs
+    all_tamshai_vpcs=$(gcloud compute networks list \
+        --filter="name~^tamshai-prod" \
+        --format="value(name)" \
+        --project="${GCP_PROJECT_ID}" 2>/dev/null) || all_tamshai_vpcs=""
 
-        # Step 1: Delete all VM instances on this VPC (they block subnet deletion)
-        local vm_instances
-        vm_instances=$(gcloud compute instances list \
-            --filter="networkInterfaces.network:${vpc_name}" \
-            --format="csv[no-heading](name,zone)" \
-            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
-        if [ -n "$vm_instances" ]; then
-            log_info "Deleting VM instances on VPC..."
-            while IFS=',' read -r vm_name vm_zone; do
-                [ -z "$vm_name" ] && continue
-                log_info "  Deleting VM: $vm_name (zone: $vm_zone)"
-                gcloud compute instances delete "$vm_name" \
-                    --zone="$vm_zone" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
-                    log_warn "  Failed to delete VM $vm_name"
-            done <<< "$vm_instances"
-        fi
+    if [ -n "$all_tamshai_vpcs" ]; then
+        while read -r vpc_name; do
+            [ -z "$vpc_name" ] && continue
+            log_warn "Orphaned VPC found: $vpc_name — cleaning up resources..."
 
-        # Step 2: Delete all firewall rules on this VPC
-        local fw_rules
-        fw_rules=$(gcloud compute firewall-rules list \
-            --filter="network:${vpc_name}" \
-            --format="value(name)" \
-            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
-        if [ -n "$fw_rules" ]; then
-            log_info "Deleting firewall rules..."
-            while read -r rule; do
-                [ -z "$rule" ] && continue
-                log_info "  Deleting firewall rule: $rule"
-                gcloud compute firewall-rules delete "$rule" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
-                    log_warn "  Failed to delete firewall rule $rule"
-            done <<< "$fw_rules"
-        fi
+            # Step 1: Delete all VM instances on this VPC (they block subnet deletion)
+            local vm_instances
+            vm_instances=$(gcloud compute instances list \
+                --filter="networkInterfaces.network:${vpc_name}" \
+                --format="csv[no-heading](name,zone)" \
+                --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+            if [ -n "$vm_instances" ]; then
+                log_info "Deleting VM instances on VPC $vpc_name..."
+                while IFS=',' read -r vm_name vm_zone; do
+                    [ -z "$vm_name" ] && continue
+                    log_info "  Deleting VM: $vm_name (zone: $vm_zone)"
+                    gcloud compute instances delete "$vm_name" \
+                        --zone="$vm_zone" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                        log_warn "  Failed to delete VM $vm_name"
+                done <<< "$vm_instances"
+            fi
 
-        # Step 2b: Delete auto-created VPC connector firewall rules (Issue #103)
-        # Network filter misses auto-created aet-* rules — use shared library fallback
-        delete_vpc_connector_firewall_rules 2>/dev/null || true
+            # Step 2: Delete all firewall rules on this VPC
+            local fw_rules
+            fw_rules=$(gcloud compute firewall-rules list \
+                --filter="network:${vpc_name}" \
+                --format="value(name)" \
+                --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+            if [ -n "$fw_rules" ]; then
+                log_info "Deleting firewall rules on $vpc_name..."
+                while read -r rule; do
+                    [ -z "$rule" ] && continue
+                    log_info "  Deleting firewall rule: $rule"
+                    gcloud compute firewall-rules delete "$rule" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                        log_warn "  Failed to delete firewall rule $rule"
+                done <<< "$fw_rules"
+            fi
 
-        # Step 3: Delete all subnets in this VPC
-        local subnets
-        subnets=$(gcloud compute networks subnets list \
-            --network="${vpc_name}" \
-            --format="csv[no-heading](name,region)" \
-            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
-        if [ -n "$subnets" ]; then
-            log_info "Deleting subnets..."
-            while IFS=',' read -r subnet_name subnet_region; do
-                [ -z "$subnet_name" ] && continue
-                log_info "  Deleting subnet: $subnet_name (region: $subnet_region)"
-                gcloud compute networks subnets delete "$subnet_name" \
-                    --region="$subnet_region" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
-                    log_warn "  Failed to delete subnet $subnet_name"
-            done <<< "$subnets"
-        fi
+            # Step 2b: Delete auto-created VPC connector firewall rules (Issue #103)
+            # Network filter misses auto-created aet-* rules — use shared library fallback
+            delete_vpc_connector_firewall_rules 2>/dev/null || true
 
-        # Step 4: Delete Cloud Routers (and their NAT gateways) on this VPC
-        local routers
-        routers=$(gcloud compute routers list \
-            --filter="network:${vpc_name}" \
-            --format="csv[no-heading](name,region)" \
-            --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
-        if [ -n "$routers" ]; then
-            log_info "Deleting Cloud Routers..."
-            while IFS=',' read -r router_name router_region; do
-                [ -z "$router_name" ] && continue
-                log_info "  Deleting router: $router_name (region: $router_region)"
-                gcloud compute routers delete "$router_name" \
-                    --region="$router_region" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
-                    log_warn "  Failed to delete router $router_name"
-            done <<< "$routers"
-        fi
+            # Step 3: Delete all subnets in this VPC
+            local subnets
+            subnets=$(gcloud compute networks subnets list \
+                --network="${vpc_name}" \
+                --format="csv[no-heading](name,region)" \
+                --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+            if [ -n "$subnets" ]; then
+                log_info "Deleting subnets on $vpc_name..."
+                while IFS=',' read -r subnet_name subnet_region; do
+                    [ -z "$subnet_name" ] && continue
+                    log_info "  Deleting subnet: $subnet_name (region: $subnet_region)"
+                    gcloud compute networks subnets delete "$subnet_name" \
+                        --region="$subnet_region" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                        log_warn "  Failed to delete subnet $subnet_name"
+                done <<< "$subnets"
+            fi
 
-        # Step 5: Delete the VPC network
-        log_info "Deleting VPC network: ${vpc_name}"
-        if gcloud compute networks delete "${vpc_name}" --quiet --project="${GCP_PROJECT_ID}" 2>&1; then
-            log_success "Orphaned VPC deleted"
-        else
-            log_error "Failed to delete VPC - checking remaining dependencies:"
-            gcloud compute routers list --filter="network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
-            gcloud compute networks subnets list --network="${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
-            gcloud compute instances list --filter="networkInterfaces.network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
-            verification_failed=true
-        fi
+            # Step 4: Delete Cloud Routers (and their NAT gateways) on this VPC
+            local routers
+            routers=$(gcloud compute routers list \
+                --filter="network:${vpc_name}" \
+                --format="csv[no-heading](name,region)" \
+                --project="${GCP_PROJECT_ID}" 2>/dev/null) || true
+            if [ -n "$routers" ]; then
+                log_info "Deleting Cloud Routers on $vpc_name..."
+                while IFS=',' read -r router_name router_region; do
+                    [ -z "$router_name" ] && continue
+                    log_info "  Deleting router: $router_name (region: $router_region)"
+                    gcloud compute routers delete "$router_name" \
+                        --region="$router_region" --quiet --project="${GCP_PROJECT_ID}" 2>&1 || \
+                        log_warn "  Failed to delete router $router_name"
+                done <<< "$routers"
+            fi
+
+            # Step 5: Delete the VPC network
+            log_info "Deleting VPC network: ${vpc_name}"
+            if gcloud compute networks delete "${vpc_name}" --quiet --project="${GCP_PROJECT_ID}" 2>&1; then
+                log_success "Orphaned VPC deleted: $vpc_name"
+            else
+                log_error "Failed to delete VPC $vpc_name - checking remaining dependencies:"
+                gcloud compute routers list --filter="network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
+                gcloud compute networks subnets list --network="${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
+                gcloud compute instances list --filter="networkInterfaces.network:${vpc_name}" --project="${GCP_PROJECT_ID}" 2>&1 || true
+                verification_failed=true
+            fi
+        done <<< "$all_tamshai_vpcs"
     fi
 
     # Gap #1b: Remove stale state entries
@@ -848,6 +937,39 @@ phase_4_infrastructure() {
 
     log_step "Initializing Terraform..."
     terraform init -upgrade
+
+    # =============================================================================
+    # Bug #14 Safety Net: Verify no recovery VPC in state before apply
+    # =============================================================================
+    # This catches the case where Phase 3 was skipped (--phase 4, --skip-destroy)
+    # or the recovery VPC was imported after Phase 3 ran.
+    # =============================================================================
+    log_step "Verifying no recovery VPC in terraform state (Bug #14 safety net)..."
+    local p4_vpc_name=""
+    p4_vpc_name=$(terraform state show 'module.networking.google_compute_network.vpc' 2>/dev/null \
+        | grep -E '^\s+name\s*=' | head -1 | sed 's/.*"\(.*\)".*/\1/' || echo "")
+
+    if [[ -n "$p4_vpc_name" && "$p4_vpc_name" == *"recovery"* ]]; then
+        log_warn "Recovery VPC detected in state: $p4_vpc_name"
+        log_warn "Removing to prevent terraform apply failure (Bug #14 safety net)..."
+        terraform state rm 'module.networking.google_compute_network.vpc' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_subnetwork.subnet' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_router.router' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_router_nat.nat' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.connector[0]' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.connector' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector[0]' 2>/dev/null || true
+        terraform state rm 'module.networking.google_vpc_access_connector.serverless_connector' 2>/dev/null || true
+        terraform state rm 'module.networking.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+        terraform state rm 'module.networking.google_compute_global_address.private_ip_range' 2>/dev/null || true
+        terraform state rm 'module.database.google_service_networking_connection.private_vpc_connection' 2>/dev/null || true
+        terraform state rm 'module.database.google_compute_global_address.private_ip_range' 2>/dev/null || true
+        log_success "Recovery VPC removed from state — terraform apply will create fresh resources"
+    elif [ -n "$p4_vpc_name" ]; then
+        log_info "State VPC is correct: $p4_vpc_name"
+    else
+        log_info "No VPC in state (clean apply expected)"
+    fi
 
     # Issue #24: Create artifact registry FIRST using gcloud
     # Terraform targeted apply can fail if provision_users job tries to update before images exist

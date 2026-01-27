@@ -465,6 +465,86 @@ check_current_status() {
 }
 
 # =============================================================================
+# Check 11: Recovery Stack Detection (Bug #14)
+# =============================================================================
+# After a DR evacuation, recovery VPCs and Cloud SQL instances may remain in
+# GCP. If not cleaned up, they block Phoenix rebuild terraform operations
+# (phantom firewall rules prevent VPC deletion, stale state causes conflicts).
+# =============================================================================
+check_recovery_stacks() {
+    log_section "11. Recovery Stack Detection (Bug #14)"
+
+    local issues=0
+    local project="${GCP_PROJECT_ID:-}"
+
+    if [ -z "$project" ]; then
+        log_fail "GCP_PROJECT_ID not set — cannot check for recovery stacks"
+        return 1
+    fi
+
+    # Check 1: Orphaned recovery VPC networks in GCP
+    log_check "Orphaned recovery VPCs in GCP"
+    local recovery_vpcs
+    recovery_vpcs=$(gcloud compute networks list \
+        --filter="name~^tamshai-prod-recovery-" \
+        --format="value(name)" \
+        --project="$project" 2>/dev/null) || recovery_vpcs=""
+
+    if [ -n "$recovery_vpcs" ]; then
+        check "No orphaned recovery VPCs" 1
+        echo "    Found recovery VPCs:"
+        while read -r vpc; do
+            [ -z "$vpc" ] && continue
+            echo "      - $vpc"
+        done <<< "$recovery_vpcs"
+        echo "    Action: Run cleanup-recovery.sh or delete manually before Phoenix rebuild"
+        issues=$((issues + 1))
+    else
+        check "No orphaned recovery VPCs" 0
+    fi
+
+    # Check 2: Recovery Cloud SQL instances (hold VPC peering references)
+    log_check "Recovery Cloud SQL instances"
+    local recovery_sql
+    recovery_sql=$(gcloud sql instances list \
+        --format="value(name)" \
+        --project="$project" 2>/dev/null | grep -E "recovery" || true)
+
+    if [ -n "$recovery_sql" ]; then
+        check "No recovery Cloud SQL instances" 1
+        echo "    Found recovery Cloud SQL:"
+        while read -r sql; do
+            [ -z "$sql" ] && continue
+            echo "      - $sql"
+        done <<< "$recovery_sql"
+        echo "    Action: Delete these first (they hold VPC peering references)"
+        issues=$((issues + 1))
+    else
+        check "No recovery Cloud SQL instances" 0
+    fi
+
+    # Check 3: Recovery terraform states in GCS
+    log_check "Recovery terraform states in GCS"
+    local state_bucket="tamshai-terraform-state-prod"
+    local recovery_states
+    recovery_states=$(gcloud storage ls "gs://${state_bucket}/gcp/recovery/" 2>/dev/null | head -10) || recovery_states=""
+
+    if [ -n "$recovery_states" ]; then
+        warn "Recovery terraform states found in GCS (may be stale):"
+        while read -r state_path; do
+            [ -z "$state_path" ] && continue
+            echo "      - $state_path"
+        done <<< "$recovery_states"
+        echo "    Action: Run cleanup-recovery.sh to clean up recovery states"
+        # Warning only — stale states don't block rebuild unless they contaminated primary state
+    else
+        check "No recovery terraform states in GCS" 0
+    fi
+
+    return $issues
+}
+
+# =============================================================================
 # Summary
 # =============================================================================
 print_summary() {
@@ -516,6 +596,7 @@ main() {
     check_artifact_registry || true
     check_terraform || true
     check_current_status || true
+    check_recovery_stacks || true
 
     print_summary
 }
