@@ -115,9 +115,12 @@ wait_for_domain_reachable() {
 
     while [[ $elapsed -lt $timeout ]]; do
         local http_code
-        http_code=$(curl -sf -o /dev/null -w "%{http_code}" "https://${domain}${path}" 2>/dev/null || echo "000")
+        # Note: Do NOT use -f flag — it causes curl to exit non-zero on HTTP 4xx,
+        # which triggers the || fallback and corrupts http_code (e.g., "401000").
+        # HTTP 401/403 means SSL IS working (server responded after SSL handshake).
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${domain}${path}" 2>/dev/null || echo "000")
 
-        if [[ "$http_code" =~ ^[23] ]]; then
+        if [[ "$http_code" =~ ^[234] ]]; then
             log_info "Domain is reachable: $domain (HTTP $http_code)"
             return 0
         fi
@@ -187,9 +190,12 @@ wait_for_ssl_certificate() {
     while [[ $elapsed -lt $timeout ]]; do
         # Direct HTTPS check - this is what matters
         local http_code
-        http_code=$(curl -sf -o /dev/null -w "%{http_code}" "https://${domain}${path}" 2>/dev/null || echo "000")
+        # Note: Do NOT use -f flag — it causes curl to exit non-zero on HTTP 4xx,
+        # which triggers the || fallback and corrupts http_code (e.g., "401000").
+        # HTTP 401/403 means SSL IS working (server responded after SSL handshake).
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${domain}${path}" 2>/dev/null || echo "000")
 
-        if [[ "$http_code" =~ ^[23] ]]; then
+        if [[ "$http_code" =~ ^[234] ]]; then
             log_info "SSL certificate deployed and working: $domain (HTTP $http_code)"
             return 0
         fi
