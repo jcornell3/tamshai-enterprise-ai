@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
 **Last Updated**: January 27, 2026
-**Version**: 3.9.0
+**Version**: 3.10.0
 **Owner**: Platform Team
 
 ## Overview
@@ -172,6 +172,29 @@ check_secret_hygiene "tamshai-prod-keycloak-admin-password"
 
 ```bash
 terraform force-unlock -force <LOCK_ID>
+```
+
+### Bug #9: Domain Mapping "doesn't support update" (v15 fix)
+
+**Symptom**: Phase 7 Stage 1 fails with `Error: doesn't support update` on `google_cloud_run_domain_mapping` resources.
+
+**Cause**: `google_cloud_run_domain_mapping` has NO update function in the Google Terraform provider. When stale domain mappings (persisting from previous deployments) are imported into fresh state, Terraform detects drift in `terraform_labels` and attempts an in-place update which is unsupported. The `lifecycle { ignore_changes = [metadata, spec] }` does NOT cover provider-managed `terraform_labels`.
+
+**Prevention**: The script now deletes stale domain mappings from GCP before `terraform apply` (instead of importing them). Terraform creates fresh mappings pointing to the new services.
+
+**Manual Fix** (if encountered on older script versions):
+```bash
+cd infrastructure/terraform/gcp
+# Remove from state
+terraform state rm 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]'
+terraform state rm 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]'
+terraform state rm 'module.cloudrun.google_cloud_run_domain_mapping.mcp_gateway[0]'
+# Delete from GCP
+gcloud beta run domain-mappings delete --domain=auth.tamshai.com --region=us-central1 --quiet
+gcloud beta run domain-mappings delete --domain=app.tamshai.com --region=us-central1 --quiet
+gcloud beta run domain-mappings delete --domain=api.tamshai.com --region=us-central1 --quiet
+# Re-run Phase 7
+./scripts/gcp/phoenix-rebuild.sh --phase 7 --yes
 ```
 
 ### Issue #9: Provision Job Permission Denied
@@ -455,8 +478,9 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 
 - [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (50-75 min estimated)
 - [GCP Region Failure Run v1](./GCP_REGION_FAILURE_RUNv1.md) - First DR drill log (8 bugs found, 7 fixed in-flight)
-- [Phoenix Manual Actions v14](./PHOENIX_MANUAL_ACTIONSv14.md) - Latest rebuild log (0 manual actions)
-- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Previous rebuild log (1 manual action)
+- [Phoenix Manual Actions v15](./PHOENIX_MANUAL_ACTIONSv15.md) - Latest rebuild log (Bug #9 fix, 0 manual actions)
+- [Phoenix Manual Actions v14](./PHOENIX_MANUAL_ACTIONSv14.md) - Previous rebuild log (0 manual actions)
+- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Rebuild log (1 manual action)
 - [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Rebuild log (1 manual action)
 - [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Rebuild log (0 manual actions)
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)
@@ -683,6 +707,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.10.0 | Jan 27, 2026 | Tamshai-Dev | v15 rebuild: Bug #9 fix (domain mapping "doesn't support update"); delete-then-recreate pattern replaces import; added Bug #9 troubleshooting |
 | 3.9.0 | Jan 27, 2026 | Tamshai-Dev | DR run v1 Bug #8: GitHub secrets now fetched in Phase 1 (pre-flight) instead of Phase 10; updated PROD_USER_PASSWORD and E2E troubleshooting entries |
 | 3.8.0 | Jan 27, 2026 | Tamshai-Dev | v14 rebuild: 0 manual actions; validated v13 fixes (KEYCLOAK_URL, polling, cross-env); documented provision-users Cloud Run Job container failure |
 | 3.7.0 | Jan 26, 2026 | Tamshai-Dev | Added v13 issues: provision-prod-users KEYCLOAK_URL discovery, Cloud Run Job polling Unknown status, E2E cross-env Windows fix; updated related docs |

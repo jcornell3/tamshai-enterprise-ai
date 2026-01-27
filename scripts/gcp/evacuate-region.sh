@@ -1066,6 +1066,26 @@ phase2_deploy_infrastructure() {
         -var="api_domain=${API_DR_DOMAIN}"
     )
 
+    # Bug #9 Fix: Delete existing domain mappings so Terraform can recreate them fresh.
+    # google_cloud_run_domain_mapping has no update function — import causes
+    # "doesn't support update" errors. This also handles DR retry scenarios where
+    # domain mappings persist from a previous failed DR run.
+    log_step "Cleaning up stale DR domain mappings (Bug #9 fix)..."
+    for dm_entry in \
+        "${KEYCLOAK_DR_DOMAIN}|module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]|keycloak" \
+        "${APP_DR_DOMAIN}|module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]|web-portal" \
+        "${API_DR_DOMAIN}|module.cloudrun.google_cloud_run_domain_mapping.mcp_gateway[0]|mcp-gateway"; do
+        IFS='|' read -r dm_domain dm_tf_addr dm_label <<< "$dm_entry"
+        if gcloud beta run domain-mappings describe --domain="${dm_domain}" --region="$NEW_REGION" &>/dev/null 2>&1; then
+            log_info "Found existing ${dm_label} DR domain mapping (${dm_domain}) - deleting for clean recreate..."
+            terraform state rm "${dm_tf_addr}" &>/dev/null 2>&1 || true
+            gcloud beta run domain-mappings delete --domain="${dm_domain}" --region="$NEW_REGION" --quiet 2>/dev/null || \
+                log_warn "Could not delete ${dm_domain} domain mapping"
+        else
+            terraform state rm "${dm_tf_addr}" &>/dev/null 2>&1 || true
+        fi
+    done
+
     # Use staged deployment from domain-mapping.sh library if available
     if type staged_terraform_deploy &>/dev/null; then
         log_info "Using staged_terraform_deploy from domain-mapping.sh library"

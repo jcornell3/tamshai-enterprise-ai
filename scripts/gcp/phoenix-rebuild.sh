@@ -1266,30 +1266,41 @@ phase_7_cloud_run() {
         --service=sqladmin.googleapis.com \
         --project="${GCP_PROJECT_ID}" 2>/dev/null || log_warn "Could not create Cloud SQL Service Agent (may already exist)"
 
-    # Gap #48: Import existing domain mappings before apply (they persist across Phoenix rebuilds)
-    log_step "Checking for existing domain mappings to import (Gap #48)..."
+    # Bug #9 Fix: Delete existing domain mappings so Terraform can recreate them fresh.
+    # google_cloud_run_domain_mapping has NO update function in the Terraform provider.
+    # Importing them causes "doesn't support update" errors during apply because Terraform
+    # detects drift in provider-managed attributes (terraform_labels) but cannot update.
+    # Solution: delete stale mappings from GCP + remove from state → Terraform creates fresh.
+    log_step "Cleaning up stale domain mappings (Bug #9 fix)..."
     local region="${GCP_REGION}"
     local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
 
-    # Check if ${KEYCLOAK_DOMAIN} domain mapping exists but isn't in state
-    if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' &>/dev/null 2>&1; then
-            log_info "Importing existing ${KEYCLOAK_DOMAIN} domain mapping..."
-            terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
-                "locations/${region}/namespaces/${project}/domainmappings/${KEYCLOAK_DOMAIN}" 2>/dev/null || \
-                log_warn "Domain mapping import failed - may already be in state"
-        fi
-    fi
+    # Helper: delete domain mapping from GCP and remove from Terraform state
+    cleanup_domain_mapping() {
+        local domain="$1"
+        local tf_address="$2"
+        local label="$3"
 
-    # Check if app domain mapping exists (supports app.tamshai.com / app-dr.tamshai.com)
-    if gcloud beta run domain-mappings describe --domain="${APP_DOMAIN}" --region="$region" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' &>/dev/null 2>&1; then
-            log_info "Importing existing ${APP_DOMAIN} domain mapping..."
-            terraform import 'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' \
-                "locations/${region}/namespaces/${project}/domainmappings/${APP_DOMAIN}" 2>/dev/null || \
-                log_warn "Domain mapping import failed - may not exist in config"
+        if gcloud beta run domain-mappings describe --domain="${domain}" --region="$region" &>/dev/null 2>&1; then
+            log_info "Found existing ${label} domain mapping (${domain}) - deleting for clean recreate..."
+            # Remove from Terraform state first (if present) to avoid state/GCP mismatch
+            terraform state rm "${tf_address}" &>/dev/null 2>&1 || true
+            # Delete from GCP so Terraform can create fresh
+            gcloud beta run domain-mappings delete --domain="${domain}" --region="$region" --quiet 2>/dev/null || \
+                log_warn "Could not delete ${domain} domain mapping - may need manual cleanup"
+        else
+            log_info "No existing ${label} domain mapping found - will be created by Terraform"
+            # Also ensure it's not orphaned in state
+            terraform state rm "${tf_address}" &>/dev/null 2>&1 || true
         fi
-    fi
+    }
+
+    cleanup_domain_mapping "${KEYCLOAK_DOMAIN}" \
+        'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' "keycloak"
+    cleanup_domain_mapping "${APP_DOMAIN}" \
+        'module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' "web-portal"
+    cleanup_domain_mapping "${API_DOMAIN}" \
+        'module.cloudrun.google_cloud_run_domain_mapping.mcp_gateway[0]' "mcp-gateway"
 
     # Issue #31: Preemptive Artifact Registry import (before terraform apply)
     # The repository may exist from Phase 5 builds but not be in terraform state
@@ -1425,16 +1436,21 @@ phase_7_cloud_run() {
     apply_output=$(terraform apply -auto-approve 2>&1) || apply_exit_code=$?
 
     if [ $apply_exit_code -ne 0 ]; then
-        # Check if this is a 409 "already exists" error
-        if echo "$apply_output" | grep -q "Error 409.*already exists"; then
-            log_warn "Detected 409 conflict - resources exist but not in state (Issue #11)"
-            log_info "This can happen if a previous terraform apply timed out"
-            log_info "Attempting auto-recovery by importing existing resources..."
+        # Check if this is a recoverable error (409 conflict or domain mapping update)
+        local is_409=false
+        local is_domain_update=false
+        echo "$apply_output" | grep -q "Error 409.*already exists" && is_409=true
+        echo "$apply_output" | grep -q "doesn't support update" && is_domain_update=true
+
+        if [ "$is_409" = true ] || [ "$is_domain_update" = true ]; then
+            [ "$is_409" = true ] && log_warn "Detected 409 conflict - resources exist but not in state (Issue #11)"
+            [ "$is_domain_update" = true ] && log_warn "Detected domain mapping update error (Bug #9)"
+            log_info "Attempting auto-recovery..."
 
             local region="${GCP_REGION}"
             local project="${GCP_PROJECT_ID:-$(gcloud config get-value project)}"
 
-            # Import mcp-gateway if it exists but not in state
+            # Import Cloud Run services if they exist but not in state (services support updates)
             if echo "$apply_output" | grep -q "mcp-gateway.*already exists"; then
                 if gcloud run services describe mcp-gateway --region="$region" &>/dev/null; then
                     log_info "Importing existing mcp-gateway service..."
@@ -1443,7 +1459,6 @@ phase_7_cloud_run() {
                 fi
             fi
 
-            # Import keycloak if it exists but not in state
             if echo "$apply_output" | grep -q "keycloak.*already exists"; then
                 if gcloud run services describe keycloak --region="$region" &>/dev/null; then
                     log_info "Importing existing keycloak service..."
@@ -1452,7 +1467,6 @@ phase_7_cloud_run() {
                 fi
             fi
 
-            # Import MCP suite services if they exist
             for svc in hr finance sales support; do
                 if echo "$apply_output" | grep -q "mcp-${svc}.*already exists"; then
                     if gcloud run services describe "mcp-${svc}" --region="$region" &>/dev/null; then
@@ -1463,7 +1477,6 @@ phase_7_cloud_run() {
                 fi
             done
 
-            # Import web-portal if it exists
             if echo "$apply_output" | grep -q "web-portal.*already exists"; then
                 if gcloud run services describe web-portal --region="$region" &>/dev/null; then
                     log_info "Importing existing web-portal service..."
@@ -1472,13 +1485,22 @@ phase_7_cloud_run() {
                 fi
             fi
 
-            # Import domain mappings if they exist
-            if echo "$apply_output" | grep -q "${KEYCLOAK_DOMAIN}.*already exists"; then
-                if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null 2>&1; then
-                    log_info "Importing existing ${KEYCLOAK_DOMAIN} domain mapping..."
-                    terraform import 'module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' \
-                        "locations/${region}/namespaces/${project}/domainmappings/${KEYCLOAK_DOMAIN}" 2>/dev/null || true
-                fi
+            # Bug #9 Fix: Domain mappings DON'T support updates — delete + recreate instead of import
+            if echo "$apply_output" | grep -q "domain_mapping.*doesn't support update\|${KEYCLOAK_DOMAIN}.*already exists\|${APP_DOMAIN}.*already exists\|${API_DOMAIN}.*already exists"; then
+                log_info "Cleaning up domain mappings for fresh creation (Bug #9)..."
+                for dm_domain in "${KEYCLOAK_DOMAIN}" "${APP_DOMAIN}" "${API_DOMAIN}"; do
+                    local tf_addr=""
+                    case "$dm_domain" in
+                        "${KEYCLOAK_DOMAIN}") tf_addr='module.cloudrun.google_cloud_run_domain_mapping.keycloak[0]' ;;
+                        "${APP_DOMAIN}") tf_addr='module.cloudrun.google_cloud_run_domain_mapping.web_portal[0]' ;;
+                        "${API_DOMAIN}") tf_addr='module.cloudrun.google_cloud_run_domain_mapping.mcp_gateway[0]' ;;
+                    esac
+                    if gcloud beta run domain-mappings describe --domain="${dm_domain}" --region="$region" &>/dev/null 2>&1; then
+                        log_info "Deleting stale ${dm_domain} domain mapping..."
+                        terraform state rm "${tf_addr}" &>/dev/null 2>&1 || true
+                        gcloud beta run domain-mappings delete --domain="${dm_domain}" --region="$region" --quiet 2>/dev/null || true
+                    fi
+                done
             fi
 
             # Issue #31: Import Artifact Registry if it exists but not in state
@@ -1490,10 +1512,10 @@ phase_7_cloud_run() {
                 fi
             fi
 
-            # Retry terraform apply after imports
-            log_step "Retrying terraform apply after import (Issue #11 recovery)..."
+            # Retry terraform apply after recovery
+            log_step "Retrying terraform apply after recovery (Issue #11 / Bug #9)..."
             terraform apply -auto-approve || {
-                log_error "Terraform apply failed even after import recovery"
+                log_error "Terraform apply failed even after recovery"
                 log_error "Original error output:"
                 echo "$apply_output"
                 log_error ""
@@ -1503,9 +1525,9 @@ phase_7_cloud_run() {
                 save_checkpoint 7 "failed"
                 exit 1
             }
-            log_success "409 recovery successful - resources imported and apply completed"
+            log_success "Auto-recovery successful - apply completed"
         else
-            log_error "Terraform apply failed with non-409 error:"
+            log_error "Terraform apply failed with unrecoverable error:"
             echo "$apply_output"
             save_checkpoint 7 "failed"
             exit 1
@@ -1518,22 +1540,28 @@ phase_7_cloud_run() {
     # Uses shared function from lib/secrets.sh
     ensure_mongodb_uri_iam_binding "${GCP_PROJECT_ID}" || true
 
-    # Gap #35 & #48: Create ${KEYCLOAK_DOMAIN} domain mapping (handle already exists)
-    log_step "Creating ${KEYCLOAK_DOMAIN} domain mapping (Gap #35, #48)..."
+    # Verify domain mappings exist (Terraform should have created them in Stage 1/3)
+    # This is a safety net — if Terraform failed silently, create via gcloud
+    log_step "Verifying domain mappings exist..."
     local region="${GCP_REGION}"
 
-    # Gap #48: Domain mapping may already exist from a previous deployment
-    # Unlike other resources, domain mappings persist across terraform destroys
-    if gcloud beta run domain-mappings describe --domain=${KEYCLOAK_DOMAIN} --region="$region" &>/dev/null; then
-        log_info "Domain mapping ${KEYCLOAK_DOMAIN} already exists (Gap #48 - this is expected)"
-        log_info "Domain mappings persist across Phoenix rebuilds - no action needed"
-    else
-        log_info "Creating new domain mapping for ${KEYCLOAK_DOMAIN}..."
-        gcloud beta run domain-mappings create \
-            --service=keycloak \
-            --domain=${KEYCLOAK_DOMAIN} \
-            --region="$region" || log_warn "Domain mapping creation failed - may need manual creation"
-    fi
+    for dm_domain in "${KEYCLOAK_DOMAIN}" "${APP_DOMAIN}" "${API_DOMAIN}"; do
+        local dm_service=""
+        case "$dm_domain" in
+            "${KEYCLOAK_DOMAIN}") dm_service="keycloak" ;;
+            "${APP_DOMAIN}") dm_service="web-portal" ;;
+            "${API_DOMAIN}") dm_service="mcp-gateway" ;;
+        esac
+        if gcloud beta run domain-mappings describe --domain="${dm_domain}" --region="$region" &>/dev/null; then
+            log_info "Domain mapping ${dm_domain} → ${dm_service} exists"
+        else
+            log_warn "Domain mapping ${dm_domain} missing - creating via gcloud..."
+            gcloud beta run domain-mappings create \
+                --service="${dm_service}" \
+                --domain="${dm_domain}" \
+                --region="$region" 2>/dev/null || log_warn "  Could not create ${dm_domain} mapping - may need manual creation"
+        fi
+    done
 
     # =============================================================================
     # SSL CERTIFICATE VERIFICATION (Issue #8 Fix)
