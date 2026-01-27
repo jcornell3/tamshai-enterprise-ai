@@ -1764,7 +1764,8 @@ phase_10_verify() {
     if [ -f "package.json" ]; then
         # Secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET) already loaded
         # from read-github-secrets.sh --phoenix earlier in this phase
-        if npm run test:login:prod; then
+        # Use npx cross-env for Windows compatibility (npm scripts use Unix syntax)
+        if npx cross-env TEST_ENV=prod playwright test login-journey --project=chromium --workers=1; then
             log_success "E2E tests passed"
         else
             log_warn "E2E tests failed — check output above for details"
