@@ -182,7 +182,7 @@ verify_cloud_run_services_healthy() {
 verify_keycloak_reachable() {
     log_info "Verifying Keycloak is reachable via auth.tamshai.com..."
     local response
-    response=$(curl -sf -o /dev/null -w "%{http_code}" "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" 2>/dev/null || echo "000")
+    response=$(curl -s -o /dev/null -w "%{http_code}" "https://auth.tamshai.com/auth/realms/tamshai-corp/.well-known/openid-configuration" 2>/dev/null || echo "000")
 
     if [[ "$response" == "200" ]]; then
         log_info "Keycloak reachable (HTTP 200)"
@@ -204,7 +204,7 @@ verify_mcp_gateway_healthy() {
     fi
 
     local response
-    response=$(curl -sf -o /dev/null -w "%{http_code}" "${gateway_url}/health" 2>/dev/null || echo "000")
+    response=$(curl -s -o /dev/null -w "%{http_code}" "${gateway_url}/health" 2>/dev/null || echo "000")
 
     if [[ "$response" == "200" ]]; then
         log_info "MCP Gateway healthy (HTTP 200)"
