@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
 **Last Updated**: January 26, 2026
-**Version**: 3.7.0
+**Version**: 3.8.0
 **Owner**: Platform Team
 
 ## Overview
@@ -454,8 +454,9 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 ## Related Documentation
 
 - [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (15-25 min RTO)
-- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Latest rebuild log (1 manual action)
-- [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Previous rebuild log (1 manual action)
+- [Phoenix Manual Actions v14](./PHOENIX_MANUAL_ACTIONSv14.md) - Latest rebuild log (0 manual actions)
+- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Previous rebuild log (1 manual action)
+- [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Rebuild log (1 manual action)
 - [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Rebuild log (0 manual actions)
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)
 - [Identity Sync](./IDENTITY_SYNC.md) - User provisioning
@@ -681,6 +682,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.8.0 | Jan 27, 2026 | Tamshai-Dev | v14 rebuild: 0 manual actions; validated v13 fixes (KEYCLOAK_URL, polling, cross-env); documented provision-users Cloud Run Job container failure |
 | 3.7.0 | Jan 26, 2026 | Tamshai-Dev | Added v13 issues: provision-prod-users KEYCLOAK_URL discovery, Cloud Run Job polling Unknown status, E2E cross-env Windows fix; updated related docs |
 | 3.6.0 | Jan 26, 2026 | Tamshai-Dev | Added v12 issues: PROD_USER_PASSWORD fetch, E2E silent failure, workflow detection fix; updated DR script |
 | 3.5.0 | Jan 26, 2026 | Tamshai-Dev | Added blocking requirements: user password provisioning and ALL E2E tests must pass for successful rebuild |
