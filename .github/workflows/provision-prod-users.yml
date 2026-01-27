@@ -145,12 +145,13 @@ jobs:
                 echo "[OK] Job completed successfully"
                 echo "result=success" >> $GITHUB_OUTPUT
                 break
-              else
+              elif [ "$CONDITION_STATUS" = "False" ]; then
                 echo ""
                 echo "[ERROR] Job failed"
                 echo "result=failure" >> $GITHUB_OUTPUT
                 break
               fi
+              # Unknown = still running, continue waiting
             fi
 
             sleep $INTERVAL
