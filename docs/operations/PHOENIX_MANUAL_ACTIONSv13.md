@@ -48,7 +48,7 @@ These issues were identified during v12 and fixed in commit `d3d07c88` prior to 
 | ~21:43 | 7 | Terraform Cloud Run (Stage 1-3) | PASS | ~20 min |
 | ~22:03 | 8 | Deploy via GitHub Actions | PASS | ~8 min |
 | ~22:11 | 9 | Configure TOTP | PASS | ~2 min |
-| ~22:13 | 10 | Provision & Verify | PASS (workflow issues fixed mid-run) | ~10 min |
+| ~22:13 | 10 | Provision & Verify | PARTIAL (3 in-flight issues fixed) | ~10 min |
 | ~22:23 | E2E | End-to-End Tests | PASS (6/6, 25.2s) | ~1 min |
 
 **v13 Total Duration**: ~85 min
@@ -223,14 +223,14 @@ All 8 images built on first attempt and verified in Artifact Registry.
 
 **Duration**: ~10 minutes
 
-**Result**: PASS (after in-flight workflow fixes)
+**Result**: PARTIAL (3 in-flight issues discovered and fixed)
 
 **v12 Fix Validation**:
 | Step | Result | Notes |
 |------|--------|-------|
 | Phoenix secrets fetch | **PASS** | "Phoenix secrets loaded into environment" |
 | PROD_USER_PASSWORD sync | **PASS** | "PROD_USER_PASSWORD found in environment" — v12 fix validated |
-| Identity sync (provision-prod-users) | **PASS** | Workflow triggered and completed (after 2 in-flight fixes) |
+| Identity sync (provision-prod-users) | **FAIL** | Workflow failed twice (KEYCLOAK_URL missing, then polling bug); passed on 3rd run after in-flight fixes |
 | Sample data load (provision-prod-data) | **PASS** | Loaded successfully |
 | E2E tests (in-script) | **FAIL** | `'TEST_ENV' is not recognized` — Windows cmd.exe issue (fixed in-flight) |
 
