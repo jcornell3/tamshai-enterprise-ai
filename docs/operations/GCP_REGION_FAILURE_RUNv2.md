@@ -258,9 +258,83 @@ Script exited at Phase 4 due to workflow dispatch error (Bug #10).
 
 ---
 
-## Cleanup: NOT RUN
+## Cleanup: cleanup-recovery.sh recovery-20260127-0830 --force
 
-Recovery stack remains deployed. Will run `cleanup-recovery.sh recovery-20260127-0830` after fixing bugs.
+**Duration**: ~30 minutes
+**Result**: **SUCCESS** -- all recovery resources destroyed, production stack intact
+
+### Cleanup Phases
+
+| Phase | Action | Result |
+|-------|--------|--------|
+| 1 | Detect recovery region | PASS (us-west1, defaulted -- state read failed) |
+| 2 | Terraform destroy | PASS (34 resources destroyed) |
+| 3 | State cleanup | PASS (state removed from GCS bucket) |
+| 4 | DNS configuration | INFO (manual -- DR CNAME records left in place) |
+| 5 | Cleanup complete | PASS |
+
+### v1 Bug #5 Validation: Cleanup skips production secrets
+
+**Result**: **FIXED**
+
+```
+[STEP] Skipping secret deletion (shared with prod — Bug #5)...
+[STEP] Removing secret IAM bindings from state (Issue #28)...
+Removed module.security.google_secret_manager_secret_iam_member.keycloak_admin_access (+ 15 more)
+Removed module.security.google_secret_manager_secret.keycloak_admin_password (+ 7 more)
+```
+
+The cleanup script correctly removed secret resources from Terraform state instead of destroying them. Secrets remain intact for production use.
+
+### v1 Bug #6 Validation: Cleanup only deletes recovery Cloud SQL
+
+**Result**: **FIXED**
+
+```
+[INFO]   Checking for Cloud SQL instances...
+[INFO]     - tamshai-prod-postgres (not matching ENV_ID=recovery-20260127-0830 — skipping, belongs to another environment)
+[INFO]   No Cloud SQL instances matching ENV_ID=recovery-20260127-0830 found
+```
+
+Post-cleanup verification:
+```
+NAME                   STATUS    REGION
+tamshai-prod-postgres  RUNNABLE  us-central1
+```
+
+Production Cloud SQL instance is untouched. Only the recovery instance (`tamshai-prod-postgres-recovery-20260127-0830`) was deleted.
+
+### v1 Bug #7 Validation: CICD SA removed from state before destroy
+
+**Result**: **FIXED**
+
+```
+[STEP] Removing shared CICD resources from state (prevent_destroy + shared with prod)...
+Removed module.security.google_service_account.cicd
+Removed module.security.google_project_iam_member.cicd_run_admin
+Removed module.security.google_project_iam_member.cicd_artifact_registry_writer
+Removed module.security.google_project_iam_member.cicd_cloudsql_viewer
+Removed module.security.google_service_account_iam_member.cicd_can_use_keycloak_sa
+Removed module.security.google_service_account_iam_member.cicd_can_use_mcp_gateway_sa
+Removed module.security.google_service_account_iam_member.cicd_can_use_mcp_servers_sa
+Removed module.security.google_project_iam_member.cicd_secret_accessor
+```
+
+The CICD service account (which has `prevent_destroy = true`) was removed from Terraform state before `terraform destroy`, allowing the destroy to proceed without error. The SA itself remains in GCP for production CI/CD.
+
+### VPC Peering Dependency Issue (Observation)
+
+The VPC peering deletion via Services API failed after 20 attempts (10 minutes). The error:
+```
+FLOW_SN_DC_RESOURCE_PREVENTING_DELETE_CONNECTION
+Producer services (e.g. CloudSQL, Cloud Memstore, etc.) are still using this connection.
+```
+
+**Root cause**: The recovery Cloud SQL instance `tamshai-prod-postgres-recovery-20260127-0830` was issued a `gcloud sql instances delete` command, and the instance disappeared from `gcloud sql instances list` within the 3-minute wait window. However, GCP's Service Networking API retains an internal reference to deleted Cloud SQL instances for 10-15+ minutes after deletion. The peering delete retry loop (20 attempts × 30s = 10 min) was not long enough.
+
+**Mitigation**: The `delete_vpc_peering_robust` function (shared by both `cleanup-recovery.sh` and `phoenix-rebuild.sh`) falls back to the compute API force-delete after exhausting Services API retries. The compute API force-delete succeeded immediately, and cleanup proceeded without issue.
+
+**Both scripts share identical fallback behavior**: `phoenix-rebuild.sh` (line 512) and `cleanup-recovery.sh` (line 1323/1460) both call `delete_vpc_peering_robust` from the shared `lib/cleanup.sh` library, which implements: dependency check → 20 Services API retries → compute API force-delete fallback.
 
 ---
 
@@ -278,8 +352,8 @@ Recovery stack remains deployed. Will run `cleanup-recovery.sh recovery-20260127
 | 3. SA key regen | 0 |
 | 4. Deploy services | 0 (script failed, no manual intervention) |
 | 5-7 | NOT REACHED |
-| Cleanup | NOT RUN |
-| **TOTAL** | **0** (2 new bugs found: #10, #11) |
+| Cleanup | 0 (all phases passed, production intact) |
+| **TOTAL** | **0** (2 new bugs found: #10, #11; cleanup validated #5, #6, #7) |
 
 ### v1 Bug Fix Validations
 
@@ -289,9 +363,9 @@ Recovery stack remains deployed. Will run `cleanup-recovery.sh recovery-20260127
 | #2 | Missing domain mapping targets in library | **FIXED** -- api-dr.tamshai.com created in Stage 3 |
 | #3 | Cloudflare redirect loop on DR domains | **FIXED** -- mcp-gateway startup in 29s, no redirect loop |
 | #4 | SSL check treats HTTP 302 as success | Not tested (no 302 encountered) |
-| #5 | Cleanup deletes production secrets | NOT TESTED (cleanup not run) |
-| #6 | Cleanup deletes ALL Cloud SQL instances | NOT TESTED (cleanup not run) |
-| #7 | CICD SA prevent_destroy blocks destroy | NOT TESTED (cleanup not run) |
+| #5 | Cleanup deletes production secrets | **FIXED** -- secrets removed from state, not destroyed |
+| #6 | Cleanup deletes ALL Cloud SQL instances | **FIXED** -- only recovery instance deleted, prod intact |
+| #7 | CICD SA prevent_destroy blocks destroy | **FIXED** -- CICD SA removed from state before destroy |
 | #8 | GitHub secrets fetched too late | **FIXED** -- secrets loaded in pre-flight |
 | #9 | Domain mapping "doesn't support update" | **FIXED** -- fresh creation, 0 to change |
 
@@ -327,7 +401,7 @@ No in-flight fixes were applied during this run. Both bugs (#10, #11) will be fi
 | Image replication | Skipped (images pre-existing) | 8/8 built (false errors logged) | New issue found |
 | SSL certificates | 1 of 3 (auth-dr with redirect loop) | 2 of 3 (api-dr timed out, blocking for API) | Improved |
 | Bugs found | 8 (4 evacuation + 3 cleanup + 1 resilience) | 2 (1 blocking + 1 cosmetic) | 75% reduction |
-| Production collateral damage | YES (Bug #5 deleted secrets, Bug #6 deleted Cloud SQL) | None (cleanup not run) | Eliminated |
+| Production collateral damage | YES (Bug #5 deleted secrets, Bug #6 deleted Cloud SQL) | NONE (secrets, Cloud SQL, CICD SA all intact) | Eliminated |
 
 ---
 
@@ -371,11 +445,13 @@ No in-flight fixes were applied during this run. Both bugs (#10, #11) will be fi
 ---
 
 **End of GCP Region Failure DR Run v2 Log**
-*Status: FAILED (Phase 4: workflow dispatch "region" input not accepted)*
-*Started: 2026-01-27 ~08:30 UTC*
-*Failed: 2026-01-27 ~09:43 UTC (~73 min)*
+*Status: Evacuation FAILED at Phase 4; Cleanup SUCCESS*
+*Evacuation Started: 2026-01-27 ~08:30 UTC*
+*Evacuation Failed: 2026-01-27 ~09:43 UTC (~73 min)*
+*Cleanup Completed: 2026-01-27 (~30 min)*
 *Manual Actions: 0*
 *Total Bugs Found: 2*
 - *Bug #10: deploy-to-gcp.yml workflow does not accept "region" input (BLOCKING -- Phase 4)*
 - *Bug #11: Cloud Build log-streaming error causes false failures (NON-BLOCKING -- Phase 1.5)*
-*v1 Bug Fixes Validated: 5 of 9 (#1, #2, #3, #8, #9 confirmed fixed; #4-#7 not tested)*
+*v1 Bug Fixes Validated: 8 of 9 (#1, #2, #3, #5, #6, #7, #8, #9 confirmed fixed; #4 not tested)*
+*Production Collateral Damage: NONE (Cloud SQL, secrets, CICD SA all intact)*
