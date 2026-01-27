@@ -1,7 +1,7 @@
 # Phoenix Rebuild Runbook
 
 **Last Updated**: January 26, 2026
-**Version**: 3.6.0
+**Version**: 3.7.0
 **Owner**: Platform Team
 
 ## Overview
@@ -404,6 +404,30 @@ gcloud compute networks describe tamshai-prod-vpc \
 
 **Prevention**: Fixed in `secrets.sh` — replaced `gh workflow list | grep` with `gh workflow view <filename>`, which accepts workflow filenames directly and returns success/failure without needing to parse display names.
 
+### Provision-prod-users Final Verification Fails with curl exit 3
+
+**Symptom**: Final Verification job in `provision-prod-users.yml` fails immediately with `Process completed with exit code 3` (curl URL malformat).
+
+**Cause**: `${{ env.KEYCLOAK_URL }}` was referenced in the workflow but never defined in the `env:` block. The Keycloak URL must be discovered dynamically since it's a Cloud Run-generated URL.
+
+**Prevention**: Fixed in `provision-prod-users.yml` — the Final Verification job now includes a `Discover Keycloak URL` step that uses `gcloud run services describe keycloak --format="value(status.url)"` and sets the result in `$GITHUB_ENV`. The verification step also guards against missing URLs by skipping gracefully.
+
+### Cloud Run Job Polling Treats "Unknown" Status as Failure
+
+**Symptom**: `provision-prod-users.yml` Execute Provision Job reports `[ERROR] Job failed` at 0 seconds with `Condition: Completed = Unknown`.
+
+**Cause**: The polling loop used an `else` branch that treated any status other than `True` as failure. When a Cloud Run Job has just started, its condition status is `Unknown` (not yet determined), which fell into the failure branch.
+
+**Prevention**: Fixed in `provision-prod-users.yml` — polling now uses explicit `elif [ "$CONDITION_STATUS" = "False" ]` to only break on actual failure. `Unknown` status continues the wait loop.
+
+### E2E Tests Fail with "'TEST_ENV' is not recognized" on Windows
+
+**Symptom**: Phoenix rebuild E2E test step fails with `'TEST_ENV' is not recognized as an internal or external command`.
+
+**Cause**: `npm run test:login:prod` invokes `TEST_ENV=prod playwright test...` which is Unix-only shell syntax. On Windows, npm spawns `cmd.exe` which cannot parse environment variable prefixes.
+
+**Prevention**: Fixed in `phoenix-rebuild.sh` — E2E tests now use `npx cross-env TEST_ENV=prod playwright test login-journey --project=chromium --workers=1` which works cross-platform. The `cross-env` package is a devDependency of the e2e test project.
+
 For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-procedures-fallback).
 
 ---
@@ -430,8 +454,9 @@ For additional troubleshooting scenarios, see [Appendix B](#appendix-b-manual-pr
 ## Related Documentation
 
 - [GCP Regional Failure Runbook](./GCP_REGION_FAILURE_RUNBOOK.md) - **For regional outages** (15-25 min RTO)
-- [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Latest rebuild log (1 manual action)
-- [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Previous rebuild log (0 manual actions)
+- [Phoenix Manual Actions v13](./PHOENIX_MANUAL_ACTIONSv13.md) - Latest rebuild log (0 manual actions)
+- [Phoenix Manual Actions v12](./PHOENIX_MANUAL_ACTIONSv12.md) - Previous rebuild log (1 manual action)
+- [Phoenix Manual Actions v11](./PHOENIX_MANUAL_ACTIONSv11.md) - Rebuild log (0 manual actions)
 - [Phoenix Recovery](./PHOENIX_RECOVERY.md) - Emergency recovery procedures (13 scenarios)
 - [Identity Sync](./IDENTITY_SYNC.md) - User provisioning
 - [Keycloak Management](./KEYCLOAK_MANAGEMENT.md) - Keycloak operations
@@ -656,6 +681,7 @@ With Workload Identity Federation:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 3.7.0 | Jan 26, 2026 | Tamshai-Dev | Added v13 issues: provision-prod-users KEYCLOAK_URL discovery, Cloud Run Job polling Unknown status, E2E cross-env Windows fix; updated related docs |
 | 3.6.0 | Jan 26, 2026 | Tamshai-Dev | Added v12 issues: PROD_USER_PASSWORD fetch, E2E silent failure, workflow detection fix; updated DR script |
 | 3.5.0 | Jan 26, 2026 | Tamshai-Dev | Added blocking requirements: user password provisioning and ALL E2E tests must pass for successful rebuild |
 | 3.4.0 | Jan 26, 2026 | Tamshai-Dev | Added Issue #103 troubleshooting: VPC peering dependency diagnostics and auto-created firewall rule diagnostics |
