@@ -324,18 +324,34 @@ E2E tests ran **in-script** using `npx cross-env TEST_ENV=prod playwright test l
 | #36 | Terraform state lock deadlock | PASS | **PASS** — no deadlock |
 | #37 | mcp-gateway SSL startup failure | PASS | **PASS** — staged deployment, SSL at attempt 22/45 |
 
-### Known Issue: Cloud Run Job provision-users Failure
+### Known Issue: Cloud Run Job provision-users Failure (ROOT CAUSE FOUND)
 
-The `provision-users` Cloud Run Job failed during execution (`failedCount=1`). This is **not a workflow logic bug** — the three v13 workflow fixes (KEYCLOAK_URL, polling, cross-env) all worked correctly. The failure is in the provisioning container itself.
+The `provision-users` Cloud Run Job failed during execution (`failedCount=1`). This is **not a workflow logic bug** — the three v13 workflow fixes (KEYCLOAK_URL, polling, cross-env) all worked correctly. The failure is a **Docker build context issue**.
 
-**Evidence**:
-- Task status: `running=0, succeeded=0, failed=1`
-- Cloud Logging: `[WARN] Could not retrieve logs` (logs not yet available)
-- Keycloak verification: HTTP 404 at realm endpoint (realm may not have been fully imported)
+**Root Cause**: `tsx: Permission denied` — Windows `node_modules` overwrites Linux `node_modules` in Docker build.
+
+The `phoenix-rebuild.sh` creates a minimal Cloud Build context by copying `services/mcp-hr/` — including the local **130MB Windows `node_modules/`**. The Dockerfile's two-step pattern (`npm ci` + `chmod +x`, then `COPY services/mcp-hr/`) causes the second `COPY` to overwrite the properly installed Linux `node_modules/.bin/` with Windows versions that lack Unix execute permissions.
+
+**Container Logs** (all 4 attempts identical):
+```
+[INFO] Running identity-sync (create/update users)...
+sh: 1: tsx: Permission denied
+[ERROR] Identity sync failed
+Container called exit(1).
+```
+
+**Timeline of failure**:
+1. Cloud SQL Proxy started, state verified (59 employees, 1 Keycloak user)
+2. HR sample data loaded successfully
+3. Service account permissions verified (manage-users, view-users, query-users, view-realm, manage-realm)
+4. `npx tsx src/scripts/sync-identities.ts --no-redis` → `sh: 1: tsx: Permission denied` → `exit(1)`
+5. Retried 3 more times (Max Retries: 3), all failed identically
+
+**Why `ACTION=load-finance-data` jobs succeed**: They skip `sync_users()` entirely, never invoking `npx tsx`.
+
+**Fix**: Exclude host `node_modules` from build context — `rm -rf` after `cp -r` in all 3 locations (phoenix Phase 4, Phase 5, DR rebuild). Commit `cbab9859`.
 
 **Impact**: Local Cloud Build fallback ran in `verify-only` mode. Sample data loaded via separate workflow. E2E tests passed, indicating the portal and auth are functional.
-
-**Investigation Needed**: Check `provision-users` container logs to determine root cause of job failure.
 
 ### Blocking Requirements (PHOENIX_RUNBOOK v3.7.0)
 
@@ -384,4 +400,4 @@ The `provision-users` Cloud Run Job failed during execution (`failedCount=1`). T
 *Manual Actions: 0*
 *E2E Tests: 6/6 PASS (24.0s, in-script)*
 *In-Flight Issues: 0*
-*Known Issue: provision-users Cloud Run Job container failed (workflow logic validated)*
+*Known Issue: provision-users Cloud Run Job — tsx Permission denied (Windows node_modules in build context) — fixed in cbab9859*
