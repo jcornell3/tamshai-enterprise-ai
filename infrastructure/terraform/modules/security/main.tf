@@ -86,7 +86,7 @@ resource "google_secret_manager_secret" "keycloak_admin_password" {
 }
 
 resource "google_secret_manager_secret_version" "keycloak_admin_password" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.keycloak_admin_password.id
   secret_data = random_password.keycloak_admin_password.result
 }
@@ -108,7 +108,7 @@ resource "google_secret_manager_secret" "keycloak_db_password" {
 }
 
 resource "google_secret_manager_secret_version" "keycloak_db_password" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.keycloak_db_password.id
   secret_data = random_password.keycloak_db_password.result
 }
@@ -132,7 +132,7 @@ resource "google_secret_manager_secret" "tamshai_db_password" {
 }
 
 resource "google_secret_manager_secret_version" "tamshai_db_password" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.tamshai_db_password.id
   secret_data = random_password.tamshai_db_password.result
 }
@@ -156,7 +156,7 @@ resource "google_secret_manager_secret" "anthropic_api_key" {
 }
 
 resource "google_secret_manager_secret_version" "anthropic_api_key" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.anthropic_api_key.id
   secret_data = var.claude_api_key
 }
@@ -178,7 +178,7 @@ resource "google_secret_manager_secret" "mcp_gateway_client_secret" {
 }
 
 resource "google_secret_manager_secret_version" "mcp_gateway_client_secret" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.mcp_gateway_client_secret.id
   secret_data = random_password.mcp_gateway_client_secret.result
 }
@@ -202,7 +202,7 @@ resource "google_secret_manager_secret" "jwt_secret" {
 }
 
 resource "google_secret_manager_secret_version" "jwt_secret" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.jwt_secret.id
   secret_data = random_password.jwt_secret.result
 }
@@ -460,7 +460,7 @@ resource "google_secret_manager_secret" "mcp_hr_service_client_secret" {
 # preventing "secret version not found" errors during Phoenix rebuild.
 # The value can be updated later after Keycloak is configured with the actual client secret.
 resource "google_secret_manager_secret_version" "mcp_hr_service_client_secret" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.mcp_hr_service_client_secret.id
   secret_data = random_password.mcp_hr_service_client_secret.result
 
@@ -492,7 +492,7 @@ resource "google_secret_manager_secret" "prod_user_password" {
 }
 
 resource "google_secret_manager_secret_version" "prod_user_password" {
-  count       = var.manage_secret_versions ? 1 : 0  # Bug #29: Skip for DR
+  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.prod_user_password.id
   secret_data = var.prod_user_password != "" ? var.prod_user_password : random_password.prod_user_password.result
 
