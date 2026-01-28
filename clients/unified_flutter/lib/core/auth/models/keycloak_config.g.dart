@@ -6,12 +6,13 @@ part of 'keycloak_config.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-_$KeycloakConfigImpl _$$KeycloakConfigImplFromJson(Map<String, dynamic> json) =>
-    _$KeycloakConfigImpl(
+_KeycloakConfig _$KeycloakConfigFromJson(Map<String, dynamic> json) =>
+    _KeycloakConfig(
       issuer: json['issuer'] as String,
       clientId: json['clientId'] as String,
       redirectUrl: json['redirectUrl'] as String,
-      scopes: (json['scopes'] as List<dynamic>?)
+      scopes:
+          (json['scopes'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           const ['openid', 'profile', 'email', 'offline_access'],
@@ -19,8 +20,7 @@ _$KeycloakConfigImpl _$$KeycloakConfigImplFromJson(Map<String, dynamic> json) =>
       endSessionRedirectUrl: json['endSessionRedirectUrl'] as String?,
     );
 
-Map<String, dynamic> _$$KeycloakConfigImplToJson(
-        _$KeycloakConfigImpl instance) =>
+Map<String, dynamic> _$KeycloakConfigToJson(_KeycloakConfig instance) =>
     <String, dynamic>{
       'issuer': instance.issuer,
       'clientId': instance.clientId,
