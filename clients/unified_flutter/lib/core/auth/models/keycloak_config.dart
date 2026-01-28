@@ -12,7 +12,7 @@ part 'keycloak_config.g.dart';
 /// - redirectUrl: OAuth callback URL (for Windows: http://localhost:0/callback)
 /// - scopes: OAuth scopes to request (openid is required, add profile, email as needed)
 @freezed
-class KeycloakConfig with _$KeycloakConfig {
+sealed class KeycloakConfig with _$KeycloakConfig {
   const factory KeycloakConfig({
     required String issuer,
     required String clientId,

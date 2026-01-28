@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:logger/logger.dart';
 
@@ -33,7 +32,7 @@ class BiometricService {
       _logger.d('  - isDeviceSupported: $canAuthenticate');
 
       return canAuthenticateWithBiometrics || canAuthenticate;
-    } on PlatformException catch (e) {
+    } on LocalAuthException catch (e) {
       _logger.e('Error checking biometric availability', error: e);
       return false;
     }
@@ -45,7 +44,7 @@ class BiometricService {
       final biometrics = await _localAuth.getAvailableBiometrics();
       _logger.d('Available biometrics: $biometrics');
       return biometrics;
-    } on PlatformException catch (e) {
+    } on LocalAuthException catch (e) {
       _logger.e('Error getting available biometrics', error: e);
       return [];
     }
@@ -103,54 +102,53 @@ class BiometricService {
     try {
       _logger.i('Requesting biometric authentication');
 
+      // local_auth 3.0: parameters passed directly
       final didAuthenticate = await _localAuth.authenticate(
         localizedReason: reason,
-        options: AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: biometricOnly,
-          useErrorDialogs: true,
-          sensitiveTransaction: true,
-        ),
+        biometricOnly: biometricOnly,
       );
 
       _logger.i('Biometric authentication result: $didAuthenticate');
       return didAuthenticate;
-    } on PlatformException catch (e) {
+    } on LocalAuthException catch (e) {
       _logger.e('Biometric authentication error', error: e);
 
-      if (e.code == 'NotAvailable') {
-        throw BiometricAuthException(
-          'Biometric authentication is not available on this device',
-          code: BiometricErrorCode.notAvailable,
-        );
+      // local_auth 3.0: Use LocalAuthExceptionCode enum for error handling
+      switch (e.code) {
+        case LocalAuthExceptionCode.noBiometricHardware:
+        case LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable:
+          throw BiometricAuthException(
+            'Biometric authentication is not available on this device',
+            code: BiometricErrorCode.notAvailable,
+          );
+        case LocalAuthExceptionCode.noBiometricsEnrolled:
+        case LocalAuthExceptionCode.noCredentialsSet:
+          throw BiometricAuthException(
+            'No biometrics enrolled on this device',
+            code: BiometricErrorCode.notEnrolled,
+          );
+        case LocalAuthExceptionCode.temporaryLockout:
+          throw BiometricAuthException(
+            'Biometric authentication is locked due to too many attempts',
+            code: BiometricErrorCode.lockedOut,
+          );
+        case LocalAuthExceptionCode.biometricLockout:
+          throw BiometricAuthException(
+            'Biometric authentication is permanently locked',
+            code: BiometricErrorCode.permanentlyLockedOut,
+          );
+        case LocalAuthExceptionCode.userCanceled:
+          throw BiometricAuthException(
+            'Authentication cancelled by user',
+            code: BiometricErrorCode.cancelled,
+          );
+        default:
+          throw BiometricAuthException(
+            'Biometric authentication failed: ${e.description}',
+            code: BiometricErrorCode.unknown,
+            originalError: e,
+          );
       }
-
-      if (e.code == 'NotEnrolled') {
-        throw BiometricAuthException(
-          'No biometrics enrolled on this device',
-          code: BiometricErrorCode.notEnrolled,
-        );
-      }
-
-      if (e.code == 'LockedOut') {
-        throw BiometricAuthException(
-          'Biometric authentication is locked due to too many attempts',
-          code: BiometricErrorCode.lockedOut,
-        );
-      }
-
-      if (e.code == 'PermanentlyLockedOut') {
-        throw BiometricAuthException(
-          'Biometric authentication is permanently locked',
-          code: BiometricErrorCode.permanentlyLockedOut,
-        );
-      }
-
-      throw BiometricAuthException(
-        'Biometric authentication failed: ${e.message}',
-        code: BiometricErrorCode.unknown,
-        originalError: e,
-      );
     }
   }
 

@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.29.0'  # Dart 3.7+ required for flutter_appauth ^11.0.0
+  FLUTTER_VERSION: '3.38.0'  # Dart 3.7+ required for flutter_appauth ^11.0.0
 
 permissions:
   contents: read
@@ -65,7 +65,7 @@ jobs:
         run: flutter build web --release
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: flutter-web-build
           path: clients/unified_flutter/build/web

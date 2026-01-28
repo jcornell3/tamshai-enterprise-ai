@@ -98,7 +98,7 @@ jobs:
 
       - name: Upload type coverage report
         if: matrix.node-version == '20'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: type-coverage
           path: services/mcp-gateway/type-coverage.txt
@@ -177,11 +177,15 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2
         with:
+          flutter-version: '3.38.0'
           channel: 'stable'
           cache: true
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Generate code (Freezed, JSON serialization)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Analyze code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
@@ -999,7 +1003,7 @@ jobs:
           CI: true
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
         with:
           name: playwright-report
@@ -1133,7 +1137,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload k6 results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         if: always()
         with:
           name: k6-results
@@ -1173,7 +1177,7 @@ jobs:
           output-file: sbom.cdx.json
 
       - name: Scan SBOM for vulnerabilities
-        uses: anchore/scan-action@64a33b277ea7a1215a3c142735a1091341939ff5 # v4
+        uses: anchore/scan-action@62b74fb7bb810d2c45b1865f47a77655621862a5 # v4
         id: scan
         with:
           sbom: sbom.spdx.json
@@ -1181,7 +1185,7 @@ jobs:
           severity-cutoff: critical
 
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: sbom
           path: |

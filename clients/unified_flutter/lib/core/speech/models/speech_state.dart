@@ -4,7 +4,7 @@ part 'speech_state.freezed.dart';
 
 /// Speech recognition state (v1.5 Voice Input)
 @freezed
-class SpeechState with _$SpeechState {
+abstract class SpeechState with _$SpeechState {
   const factory SpeechState({
     /// Whether speech recognition is available on this device
     @Default(false) bool isAvailable,
