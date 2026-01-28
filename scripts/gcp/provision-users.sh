@@ -103,7 +103,11 @@ fi
 
 # Build substitutions
 # Issue #32: Include _REGION in substitutions (required by cloudbuild-provision-users.yaml)
-REGION="${GCP_REGION:-us-central1}"
+REGION="${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}"
+if [[ -z "$REGION" ]]; then
+    echo -e "${RED}[ERROR] GCP_REGION not set. Set GCP_REGION env var or configure gcloud: gcloud config set compute/region <REGION>${NC}"
+    exit 1
+fi
 SUBSTITUTIONS="_ACTION=${ACTION}"
 SUBSTITUTIONS="${SUBSTITUTIONS},_DRY_RUN=${DRY_RUN}"
 SUBSTITUTIONS="${SUBSTITUTIONS},_FORCE_PASSWORD_RESET=${FORCE_PASSWORD_RESET}"

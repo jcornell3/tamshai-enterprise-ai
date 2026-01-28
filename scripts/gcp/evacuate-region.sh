@@ -7,7 +7,7 @@
 # Uses the "Amnesia" approach: creates a fresh Terraform state in the target
 # region, bypassing the unreachable primary region entirely.
 #
-# This script is designed for scenarios where us-central1 is completely
+# This script is designed for scenarios where the primary region is completely
 # unavailable and terraform destroy/apply would hang.
 #
 # Usage:
@@ -15,7 +15,7 @@
 #
 # Options:
 #   --yes, -y           Skip interactive confirmations (for automated runs)
-#   --region=REGION     Target region (default: from dr.tfvars or us-west1)
+#   --region=REGION     Target region (default: from dr.tfvars)
 #   --zone=ZONE         Target zone (default: from dr.tfvars or REGION-b)
 #   --env-id=ID         Environment ID (default: recovery-YYYYMMDD-HHMM)
 #   --tfvars=FILE       Use custom tfvars file (default: environments/dr.tfvars)
@@ -31,16 +31,13 @@
 #   GCP_SA_*, GCP_SECRET_*           - Override service account/secret names
 #
 # Examples:
-#   ./evacuate-region.sh                                    # Uses dr.tfvars defaults
-#   ./evacuate-region.sh us-west1 us-west1-b recovery-01    # Specific region and ID
-#   ./evacuate-region.sh us-east1 us-east1-b                # East coast, auto-generated ID
-#   ./evacuate-region.sh --yes us-west1 us-west1-b test-01  # Skip confirmation
-#   GCP_DR_REGION=us-east1 ./evacuate-region.sh             # Override via env var
+#   ./evacuate-region.sh                                        # Uses dr.tfvars defaults
+#   ./evacuate-region.sh <REGION> <ZONE> recovery-01            # Specific region and ID
+#   ./evacuate-region.sh --yes <REGION> <ZONE> test-01          # Skip confirmation
+#   GCP_DR_REGION=<REGION> ./evacuate-region.sh                 # Override via env var
 #
-# Priority Regions (same cost as us-central1):
-#   1. us-west1 (Oregon)    - Recommended: No hurricane risk, closest to CA team
-#   2. us-east1 (S. Carolina) - Hurricane zone (June-Nov)
-#   3. us-east5 (Ohio)       - Newer region
+# DR region and fallback zones are configured in dr.tfvars.
+# Primary region is configured in prod.tfvars.
 #
 # See: docs/plans/GCP-REGION-FAILURE-SCENARIO.md
 # =============================================================================
@@ -60,7 +57,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # =============================================================================
 
 # Default GCP configuration (needed by libraries)
-export GCP_REGION="${GCP_REGION:-us-central1}"
+# GCP_REGION is the primary region — loaded from prod.tfvars or GCP_REGION env var.
+# Temporary default for library sourcing; overridden by load_tfvars_config() below.
+export GCP_REGION="${GCP_REGION:-}"
 export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
 export GCP_PROJECT_ID="${GCP_PROJECT_ID:-${GCP_PROJECT}}"
 
@@ -103,27 +102,48 @@ TFVARS_DIR="$TF_DIR/environments"
 # =============================================================================
 
 load_tfvars_config() {
-    local tfvars_file="${TFVARS_DIR}/dr.tfvars"
+    local dr_tfvars="${TFVARS_DIR}/dr.tfvars"
+    local prod_tfvars="${TFVARS_DIR}/prod.tfvars"
 
-    if [ ! -f "$tfvars_file" ]; then
-        log_warn "DR tfvars not found: $tfvars_file"
+    # ── Load primary region from prod.tfvars ──
+    # The primary region must come from configuration, not hardcoded.
+    if [ -f "$prod_tfvars" ]; then
+        TFVAR_PRIMARY_REGION=$(get_tfvar "region" "$prod_tfvars" 2>/dev/null || echo "")
+        if [[ -n "$TFVAR_PRIMARY_REGION" ]]; then
+            log_info "Primary region from prod.tfvars: $TFVAR_PRIMARY_REGION"
+        fi
+    fi
+
+    # Set PRIMARY_REGION: env var > prod.tfvars (no hardcoded fallback)
+    PRIMARY_REGION="${GCP_REGION:-${TFVAR_PRIMARY_REGION:-}}"
+    export GCP_REGION="${PRIMARY_REGION}"
+
+    if [[ -z "$PRIMARY_REGION" ]]; then
+        log_error "PRIMARY_REGION not set. Set GCP_REGION env var or check prod.tfvars"
+        return 1
+    fi
+    log_info "Primary region: $PRIMARY_REGION"
+
+    # ── Load DR configuration from dr.tfvars ──
+    if [ ! -f "$dr_tfvars" ]; then
+        log_warn "DR tfvars not found: $dr_tfvars"
         log_info "Using default configuration values"
         return 1
     fi
 
-    log_info "Loading configuration from: $tfvars_file"
+    log_info "Loading DR configuration from: $dr_tfvars"
 
     # Load region configuration
-    TFVAR_REGION=$(get_tfvar "region" "$tfvars_file" 2>/dev/null || echo "")
-    TFVAR_ZONE=$(get_tfvar "zone" "$tfvars_file" 2>/dev/null || echo "")
-    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
-    TFVAR_APP_DOMAIN=$(get_tfvar "app_domain" "$tfvars_file" 2>/dev/null || echo "")
-    TFVAR_API_DOMAIN=$(get_tfvar "api_domain" "$tfvars_file" 2>/dev/null || echo "")
-    TFVAR_BACKUP_BUCKET=$(get_tfvar "source_backup_bucket" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_REGION=$(get_tfvar "region" "$dr_tfvars" 2>/dev/null || echo "")
+    TFVAR_ZONE=$(get_tfvar "zone" "$dr_tfvars" 2>/dev/null || echo "")
+    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$dr_tfvars" 2>/dev/null || echo "")
+    TFVAR_APP_DOMAIN=$(get_tfvar "app_domain" "$dr_tfvars" 2>/dev/null || echo "")
+    TFVAR_API_DOMAIN=$(get_tfvar "api_domain" "$dr_tfvars" 2>/dev/null || echo "")
+    TFVAR_BACKUP_BUCKET=$(get_tfvar "source_backup_bucket" "$dr_tfvars" 2>/dev/null || echo "")
 
     # Load fallback zones (Issue #102: Zone capacity resilience)
-    # Format in tfvars: fallback_zones = ["us-west1-a", "us-west1-c"]
-    TFVAR_FALLBACK_ZONES=$(grep -E '^fallback_zones\s*=' "$tfvars_file" 2>/dev/null | \
+    # Format in tfvars: fallback_zones = ["<region>-a", "<region>-c"]
+    TFVAR_FALLBACK_ZONES=$(grep -E '^fallback_zones\s*=' "$dr_tfvars" 2>/dev/null | \
         sed 's/.*=\s*//' | tr -d '[]"' | tr ',' ' ' || echo "")
 
     return 0
@@ -159,9 +179,13 @@ if [ ${#POSITIONAL_ARGS[@]} -ge 3 ]; then ENV_ID="${POSITIONAL_ARGS[2]}"; fi
 # Load tfvars configuration (provides defaults for values not set via CLI)
 load_tfvars_config || true
 
-# Apply configuration priority: CLI args > Environment vars > tfvars > hardcoded defaults
-# Region: CLI > GCP_DR_REGION env > tfvars > us-west1
-NEW_REGION="${NEW_REGION:-${GCP_DR_REGION:-${TFVAR_REGION:-us-west1}}}"
+# Apply configuration priority: CLI args > Environment vars > tfvars
+# Region: CLI > GCP_DR_REGION env > tfvars (required — no hardcoded default)
+NEW_REGION="${NEW_REGION:-${GCP_DR_REGION:-${TFVAR_REGION:-}}}"
+if [[ -z "$NEW_REGION" ]]; then
+    echo "ERROR: DR region not set. Specify via CLI arg, GCP_DR_REGION env var, or dr.tfvars" >&2
+    exit 1
+fi
 # Zone: CLI > GCP_DR_ZONE env > tfvars > region-b
 NEW_ZONE="${NEW_ZONE:-${GCP_DR_ZONE:-${TFVAR_ZONE:-${NEW_REGION}-b}}}"
 # Keycloak domain: CLI > KEYCLOAK_DR_DOMAIN env > tfvars > auth-dr.tamshai.com
@@ -208,13 +232,8 @@ if [ -n "$GCP_DR_FALLBACK_ZONES" ]; then
 elif [ -n "$TFVAR_FALLBACK_ZONES" ]; then
     FALLBACK_ZONES="$TFVAR_FALLBACK_ZONES"
 else
-    # Default fallback zones based on region
-    case "$NEW_REGION" in
-        us-west1)  FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-c" ;;
-        us-east1)  FALLBACK_ZONES="${NEW_REGION}-b ${NEW_REGION}-c ${NEW_REGION}-d" ;;
-        us-east5)  FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-b ${NEW_REGION}-c" ;;
-        *)         FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-c" ;;
-    esac
+    # Generic fallback: try zones a and c (most regions have these)
+    FALLBACK_ZONES="${NEW_REGION}-a ${NEW_REGION}-c"
 fi
 
 # Colors and logging (fallback if common.sh not loaded)
@@ -421,59 +440,157 @@ confirm_evacuation() {
 # =============================================================================
 # PRE-CLEANUP: REMOVE LEFTOVER RESOURCES FROM FAILED ATTEMPTS
 # =============================================================================
-# Uses the common cleanup library (lib/cleanup.sh) to remove any leftover GCP
-# resources from previous failed evacuation attempts.
+# Bug #16: Scans for leftovers from ANY previous evacuation attempt, not just
+# the current ENV_ID. Each DR run gets a unique timestamp-based ENV_ID, so
+# previous runs leave orphans with different suffixes.
 #
-# This is necessary because:
-# 1. Terraform may have created some resources before failing
-# 2. The fresh state file doesn't know about these orphaned resources
-# 3. Re-running terraform apply will fail with "already exists" errors
+# Two categories of leftovers:
+#   1. Cloud Run services — NO suffix, same names across all DR attempts.
+#      Always collide, must always be cleaned up.
+#   2. Suffixed resources (VPC, Cloud SQL, routers, etc.) — unique per ENV_ID.
+#      Detected by scanning for recovery VPC pattern, cleaned up per-ENV_ID.
 #
-# The library function handles all resource types in the correct dependency order.
+# Uses cleanup_recovery_resources() (recovery-safe) which omits shared
+# resources (storage buckets, secrets, artifact registry).
 # =============================================================================
 
 run_cleanup_leftover_resources() {
     log_phase "0.5" "PRE-CLEANUP: REMOVE LEFTOVER RESOURCES"
 
-    local name_suffix="-${ENV_ID}"
+    # Save current ENV_ID — the loop in Step 3 temporarily overrides it
+    local current_env_id="${ENV_ID}"
 
-    # Set up environment for library functions
-    # NAME_PREFIX includes suffix for VPC naming: tamshai-prod-recovery-xxx
-    # ENV_ID is just the ID part: recovery-xxx
-    export NAME_PREFIX="tamshai-prod${name_suffix}"
+    # Set up base environment for library functions
     export RESOURCE_PREFIX="tamshai-prod"
-    export ENV_ID="${ENV_ID}"
     export GCP_REGION="${NEW_REGION}"
     export GCP_PROJECT="${PROJECT_ID}"
     export REGION="${NEW_REGION}"
     export PROJECT="${PROJECT_ID}"
 
-    log_info "Cleanup configuration:"
-    log_info "  NAME_PREFIX: $NAME_PREFIX"
-    log_info "  ENV_ID: $ENV_ID"
-    log_info "  name_suffix: $name_suffix"
-    log_info "  FALLBACK_ZONES: $FALLBACK_ZONES"
+    local found_leftovers=false
 
-    # Call the library function
-    # Arguments: name_suffix, state_bucket, state_prefix, fallback_zones
-    # Issue #102: Pass fallback zones for comprehensive instance cleanup across zones
-    if type cleanup_leftover_resources &>/dev/null; then
-        cleanup_leftover_resources "$name_suffix" "$STATE_BUCKET" "gcp/recovery/${ENV_ID}" "$FALLBACK_ZONES" || {
-            log_error "Cleanup failed - cannot proceed with evacuation"
-            exit 1
-        }
+    # ── Step 1: Clean up Cloud Run services in recovery region ──
+    # Cloud Run services have NO suffix — same names (keycloak, mcp-hr, etc.)
+    # across all DR attempts. If a previous run created them, this run's
+    # terraform create will fail with "already exists".
+    #
+    # Safety: skip if recovery region == primary region (same-region DR would
+    # delete production services).
+    if [[ "${NEW_REGION}" == "${PRIMARY_REGION}" ]]; then
+        log_warn "Recovery region matches primary (${PRIMARY_REGION}) — skipping Cloud Run cleanup"
+        log_warn "Same-region DR: Cloud Run services will be imported by terraform"
     else
-        log_error "cleanup_leftover_resources function not found - is lib/cleanup.sh loaded?"
-        log_error "Falling back to manual VPC check only..."
+        log_step "Checking for leftover Cloud Run services in ${NEW_REGION}..."
+        local leftover_services
+        leftover_services=$(gcloud run services list --region="${NEW_REGION}" \
+            --project="${PROJECT_ID}" --format="value(SERVICE)" 2>/dev/null || true)
 
-        local vpc_name="${NAME_PREFIX}-vpc"
-        if gcloud compute networks describe "$vpc_name" --project="$PROJECT_ID" &>/dev/null; then
-            log_error "Found leftover VPC: $vpc_name"
-            log_error "Library not loaded - cannot clean up automatically"
-            log_error "Please ensure lib/cleanup.sh is available and re-run"
-            exit 1
+        if [[ -n "$leftover_services" ]]; then
+            found_leftovers=true
+            log_warn "Found leftover Cloud Run services in ${NEW_REGION}:"
+            echo "$leftover_services" | while read -r svc; do
+                log_info "  - $svc"
+            done
+            log_step "Deleting leftover Cloud Run services..."
+            delete_cloudrun_services
+            log_info "Waiting for DB connections to close..."
+            sleep 5
+        else
+            log_info "No leftover Cloud Run services in ${NEW_REGION}"
         fi
-        log_info "No leftover VPC found - environment is clean"
+    fi
+
+    # ── Step 2: Always clean up Cloud Run jobs in recovery region ──
+    log_step "Checking for leftover Cloud Run jobs..."
+    local leftover_jobs
+    leftover_jobs=$(gcloud run jobs list --region="${NEW_REGION}" \
+        --project="${PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -E "provision" || true)
+
+    if [[ -n "$leftover_jobs" ]]; then
+        found_leftovers=true
+        log_warn "Found leftover Cloud Run jobs — deleting..."
+        # Delete jobs for any suffix pattern
+        delete_cloud_run_jobs ""
+    fi
+
+    # ── Step 3: Find ALL recovery VPCs (any ENV_ID, not just current) ──
+    log_step "Scanning for leftover recovery VPCs..."
+    local recovery_vpcs
+    recovery_vpcs=$(gcloud compute networks list --project="${PROJECT_ID}" \
+        --filter="name~tamshai-prod-recovery-" \
+        --format="value(name)" 2>/dev/null || true)
+
+    if [[ -n "$recovery_vpcs" ]]; then
+        found_leftovers=true
+        log_warn "Found leftover recovery VPCs:"
+        echo "$recovery_vpcs" | while read -r vpc; do
+            log_info "  - $vpc"
+        done
+
+        # Clean up each previous run's suffixed resources
+        while IFS= read -r vpc_name; do
+            # Extract suffix: tamshai-prod-recovery-YYYYMMDD-HHMM-vpc → -recovery-YYYYMMDD-HHMM
+            local old_suffix old_env_id
+            old_suffix=$(echo "$vpc_name" | sed 's/^tamshai-prod\(.*\)-vpc$/\1/')
+            old_env_id=$(echo "$old_suffix" | sed 's/^-//')
+
+            log_step "Cleaning up leftovers from previous run: $old_env_id"
+
+            # Set environment for this specific run's cleanup
+            export NAME_PREFIX="tamshai-prod${old_suffix}"
+            export ENV_ID="$old_env_id"
+
+            # cleanup_recovery_resources handles: Cloud SQL → VPC peering →
+            # private IP → NAT/Router → VPC connector → GCE → firewall →
+            # subnets → routes → VPC. Omits shared resources.
+            cleanup_recovery_resources "$old_suffix" || {
+                log_error "Cleanup failed for $old_env_id — cannot proceed"
+                exit 1
+            }
+
+            # Clean up terraform state lock for this previous run
+            if [[ -n "$STATE_BUCKET" ]]; then
+                cleanup_terraform_state_lock "$STATE_BUCKET" "gcp/recovery/$old_env_id" 2>/dev/null || true
+            fi
+        done <<< "$recovery_vpcs"
+    else
+        log_info "No leftover recovery VPCs found"
+    fi
+
+    # ── Step 4: Check for orphaned Cloud SQL without a VPC ──
+    # A partial failure may have created Cloud SQL but not VPC
+    log_step "Checking for orphaned recovery Cloud SQL instances..."
+    local orphaned_sql
+    orphaned_sql=$(gcloud sql instances list --project="${PROJECT_ID}" \
+        --filter="name~tamshai-prod-postgres-recovery-" \
+        --format="value(name)" 2>/dev/null || true)
+
+    if [[ -n "$orphaned_sql" ]]; then
+        while IFS= read -r sql_name; do
+            # Skip if already cleaned up by Step 3 (check if it still exists)
+            if ! gcloud sql instances describe "$sql_name" --project="${PROJECT_ID}" &>/dev/null 2>&1; then
+                continue
+            fi
+            found_leftovers=true
+            log_warn "Found orphaned Cloud SQL: $sql_name — deleting..."
+            # Extract suffix for deletion protection toggle
+            local sql_suffix
+            sql_suffix=$(echo "$sql_name" | sed "s/^tamshai-prod-postgres//")
+            disable_cloudsql_deletion_protection "$sql_suffix" 2>/dev/null || true
+            gcloud sql instances delete "$sql_name" --project="${PROJECT_ID}" --quiet 2>/dev/null || {
+                log_warn "Failed to delete $sql_name — may need manual cleanup"
+            }
+        done <<< "$orphaned_sql"
+    fi
+
+    # ── Restore environment for current run ──
+    export NAME_PREFIX="tamshai-prod-${current_env_id}"
+    export ENV_ID="${current_env_id}"
+
+    if [[ "$found_leftovers" == "true" ]]; then
+        log_success "Pre-cleanup complete — leftover resources removed"
+    else
+        log_info "No leftover resources found — environment is clean"
     fi
 }
 
@@ -579,15 +696,15 @@ phase1_init_state() {
 # =============================================================================
 # PHASE 1.5: REPLICATE CONTAINER IMAGES TO RECOVERY REGION
 # =============================================================================
-# Artifact Registry is regional, so images built for us-central1 are not available
-# in us-west1. We must copy images from the primary region to the recovery region
-# before deploying Cloud Run services.
+# Artifact Registry is regional, so images built for the primary region are not
+# available in the recovery region. We must copy images from the primary region
+# to the recovery region before deploying Cloud Run services.
 # =============================================================================
 
 phase1_5_replicate_images() {
     log_phase "1.5" "REPLICATE CONTAINER IMAGES TO RECOVERY REGION"
 
-    local PRIMARY_REGION="${GCP_REGION:-us-central1}"  # Where images currently exist
+    # PRIMARY_REGION is set by load_tfvars_config() from prod.tfvars or GCP_REGION env
     local SOURCE_REGISTRY="${PRIMARY_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai"
     local TARGET_REGISTRY="${NEW_REGION}-docker.pkg.dev/${PROJECT_ID}/tamshai"
 
@@ -867,9 +984,8 @@ copy_image_via_docker() {
     local target=$2
 
     # Configure docker for Artifact Registry (both source and target regions)
-    local primary_region="${GCP_REGION:-us-central1}"
-    log_info "    Configuring docker for ${primary_region}-docker.pkg.dev..."
-    gcloud auth configure-docker "${primary_region}-docker.pkg.dev" --quiet 2>/dev/null || true
+    log_info "    Configuring docker for ${PRIMARY_REGION}-docker.pkg.dev..."
+    gcloud auth configure-docker "${PRIMARY_REGION}-docker.pkg.dev" --quiet 2>/dev/null || true
     log_info "    Configuring docker for ${NEW_REGION}-docker.pkg.dev..."
     gcloud auth configure-docker "${NEW_REGION}-docker.pkg.dev" --quiet 2>/dev/null || true
 
@@ -930,7 +1046,7 @@ phase2_deploy_infrastructure() {
 
     # Common vars for all terraform commands
     # NOTE: keycloak_domain must use DR domain (e.g., auth-dr.tamshai.com) for recovery mode
-    # because domain mappings are region-bound (auth.tamshai.com is bound to us-central1)
+    # because domain mappings are region-bound (auth.tamshai.com is bound to the primary region)
     local TF_VARS=(
         -var="region=$NEW_REGION"
         -var="zone=$NEW_ZONE"
@@ -1263,7 +1379,7 @@ phase4_deploy_services() {
 
     # =========================================================================
     # Bug #10 fix: Deploy-to-gcp.yml workflow does not accept a "region" input
-    # and hardcodes vars.GCP_REGION (us-central1) for all operations.
+    # and hardcodes vars.GCP_REGION (primary region) for all operations.
     # In DR, services are already deployed by Phase 2 Terraform with correct
     # images (built in Phase 1.5), env vars, and service accounts.
     # Phase 4 now verifies services are healthy instead of re-deploying.

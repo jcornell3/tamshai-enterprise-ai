@@ -31,7 +31,7 @@ substitutions:
   _ACTION: 'verify-only'  # verify-only, load-hr-data, sync-users, all
   _DRY_RUN: 'false'
   _FORCE_PASSWORD_RESET: 'false'
-  _REGION: 'us-central1'  # Default region, can override via --substitutions
+  _REGION: ''  # REQUIRED: Must be provided via --substitutions (no hardcoded default)
   # Issue #32 Fix: Cannot use ${_REGION} in substitution defaults - construct in steps instead
   _KEYCLOAK_URL: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth'
   _KEYCLOAK_REALM: 'tamshai-corp'

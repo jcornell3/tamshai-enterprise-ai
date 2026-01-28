@@ -57,7 +57,7 @@ log_step() {
 }
 
 # Log informational message
-# Usage: log_info "Region: us-central1"
+# Usage: log_info "Region: ${GCP_REGION}"
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -117,7 +117,7 @@ get_project_id() {
 # Get default region from environment or gcloud config
 # Usage: REGION=$(get_default_region)
 get_default_region() {
-    echo "${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "us-central1")}"
+    echo "${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}"
 }
 
 # =============================================================================

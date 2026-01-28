@@ -45,7 +45,7 @@ log_health_error() { echo -e "${RED}[health]${NC} $1"; }
 # Default values
 DEFAULT_TIMEOUT=300
 DEFAULT_INTERVAL=10
-GCP_REGION="${GCP_REGION:-us-central1}"
+GCP_REGION="${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}"
 
 # Configurable defaults (Issue #102)
 KEYCLOAK_DOMAIN="${KEYCLOAK_DOMAIN:-auth.tamshai.com}"
