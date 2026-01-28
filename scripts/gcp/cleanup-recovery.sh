@@ -53,7 +53,7 @@ if [ -f "$SCRIPT_DIR/lib/common.sh" ]; then
     source "$SCRIPT_DIR/lib/common.sh" 2>/dev/null || true
 fi
 
-# Note: cleanup.sh will be sourced in terraform_destroy after GCP_REGION is set
+# Note: cleanup.sh will be sourced in terraform_destroy after GCP_DR_REGION is set
 
 # =============================================================================
 # CONFIGURATION
@@ -404,8 +404,9 @@ terraform_destroy() {
 
     # =============================================================================
     # Configure cleanup library environment variables
+    # Bug #20: Use GCP_DR_REGION (not GCP_REGION) to prevent accidentally acting on production
     # =============================================================================
-    export GCP_REGION="${RECOVERY_REGION}"
+    export GCP_DR_REGION="${RECOVERY_REGION}"
     export GCP_PROJECT="${PROJECT_ID}"
     export NAME_PREFIX="tamshai-prod-${ENV_ID}"
     export RESOURCE_PREFIX="tamshai-prod"
