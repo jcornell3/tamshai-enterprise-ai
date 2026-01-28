@@ -316,6 +316,51 @@ terraform_destroy() {
         -backend-config="prefix=gcp/recovery/${ENV_ID}" \
         -input=false
 
+    # =========================================================================
+    # STALE STATE DETECTION (Bug #17)
+    # =========================================================================
+    # Old DR runs may have imported production resources into recovery state.
+    # If no actual recovery GCP resources exist (VPC or Cloud SQL with the
+    # ENV_ID suffix), this is a stale state — just delete it and skip destroy.
+    # =========================================================================
+    log_step "Checking for actual recovery GCP resources..."
+    local recovery_vpc="tamshai-prod-${ENV_ID}-vpc"
+    local recovery_sql="tamshai-prod-postgres-${ENV_ID}"
+    local has_recovery_vpc=false
+    local has_recovery_sql=false
+
+    if gcloud compute networks describe "$recovery_vpc" --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        has_recovery_vpc=true
+        log_info "Found recovery VPC: $recovery_vpc"
+    fi
+
+    if gcloud sql instances describe "$recovery_sql" --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        has_recovery_sql=true
+        log_info "Found recovery Cloud SQL: $recovery_sql"
+    fi
+
+    if [[ "$has_recovery_vpc" == "false" && "$has_recovery_sql" == "false" ]]; then
+        log_warn "════════════════════════════════════════════════════════════════════"
+        log_warn "STALE STATE DETECTED (Bug #17)"
+        log_warn "════════════════════════════════════════════════════════════════════"
+        log_warn "No recovery GCP resources found for ENV_ID: $ENV_ID"
+        log_warn "This state likely contains production resources imported by a buggy DR run."
+        log_warn "Deleting stale terraform state (no terraform destroy needed)..."
+        echo ""
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "DRY RUN: Would delete state at gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/"
+            return 0
+        fi
+
+        # Delete the stale state file
+        gcloud storage rm -r "gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/" 2>/dev/null || {
+            log_warn "Failed to delete state — may need manual cleanup"
+        }
+        log_success "Stale state deleted for $ENV_ID"
+        return 0
+    fi
+
     log_step "Planning destruction..."
 
     # Note: TF_ARGS is global (not local) so cleanup_networking_resources can access it
