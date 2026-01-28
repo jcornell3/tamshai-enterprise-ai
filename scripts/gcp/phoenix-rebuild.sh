@@ -37,6 +37,11 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Bug #20 SAFETY: Unset GCP_DR_REGION to ensure phoenix NEVER uses a DR region.
+# This protects against accidental cross-contamination if user ran a DR script
+# earlier in the same shell session.
+unset GCP_DR_REGION
+
 # Default GCP configuration (resolved from prod.tfvars or GCP_REGION env var below)
 export GCP_REGION="${GCP_REGION:-}"
 

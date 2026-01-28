@@ -12,8 +12,13 @@
 #   wait_for_ssl_certificate "auth-dr.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration"
 #
 # Required environment variables:
-#   GCP_REGION  - GCP region (from GitHub variable / tfvars)
-#   GCP_PROJECT - GCP project ID
+#   GCP_DR_REGION - DR target region (for DR scripts)
+#   GCP_REGION    - Production region (for phoenix-rebuild.sh)
+#   GCP_PROJECT   - GCP project ID
+#
+# SAFETY (Bug #20): GCP_DR_REGION takes priority over GCP_REGION.
+#   - DR scripts set GCP_DR_REGION → uses DR region
+#   - Production scripts set GCP_REGION → uses production region
 #
 # Optional configuration variables:
 #   KEYCLOAK_DOMAIN - Keycloak domain (default: auth.tamshai.com)
@@ -25,12 +30,23 @@
 # Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
 set -eo pipefail
 
-# Required environment variables
-: "${GCP_REGION:?ERROR: GCP_REGION environment variable must be set}"
-: "${GCP_PROJECT:?ERROR: GCP_PROJECT environment variable must be set}"
+# Bug #20: Defer region check. GCP_DR_REGION takes priority over GCP_REGION.
+REGION="${GCP_DR_REGION:-${GCP_REGION:-}}"
+PROJECT="${GCP_PROJECT:-}"
 
-REGION="$GCP_REGION"
-PROJECT="$GCP_PROJECT"
+# Validate at function call time, not source time
+_ensure_domain_env() {
+    if [[ -z "${GCP_DR_REGION:-}" && -z "${GCP_REGION:-}" ]]; then
+        log_error "Either GCP_DR_REGION (DR) or GCP_REGION (prod) must be set"
+        return 1
+    fi
+    if [[ -z "${GCP_PROJECT:-}" ]]; then
+        log_error "GCP_PROJECT must be set"
+        return 1
+    fi
+    REGION="${GCP_DR_REGION:-${GCP_REGION}}"
+    PROJECT="$GCP_PROJECT"
+}
 
 # Configurable defaults (Issue #102)
 KEYCLOAK_DOMAIN="${KEYCLOAK_DOMAIN:-auth.tamshai.com}"

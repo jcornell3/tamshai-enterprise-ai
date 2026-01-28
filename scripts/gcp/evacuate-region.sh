@@ -464,8 +464,10 @@ run_cleanup_leftover_resources() {
     local current_env_id="${ENV_ID}"
 
     # Set up base environment for library functions
+    # Bug #20: Use GCP_DR_REGION (not GCP_REGION) to prevent DR scripts
+    # from accidentally acting on production. NEW_REGION is the DR region.
     export RESOURCE_PREFIX="tamshai-prod"
-    export GCP_REGION="${NEW_REGION}"
+    export GCP_DR_REGION="${NEW_REGION}"
     export GCP_PROJECT="${PROJECT_ID}"
     export REGION="${NEW_REGION}"
     export PROJECT="${PROJECT_ID}"
@@ -841,20 +843,17 @@ phase1_5_replicate_images() {
             # Source exists, try to copy
 
             # Try gcrane first (fastest, preserves manifests)
+            # Bug #21: Skip Docker fallback - go straight to Cloud Build if gcrane fails.
+            # Docker requires local daemon which may not be available in DR scenarios.
             if command -v gcrane &>/dev/null; then
                 if gcrane copy "$source_image" "$target_image" 2>/dev/null; then
                     log_success "    Copied via gcrane"
                     copy_success=true
                 else
-                    log_warn "    gcrane copy failed, trying docker method..."
+                    log_info "    gcrane not available or copy failed, will rebuild via Cloud Build..."
                 fi
-            fi
-
-            # Fallback to docker pull/tag/push
-            if [ "$copy_success" = false ]; then
-                if copy_image_via_docker "$source_image" "$target_image"; then
-                    copy_success=true
-                fi
+            else
+                log_info "    gcrane not installed, will rebuild via Cloud Build..."
             fi
         else
             log_warn "    Source image not found, will attempt rebuild..."
@@ -1406,27 +1405,23 @@ phase2_deploy_infrastructure() {
 }
 
 # =============================================================================
-# PHASE 3: REGENERATE SERVICE ACCOUNT KEY
+# PHASE 3: REMOVED - Bug #23 fix
 # =============================================================================
-
-phase3_regenerate_key() {
-    log_phase "3" "REGENERATE SERVICE ACCOUNT KEY"
-
-    local sa_email="${SA_CICD}@${PROJECT_ID}.iam.gserviceaccount.com"
-    local key_file="/tmp/recovery-key-$$.json"
-
-    log_step "Creating new CICD service account key for ${SA_CICD}..."
-    gcloud iam service-accounts keys create "$key_file" \
-        --iam-account="$sa_email"
-
-    log_step "Updating GitHub secret GCP_SA_KEY_PROD..."
-    gh secret set GCP_SA_KEY_PROD < "$key_file"
-
-    # Secure cleanup
-    rm -f "$key_file"
-
-    log_success "Service account key regenerated and synced to GitHub"
-}
+#
+# Phase 3 (regenerate SA key) was REMOVED because it operated on SHARED
+# PRODUCTION infrastructure:
+#
+#   - tamshai-prod-cicd service account is project-level (not region-specific)
+#   - GCP_SA_KEY_PROD GitHub secret is used by PRODUCTION workflows
+#   - The existing key works for ANY region - no regeneration needed for DR
+#   - Deleting/rotating keys during DR could break production deployments
+#
+# DR operations must NEVER touch production. The CICD SA key is production
+# infrastructure that happens to work for DR too.
+#
+# If SA key rotation is needed (compromise, expiry), use a SEPARATE manual
+# process with explicit production impact warnings.
+# =============================================================================
 
 # =============================================================================
 # PHASE 4: DEPLOY CLOUD RUN SERVICES
@@ -1747,7 +1742,7 @@ main() {
     phase1_init_state
     phase1_5_replicate_images
     phase2_deploy_infrastructure
-    phase3_regenerate_key
+    # Phase 3 REMOVED (Bug #23) - SA key is shared production infrastructure
     phase4_deploy_services
     phase5_configure_users
     phase6_verify
