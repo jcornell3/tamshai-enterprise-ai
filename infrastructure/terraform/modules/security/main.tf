@@ -91,8 +91,9 @@ resource "google_secret_manager_secret_version" "keycloak_admin_password" {
   secret_data = random_password.keycloak_admin_password.result
 }
 
+# Bug #30: Add name_suffix for DR - each Cloud SQL instance needs its own DB password secret
 resource "google_secret_manager_secret" "keycloak_db_password" {
-  secret_id = "tamshai-${var.environment}-keycloak-db-password"
+  secret_id = "tamshai-${var.environment}-keycloak-db-password${var.name_suffix}"
   project   = var.project_id
 
   replication {
@@ -102,21 +103,24 @@ resource "google_secret_manager_secret" "keycloak_db_password" {
   labels = {
     environment = var.environment
     service     = "keycloak"
+    env-id      = var.name_suffix != "" ? trimprefix(var.name_suffix, "-") : "primary"
   }
 
   depends_on = [google_project_service.secretmanager]
 }
 
+# Bug #30: Always create version for DB secrets (they have unique names per deployment)
+# Unlike shared secrets, suffixed DB secrets don't conflict between prod and DR
 resource "google_secret_manager_secret_version" "keycloak_db_password" {
-  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.keycloak_db_password.id
   secret_data = random_password.keycloak_db_password.result
 }
 
 # --- Database Secrets ---
 
+# Bug #30: Add name_suffix for DR - each Cloud SQL instance needs its own DB password secret
 resource "google_secret_manager_secret" "tamshai_db_password" {
-  secret_id = "tamshai-${var.environment}-db-password"
+  secret_id = "tamshai-${var.environment}-db-password${var.name_suffix}"
   project   = var.project_id
 
   replication {
@@ -126,13 +130,14 @@ resource "google_secret_manager_secret" "tamshai_db_password" {
   labels = {
     environment = var.environment
     service     = "database"
+    env-id      = var.name_suffix != "" ? trimprefix(var.name_suffix, "-") : "primary"
   }
 
   depends_on = [google_project_service.secretmanager]
 }
 
+# Bug #30: Always create version for DB secrets (they have unique names per deployment)
 resource "google_secret_manager_secret_version" "tamshai_db_password" {
-  count       = var.manage_secret_versions ? 1 : 0 # Bug #29: Skip for DR
   secret      = google_secret_manager_secret.tamshai_db_password.id
   secret_data = random_password.tamshai_db_password.result
 }

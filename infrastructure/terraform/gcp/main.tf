@@ -250,10 +250,11 @@ module "cloudrun" {
   keycloak_service_account    = module.security.keycloak_service_account_email
 
   # Secrets (use actual Secret Manager names with tamshai-prod- prefix)
+  # Bug #30: DB password secrets use name_suffix for DR isolation
   claude_api_key_secret          = "tamshai-prod-claude-api-key"
   keycloak_admin_user_secret     = "keycloak-admin-user" # Not used - admin username is env var
   keycloak_admin_password_secret = "tamshai-prod-keycloak-admin-password"
-  keycloak_db_password_secret    = "tamshai-prod-keycloak-db-password"
+  keycloak_db_password_secret    = "tamshai-prod-keycloak-db-password${local.name_suffix}"
 
   # Database configuration
   postgres_connection_name = module.database.postgres_connection_name

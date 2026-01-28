@@ -86,6 +86,8 @@ load_tfvars_config() {
 
     # Load Keycloak configuration
     TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$dr_tfvars" 2>/dev/null || echo "")
+    # Load static website domain (Bug #30: DR uses separate bucket)
+    TFVAR_STATIC_WEBSITE_DOMAIN=$(get_tfvar "static_website_domain" "$dr_tfvars" 2>/dev/null || echo "")
 
     return 0
 }
@@ -101,6 +103,11 @@ STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
 
 # Keycloak configuration: Environment vars > tfvars > defaults
 KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
+
+# Static website domain: Environment vars > tfvars > defaults (Bug #30)
+STATIC_DR_DOMAIN="${STATIC_DR_DOMAIN:-${TFVAR_STATIC_WEBSITE_DOMAIN:-prod-dr.tamshai.com}}"
+# Production static website bucket (shared, do NOT delete)
+STATIC_PROD_BUCKET="${STATIC_PROD_BUCKET:-prod.tamshai.com}"
 
 # Bug #15: Primary region for same-region detection (artifact registry cleanup)
 # Loaded from prod.tfvars or PRIMARY_REGION env var (no hardcoded default)
@@ -610,6 +617,28 @@ terraform_destroy() {
         fi
     else
         log_warn "  Skipping Artifact Registry cleanup (recovery region $RECOVERY_REGION == primary region $PRIMARY_REGION — Bug #15)"
+    fi
+
+    # Step 8: Clean up DR static website bucket (Bug #30)
+    # The DR static website bucket is NOT shared with production - it's a separate
+    # bucket created by evacuate-region.sh for the DR domain (e.g., prod-dr.tamshai.com).
+    # The production bucket (prod.tamshai.com) is NEVER deleted here.
+    log_step "Cleaning up DR static website bucket..."
+    if [[ -n "$STATIC_DR_DOMAIN" && "$STATIC_DR_DOMAIN" != "$STATIC_PROD_BUCKET" ]]; then
+        local dr_static_bucket="gs://${STATIC_DR_DOMAIN}"
+        if gcloud storage buckets describe "$dr_static_bucket" &>/dev/null 2>&1; then
+            log_info "  Deleting DR static website bucket: $dr_static_bucket"
+            # Empty the bucket first (required for deletion)
+            gcloud storage rm -r "${dr_static_bucket}/**" 2>/dev/null || true
+            # Delete the bucket
+            gcloud storage buckets delete "$dr_static_bucket" --quiet 2>/dev/null && \
+                log_success "  DR static website bucket deleted" || \
+                log_warn "  Failed to delete DR static website bucket (manual cleanup may be needed)"
+        else
+            log_info "  No DR static website bucket found: $dr_static_bucket"
+        fi
+    else
+        log_info "  No DR-specific static website bucket to clean up"
     fi
 }
 
