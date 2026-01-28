@@ -31,8 +31,12 @@ resource "google_storage_bucket" "logs" {
   # Bug #15: Prevent terraform destroy from deleting shared storage buckets.
   # This is a safety net — even if a script forgets to remove the bucket from
   # state, terraform will error out instead of destroying production data.
+  # ignore_changes(location): Shared bucket may be imported from a different region
+  # during DR evacuation. GCS location is immutable — without this, terraform
+  # plans a forced replacement (destroy+recreate) of the production bucket.
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [location]
   }
 }
 
@@ -72,8 +76,10 @@ resource "google_storage_bucket" "finance_docs" {
   }
 
   # Bug #15: Prevent terraform destroy from deleting shared storage buckets
+  # ignore_changes(location): Shared bucket — see logs bucket comment above.
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [location]
   }
 }
 
@@ -102,8 +108,10 @@ resource "google_storage_bucket" "public_docs" {
   }
 
   # Bug #15: Prevent terraform destroy from deleting shared storage buckets
+  # ignore_changes(location): Shared bucket — see logs bucket comment above.
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [location]
   }
 }
 
