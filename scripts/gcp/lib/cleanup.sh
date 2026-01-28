@@ -312,6 +312,242 @@ remove_all_problematic_state() {
     log_info "=== Terraform State Cleanup Complete ==="
 }
 
+# =============================================================================
+# BUG #15: SHARED RESOURCE STATE PROTECTION (Recovery Cleanup)
+# =============================================================================
+# These functions implement defense-in-depth for recovery stack cleanup.
+# They ensure shared resources (storage, service accounts, artifact registry,
+# secrets, Cloud Run) are removed from terraform state BEFORE terraform destroy,
+# so that only recovery-specific resources (VPC, Cloud SQL, GCE) are destroyed.
+#
+# Layer 1: prevent_destroy = true in Terraform modules (infrastructure-level)
+# Layer 2: RECOVERY_CLEANUP env guard on cleanup_leftover_resources()
+# Layer 3: cleanup_recovery_resources() — recovery-safe gcloud cleanup
+# Layer 4: remove_shared_resources_from_state() — whitelist state removal
+# Layer 5: verify_no_shared_resources_in_state() — pre-destroy gate
+# =============================================================================
+
+# Remove all shared/global resources from terraform state, keeping only
+# recovery-specific resources that are safe to destroy.
+#
+# Uses a WHITELIST approach: only resources matching these patterns are kept.
+# Everything else is removed from state. This is future-proof — new shared
+# resources added to terraform are automatically caught and removed.
+#
+# Usage: remove_shared_resources_from_state
+# Returns: 0 on success, 1 if terraform state list fails
+remove_shared_resources_from_state() {
+    log_info "=== Removing Shared Resources from Terraform State (Bug #15) ==="
+
+    # Whitelist: ONLY these module patterns are recovery-specific and safe to destroy
+    local whitelist_patterns=(
+        "^module\.networking\."     # VPC chain (NAME_PREFIX with suffix)
+        "^module\.database\."       # Cloud SQL (name_suffix)
+        "^module\.utility_vm\."     # GCE instances (name_suffix)
+    )
+
+    # Get all resources currently in state
+    local all_resources
+    all_resources=$(terraform state list 2>/dev/null) || {
+        log_error "Failed to list terraform state"
+        return 1
+    }
+
+    if [[ -z "$all_resources" ]]; then
+        log_info "Terraform state is empty — nothing to remove"
+        return 0
+    fi
+
+    local removed=0
+    local kept=0
+
+    while IFS= read -r resource; do
+        [[ -z "$resource" ]] && continue
+
+        local is_whitelisted=false
+        for pattern in "${whitelist_patterns[@]}"; do
+            if echo "$resource" | grep -qE "$pattern"; then
+                is_whitelisted=true
+                break
+            fi
+        done
+
+        if [[ "$is_whitelisted" == "true" ]]; then
+            kept=$((kept + 1))
+        else
+            terraform state rm "$resource" 2>/dev/null || log_warn "Failed to remove: $resource"
+            removed=$((removed + 1))
+        fi
+    done <<< "$all_resources"
+
+    log_info "State cleanup: removed=$removed, kept=$kept (whitelist: networking, database, utility_vm)"
+    log_info "=== Shared Resource State Removal Complete ==="
+    return 0
+}
+
+# Verify that NO shared resources remain in terraform state before destroy.
+# This is the final safety gate — if any shared resources are found, the
+# caller should ABORT before running terraform destroy.
+#
+# Usage: verify_no_shared_resources_in_state
+# Returns: 0 if safe (no shared resources), 1 if shared resources found (ABORT)
+verify_no_shared_resources_in_state() {
+    log_info "=== Verifying No Shared Resources in State (Bug #15 Safety Gate) ==="
+
+    local all_resources
+    all_resources=$(terraform state list 2>/dev/null) || {
+        log_error "Failed to list terraform state"
+        return 1
+    }
+
+    if [[ -z "$all_resources" ]]; then
+        log_info "State is empty — safe to proceed"
+        return 0
+    fi
+
+    # Forbidden patterns: shared resources that must NOT be in state during recovery destroy
+    local forbidden_patterns=(
+        "^module\.storage\."                                        # Storage buckets
+        "^module\.security\.google_service_account\."               # Service accounts
+        "^module\.security\.google_secret_manager"                  # Secrets & versions
+        "^module\.security\.google_project_iam_member\."            # Project IAM bindings
+        "^module\.security\.google_service_account_iam_member\."    # SA IAM bindings
+        "^module\.security\.google_secret_manager_secret_iam"       # Secret IAM bindings
+        "^module\.security\.google_project_service\."               # API enablement
+        "^module\.security\.google_cloud_run_service_iam_member\."  # Cloud Run IAM
+        "^module\.security\.random_password\."                      # Random passwords
+        "^module\.security\.data\."                                 # Data sources
+        "^module\.cloudrun\.google_artifact_registry"               # Artifact registry
+        "^module\.cloudrun\.google_cloud_run_service\."             # Cloud Run services
+        "^module\.cloudrun\.google_cloud_run_service_iam"           # Cloud Run IAM
+        "^module\.cloudrun\.google_cloud_run_domain_mapping\."      # Domain mappings
+    )
+
+    local found_shared=0
+    local shared_list=""
+
+    while IFS= read -r resource; do
+        [[ -z "$resource" ]] && continue
+
+        for pattern in "${forbidden_patterns[@]}"; do
+            if echo "$resource" | grep -qE "$pattern"; then
+                found_shared=$((found_shared + 1))
+                shared_list="${shared_list}\n  - ${resource}"
+                break
+            fi
+        done
+    done <<< "$all_resources"
+
+    if [[ $found_shared -gt 0 ]]; then
+        log_error "SAFETY GATE FAILED: Found $found_shared shared resource(s) still in state!"
+        log_error "These would be DESTROYED by terraform destroy:${shared_list}"
+        log_error "ABORTING to protect production resources."
+        log_error "Run remove_shared_resources_from_state() first, then retry."
+        return 1
+    fi
+
+    log_info "Safety gate passed: no shared resources in state ($( echo "$all_resources" | wc -l) resources checked)"
+    log_info "=== Verification Complete ==="
+    return 0
+}
+
+# Recovery-safe resource cleanup via gcloud.
+# Only cleans up recovery-suffixed resources. NEVER touches storage buckets,
+# Cloud Run services, artifact registry, or other shared resources.
+#
+# This is the recovery-safe replacement for cleanup_leftover_resources().
+# It handles the same VPC/networking/database cleanup but omits all shared
+# resource operations (empty_all_storage_buckets, delete_cloudrun_services).
+#
+# Usage: cleanup_recovery_resources <name_suffix>
+#   name_suffix: REQUIRED — recovery environment suffix (e.g., "-recovery-20260123")
+#                Empty suffix is rejected to prevent accidental primary cleanup.
+# Returns: 0 on success, 1 on failure
+cleanup_recovery_resources() {
+    local name_suffix="${1:-}"
+
+    # Safety: require non-empty suffix to prevent accidental primary cleanup
+    if [[ -z "$name_suffix" ]]; then
+        log_error "SAFETY: cleanup_recovery_resources() requires a non-empty name_suffix"
+        log_error "This function is only for recovery environments, not primary."
+        return 1
+    fi
+
+    log_step "=== Recovery-Safe Resource Cleanup (Bug #15) ==="
+    log_info "NAME_PREFIX=$NAME_PREFIX, ENV_ID=$ENV_ID, suffix=$name_suffix"
+    log_info "OMITTED: storage buckets, Cloud Run services, artifact registry (shared resources)"
+
+    # Step 1: Delete Cloud SQL instance (recovery-suffixed)
+    log_step "Deleting recovery Cloud SQL instance..."
+    disable_cloudsql_deletion_protection "$name_suffix"
+
+    local sql_instance="${RESOURCE_PREFIX}-postgres${name_suffix}"
+    if gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; then
+        log_info "Deleting Cloud SQL: $sql_instance..."
+        gcloud sql instances delete "$sql_instance" --project="$PROJECT" --quiet 2>/dev/null || true
+
+        # Wait for Cloud SQL deletion (VPC peering depends on this)
+        local sql_wait=0
+        local sql_max_wait=18  # 3 minutes max
+        while gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; do
+            sql_wait=$((sql_wait + 1))
+            if [[ $sql_wait -ge $sql_max_wait ]]; then
+                log_warn "Cloud SQL deletion timeout - continuing anyway"
+                break
+            fi
+            log_info "  Waiting for Cloud SQL deletion... [$sql_wait/$sql_max_wait]"
+            sleep 10
+        done
+    fi
+
+    # Step 2: Delete VPC peering (must be after Cloud SQL)
+    log_step "Deleting recovery VPC peering..."
+    delete_vpc_peering_robust || log_warn "VPC peering deletion may have failed"
+
+    # Step 3: Delete private IP addresses
+    log_step "Deleting recovery private IP addresses..."
+    delete_orphaned_private_ip "$name_suffix"
+
+    # Step 4: Delete Cloud NAT and Router
+    log_step "Deleting recovery Cloud NAT..."
+    delete_cloud_nat
+    log_step "Deleting recovery Cloud Router..."
+    delete_cloud_router
+
+    # Step 5: Delete VPC connector with wait
+    log_step "Deleting recovery VPC connectors..."
+    delete_vpc_connector_and_wait || {
+        log_error "VPC connector deletion failed - cannot proceed"
+        return 1
+    }
+
+    # Step 6: Delete GCE instances
+    log_step "Deleting recovery GCE instances..."
+    delete_gce_instances_in_vpc
+    delete_gce_instances_by_pattern "tamshai-${RESOURCE_PREFIX#tamshai-}-*" ""
+
+    # Step 7: Delete firewall rules
+    log_step "Deleting recovery firewall rules..."
+    delete_firewall_rules
+
+    # Step 8: Delete custom routes
+    log_step "Deleting recovery routes..."
+    delete_vpc_routes
+
+    # Step 9: Delete subnets
+    log_step "Deleting recovery subnets..."
+    delete_vpc_subnets
+
+    # Step 10: Delete VPC network (must be last)
+    log_step "Deleting recovery VPC network..."
+    delete_vpc_network_robust || {
+        log_warn "VPC deletion may need manual cleanup"
+    }
+
+    log_info "=== Recovery-Safe Resource Cleanup Complete ==="
+    return 0
+}
+
 # Gap #2: Delete persisted secrets
 delete_persisted_secrets() {
     log_info "Deleting persisted GCP secrets..."
@@ -1380,6 +1616,15 @@ has_leftover_resources() {
 #   state_prefix: Optional GCS prefix for terraform state lock cleanup
 #   fallback_zones: Optional space-separated list of zones to check (default: all zones in region)
 cleanup_leftover_resources() {
+    # Bug #15: Guard against use during recovery cleanup.
+    # During recovery cleanup, this function would destroy shared production
+    # resources (Cloud Run services, storage buckets). Use cleanup_recovery_resources() instead.
+    if [[ "${RECOVERY_CLEANUP:-false}" == "true" ]]; then
+        log_error "SAFETY: cleanup_leftover_resources() blocked during recovery cleanup"
+        log_error "Use cleanup_recovery_resources() instead"
+        return 1
+    fi
+
     local name_suffix="${1:-}"
     local state_bucket="${2:-}"
     local state_prefix="${3:-}"

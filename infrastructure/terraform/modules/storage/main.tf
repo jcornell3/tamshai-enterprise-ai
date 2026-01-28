@@ -27,6 +27,13 @@ resource "google_storage_bucket" "logs" {
     environment = var.environment
     purpose     = "access-logs"
   }
+
+  # Bug #15: Prevent terraform destroy from deleting shared storage buckets.
+  # This is a safety net — even if a script forgets to remove the bucket from
+  # state, terraform will error out instead of destroying production data.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_storage_bucket" "finance_docs" {
@@ -63,6 +70,11 @@ resource "google_storage_bucket" "finance_docs" {
     environment = var.environment
     purpose     = "finance-documents"
   }
+
+  # Bug #15: Prevent terraform destroy from deleting shared storage buckets
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_storage_bucket" "public_docs" {
@@ -87,6 +99,11 @@ resource "google_storage_bucket" "public_docs" {
   labels = {
     environment = var.environment
     purpose     = "public-documents"
+  }
+
+  # Bug #15: Prevent terraform destroy from deleting shared storage buckets
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -155,7 +172,8 @@ resource "google_storage_bucket" "static_website" {
   # Ignore location changes - the bucket may already exist in a different region
   # This allows terraform to manage the bucket without forcing recreation
   lifecycle {
-    ignore_changes = [location]
+    prevent_destroy = true # Bug #15: Prevent terraform destroy from deleting shared storage buckets
+    ignore_changes  = [location]
   }
 }
 
@@ -241,6 +259,11 @@ resource "google_storage_bucket" "backups" {
   labels = {
     environment = var.environment
     purpose     = "disaster-recovery-backups"
+  }
+
+  # Bug #15: Prevent terraform destroy from deleting shared storage buckets
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
