@@ -102,7 +102,7 @@ class BiometricService {
     try {
       _logger.i('Requesting biometric authentication');
 
-      // local_auth 3.0: parameters passed directly instead of AuthenticationOptions
+      // local_auth 3.0: parameters passed directly
       final didAuthenticate = await _localAuth.authenticate(
         localizedReason: reason,
         biometricOnly: biometricOnly,
@@ -115,29 +115,36 @@ class BiometricService {
 
       // local_auth 3.0: Use LocalAuthExceptionCode enum for error handling
       switch (e.code) {
-        case LocalAuthExceptionCode.notAvailable:
+        case LocalAuthExceptionCode.noBiometricHardware:
+        case LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable:
           throw BiometricAuthException(
             'Biometric authentication is not available on this device',
             code: BiometricErrorCode.notAvailable,
           );
-        case LocalAuthExceptionCode.notEnrolled:
+        case LocalAuthExceptionCode.noBiometricsEnrolled:
+        case LocalAuthExceptionCode.noCredentialsSet:
           throw BiometricAuthException(
             'No biometrics enrolled on this device',
             code: BiometricErrorCode.notEnrolled,
           );
-        case LocalAuthExceptionCode.lockedOut:
+        case LocalAuthExceptionCode.temporaryLockout:
           throw BiometricAuthException(
             'Biometric authentication is locked due to too many attempts',
             code: BiometricErrorCode.lockedOut,
           );
-        case LocalAuthExceptionCode.permanentlyLockedOut:
+        case LocalAuthExceptionCode.biometricLockout:
           throw BiometricAuthException(
             'Biometric authentication is permanently locked',
             code: BiometricErrorCode.permanentlyLockedOut,
           );
+        case LocalAuthExceptionCode.userCanceled:
+          throw BiometricAuthException(
+            'Authentication cancelled by user',
+            code: BiometricErrorCode.cancelled,
+          );
         default:
           throw BiometricAuthException(
-            'Biometric authentication failed: ${e.message}',
+            'Biometric authentication failed: ${e.description}',
             code: BiometricErrorCode.unknown,
             originalError: e,
           );

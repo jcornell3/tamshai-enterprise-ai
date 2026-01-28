@@ -5,7 +5,7 @@ part 'chat_state.g.dart';
 
 /// Chat message model
 @freezed
-class ChatMessage with _$ChatMessage {
+sealed class ChatMessage with _$ChatMessage {
   const factory ChatMessage({
     required String id,
     required String content,
@@ -34,7 +34,7 @@ enum MessageRole {
 
 /// Pending confirmation for write operations (v1.4 requirement)
 @freezed
-class PendingConfirmation with _$PendingConfirmation {
+sealed class PendingConfirmation with _$PendingConfirmation {
   const factory PendingConfirmation({
     required String confirmationId,
     required String message,
@@ -49,7 +49,7 @@ class PendingConfirmation with _$PendingConfirmation {
 
 /// Chat session state
 @freezed
-class ChatState with _$ChatState {
+sealed class ChatState with _$ChatState {
   const factory ChatState({
     @Default([]) List<ChatMessage> messages,
     @Default(false) bool isLoading,
@@ -77,7 +77,7 @@ enum SSEEventType {
 
 /// SSE chunk data
 @freezed
-class SSEChunk with _$SSEChunk {
+sealed class SSEChunk with _$SSEChunk {
   const factory SSEChunk({
     required SSEEventType type,
     String? text,

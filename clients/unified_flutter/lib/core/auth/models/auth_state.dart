@@ -5,7 +5,7 @@ part 'auth_state.g.dart';
 
 /// Authentication state representing current auth status
 @freezed
-class AuthState with _$AuthState {
+sealed class AuthState with _$AuthState {
   const factory AuthState.unauthenticated() = Unauthenticated;
   const factory AuthState.authenticating() = Authenticating;
   const factory AuthState.authenticated(AuthUser user) = Authenticated;
@@ -14,7 +14,7 @@ class AuthState with _$AuthState {
 
 /// User model containing profile information from Keycloak
 @freezed
-class AuthUser with _$AuthUser {
+sealed class AuthUser with _$AuthUser {
   const factory AuthUser({
     required String id,
     required String username,
@@ -33,7 +33,7 @@ class AuthUser with _$AuthUser {
 /// Token response model containing OAuth tokens
 /// Named StoredTokens to avoid conflict with flutter_appauth's TokenResponse
 @freezed
-class StoredTokens with _$StoredTokens {
+sealed class StoredTokens with _$StoredTokens {
   const factory StoredTokens({
     required String accessToken,
     required String idToken,
