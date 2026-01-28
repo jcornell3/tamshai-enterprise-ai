@@ -1028,46 +1028,21 @@ phase2_deploy_infrastructure() {
     # 3. 63-char name limit issues with long suffixes
     # =============================================================================
     log_step "Pre-importing shared storage buckets..."
+    # Storage buckets use name_suffix="" (shared, globally unique names).
+    # They MUST be imported regardless of their location — otherwise terraform
+    # tries to create a new bucket with the same name, which fails with 409
+    # (GCS bucket names are globally unique).
+    # Terraform ignore_changes=[location] on regional buckets (logs, finance_docs,
+    # public_docs) prevents forced replacement when the bucket is in a different
+    # region than the recovery config.
 
-    # Helper: check if a bucket's location matches the recovery region or is multi-regional.
-    # Returns 0 (true) if the bucket should be imported, 1 (false) if it should be skipped.
-    bucket_in_scope() {
-        local bucket_name="$1"
-        local bucket_location
-        bucket_location=$(gcloud storage buckets describe "gs://${bucket_name}" \
-            --format="value(location)" 2>/dev/null) || return 1
-
-        # Normalize to uppercase for comparison
-        bucket_location="${bucket_location^^}"
-        local recovery_upper="${NEW_REGION^^}"
-
-        # Import if: same region as recovery, or multi-regional (US, EU, ASIA)
-        if [[ "$bucket_location" == "$recovery_upper" \
-           || "$bucket_location" == "US" \
-           || "$bucket_location" == "EU" \
-           || "$bucket_location" == "ASIA" ]]; then
-            return 0
-        fi
-
-        log_info "  Skipping ${bucket_name} (location: ${bucket_location}, not in recovery region ${recovery_upper})"
-        return 1
-    }
-
-    # Import a bucket if it exists, is in scope, and not already in state.
-    # Buckets outside the recovery region are skipped — their location is immutable
-    # and importing them would cause terraform to plan a forced replacement.
-    import_bucket_if_in_scope() {
+    # Helper: import a bucket if it exists in GCP and not already in state.
+    import_shared_bucket() {
         local bucket_name="$1"
         local tf_resource="$2"
 
         if ! gcloud storage buckets describe "gs://${bucket_name}" &>/dev/null 2>&1; then
             return 0  # Bucket doesn't exist, nothing to import
-        fi
-
-        if ! bucket_in_scope "$bucket_name"; then
-            # Remove from state if a previous run imported it
-            terraform state rm "$tf_resource" &>/dev/null 2>&1 || true
-            return 0
         fi
 
         if ! terraform state show "$tf_resource" &>/dev/null 2>&1; then
@@ -1077,19 +1052,19 @@ phase2_deploy_infrastructure() {
         fi
     }
 
-    import_bucket_if_in_scope "tamshai-prod-logs-${PROJECT_ID}" \
+    import_shared_bucket "tamshai-prod-logs-${PROJECT_ID}" \
         'module.storage.google_storage_bucket.logs'
 
-    import_bucket_if_in_scope "tamshai-prod-finance-docs-${PROJECT_ID}" \
+    import_shared_bucket "tamshai-prod-finance-docs-${PROJECT_ID}" \
         'module.storage.google_storage_bucket.finance_docs'
 
-    import_bucket_if_in_scope "tamshai-prod-public-docs-${PROJECT_ID}" \
+    import_shared_bucket "tamshai-prod-public-docs-${PROJECT_ID}" \
         'module.storage.google_storage_bucket.public_docs'
 
-    import_bucket_if_in_scope "prod.tamshai.com" \
+    import_shared_bucket "prod.tamshai.com" \
         'module.storage.google_storage_bucket.static_website[0]'
 
-    import_bucket_if_in_scope "tamshai-prod-backups-${PROJECT_ID}" \
+    import_shared_bucket "tamshai-prod-backups-${PROJECT_ID}" \
         'module.storage.google_storage_bucket.backups[0]'
 
     log_success "Pre-import complete"
