@@ -96,6 +96,9 @@ STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
 # Keycloak configuration: Environment vars > tfvars > defaults
 KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
 
+# Bug #15: Primary region for same-region detection (artifact registry cleanup)
+PRIMARY_REGION="${PRIMARY_REGION:-us-central1}"
+
 # Default options
 FORCE=false
 DRY_RUN=false
@@ -363,117 +366,96 @@ terraform_destroy() {
     fi
 
     # =============================================================================
-    # PROACTIVE PRE-DESTROY CLEANUP (using library functions)
+    # PROACTIVE PRE-DESTROY CLEANUP (Bug #15 — defense-in-depth)
     # =============================================================================
-    log_step "=== Starting PROACTIVE pre-destroy cleanup (using library) ==="
+    # Bug #15 redesign: The previous approach used individual state removals and
+    # called cleanup_leftover_resources() which destroys shared production resources
+    # (Cloud Run services, storage buckets). The new approach uses:
+    #   1. RECOVERY_CLEANUP=true env guard to block cleanup_leftover_resources()
+    #   2. cleanup_recovery_resources() for recovery-safe gcloud cleanup (VPC/SQL only)
+    #   3. remove_shared_resources_from_state() whitelist to keep only recovery resources
+    #   4. verify_no_shared_resources_in_state() as final safety gate before destroy
+    #   5. prevent_destroy=true on all shared terraform resources as infrastructure-level safety net
+    # =============================================================================
+    log_step "=== Starting PROACTIVE pre-destroy cleanup (Bug #15 safe flow) ==="
+
+    # Set recovery cleanup guard — blocks cleanup_leftover_resources() if accidentally called
+    export RECOVERY_CLEANUP=true
 
     # Step 1: Clean up stale terraform state locks (Issue #36)
     if type cleanup_terraform_state_lock &>/dev/null; then
         cleanup_terraform_state_lock "$STATE_BUCKET" "gcp/recovery/${ENV_ID}"
     fi
 
-    # Step 2: Empty storage buckets before destroy (Gap #39)
-    if type empty_all_storage_buckets &>/dev/null; then
-        log_step "Emptying storage buckets (Gap #39)..."
-        empty_all_storage_buckets
-    fi
+    # Step 2: Skip storage bucket emptying (Bug #15)
+    # Storage buckets are shared with production. Do NOT empty them.
+    log_step "Skipping storage bucket emptying (shared with prod — Bug #15)..."
 
     # Step 3: DO NOT delete secrets during recovery cleanup (Bug #5)
     # Secrets (tamshai-prod-*) are shared between prod and DR environments.
-    # Deleting them here would break the running production environment.
-    # Step 4 below removes them from Terraform state so destroy won't fail.
     log_step "Skipping secret deletion (shared with prod — Bug #5)..."
 
-    # Step 4: Remove secret IAM bindings from terraform state (Issue #28)
-    if type remove_secret_iam_bindings_state &>/dev/null; then
-        log_step "Removing secret IAM bindings from state (Issue #28)..."
-        remove_secret_iam_bindings_state
-        remove_secret_state
-    fi
-
-    # Step 5: Full environment cleanup with async waits
-    # This handles: Cloud Run (Gap #38), Cloud SQL (Issue #14), VPC peering (Issue #14),
-    # VPC connector (Gap #25), private IP (Gap #24), and VPC network
-    if type cleanup_leftover_resources &>/dev/null; then
-        log_step "Running full resource cleanup with async waits..."
-        cleanup_leftover_resources "$name_suffix" "$STATE_BUCKET" "gcp/recovery/${ENV_ID}" || {
-            log_warn "Cleanup had warnings - continuing with terraform destroy"
+    # Step 4: Recovery-safe gcloud cleanup (VPC, Cloud SQL, networking only)
+    # This replaces cleanup_leftover_resources() which would destroy Cloud Run
+    # services and empty storage buckets (production resources).
+    if type cleanup_recovery_resources &>/dev/null; then
+        log_step "Running recovery-safe resource cleanup (Bug #15)..."
+        cleanup_recovery_resources "$name_suffix" || {
+            log_warn "Recovery cleanup had warnings - continuing with state removal"
         }
     else
-        log_warn "cleanup_leftover_resources not available - using fallback"
-        # Fallback: use individual functions if available
-        if type delete_cloudrun_services &>/dev/null; then
-            log_step "Deleting Cloud Run services (Gap #38)..."
-            delete_cloudrun_services
-            sleep 10
-        fi
-
+        log_warn "cleanup_recovery_resources not available - using individual functions"
+        # Fallback: individual recovery-safe functions only
         if type disable_cloudsql_deletion_protection &>/dev/null; then
-            log_step "Disabling Cloud SQL deletion protection..."
             disable_cloudsql_deletion_protection "$name_suffix"
         fi
-
         if type delete_vpc_connector_and_wait &>/dev/null; then
-            log_step "Deleting VPC connector with wait (Gap #25)..."
             delete_vpc_connector_and_wait || log_warn "VPC connector deletion may have failed"
         fi
-
         if type delete_vpc_peering_robust &>/dev/null; then
-            log_step "Deleting VPC peering with wait (Issue #14)..."
             delete_vpc_peering_robust || log_warn "VPC peering deletion may have failed"
         fi
-
         if type delete_orphaned_private_ip &>/dev/null; then
-            log_step "Deleting orphaned private IP (Gap #24)..."
             delete_orphaned_private_ip "$name_suffix"
         fi
     fi
 
-    # Step 6: Remove all problematic state entries
-    if type remove_all_problematic_state &>/dev/null; then
-        log_step "Removing problematic terraform state entries..."
-        remove_all_problematic_state
+    # Step 5: Remove ALL shared resources from terraform state (Bug #15 whitelist)
+    # This replaces the previous manual state rm commands (Bug #5, #7, #12) with
+    # a future-proof whitelist: only networking, database, and utility_vm modules
+    # are kept. Everything else (storage, security, cloudrun) is removed.
+    if type remove_shared_resources_from_state &>/dev/null; then
+        log_step "Removing shared resources from state (Bug #15 whitelist)..."
+        remove_shared_resources_from_state || {
+            log_error "Failed to remove shared resources from state"
+            log_error "ABORTING to protect production resources"
+            exit 1
+        }
+    else
+        log_warn "remove_shared_resources_from_state not available - using legacy removal"
+        # Legacy fallback: manually remove known shared resources from state
+        if type remove_all_problematic_state &>/dev/null; then
+            remove_all_problematic_state
+        fi
+        # Remove service accounts (Bug #7, #12)
+        terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
+        terraform state rm 'module.security.google_service_account.keycloak' 2>/dev/null || true
+        terraform state rm 'module.security.google_service_account.mcp_gateway' 2>/dev/null || true
+        terraform state rm 'module.security.google_service_account.mcp_servers' 2>/dev/null || true
+        terraform state rm 'module.security.google_service_account.provision_job' 2>/dev/null || true
     fi
 
-    # Step 7: Remove ALL shared/global service accounts from state (Bug #7, Bug #12)
-    # Service accounts are project-level globals shared between primary and recovery.
-    # If left in state, terraform destroy deletes them, changing their UID and
-    # breaking the primary stack's Cloud Run services on next cold start (Bug #12).
-    # Their project-level IAM bindings must also be removed to prevent
-    # terraform destroy from revoking primary stack permissions.
-    #
-    # Note: Secret Manager IAM bindings (google_secret_manager_secret_iam_member.*)
-    # are already handled by Step 4 (remove_secret_iam_bindings_state).
-    log_step "Removing shared global service accounts from state (Bug #7, Bug #12)..."
+    # Step 6: Verify no shared resources remain in state (Bug #15 safety gate)
+    if type verify_no_shared_resources_in_state &>/dev/null; then
+        log_step "Verifying no shared resources in state (Bug #15 safety gate)..."
+        if ! verify_no_shared_resources_in_state; then
+            log_error "SAFETY GATE FAILED — shared resources still in terraform state!"
+            log_error "Cannot proceed with terraform destroy. Manual intervention required."
+            exit 1
+        fi
+    fi
 
-    # --- CICD service account (Bug #7: has prevent_destroy=true) ---
-    terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.cicd_run_admin' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.cicd_artifact_registry_writer' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.cicd_cloudsql_viewer' 2>/dev/null || true
-    terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_keycloak_sa' 2>/dev/null || true
-    terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_gateway_sa' 2>/dev/null || true
-    terraform state rm 'module.security.google_service_account_iam_member.cicd_can_use_mcp_servers_sa' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.cicd_secret_accessor' 2>/dev/null || true
-
-    # --- Keycloak service account (Bug #12) ---
-    terraform state rm 'module.security.google_service_account.keycloak' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.keycloak_cloudsql_client' 2>/dev/null || true
-
-    # --- MCP Gateway service account (Bug #12) ---
-    terraform state rm 'module.security.google_service_account.mcp_gateway' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.mcp_gateway_cloudsql_client' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.mcp_gateway_run_invoker' 2>/dev/null || true
-
-    # --- MCP Servers service account (Bug #12) ---
-    terraform state rm 'module.security.google_service_account.mcp_servers' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.mcp_servers_cloudsql_client' 2>/dev/null || true
-
-    # --- Provision Job service account (Bug #12) ---
-    terraform state rm 'module.security.google_service_account.provision_job' 2>/dev/null || true
-    terraform state rm 'module.security.google_project_iam_member.provision_job_cloudsql_client' 2>/dev/null || true
-
-    log_success "=== Pre-destroy cleanup complete ==="
+    log_success "=== Pre-destroy cleanup complete (Bug #15 safe flow) ==="
 
     # Refresh Terraform state to pick up manual changes
     log_step "Refreshing Terraform state..."
@@ -504,24 +486,31 @@ terraform_destroy() {
 
     log_success "Recovery stack destroyed successfully"
 
-    # Step 7: Clean up Artifact Registry in recovery region
+    # Step 7: Clean up Artifact Registry in recovery region (Bug #15 same-region check)
     # Images from phase1_5_replicate_images() are created via gcloud (not Terraform)
     # and persist after terraform destroy. Stale images cause future DR runs to
     # deploy outdated code if digest comparison is bypassed or unavailable.
+    #
+    # Bug #15: When recovery region == primary region (same-region DR), the artifact
+    # registry is shared and must NOT be deleted. Only delete when in a different region.
     log_step "Cleaning up Artifact Registry in recovery region..."
     local registry_repo="tamshai"
-    if gcloud artifacts repositories describe "$registry_repo" \
-        --location="$RECOVERY_REGION" \
-        --project="$PROJECT_ID" &>/dev/null 2>&1; then
-        log_info "  Deleting Artifact Registry repository '$registry_repo' in $RECOVERY_REGION"
-        gcloud artifacts repositories delete "$registry_repo" \
+    if [[ "$RECOVERY_REGION" != "$PRIMARY_REGION" ]]; then
+        if gcloud artifacts repositories describe "$registry_repo" \
             --location="$RECOVERY_REGION" \
-            --project="$PROJECT_ID" \
-            --quiet 2>/dev/null && \
-            log_success "  Artifact Registry cleaned up" || \
-            log_warn "  Failed to delete Artifact Registry (manual cleanup may be needed)"
+            --project="$PROJECT_ID" &>/dev/null 2>&1; then
+            log_info "  Deleting Artifact Registry repository '$registry_repo' in $RECOVERY_REGION (different from primary: $PRIMARY_REGION)"
+            gcloud artifacts repositories delete "$registry_repo" \
+                --location="$RECOVERY_REGION" \
+                --project="$PROJECT_ID" \
+                --quiet 2>/dev/null && \
+                log_success "  Artifact Registry cleaned up" || \
+                log_warn "  Failed to delete Artifact Registry (manual cleanup may be needed)"
+        else
+            log_info "  No Artifact Registry repository found in $RECOVERY_REGION"
+        fi
     else
-        log_info "  No Artifact Registry repository found in $RECOVERY_REGION"
+        log_warn "  Skipping Artifact Registry cleanup (recovery region $RECOVERY_REGION == primary region $PRIMARY_REGION — Bug #15)"
     fi
 }
 

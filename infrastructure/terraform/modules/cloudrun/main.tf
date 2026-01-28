@@ -28,8 +28,8 @@ resource "google_artifact_registry_repository" "tamshai" {
   # The evacuate-region.sh pre-imports existing resources, but Terraform may still
   # try to create. This lifecycle block prevents errors when the repository already exists.
   lifecycle {
-    # Prevent destruction of shared Artifact Registry (images are used by both primary and DR)
-    prevent_destroy = false
+    # Bug #15: Prevent destruction of shared Artifact Registry (images are used by both primary and DR)
+    prevent_destroy = true
     # Ignore changes that could trigger recreation
     ignore_changes = [
       location,

@@ -693,6 +693,20 @@ phase_3_destroy() {
     log_step "Removing cicd service account from state (prevent_destroy lifecycle)..."
     terraform state rm 'module.security.google_service_account.cicd' 2>/dev/null || true
 
+    # ── Bug #15: Temporarily disable prevent_destroy for full phoenix teardown ──
+    # prevent_destroy must be a literal bool in .tf files (terraform limitation #22544, #30957).
+    # We sed-toggle it to false for destroy, then git-restore afterward.
+    # This allows phoenix to destroy everything while keeping prevent_destroy = true
+    # as the committed/deployed default that protects against accidental destruction.
+    local TF_MODULES_DIR="$PROJECT_ROOT/infrastructure/terraform/modules"
+
+    log_step "Disabling prevent_destroy for phoenix teardown (Bug #15)..."
+    sed -i 's/prevent_destroy = true/prevent_destroy = false/g' \
+        "${TF_MODULES_DIR}/storage/main.tf" \
+        "${TF_MODULES_DIR}/security/main.tf" \
+        "${TF_MODULES_DIR}/cloudrun/main.tf"
+    log_info "prevent_destroy disabled in storage, security, cloudrun modules"
+
     log_step "Running terraform destroy..."
     echo ""
     echo -e "${YELLOW}WARNING: This will DESTROY all GCP infrastructure!${NC}"
@@ -763,6 +777,16 @@ phase_3_destroy() {
         log_step "Retrying terraform destroy..."
         terraform destroy -auto-approve || log_warn "Destroy may be incomplete - verify manually"
     }
+
+    # ── Bug #15: Restore prevent_destroy = true (committed default) ──
+    # This must happen after destroy, regardless of success or failure.
+    # Phase 4 terraform apply will then create resources with prevent_destroy = true.
+    log_step "Restoring prevent_destroy protections (Bug #15)..."
+    git checkout -- \
+        "${TF_MODULES_DIR}/storage/main.tf" \
+        "${TF_MODULES_DIR}/security/main.tf" \
+        "${TF_MODULES_DIR}/cloudrun/main.tf"
+    log_info "prevent_destroy restored to true in all modules"
 
     # Post-destroy verification (Gap #1a)
     log_step "Running post-destroy verification (Gap #1a)..."
