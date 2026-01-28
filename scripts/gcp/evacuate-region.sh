@@ -1029,55 +1029,68 @@ phase2_deploy_infrastructure() {
     # =============================================================================
     log_step "Pre-importing shared storage buckets..."
 
-    # Logs bucket
-    local logs_bucket="tamshai-prod-logs-${PROJECT_ID}"
-    if gcloud storage buckets describe "gs://${logs_bucket}" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.storage.google_storage_bucket.logs' &>/dev/null 2>&1; then
-            log_info "  Importing existing logs bucket: $logs_bucket"
-            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.logs' \
-                "${PROJECT_ID}/${logs_bucket}" 2>/dev/null || true
-        fi
-    fi
+    # Helper: check if a bucket's location matches the recovery region or is multi-regional.
+    # Returns 0 (true) if the bucket should be imported, 1 (false) if it should be skipped.
+    bucket_in_scope() {
+        local bucket_name="$1"
+        local bucket_location
+        bucket_location=$(gcloud storage buckets describe "gs://${bucket_name}" \
+            --format="value(location)" 2>/dev/null) || return 1
 
-    # Finance docs bucket
-    local finance_bucket="tamshai-prod-finance-docs-${PROJECT_ID}"
-    if gcloud storage buckets describe "gs://${finance_bucket}" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.storage.google_storage_bucket.finance_docs' &>/dev/null 2>&1; then
-            log_info "  Importing existing finance docs bucket: $finance_bucket"
-            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.finance_docs' \
-                "${PROJECT_ID}/${finance_bucket}" 2>/dev/null || true
-        fi
-    fi
+        # Normalize to uppercase for comparison
+        bucket_location="${bucket_location^^}"
+        local recovery_upper="${NEW_REGION^^}"
 
-    # Public docs bucket
-    local public_bucket="tamshai-prod-public-docs-${PROJECT_ID}"
-    if gcloud storage buckets describe "gs://${public_bucket}" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.storage.google_storage_bucket.public_docs' &>/dev/null 2>&1; then
-            log_info "  Importing existing public docs bucket: $public_bucket"
-            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.public_docs' \
-                "${PROJECT_ID}/${public_bucket}" 2>/dev/null || true
+        # Import if: same region as recovery, or multi-regional (US, EU, ASIA)
+        if [[ "$bucket_location" == "$recovery_upper" \
+           || "$bucket_location" == "US" \
+           || "$bucket_location" == "EU" \
+           || "$bucket_location" == "ASIA" ]]; then
+            return 0
         fi
-    fi
 
-    # Static website bucket (domain-based)
-    local static_bucket="prod.tamshai.com"
-    if gcloud storage buckets describe "gs://${static_bucket}" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.storage.google_storage_bucket.static_website[0]' &>/dev/null 2>&1; then
-            log_info "  Importing existing static website bucket: $static_bucket"
-            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.static_website[0]' \
-                "${PROJECT_ID}/${static_bucket}" 2>/dev/null || true
-        fi
-    fi
+        log_info "  Skipping ${bucket_name} (location: ${bucket_location}, not in recovery region ${recovery_upper})"
+        return 1
+    }
 
-    # Backups bucket (multi-regional, critical for DR!)
-    local backups_bucket="tamshai-prod-backups-${PROJECT_ID}"
-    if gcloud storage buckets describe "gs://${backups_bucket}" &>/dev/null 2>&1; then
-        if ! terraform state show 'module.storage.google_storage_bucket.backups[0]' &>/dev/null 2>&1; then
-            log_info "  Importing existing backups bucket: $backups_bucket"
-            terraform import "${TF_VARS[@]}" 'module.storage.google_storage_bucket.backups[0]' \
-                "${PROJECT_ID}/${backups_bucket}" 2>/dev/null || true
+    # Import a bucket if it exists, is in scope, and not already in state.
+    # Buckets outside the recovery region are skipped — their location is immutable
+    # and importing them would cause terraform to plan a forced replacement.
+    import_bucket_if_in_scope() {
+        local bucket_name="$1"
+        local tf_resource="$2"
+
+        if ! gcloud storage buckets describe "gs://${bucket_name}" &>/dev/null 2>&1; then
+            return 0  # Bucket doesn't exist, nothing to import
         fi
-    fi
+
+        if ! bucket_in_scope "$bucket_name"; then
+            # Remove from state if a previous run imported it
+            terraform state rm "$tf_resource" &>/dev/null 2>&1 || true
+            return 0
+        fi
+
+        if ! terraform state show "$tf_resource" &>/dev/null 2>&1; then
+            log_info "  Importing existing bucket: $bucket_name"
+            terraform import "${TF_VARS[@]}" "$tf_resource" \
+                "${PROJECT_ID}/${bucket_name}" 2>/dev/null || true
+        fi
+    }
+
+    import_bucket_if_in_scope "tamshai-prod-logs-${PROJECT_ID}" \
+        'module.storage.google_storage_bucket.logs'
+
+    import_bucket_if_in_scope "tamshai-prod-finance-docs-${PROJECT_ID}" \
+        'module.storage.google_storage_bucket.finance_docs'
+
+    import_bucket_if_in_scope "tamshai-prod-public-docs-${PROJECT_ID}" \
+        'module.storage.google_storage_bucket.public_docs'
+
+    import_bucket_if_in_scope "prod.tamshai.com" \
+        'module.storage.google_storage_bucket.static_website[0]'
+
+    import_bucket_if_in_scope "tamshai-prod-backups-${PROJECT_ID}" \
+        'module.storage.google_storage_bucket.backups[0]'
 
     log_success "Pre-import complete"
 
