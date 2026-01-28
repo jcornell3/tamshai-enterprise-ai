@@ -15,6 +15,7 @@
 #
 # Options:
 #   --yes, -y           Skip interactive confirmations (for automated runs)
+#   --force-cleanup     Force cleanup of existing DR stacks (DANGEROUS — use cleanup-recovery.sh instead)
 #   --region=REGION     Target region (default: from dr.tfvars)
 #   --zone=ZONE         Target zone (default: from dr.tfvars or REGION-b)
 #   --env-id=ID         Environment ID (default: recovery-YYYYMMDD-HHMM)
@@ -153,13 +154,15 @@ load_tfvars_config() {
 NEW_REGION=""
 NEW_ZONE=""
 ENV_ID=""
-AUTO_YES=false  # Skip interactive confirmations
+AUTO_YES=false       # Skip interactive confirmations
+FORCE_CLEANUP=false  # Force cleanup of existing DR stacks (DANGEROUS)
 
 # Parse arguments first (supports both positional and flags)
 POSITIONAL_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --yes|-y) AUTO_YES=true; shift ;;
+        --force-cleanup) FORCE_CLEANUP=true; shift ;;
         --region=*) NEW_REGION="${1#*=}"; shift ;;
         --zone=*) NEW_ZONE="${1#*=}"; shift ;;
         --env-id=*) ENV_ID="${1#*=}"; shift ;;
@@ -468,6 +471,61 @@ run_cleanup_leftover_resources() {
     export PROJECT="${PROJECT_ID}"
 
     local found_leftovers=false
+
+    # ── Safety Gate: Check for ACTIVE recovery stacks ──
+    # If terraform state files exist in the recovery bucket, assume they're from
+    # a SUCCESSFUL deployment (not orphans). User should use cleanup-recovery.sh
+    # to explicitly remove them first.
+    #
+    # This prevents accidentally destroying an active DR stack by re-running
+    # evacuate-region.sh. Only orphaned resources (no terraform state) are
+    # cleaned up automatically.
+    log_step "Checking for active recovery terraform states..."
+    local active_states
+    active_states=$(gsutil ls "gs://${STATE_BUCKET}/gcp/recovery/" 2>/dev/null | \
+        grep -E "recovery-[0-9]+" | \
+        sed 's|.*/gcp/recovery/\([^/]*\)/.*|\1|' | \
+        sort -u || true)
+
+    if [[ -n "$active_states" ]]; then
+        log_warn "════════════════════════════════════════════════════════════════════"
+        log_warn "ACTIVE RECOVERY STACKS DETECTED"
+        log_warn "════════════════════════════════════════════════════════════════════"
+        log_warn "Found terraform state for the following recovery environments:"
+        echo ""
+        echo "$active_states" | while read -r state_id; do
+            log_info "  • $state_id"
+        done
+        echo ""
+
+        if [[ "$FORCE_CLEANUP" == "true" ]]; then
+            log_warn "⚠️  --force-cleanup: Proceeding to destroy active recovery stacks!"
+            log_warn "This will DELETE all Cloud Run services, databases, and networking"
+            log_warn "in the DR region. Use cleanup-recovery.sh for controlled teardown."
+            echo ""
+            if [[ "$AUTO_YES" != "true" ]]; then
+                if ! confirm "Are you ABSOLUTELY SURE you want to destroy active DR stacks?"; then
+                    log_error "Aborted by user."
+                    exit 1
+                fi
+            fi
+        else
+            log_error "Cannot proceed: active recovery stacks would be destroyed."
+            log_error ""
+            log_error "To failback to production (remove DR stack):"
+            log_error "  ./cleanup-recovery.sh <ENV_ID>"
+            log_error ""
+            log_error "To list all recovery stacks:"
+            log_error "  ./cleanup-recovery.sh --list"
+            log_error ""
+            log_error "To force cleanup anyway (DANGEROUS):"
+            log_error "  ./evacuate-region.sh --force-cleanup ..."
+            log_error ""
+            exit 1
+        fi
+    else
+        log_info "No active recovery terraform states found — safe to proceed"
+    fi
 
     # ── Step 1: Clean up Cloud Run services in recovery region ──
     # Cloud Run services have NO suffix — same names (keycloak, mcp-hr, etc.)
