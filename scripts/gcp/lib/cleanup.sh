@@ -482,13 +482,15 @@ cleanup_recovery_resources() {
     disable_cloudsql_deletion_protection "$name_suffix"
 
     local sql_instance="${RESOURCE_PREFIX}-postgres${name_suffix}"
+    local sql_was_deleted=false
     if gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; then
         log_info "Deleting Cloud SQL: $sql_instance..."
         gcloud sql instances delete "$sql_instance" --project="$PROJECT" --quiet 2>/dev/null || true
+        sql_was_deleted=true
 
         # Wait for Cloud SQL deletion (VPC peering depends on this)
         local sql_wait=0
-        local sql_max_wait=18  # 3 minutes max
+        local sql_max_wait=30  # 5 minutes max (increased from 3)
         while gcloud sql instances describe "$sql_instance" --project="$PROJECT" &>/dev/null 2>&1; do
             sql_wait=$((sql_wait + 1))
             if [[ $sql_wait -ge $sql_max_wait ]]; then
@@ -498,6 +500,15 @@ cleanup_recovery_resources() {
             log_info "  Waiting for Cloud SQL deletion... [$sql_wait/$sql_max_wait]"
             sleep 10
         done
+    fi
+
+    # Bug #18: GCP service networking holds stale VPC peering reference after Cloud SQL deletion.
+    # Even after `gcloud sql instances describe` returns "not found", the internal service
+    # networking state can take 2-5 minutes to release the VPC peering. Add a delay to reduce
+    # the number of VPC peering deletion retries needed.
+    if [[ "$sql_was_deleted" == "true" ]]; then
+        log_info "Cloud SQL deleted - waiting 2 minutes for GCP service networking to release VPC peering..."
+        sleep 120
     fi
 
     # Step 2: Delete VPC peering (must be after Cloud SQL)
