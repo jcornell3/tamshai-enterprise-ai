@@ -177,11 +177,15 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e # v2
         with:
+          flutter-version: '3.38.0'
           channel: 'stable'
           cache: true
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Generate code (Freezed, JSON serialization)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Analyze code
         run: flutter analyze --no-fatal-infos --no-fatal-warnings

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth/error_codes.dart' as local_auth_error;
 import 'package:logger/logger.dart';
 
 /// Biometric authentication service
@@ -106,10 +107,7 @@ class BiometricService {
       final didAuthenticate = await _localAuth.authenticate(
         localizedReason: reason,
         options: AuthenticationOptions(
-          stickyAuth: true,
           biometricOnly: biometricOnly,
-          useErrorDialogs: true,
-          sensitiveTransaction: true,
         ),
       );
 
@@ -118,28 +116,28 @@ class BiometricService {
     } on PlatformException catch (e) {
       _logger.e('Biometric authentication error', error: e);
 
-      if (e.code == 'NotAvailable') {
+      if (e.code == local_auth_error.notAvailable) {
         throw BiometricAuthException(
           'Biometric authentication is not available on this device',
           code: BiometricErrorCode.notAvailable,
         );
       }
 
-      if (e.code == 'NotEnrolled') {
+      if (e.code == local_auth_error.notEnrolled) {
         throw BiometricAuthException(
           'No biometrics enrolled on this device',
           code: BiometricErrorCode.notEnrolled,
         );
       }
 
-      if (e.code == 'LockedOut') {
+      if (e.code == local_auth_error.lockedOut) {
         throw BiometricAuthException(
           'Biometric authentication is locked due to too many attempts',
           code: BiometricErrorCode.lockedOut,
         );
       }
 
-      if (e.code == 'PermanentlyLockedOut') {
+      if (e.code == local_auth_error.permanentlyLockedOut) {
         throw BiometricAuthException(
           'Biometric authentication is permanently locked',
           code: BiometricErrorCode.permanentlyLockedOut,
