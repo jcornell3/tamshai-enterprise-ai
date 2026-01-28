@@ -23,8 +23,14 @@
 #   delete_cloudsql_instance "-recovery-xxx"                     # Deletes tamshai-prod-postgres-recovery-xxx
 #
 # Required environment variables:
-#   GCP_REGION  - GCP region (from GitHub variable / tfvars)
-#   GCP_PROJECT - GCP project ID
+#   GCP_DR_REGION - DR target region (for DR scripts: evacuate-region.sh, cleanup-recovery.sh)
+#   GCP_REGION    - Production region (for phoenix-rebuild.sh)
+#   GCP_PROJECT   - GCP project ID
+#
+# SAFETY (Bug #20):
+#   - DR scripts set GCP_DR_REGION → cleanup uses DR region
+#   - Production scripts set GCP_REGION → cleanup uses production region
+#   Priority: GCP_DR_REGION > GCP_REGION (DR takes precedence if both set)
 #
 # Optional configuration variables (set before sourcing or use defaults):
 #   RESOURCE_PREFIX - Base resource prefix without suffix (default: tamshai-prod)
@@ -37,12 +43,33 @@
 # Issue #16: Using set -eo (not -u) because gcloud wrapper uses unbound $CLOUDSDK_PYTHON
 set -eo pipefail
 
-# Required environment variables
-: "${GCP_REGION:?ERROR: GCP_REGION environment variable must be set}"
-: "${GCP_PROJECT:?ERROR: GCP_PROJECT environment variable must be set}"
+# Bug #20: Defer region/project checks to function call time, not source time.
+# evacuate-region.sh sources this library BEFORE load_tfvars_config() sets the region.
+# The check is now performed by _ensure_cleanup_env() called at the start of each function.
+#
+# Priority: GCP_DR_REGION (DR) > GCP_REGION (production)
 
-REGION="$GCP_REGION"
-PROJECT="$GCP_PROJECT"
+# Initialize empty - will be set by caller before first function call
+REGION="${GCP_DR_REGION:-${GCP_REGION:-}}"
+PROJECT="${GCP_PROJECT:-}"
+
+# Bug #20: Ensure required environment variables are set before cleanup functions run
+_ensure_cleanup_env() {
+    # DR region takes priority over production region
+    if [[ -n "${GCP_DR_REGION:-}" ]]; then
+        REGION="$GCP_DR_REGION"
+    elif [[ -n "${GCP_REGION:-}" ]]; then
+        REGION="$GCP_REGION"
+    else
+        log_error "Either GCP_DR_REGION (DR) or GCP_REGION (prod) must be set"
+        return 1
+    fi
+    if [[ -z "${GCP_PROJECT:-}" ]]; then
+        log_error "GCP_PROJECT environment variable must be set"
+        return 1
+    fi
+    PROJECT="$GCP_PROJECT"
+}
 
 # Resource naming (configurable for different environments)
 # RESOURCE_PREFIX: Base prefix without any suffix (e.g., "tamshai-prod")
