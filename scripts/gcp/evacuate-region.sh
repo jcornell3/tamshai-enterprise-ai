@@ -141,6 +141,7 @@ load_tfvars_config() {
     TFVAR_APP_DOMAIN=$(get_tfvar "app_domain" "$dr_tfvars" 2>/dev/null || echo "")
     TFVAR_API_DOMAIN=$(get_tfvar "api_domain" "$dr_tfvars" 2>/dev/null || echo "")
     TFVAR_BACKUP_BUCKET=$(get_tfvar "source_backup_bucket" "$dr_tfvars" 2>/dev/null || echo "")
+    TFVAR_STATIC_WEBSITE_DOMAIN=$(get_tfvar "static_website_domain" "$dr_tfvars" 2>/dev/null || echo "")
 
     # Load fallback zones (Issue #102: Zone capacity resilience)
     # Format in tfvars: fallback_zones = ["<region>-a", "<region>-c"]
@@ -197,6 +198,10 @@ KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamsh
 APP_DR_DOMAIN="${APP_DR_DOMAIN:-${TFVAR_APP_DOMAIN:-app-dr.tamshai.com}}"
 # API domain: API_DR_DOMAIN env > tfvars > api-dr.tamshai.com (Issue #102)
 API_DR_DOMAIN="${API_DR_DOMAIN:-${TFVAR_API_DOMAIN:-api-dr.tamshai.com}}"
+# Static website domain: STATIC_DR_DOMAIN env > tfvars > prod-dr.tamshai.com
+STATIC_DR_DOMAIN="${STATIC_DR_DOMAIN:-${TFVAR_STATIC_WEBSITE_DOMAIN:-prod-dr.tamshai.com}}"
+# Production static website bucket (source for content copy)
+STATIC_PROD_BUCKET="${STATIC_PROD_BUCKET:-prod.tamshai.com}"
 # Keycloak realm: env var > default
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 
@@ -1485,6 +1490,69 @@ phase4_deploy_services() {
 }
 
 # =============================================================================
+# PHASE 4.5: SETUP STATIC WEBSITE
+# =============================================================================
+# Bug #30 fix: DR uses a separate static website bucket (prod-dr.tamshai.com)
+# This function creates the bucket and copies content from production.
+# =============================================================================
+
+phase4_5_setup_static_website() {
+    log_phase "4.5" "SETUP STATIC WEBSITE"
+
+    if [[ -z "$STATIC_DR_DOMAIN" || "$STATIC_DR_DOMAIN" == "prod.tamshai.com" ]]; then
+        log_info "Static website uses production bucket - skipping setup"
+        return 0
+    fi
+
+    local dr_bucket="gs://${STATIC_DR_DOMAIN}"
+    local prod_bucket="gs://${STATIC_PROD_BUCKET}"
+
+    # Check if DR bucket already exists
+    if gcloud storage buckets describe "$dr_bucket" &>/dev/null; then
+        log_info "Static website bucket already exists: $dr_bucket"
+    else
+        log_step "Creating static website bucket: $dr_bucket"
+        gcloud storage buckets create "$dr_bucket" \
+            --location=US \
+            --uniform-bucket-level-access || {
+            log_error "Failed to create bucket: $dr_bucket"
+            return 1
+        }
+
+        log_step "Configuring bucket for static website hosting..."
+        gcloud storage buckets update "$dr_bucket" \
+            --web-main-page-suffix=index.html \
+            --web-error-page=index.html || true
+
+        log_step "Making bucket publicly readable..."
+        gcloud storage buckets add-iam-policy-binding "$dr_bucket" \
+            --member=allUsers \
+            --role=roles/storage.objectViewer || true
+    fi
+
+    # Copy content from production bucket
+    log_step "Copying static content from production to DR bucket..."
+    if gcloud storage ls "$prod_bucket" &>/dev/null; then
+        gcloud storage cp -r "${prod_bucket}/*" "$dr_bucket/" || {
+            log_warn "Failed to copy some content - bucket may be partially populated"
+        }
+        log_success "Static content copied to $dr_bucket"
+    else
+        log_warn "Production bucket not accessible: $prod_bucket"
+        log_info "Static content will need to be uploaded manually"
+    fi
+
+    # Verify static website is accessible
+    log_step "Verifying static website..."
+    local website_url="https://${STATIC_DR_DOMAIN}/"
+    if curl -sf "$website_url" &>/dev/null; then
+        log_success "Static website accessible at $website_url"
+    else
+        log_warn "Static website not yet accessible - DNS/SSL may still be propagating"
+    fi
+}
+
+# =============================================================================
 # PHASE 5: CONFIGURE USERS (Test User + Corporate Users)
 # =============================================================================
 
@@ -1753,6 +1821,7 @@ main() {
     phase2_deploy_infrastructure
     # Phase 3 REMOVED (Bug #23) - SA key is shared production infrastructure
     phase4_deploy_services
+    phase4_5_setup_static_website
     phase5_configure_users
     phase6_verify
     phase7_dns_guidance
