@@ -23,7 +23,7 @@
 #   delete_cloudsql_instance "-recovery-xxx"                     # Deletes tamshai-prod-postgres-recovery-xxx
 #
 # Required environment variables:
-#   GCP_REGION  - GCP region (e.g., us-central1)
+#   GCP_REGION  - GCP region (from GitHub variable / tfvars)
 #   GCP_PROJECT - GCP project ID
 #
 # Optional configuration variables (set before sourcing or use defaults):
@@ -1584,7 +1584,7 @@ full_environment_cleanup() {
 #   # Set environment first
 #   export NAME_PREFIX="tamshai-prod-recovery-20260123"
 #   export ENV_ID="recovery-20260123"
-#   export GCP_REGION="us-west1"
+#   export GCP_REGION="<REGION>"
 #   export GCP_PROJECT="my-project"
 #
 #   # Then call the function

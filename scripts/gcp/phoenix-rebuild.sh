@@ -37,8 +37,8 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Default GCP configuration
-export GCP_REGION="${GCP_REGION:-us-central1}"
+# Default GCP configuration (resolved from prod.tfvars or GCP_REGION env var below)
+export GCP_REGION="${GCP_REGION:-}"
 
 # Issue #17: GCP_PROJECT must be set before sourcing libraries (verify.sh requires it)
 export GCP_PROJECT="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
@@ -85,8 +85,12 @@ load_tfvars_config() {
 # Load tfvars configuration
 load_tfvars_config || true
 
-# Apply configuration: Environment vars > tfvars > defaults
-export GCP_REGION="${GCP_REGION:-${TFVAR_REGION:-us-central1}}"
+# Apply configuration: Environment vars > tfvars (no hardcoded region default)
+export GCP_REGION="${GCP_REGION:-${TFVAR_REGION:-}}"
+if [[ -z "$GCP_REGION" ]]; then
+    echo "ERROR: GCP_REGION not set. Set via env var or check prod.tfvars" >&2
+    exit 1
+fi
 export GCP_ZONE="${GCP_ZONE:-${TFVAR_ZONE:-${GCP_REGION}-c}}"
 
 # Keycloak domain: env var > tfvars > default

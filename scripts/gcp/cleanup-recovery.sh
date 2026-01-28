@@ -72,14 +72,20 @@ TFVARS_DIR="$TF_DIR/environments"
 # =============================================================================
 
 load_tfvars_config() {
-    local tfvars_file="${TFVARS_DIR}/dr.tfvars"
+    local dr_tfvars="${TFVARS_DIR}/dr.tfvars"
+    local prod_tfvars="${TFVARS_DIR}/prod.tfvars"
 
-    if [ ! -f "$tfvars_file" ]; then
+    # Load primary region from prod.tfvars
+    if [ -f "$prod_tfvars" ]; then
+        TFVAR_PRIMARY_REGION=$(get_tfvar "region" "$prod_tfvars" 2>/dev/null || echo "")
+    fi
+
+    if [ ! -f "$dr_tfvars" ]; then
         return 1
     fi
 
     # Load Keycloak configuration
-    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$tfvars_file" 2>/dev/null || echo "")
+    TFVAR_KEYCLOAK_DOMAIN=$(get_tfvar "keycloak_domain" "$dr_tfvars" 2>/dev/null || echo "")
 
     return 0
 }
@@ -97,7 +103,8 @@ STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
 KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
 
 # Bug #15: Primary region for same-region detection (artifact registry cleanup)
-PRIMARY_REGION="${PRIMARY_REGION:-us-central1}"
+# Loaded from prod.tfvars or PRIMARY_REGION env var (no hardcoded default)
+PRIMARY_REGION="${PRIMARY_REGION:-${TFVAR_PRIMARY_REGION:-}}"
 
 # Default options
 FORCE=false
@@ -162,7 +169,7 @@ list_recovery_stacks() {
         log_info "No recovery stacks found in gs://${STATE_BUCKET}/gcp/recovery/"
         echo ""
         log_info "To create a recovery stack, run:"
-        echo "  ./evacuate-region.sh us-west1 us-west1-b recovery-test"
+        echo "  ./evacuate-region.sh <REGION> <ZONE> recovery-test"
         exit 0
     fi
 
@@ -269,8 +276,14 @@ detect_region() {
     RECOVERY_REGION=$(terraform output -raw region 2>/dev/null || echo "")
 
     if [ -z "$RECOVERY_REGION" ]; then
-        log_warn "Could not detect region from state. Defaulting to us-west1"
-        RECOVERY_REGION="us-west1"
+        # Fall back to DR tfvars region
+        RECOVERY_REGION=$(get_tfvar "region" "${TFVARS_DIR}/dr.tfvars" 2>/dev/null || echo "")
+        if [ -n "$RECOVERY_REGION" ]; then
+            log_warn "Could not detect region from state. Using dr.tfvars: $RECOVERY_REGION"
+        else
+            log_error "Could not detect recovery region from state or dr.tfvars"
+            exit 1
+        fi
     fi
 
     log_success "Recovery region: $RECOVERY_REGION"

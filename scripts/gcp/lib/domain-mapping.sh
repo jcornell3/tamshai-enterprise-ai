@@ -12,7 +12,7 @@
 #   wait_for_ssl_certificate "auth-dr.tamshai.com" "/auth/realms/tamshai-corp/.well-known/openid-configuration"
 #
 # Required environment variables:
-#   GCP_REGION  - GCP region (e.g., us-central1)
+#   GCP_REGION  - GCP region (from GitHub variable / tfvars)
 #   GCP_PROJECT - GCP project ID
 #
 # Optional configuration variables:
@@ -255,7 +255,7 @@ wait_for_all_domain_ssl() {
         return 0
     fi
 
-    local region="${GCP_REGION:-us-central1}"
+    local region="${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}"
     local failed=0
 
     log_info "Verifying SSL certificates for additional domains (Issue #102 fix)..."
@@ -349,7 +349,7 @@ TARGETS
 #
 # Example:
 #   staged_terraform_deploy "auth-dr.tamshai.com" "tamshai-corp" \
-#       -var="region=us-west1" \
+#       -var="region=<REGION>" \
 #       -var="project_id=my-project"
 #
 staged_terraform_deploy() {
