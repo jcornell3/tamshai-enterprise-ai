@@ -272,7 +272,7 @@ jobs:
           echo "Created $archiveName.zip"
 
       - name: Upload Windows MSIX installer
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-windows-msix
           path: tamshai-${{ needs.setup.outputs.environment }}-windows.msix
@@ -280,7 +280,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload Windows portable
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-windows-portable
           path: tamshai-${{ needs.setup.outputs.environment }}-windows-portable.zip
@@ -394,14 +394,14 @@ jobs:
           echo "Created $ARCHIVE_NAME.zip"
 
       - name: Upload macOS DMG installer
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-macos-dmg
           path: tamshai-${{ needs.setup.outputs.environment }}-macos.dmg
           retention-days: 30
 
       - name: Upload macOS portable
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-macos-portable
           path: tamshai-${{ needs.setup.outputs.environment }}-macos-portable.zip
@@ -482,14 +482,14 @@ jobs:
              tamshai-$ENV.aab
 
       - name: Upload Android APK
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-android-apk
           path: tamshai-${{ needs.setup.outputs.environment }}.apk
           retention-days: 30
 
       - name: Upload Android App Bundle
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-android-aab
           path: tamshai-${{ needs.setup.outputs.environment }}.aab
@@ -562,7 +562,7 @@ jobs:
           echo "Created $ARCHIVE_NAME.zip (unsigned - for development only)"
 
       - name: Upload iOS artifact (unsigned)
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
         with:
           name: tamshai-${{ needs.setup.outputs.environment }}-ios-unsigned
           path: tamshai-${{ needs.setup.outputs.environment }}-ios-unsigned.zip
