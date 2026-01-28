@@ -103,6 +103,9 @@ module "security" {
   # Regional evacuation support: suffix for resource naming
   name_suffix = local.name_suffix
 
+  # Bug #29 fix: Don't create new secret versions in DR mode (would overwrite production secrets)
+  manage_secret_versions = !var.recovery_mode
+
   # MongoDB URI access - disabled in DR mode (secret doesn't exist in recovery state)
   enable_mongodb_uri_access = var.enable_mongodb_uri_access
 

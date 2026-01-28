@@ -76,3 +76,10 @@ variable "name_suffix" {
   type        = string
   default     = ""
 }
+
+# Bug #29 fix: Prevent DR from regenerating production secrets
+variable "manage_secret_versions" {
+  description = "Whether to create/manage secret versions. Set to false for DR to prevent overwriting production secrets."
+  type        = bool
+  default     = true
+}
