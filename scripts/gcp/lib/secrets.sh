@@ -589,11 +589,13 @@ fetch_totp_secret() {
 # =============================================================================
 
 # Trigger identity-sync workflow to provision corporate users (Gap #53)
-# Usage: trigger_identity_sync [wait_for_completion] [repo] [action] [force_password_reset]
+# Usage: trigger_identity_sync [wait_for_completion] [repo] [action] [force_password_reset] [region] [cloud_sql_instance]
 #   wait_for_completion: true/false - whether to wait for workflow (default: true)
 #   repo: GitHub repo (default: auto-detect from git remote)
 #   action: Action to perform (default: all) - verify-only, load-hr-data, sync-users, all
 #   force_password_reset: true/false - reset passwords for existing users (default: false)
+#   region: GCP region (optional - defaults to workflow's vars.GCP_REGION)
+#   cloud_sql_instance: Cloud SQL instance name (optional - defaults to tamshai-prod-postgres)
 #
 # Phoenix Rebuild Lesson (Issue #102):
 #   After fresh Keycloak deployment, pass force_password_reset=true to ensure
@@ -601,15 +603,21 @@ fetch_totp_secret() {
 #   random passwords. The entrypoint.sh runs a two-step process:
 #     Step 1: Normal sync (create users)
 #     Step 2: Force password reset (set known passwords)
+#
+# Bug #28 fix: Added region and cloud_sql_instance parameters for DR support
 trigger_identity_sync() {
     local wait_for_completion="${1:-true}"
     local repo="${2:-}"
     local action="${3:-all}"
     local force_password_reset="${4:-false}"
+    local region="${5:-}"
+    local cloud_sql_instance="${6:-}"
 
     log_secrets_info "Triggering identity-sync workflow (Gap #53)..."
     log_secrets_info "  Action: $action"
     log_secrets_info "  Force password reset: $force_password_reset"
+    [ -n "$region" ] && log_secrets_info "  Region: $region"
+    [ -n "$cloud_sql_instance" ] && log_secrets_info "  Cloud SQL: $cloud_sql_instance"
 
     # Check gh CLI
     if ! command -v gh &>/dev/null; then
@@ -640,13 +648,19 @@ trigger_identity_sync() {
     fi
 
     # Trigger the workflow with parameters
+    # Bug #28 fix: Include region and cloud_sql_instance if provided
     log_secrets_info "Running provision-prod-users workflow..."
-    if ! gh workflow run provision-prod-users.yml \
-        --repo "$repo" \
-        --ref main \
-        -f action="$action" \
-        -f dry_run=false \
-        -f force_password_reset="$force_password_reset"; then
+    local workflow_args=(
+        --repo "$repo"
+        --ref main
+        -f action="$action"
+        -f dry_run=false
+        -f force_password_reset="$force_password_reset"
+    )
+    [ -n "$region" ] && workflow_args+=(-f region="$region")
+    [ -n "$cloud_sql_instance" ] && workflow_args+=(-f cloud_sql_instance="$cloud_sql_instance")
+
+    if ! gh workflow run provision-prod-users.yml "${workflow_args[@]}"; then
         log_secrets_error "Could not trigger provision-prod-users workflow"
         return 1
     fi
@@ -692,17 +706,25 @@ trigger_identity_sync() {
 # =============================================================================
 
 # Trigger sample data loading workflow
-# Usage: trigger_sample_data_load [wait_for_completion] [repo] [data_set]
+# Usage: trigger_sample_data_load [wait_for_completion] [repo] [data_set] [region] [cloud_sql_instance]
 #   wait_for_completion: true/false - whether to wait for workflow (default: true)
 #   repo: GitHub repo (default: auto-detect from git remote)
 #   data_set: Data to load (default: all) - all, finance, sales, support
+#   region: GCP region (optional - defaults to workflow's vars.GCP_REGION)
+#   cloud_sql_instance: Cloud SQL instance name (optional - defaults to tamshai-prod-postgres)
+#
+# Bug #28 fix: Added region and cloud_sql_instance parameters for DR support
 trigger_sample_data_load() {
     local wait_for_completion="${1:-true}"
     local repo="${2:-}"
     local data_set="${3:-all}"
+    local region="${4:-}"
+    local cloud_sql_instance="${5:-}"
 
     log_secrets_info "Triggering sample data load workflow (Issue #102 fix)..."
     log_secrets_info "  Data set: $data_set"
+    [ -n "$region" ] && log_secrets_info "  Region: $region"
+    [ -n "$cloud_sql_instance" ] && log_secrets_info "  Cloud SQL: $cloud_sql_instance"
 
     # Check gh CLI
     if ! command -v gh &>/dev/null; then
@@ -732,12 +754,18 @@ trigger_sample_data_load() {
     fi
 
     # Trigger the workflow with parameters
+    # Bug #28 fix: Include region and cloud_sql_instance if provided
     log_secrets_info "Running provision-prod-data workflow (data_set=$data_set)..."
-    if ! gh workflow run provision-prod-data.yml \
-        --repo "$repo" \
-        --ref main \
-        -f data_set="$data_set" \
-        -f dry_run=false; then
+    local workflow_args=(
+        --repo "$repo"
+        --ref main
+        -f data_set="$data_set"
+        -f dry_run=false
+    )
+    [ -n "$region" ] && workflow_args+=(-f region="$region")
+    [ -n "$cloud_sql_instance" ] && workflow_args+=(-f cloud_sql_instance="$cloud_sql_instance")
+
+    if ! gh workflow run provision-prod-data.yml "${workflow_args[@]}"; then
         log_secrets_error "Could not trigger provision-prod-data workflow"
         return 1
     fi

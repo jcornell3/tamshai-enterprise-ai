@@ -48,11 +48,22 @@ on:
         required: false
         type: boolean
         default: false
+      region:
+        description: 'GCP region (leave empty for production default)'
+        required: false
+        type: string
+        default: ''
+      cloud_sql_instance:
+        description: 'Cloud SQL instance name (leave empty for production default)'
+        required: false
+        type: string
+        default: ''
 
 env:
   GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-  GCP_REGION: ${{ vars.GCP_REGION }}
-  CLOUD_SQL_INSTANCE: tamshai-prod-postgres
+  # Bug #28 fix: Allow region override for DR or region changes
+  GCP_REGION: ${{ github.event.inputs.region || vars.GCP_REGION }}
+  CLOUD_SQL_INSTANCE: ${{ github.event.inputs.cloud_sql_instance || 'tamshai-prod-postgres' }}
   # KEYCLOAK_URL is discovered dynamically via gcloud in the Final Verification job
   KEYCLOAK_REALM: tamshai-corp
 

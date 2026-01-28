@@ -271,7 +271,8 @@ wait_for_all_domain_ssl() {
         return 0
     fi
 
-    local region="${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}"
+    # Bug #25 fix: Use GCP_DR_REGION (DR) with fallback to GCP_REGION (prod)
+    local region="${GCP_DR_REGION:-${GCP_REGION:-$(gcloud config get-value compute/region 2>/dev/null || echo "")}}"
     local failed=0
 
     log_info "Verifying SSL certificates for additional domains (Issue #102 fix)..."

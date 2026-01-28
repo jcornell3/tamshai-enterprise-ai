@@ -1849,11 +1849,14 @@ phase_9_totp() {
     # Run with AUTO_CONFIRM for non-interactive mode
     export KEYCLOAK_ADMIN_PASSWORD="$admin_password"
     export AUTO_CONFIRM=true
+    # Bug #27 fix: Set KEYCLOAK_URL explicitly to use the correct domain
+    export KEYCLOAK_URL="https://${KEYCLOAK_DOMAIN}/auth"
 
     chmod +x "$totp_script"
     "$totp_script" prod test-user.journey "$totp_secret" || {
         log_warn "TOTP configuration may have failed - check manually"
     }
+    unset KEYCLOAK_URL  # Clean up
 
     save_checkpoint 9 "completed"
     log_success "Phase 9 complete - TOTP configured"

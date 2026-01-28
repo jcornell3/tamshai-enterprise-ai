@@ -1538,9 +1538,13 @@ phase5_configure_users() {
         fi
 
         export AUTO_CONFIRM=true
-        "$PROJECT_ROOT/keycloak/scripts/set-user-totp.sh" prod test-user.journey || {
+        # Bug #27 fix: Set KEYCLOAK_URL to DR Keycloak (not production)
+        export KEYCLOAK_URL="https://${KEYCLOAK_DR_DOMAIN}/auth"
+        # Bug #26 fix: Pass TOTP secret as third argument (required by set-user-totp.sh)
+        "$PROJECT_ROOT/keycloak/scripts/set-user-totp.sh" prod test-user.journey "$TEST_USER_TOTP_SECRET_RAW" || {
             log_warn "TOTP configuration failed - may need manual setup"
         }
+        unset KEYCLOAK_URL  # Clean up to avoid affecting other scripts
     fi
 
     # =========================================================================
@@ -1562,11 +1566,15 @@ phase5_configure_users() {
     log_step "Provisioning corporate users (Gap #53, Issue #102)..."
     log_info "Corporate users (eve.thompson, alice.chen, etc.) are provisioned via workflow"
 
-    if trigger_identity_sync "true" "" "all" "true"; then
+    # Bug #28 fix: Pass DR region and Cloud SQL instance name to workflow
+    local dr_cloud_sql_instance="tamshai-prod-postgres-${ENV_ID}"
+    log_info "DR Cloud SQL instance: $dr_cloud_sql_instance"
+
+    if trigger_identity_sync "true" "" "all" "true" "$NEW_REGION" "$dr_cloud_sql_instance"; then
         log_success "Corporate users provisioned with force password reset"
     else
         log_warn "Identity sync failed - corporate users may not exist"
-        log_info "Run manually: gh workflow run provision-prod-users.yml -f action=all -f force_password_reset=true"
+        log_info "Run manually: gh workflow run provision-prod-users.yml -f action=all -f force_password_reset=true -f region=$NEW_REGION -f cloud_sql_instance=$dr_cloud_sql_instance"
     fi
 
     # =========================================================================
@@ -1576,11 +1584,12 @@ phase5_configure_users() {
     # via MongoDB Atlas) must be loaded separately after user provisioning.
     log_step "Loading sample data (Finance, Sales, Support) (Issue #102 fix)..."
 
-    if trigger_sample_data_load "true" "" "all"; then
+    # Bug #28 fix: Pass DR region and Cloud SQL instance name to workflow
+    if trigger_sample_data_load "true" "" "all" "$NEW_REGION" "$dr_cloud_sql_instance"; then
         log_success "Sample data loaded successfully"
     else
         log_warn "Sample data loading failed"
-        log_info "Run manually: gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false"
+        log_info "Run manually: gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false -f region=$NEW_REGION -f cloud_sql_instance=$dr_cloud_sql_instance"
     fi
 
     log_success "User configuration complete"

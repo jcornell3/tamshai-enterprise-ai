@@ -74,21 +74,27 @@ USERNAME="$2"
 TOTP_SECRET="$3"
 
 # Configuration based on environment
-case "$ENV" in
-    dev)
-        KEYCLOAK_URL="https://www.tamshai.local/auth"
-        ;;
-    stage)
-        KEYCLOAK_URL="https://www.tamshai.com/auth"
-        ;;
-    prod)
-        KEYCLOAK_URL="https://keycloak-fn44nd7wba-uc.a.run.app/auth"
-        ;;
-    *)
-        log_error "Invalid environment: $ENV (must be dev, stage, or prod)"
-        exit 1
-        ;;
-esac
+# Bug #27 fix: Allow KEYCLOAK_URL environment variable to override defaults
+# This is needed for DR where prod Keycloak is in a different region
+if [[ -n "${KEYCLOAK_URL:-}" ]]; then
+    log_info "Using KEYCLOAK_URL from environment: $KEYCLOAK_URL"
+else
+    case "$ENV" in
+        dev)
+            KEYCLOAK_URL="https://www.tamshai.local/auth"
+            ;;
+        stage)
+            KEYCLOAK_URL="https://www.tamshai.com/auth"
+            ;;
+        prod)
+            KEYCLOAK_URL="https://keycloak-fn44nd7wba-uc.a.run.app/auth"
+            ;;
+        *)
+            log_error "Invalid environment: $ENV (must be dev, stage, or prod)"
+            exit 1
+            ;;
+    esac
+fi
 
 REALM="tamshai-corp"
 ADMIN_USER="admin"
