@@ -765,6 +765,88 @@ EOF
     return 0
 }
 
+# Reset Cloud SQL database user passwords to match DR secrets (Bug #36)
+#
+# After database restoration from backup, the Cloud SQL users may have stale
+# passwords. This function resets them to match the current Secret Manager values.
+#
+# Usage: reset_cloudsql_user_passwords <env_id> <region> [project]
+#
+# Bug #36: DR MCP services couldn't connect to database because:
+#   - Terraform created Cloud SQL with random passwords stored in secrets
+#   - Database was restored from production backup
+#   - MCP services deployed with DR secret passwords
+#   - But Cloud SQL users still had production passwords (users not affected by data restore)
+#
+# This ensures the Cloud SQL user passwords match what's in Secret Manager.
+reset_cloudsql_user_passwords() {
+    local env_id="${1:?env_id required}"
+    local region="${2:?region required}"
+    local project="${3:-$GCP_PROJECT}"
+
+    log_secrets_info "Resetting Cloud SQL user passwords to match DR secrets (Bug #36)..."
+
+    # Determine Cloud SQL instance name
+    local instance_name
+    if [ "$env_id" = "primary" ]; then
+        instance_name="tamshai-prod-postgres"
+    else
+        instance_name="tamshai-prod-postgres-${env_id}"
+    fi
+
+    log_secrets_info "  Instance: $instance_name"
+    log_secrets_info "  Region: $region"
+
+    # Determine secret names (DR uses suffixed secrets)
+    local db_secret="tamshai-prod-db-password"
+    local kc_db_secret="tamshai-prod-keycloak-db-password"
+    if [ "$env_id" != "primary" ]; then
+        db_secret="${db_secret}-${env_id}"
+        kc_db_secret="${kc_db_secret}-${env_id}"
+    fi
+
+    # Reset tamshai user password
+    log_secrets_info "  Resetting 'tamshai' user password..."
+    local tamshai_password
+    tamshai_password=$(gcloud secrets versions access latest --secret="$db_secret" --project="$project" 2>/dev/null)
+    if [ -n "$tamshai_password" ]; then
+        if gcloud sql users set-password tamshai \
+            --instance="$instance_name" \
+            --project="$project" \
+            --password="$tamshai_password" 2>/dev/null; then
+            log_secrets_success "  'tamshai' user password reset successfully"
+        else
+            log_secrets_error "  Failed to reset 'tamshai' user password"
+            return 1
+        fi
+    else
+        log_secrets_error "  Could not retrieve tamshai password from $db_secret"
+        return 1
+    fi
+
+    # Reset keycloak user password
+    log_secrets_info "  Resetting 'keycloak' user password..."
+    local keycloak_password
+    keycloak_password=$(gcloud secrets versions access latest --secret="$kc_db_secret" --project="$project" 2>/dev/null)
+    if [ -n "$keycloak_password" ]; then
+        if gcloud sql users set-password keycloak \
+            --instance="$instance_name" \
+            --project="$project" \
+            --password="$keycloak_password" 2>/dev/null; then
+            log_secrets_success "  'keycloak' user password reset successfully"
+        else
+            log_secrets_error "  Failed to reset 'keycloak' user password"
+            return 1
+        fi
+    else
+        log_secrets_error "  Could not retrieve keycloak password from $kc_db_secret"
+        return 1
+    fi
+
+    log_secrets_success "Cloud SQL user passwords reset successfully"
+    return 0
+}
+
 # Trigger identity-sync workflow to provision corporate users (Gap #53)
 # Usage: trigger_identity_sync [wait_for_completion] [repo] [action] [force_password_reset] [region] [cloud_sql_instance]
 #   wait_for_completion: true/false - whether to wait for workflow (default: true)
