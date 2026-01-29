@@ -898,12 +898,30 @@ KEYCLOAK_EOF
                 web-portal)
                     # Web portal needs repo root context with Dockerfile.prod
                     # Phoenix pattern: Use --config with temp cloudbuild.yaml
+                    # Bug #37 fix: Pass DR-specific build args for Keycloak URL
                     log_info "    Building web-portal (Dockerfile.prod from repo root)..."
                     local webportal_config="/tmp/webportal-cloudbuild-$$.yaml"
+                    local dr_keycloak_url="https://${KEYCLOAK_DR_DOMAIN}/auth/realms/${KEYCLOAK_REALM}"
                     cat > "$webportal_config" <<WEBPORTAL_EOF
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', '${target_image}', '-f', 'clients/web/Dockerfile.prod', '.']
+    args:
+      - 'build'
+      - '-t'
+      - '${target_image}'
+      - '-f'
+      - 'clients/web/Dockerfile.prod'
+      - '--build-arg'
+      - 'VITE_KEYCLOAK_URL=${dr_keycloak_url}'
+      - '--build-arg'
+      - 'VITE_KEYCLOAK_CLIENT_ID=web-portal'
+      - '--build-arg'
+      - 'VITE_API_GATEWAY_URL='
+      - '--build-arg'
+      - 'VITE_MCP_GATEWAY_URL='
+      - '--build-arg'
+      - 'VITE_RELEASE_TAG=v1.0.0-dr'
+      - '.'
 images:
   - '${target_image}'
 WEBPORTAL_EOF
