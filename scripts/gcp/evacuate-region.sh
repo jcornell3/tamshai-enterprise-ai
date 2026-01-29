@@ -1652,11 +1652,12 @@ phase5_configure_users() {
     # =========================================================================
     # Step 4: Provision corporate users (Gap #53 - identity-sync)
     # =========================================================================
-    # Phoenix Rebuild Lesson (Issue #102): Pass force_password_reset=true after
-    # fresh Keycloak deployment. The entrypoint.sh runs a two-step process:
-    #   Step 1: Normal sync (create users + clear stale keycloak_user_id)
-    #   Step 2: Force password reset (set known PROD_USER_PASSWORD)
-    log_step "Provisioning corporate users (Gap #53, Issue #102)..."
+    # The entrypoint.sh now auto-detects stale keycloak_user_id values (Bug #33 fix).
+    # When PostgreSQL has more "synced" users than Keycloak actually has, it clears
+    # the stale IDs automatically before running identity-sync. This allows:
+    #   - Fresh Keycloak deployment: Users created with PROD_USER_PASSWORD
+    #   - Normal sync: Existing users updated with new password if needed
+    log_step "Provisioning corporate users (Gap #53, Bug #33 auto-detect fix)..."
     log_info "Corporate users (eve.thompson, alice.chen, etc.) are provisioned via workflow"
 
     # Bug #28 fix: Pass DR region and Cloud SQL instance name to workflow
@@ -1664,7 +1665,7 @@ phase5_configure_users() {
     log_info "DR Cloud SQL instance: $dr_cloud_sql_instance"
 
     # Bug #32 Fix: Fail on provisioning errors - missing job is a build failure
-    # Bug #33 Fix: Prod uses PROD_USER_PASSWORD directly, not force_password_reset
+    # Bug #33 Fix: entrypoint.sh auto-detects stale IDs, no force_password_reset needed
     if ! trigger_identity_sync "true" "" "all" "false" "$NEW_REGION" "$dr_cloud_sql_instance"; then
         log_error "Identity sync failed - this is a build failure"
         log_error "Ensure provision-users job exists in $NEW_REGION"

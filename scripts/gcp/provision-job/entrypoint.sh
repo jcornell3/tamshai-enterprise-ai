@@ -321,13 +321,54 @@ sync_users() {
 
     cd /app/services/mcp-hr
 
-    # Step 0: If force password reset, clear stale keycloak_user_id values.
-    # After a Phoenix rebuild, Keycloak is recreated but PostgreSQL still has
-    # old keycloak_user_id values from the destroyed Keycloak. The sync script
-    # checks keycloak_user_id IS NULL to find pending users, so stale IDs cause
-    # it to think all users are already synced (0 pending) and skip creation.
+    # Step 0: Auto-detect and clear stale keycloak_user_id values (Bug #33 fix)
+    # In DR/Phoenix scenarios, PostgreSQL is restored from backup with keycloak_user_id
+    # values pointing to the old Keycloak. The sync script only queries users where
+    # keycloak_user_id IS NULL, so stale IDs cause it to skip user creation.
+    #
+    # Detection: If PostgreSQL has N employees with keycloak_user_id set, but Keycloak
+    # has significantly fewer users, the IDs are stale and must be cleared.
+    #
+    # This is automatic (no FORCE_PASSWORD_RESET needed) to prevent user oversight.
+    echo "[INFO] Checking for stale keycloak_user_id values..."
+
+    # Count employees with keycloak_user_id in PostgreSQL
+    PG_SYNCED_COUNT=$(PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
+        "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null | tr -d ' \n' || echo "0")
+    echo "[INFO] PostgreSQL claims $PG_SYNCED_COUNT employees have keycloak_user_id"
+
+    # Count actual users in Keycloak (realm-export.json typically has 1 user: test-user.journey)
+    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
+    KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        --data-urlencode "password=${KC_ADMIN_PASSWORD}" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+
+    KC_USER_COUNT="0"
+    if [ -n "$KC_TOKEN" ]; then
+        KC_USER_COUNT=$(curl -sf "${KEYCLOAK_URL}/admin/realms/${KEYCLOAK_REALM}/users?max=1000" \
+            -H "Authorization: Bearer $KC_TOKEN" 2>/dev/null | grep -o '"username"' | wc -l | tr -d ' ' || echo "0")
+    fi
+    echo "[INFO] Keycloak actually has $KC_USER_COUNT users in ${KEYCLOAK_REALM}"
+
+    # If PostgreSQL has synced IDs but Keycloak has far fewer users, IDs are stale
+    # Threshold: If KC has less than half the users that PG claims are synced, clear IDs
+    # This handles: Fresh Keycloak (1 user) + Backup restore (59 employees with stale IDs)
+    if [ "$PG_SYNCED_COUNT" -gt 0 ] && [ "$KC_USER_COUNT" -lt "$((PG_SYNCED_COUNT / 2 + 1))" ]; then
+        echo "[WARN] Detected stale keycloak_user_id values (PG has $PG_SYNCED_COUNT, KC has $KC_USER_COUNT)"
+        echo "[INFO] Clearing stale keycloak_user_id values to allow user creation..."
+        PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c \
+            "UPDATE hr.employees SET keycloak_user_id = NULL WHERE keycloak_user_id IS NOT NULL;" 2>&1 || \
+            echo "[WARN] Could not clear stale keycloak_user_id values"
+    else
+        echo "[OK] keycloak_user_id values appear to be in sync"
+    fi
+
+    # Legacy: FORCE_PASSWORD_RESET also clears IDs (for explicit override scenarios)
     if [ "$FORCE_PASSWORD_RESET" = "true" ]; then
-        echo "[INFO] Clearing stale keycloak_user_id values (force reset implies fresh Keycloak)..."
+        echo "[INFO] FORCE_PASSWORD_RESET=true - ensuring keycloak_user_id values are cleared..."
         PGPASSWORD="$DB_PASSWORD" psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c \
             "UPDATE hr.employees SET keycloak_user_id = NULL WHERE keycloak_user_id IS NOT NULL;" 2>&1 || \
             echo "[WARN] Could not clear stale keycloak_user_id values"
