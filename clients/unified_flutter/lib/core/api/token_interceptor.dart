@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:logger/logger.dart';
 import '../storage/secure_storage_service.dart';
 import '../auth/providers/auth_provider.dart';
@@ -8,7 +7,7 @@ import 'certificate_pinner.dart';
 import '../config/environment_config.dart';
 
 /// Dio interceptor for automatic token injection and refresh
-/// 
+///
 /// Features:
 /// - Automatically adds Bearer token to requests
 /// - Detects 401 responses and triggers token refresh
@@ -17,7 +16,11 @@ class AuthTokenInterceptor extends Interceptor {
   final SecureStorageService _storage;
   final Ref _ref;
   final Logger _logger;
-  
+
+  /// Reference to the parent Dio instance for retrying requests.
+  /// This ensures retried requests use the same configuration (cert pinning, etc.)
+  late final Dio _dio;
+
   bool _isRefreshing = false;
   final List<RequestOptions> _requestsQueue = [];
 
@@ -28,6 +31,9 @@ class AuthTokenInterceptor extends Interceptor {
   })  : _storage = storage,
         _ref = ref,
         _logger = logger ?? Logger();
+
+  /// Set the parent Dio instance. Must be called after adding to Dio.
+  void setDio(Dio dio) => _dio = dio;
 
   @override
   Future<void> onRequest(
@@ -63,12 +69,17 @@ class AuthTokenInterceptor extends Interceptor {
     }
   }
 
+  /// Key used to mark requests as retries to avoid infinite loops
+  static const String _retryKey = 'isRetry';
+
   @override
   Future<void> onError(
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    if (err.response?.statusCode == 401) {
+    // Skip if this is already a retry request (avoid infinite loop)
+    final isRetry = err.requestOptions.extra[_retryKey] == true;
+    if (err.response?.statusCode == 401 && !isRetry) {
       _logger.w('Received 401 response, attempting token refresh');
 
       try {
@@ -88,7 +99,7 @@ class AuthTokenInterceptor extends Interceptor {
 
         // Get new token
         final newToken = await _storage.getAccessToken();
-        
+
         if (newToken == null) {
           _logger.e('No token after refresh');
           handler.next(err);
@@ -98,9 +109,11 @@ class AuthTokenInterceptor extends Interceptor {
         // Retry the original request with new token
         final requestOptions = err.requestOptions;
         requestOptions.headers['Authorization'] = 'Bearer $newToken';
+        // Mark as retry to prevent infinite loop
+        requestOptions.extra[_retryKey] = true;
 
-        final dio = Dio();
-        final response = await dio.fetch(requestOptions);
+        // Use the configured Dio instance (with cert pinning, interceptors, etc.)
+        final response = await _dio.fetch(requestOptions);
 
         // Process queued requests
         await _processQueue(newToken);
@@ -108,10 +121,10 @@ class AuthTokenInterceptor extends Interceptor {
         handler.resolve(response);
       } catch (e, stackTrace) {
         _logger.e('Token refresh failed', error: e, stackTrace: stackTrace);
-        
+
         // Clear queue on refresh failure
         _requestsQueue.clear();
-        
+
         // User will be logged out by auth provider
         handler.next(err);
       } finally {
@@ -126,12 +139,13 @@ class AuthTokenInterceptor extends Interceptor {
   Future<void> _processQueue(String newToken) async {
     _logger.i('Processing ${_requestsQueue.length} queued requests');
 
-    final dio = Dio();
-    
     for (final options in _requestsQueue) {
       try {
         options.headers['Authorization'] = 'Bearer $newToken';
-        await dio.fetch(options);
+        // Mark as retry to prevent infinite loop
+        options.extra[_retryKey] = true;
+        // Use the configured Dio instance (with cert pinning, interceptors, etc.)
+        await _dio.fetch(options);
       } catch (e) {
         _logger.e('Failed to process queued request', error: e);
       }
@@ -162,14 +176,14 @@ final dioProvider = Provider<Dio>((ref) {
   // Note: Pinning is disabled when no certificates are configured (dev mode)
   CertificatePinner.configure(dio);
 
-  // Add auth interceptor
-  dio.interceptors.add(
-    AuthTokenInterceptor(
-      storage: ref.watch(secureStorageProvider),
-      ref: ref,
-      logger: ref.watch(loggerProvider),
-    ),
+  // Create auth interceptor and set parent Dio reference
+  final authInterceptor = AuthTokenInterceptor(
+    storage: ref.watch(secureStorageProvider),
+    ref: ref,
+    logger: ref.watch(loggerProvider),
   );
+  authInterceptor.setDio(dio);
+  dio.interceptors.add(authInterceptor);
 
   // Add logging interceptor (development only)
   dio.interceptors.add(
