@@ -1581,6 +1581,20 @@ phase5_configure_users() {
     fi
 
     # =========================================================================
+    # Step 0.5: Reset Cloud SQL user passwords (Bug #36)
+    # =========================================================================
+    # After Terraform creates the DR Cloud SQL instance, the database users
+    # (tamshai, keycloak) have passwords from Secret Manager. However, if data
+    # was restored from backup or Terraform ran multiple times, passwords may
+    # be out of sync. This ensures MCP services can connect.
+    log_step "Resetting Cloud SQL user passwords to match DR secrets (Bug #36)..."
+    if ! reset_cloudsql_user_passwords "$ENV_ID" "$NEW_REGION" "$PROJECT_ID"; then
+        log_error "Failed to reset Cloud SQL user passwords"
+        log_error "MCP services will fail to connect to database"
+        exit 1
+    fi
+
+    # =========================================================================
     # Step 1: Warm up Keycloak (Gap #52 - cold start mitigation)
     # =========================================================================
     log_step "Warming up Keycloak before user configuration (Gap #52)..."
