@@ -123,12 +123,17 @@
 
     <script>
         // Environment-aware SSO redirect
-        // prod.tamshai.com uses separate portal domain (app.tamshai.com)
+        // Production domains use separate portal domains:
+        //   prod.tamshai.com → app.tamshai.com
+        //   prod-dr.tamshai.com → app-dr.tamshai.com
         // All other environments use same-origin /app/ path
         (function() {
             var ssoBtn = document.getElementById('sso-login-btn');
-            if (window.location.hostname === 'prod.tamshai.com') {
+            var hostname = window.location.hostname;
+            if (hostname === 'prod.tamshai.com') {
                 ssoBtn.href = 'https://app.tamshai.com';
+            } else if (hostname === 'prod-dr.tamshai.com') {
+                ssoBtn.href = 'https://app-dr.tamshai.com';
             }
         })();
     </script>
