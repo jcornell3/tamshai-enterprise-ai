@@ -765,6 +765,219 @@ EOF
     return 0
 }
 
+# =============================================================================
+# Sync web-portal client mappers (Bug #37 fix)
+#
+# Adds required protocol mappers to the web-portal client:
+# - subject-claim-mapper: Ensures 'sub' claim is in access token (CRITICAL)
+# - mcp-gateway-audience: Adds 'mcp-gateway' to token audience
+# - mcp-gateway-roles-mapper: Maps mcp-gateway client roles to token
+#
+# Without these mappers, JWT tokens are missing critical claims and MCP
+# Gateway returns 400 MISSING_USER_CONTEXT errors.
+#
+# Usage: sync_keycloak_web_portal_mappers <keycloak_url> <admin_password>
+#   keycloak_url: Keycloak base URL (e.g., https://auth-dr.tamshai.com/auth)
+#   admin_password: Keycloak admin password
+#
+# Returns 0 on success, 1 on failure
+# =============================================================================
+sync_keycloak_web_portal_mappers() {
+    local keycloak_url="${1:?Keycloak URL required}"
+    local admin_password="${2:?Admin password required}"
+    local realm="tamshai-corp"
+
+    log_secrets_info "Syncing web-portal client mappers (Bug #37 fix)..."
+    log_secrets_info "  Keycloak URL: $keycloak_url"
+
+    # Step 1: Get admin access token
+    log_secrets_info "  Getting admin access token..."
+    local token_response
+    token_response=$(curl -sf -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        --data-urlencode "password=${admin_password}" 2>/dev/null)
+
+    if [ -z "$token_response" ]; then
+        log_secrets_error "Failed to get admin token from Keycloak"
+        return 1
+    fi
+
+    local access_token
+    access_token=$(echo "$token_response" | jq -r '.access_token' 2>/dev/null)
+    if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+        log_secrets_error "Failed to parse access token from response"
+        log_secrets_error "Response: $token_response"
+        return 1
+    fi
+
+    # Step 2: Get web-portal client UUID
+    log_secrets_info "  Finding web-portal client..."
+    local existing_client
+    existing_client=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients?clientId=web-portal" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+
+    local client_uuid
+    client_uuid=$(echo "$existing_client" | jq -r '.[0].id' 2>/dev/null)
+    if [ -z "$client_uuid" ] || [ "$client_uuid" = "null" ]; then
+        log_secrets_error "web-portal client not found in Keycloak"
+        return 1
+    fi
+    log_secrets_info "  Found web-portal client: $client_uuid"
+
+    # Step 3: Get existing mappers
+    local existing_mappers
+    existing_mappers=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+
+    # Helper function to check if mapper exists
+    mapper_exists() {
+        local mapper_name="$1"
+        echo "$existing_mappers" | jq -e ".[] | select(.name == \"$mapper_name\")" >/dev/null 2>&1
+    }
+
+    # Helper function to get mapper ID
+    get_mapper_id() {
+        local mapper_name="$1"
+        echo "$existing_mappers" | jq -r ".[] | select(.name == \"$mapper_name\") | .id" 2>/dev/null
+    }
+
+    # Step 4: Add/update subject-claim-mapper (CRITICAL for userId)
+    log_secrets_info "  Syncing subject-claim-mapper..."
+    local sub_mapper_json
+    sub_mapper_json=$(cat <<'EOF'
+{
+    "name": "subject-claim-mapper",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-usermodel-property-mapper",
+    "consentRequired": false,
+    "config": {
+        "user.attribute": "id",
+        "claim.name": "sub",
+        "jsonType.label": "String",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+    }
+}
+EOF
+)
+
+    if mapper_exists "subject-claim-mapper"; then
+        local mapper_id
+        mapper_id=$(get_mapper_id "subject-claim-mapper")
+        log_secrets_info "    Updating existing mapper (id: $mapper_id)..."
+        curl -sf -X PUT "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${mapper_id}" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "$sub_mapper_json" 2>/dev/null || true
+    else
+        log_secrets_info "    Creating mapper..."
+        curl -sf -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "$sub_mapper_json" 2>/dev/null || true
+    fi
+
+    # Step 5: Add/update mcp-gateway-audience mapper
+    log_secrets_info "  Syncing mcp-gateway-audience mapper..."
+    local audience_mapper_json
+    audience_mapper_json=$(cat <<'EOF'
+{
+    "name": "mcp-gateway-audience",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-audience-mapper",
+    "consentRequired": false,
+    "config": {
+        "included.client.audience": "mcp-gateway",
+        "id.token.claim": "false",
+        "access.token.claim": "true"
+    }
+}
+EOF
+)
+
+    if mapper_exists "mcp-gateway-audience"; then
+        local mapper_id
+        mapper_id=$(get_mapper_id "mcp-gateway-audience")
+        log_secrets_info "    Updating existing mapper (id: $mapper_id)..."
+        curl -sf -X PUT "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${mapper_id}" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "$audience_mapper_json" 2>/dev/null || true
+    else
+        log_secrets_info "    Creating mapper..."
+        curl -sf -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "$audience_mapper_json" 2>/dev/null || true
+    fi
+
+    # Step 6: Add/update mcp-gateway-roles-mapper
+    log_secrets_info "  Syncing mcp-gateway-roles-mapper..."
+
+    # First, get mcp-gateway client UUID (needed for role mapper)
+    local mcp_gateway_client
+    mcp_gateway_client=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients?clientId=mcp-gateway" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+    local mcp_gateway_uuid
+    mcp_gateway_uuid=$(echo "$mcp_gateway_client" | jq -r '.[0].id' 2>/dev/null)
+
+    if [ -n "$mcp_gateway_uuid" ] && [ "$mcp_gateway_uuid" != "null" ]; then
+        local roles_mapper_json
+        roles_mapper_json=$(cat <<EOF
+{
+    "name": "mcp-gateway-roles-mapper",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-usermodel-client-role-mapper",
+    "consentRequired": false,
+    "config": {
+        "usermodel.clientRoleMapping.clientId": "mcp-gateway",
+        "claim.name": "resource_access.mcp-gateway.roles",
+        "jsonType.label": "String",
+        "multivalued": "true",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+    }
+}
+EOF
+)
+
+        if mapper_exists "mcp-gateway-roles-mapper"; then
+            local mapper_id
+            mapper_id=$(get_mapper_id "mcp-gateway-roles-mapper")
+            log_secrets_info "    Updating existing mapper (id: $mapper_id)..."
+            curl -sf -X PUT "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models/${mapper_id}" \
+                -H "Authorization: Bearer ${access_token}" \
+                -H "Content-Type: application/json" \
+                -d "$roles_mapper_json" 2>/dev/null || true
+        else
+            log_secrets_info "    Creating mapper..."
+            curl -sf -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+                -H "Authorization: Bearer ${access_token}" \
+                -H "Content-Type: application/json" \
+                -d "$roles_mapper_json" 2>/dev/null || true
+        fi
+    else
+        log_secrets_warn "mcp-gateway client not found - skipping roles mapper"
+    fi
+
+    # Verify mappers were added
+    log_secrets_info "  Verifying mappers..."
+    local final_mappers
+    final_mappers=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+    local mapper_names
+    mapper_names=$(echo "$final_mappers" | jq -r '.[].name' 2>/dev/null | tr '\n' ', ')
+    log_secrets_info "  Current mappers: $mapper_names"
+
+    log_secrets_success "web-portal client mappers synced successfully"
+    return 0
+}
+
 # Reset Cloud SQL database user passwords to match DR secrets (Bug #36)
 #
 # After database restoration from backup, the Cloud SQL users may have stale

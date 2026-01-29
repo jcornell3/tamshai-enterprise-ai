@@ -1647,6 +1647,22 @@ phase5_configure_users() {
     fi
 
     # =========================================================================
+    # Step 1.6: Sync web-portal client mappers (Bug #37 fix)
+    # =========================================================================
+    # Without these mappers, JWT tokens are missing critical claims:
+    # - subject-claim-mapper: Ensures 'sub' claim is in access token (userId)
+    # - mcp-gateway-audience: Adds 'mcp-gateway' to token audience
+    # - mcp-gateway-roles-mapper: Maps roles to token
+    # This causes MCP Gateway to return 400 MISSING_USER_CONTEXT errors.
+    log_step "Syncing web-portal client mappers (Bug #37 fix)..."
+
+    if ! sync_keycloak_web_portal_mappers "https://${KEYCLOAK_DR_DOMAIN}/auth" "$KEYCLOAK_ADMIN_PASSWORD"; then
+        log_error "Failed to sync web-portal client mappers"
+        log_error "Web apps will fail with MISSING_USER_CONTEXT errors"
+        exit 1
+    fi
+
+    # =========================================================================
     # Step 2: Configure TOTP for test-user.journey
     # =========================================================================
     log_step "Configuring TOTP for test-user.journey..."
