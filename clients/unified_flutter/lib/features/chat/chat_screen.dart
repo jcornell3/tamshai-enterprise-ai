@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/auth/providers/auth_provider.dart';
 import '../../core/chat/models/chat_state.dart';
 import '../../core/chat/providers/chat_provider.dart';
+import '../../core/widgets/dialogs.dart';
 import 'widgets/message_bubble.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/approval_card.dart';
@@ -95,35 +95,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             tooltip: 'Clear chat',
             onPressed: chatState.messages.isEmpty
                 ? null
-                : () {
-                    showDialog(
+                : () async {
+                    final confirmed = await AppDialogs.showConfirmationDialog(
                       context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Clear Chat'),
-                        content: const Text(
-                          'Are you sure you want to clear the chat history?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              ref.read(chatNotifierProvider.notifier).clearChat();
-                              Navigator.pop(context);
-                            },
-                            child: const Text('Clear'),
-                          ),
-                        ],
-                      ),
+                      title: 'Clear Chat',
+                      content: 'Are you sure you want to clear the chat history?',
+                      confirmText: 'Clear',
+                      isDangerous: true,
                     );
+                    if (confirmed) {
+                      ref.read(chatNotifierProvider.notifier).clearChat();
+                    }
                   },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
-            onPressed: () => _showLogoutDialog(context, ref),
+            onPressed: () => AppDialogs.showLogoutDialog(context, ref),
           ),
         ],
       ),
@@ -262,29 +250,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _textController.text = text;
         _sendMessage();
       },
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ref.read(authNotifierProvider.notifier).logout();
-            },
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
     );
   }
 }
