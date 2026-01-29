@@ -1638,12 +1638,13 @@ phase5_configure_users() {
     local dr_cloud_sql_instance="tamshai-prod-postgres-${ENV_ID}"
     log_info "DR Cloud SQL instance: $dr_cloud_sql_instance"
 
-    if trigger_identity_sync "true" "" "all" "true" "$NEW_REGION" "$dr_cloud_sql_instance"; then
-        log_success "Corporate users provisioned with force password reset"
-    else
-        log_warn "Identity sync failed - corporate users may not exist"
-        log_info "Run manually: gh workflow run provision-prod-users.yml -f action=all -f force_password_reset=true -f region=$NEW_REGION -f cloud_sql_instance=$dr_cloud_sql_instance"
+    # Bug #32 Fix: Fail on provisioning errors - missing job is a build failure
+    if ! trigger_identity_sync "true" "" "all" "true" "$NEW_REGION" "$dr_cloud_sql_instance"; then
+        log_error "Identity sync failed - this is a build failure"
+        log_error "Ensure provision-users job exists in $NEW_REGION"
+        exit 1
     fi
+    log_success "Corporate users provisioned with force password reset"
 
     # =========================================================================
     # Step 5: Load sample data (Finance, Sales, Support) (Issue #102)
@@ -1652,13 +1653,13 @@ phase5_configure_users() {
     # via MongoDB Atlas) must be loaded separately after user provisioning.
     log_step "Loading sample data (Finance, Sales, Support) (Issue #102 fix)..."
 
-    # Bug #28 fix: Pass DR region and Cloud SQL instance name to workflow
-    if trigger_sample_data_load "true" "" "all" "$NEW_REGION" "$dr_cloud_sql_instance"; then
-        log_success "Sample data loaded successfully"
-    else
-        log_warn "Sample data loading failed"
-        log_info "Run manually: gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false -f region=$NEW_REGION -f cloud_sql_instance=$dr_cloud_sql_instance"
+    # Bug #32 Fix: Fail on data loading errors - missing job is a build failure
+    if ! trigger_sample_data_load "true" "" "all" "$NEW_REGION" "$dr_cloud_sql_instance"; then
+        log_error "Sample data loading failed - this is a build failure"
+        log_error "Ensure provision-users job exists in $NEW_REGION"
+        exit 1
     fi
+    log_success "Sample data loaded successfully"
 
     log_success "User configuration complete"
 }
