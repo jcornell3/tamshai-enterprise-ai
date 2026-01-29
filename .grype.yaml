@@ -38,3 +38,6 @@ ignore:
   #
   # GHSA-r6q2-hw4h-h46w (HIGH) - tar directory traversal vulnerability
   - vulnerability: GHSA-r6q2-hw4h-h46w
+  #
+  # GHSA-34x7-hfp2-rc4v (HIGH) - tar arbitrary file overwrite via insufficient symlink protection
+  - vulnerability: GHSA-34x7-hfp2-rc4v
