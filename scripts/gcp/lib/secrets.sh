@@ -639,12 +639,13 @@ sync_keycloak_mcp_hr_client() {
     # Step 1: Get admin access token
     log_secrets_info "  Getting admin access token..."
     local token_response
+    # Use --data-urlencode for password to handle special characters like & and @
     token_response=$(curl -sf -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=${admin_password}" \
         -d "grant_type=password" \
-        -d "client_id=admin-cli" 2>/dev/null)
+        -d "client_id=admin-cli" \
+        --data-urlencode "password=${admin_password}" 2>/dev/null)
 
     if [ -z "$token_response" ]; then
         log_secrets_error "Failed to get admin token from Keycloak"
