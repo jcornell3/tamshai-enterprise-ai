@@ -1,0 +1,84 @@
+name: 'Setup Keycloak'
+description: 'Start Keycloak container with realm import for CI testing'
+
+inputs:
+  realm-export-path:
+    description: 'Path to realm export JSON file'
+    required: false
+    default: 'keycloak/realm-export-dev.json'
+  keycloak-port:
+    description: 'Host port for Keycloak'
+    required: false
+    default: '8180'
+  keycloak-version:
+    description: 'Keycloak version to use'
+    required: false
+    default: '26.0'
+  wait-timeout:
+    description: 'Maximum wait time in seconds for Keycloak to start'
+    required: false
+    default: '300'
+
+outputs:
+  keycloak-url:
+    description: 'Keycloak base URL'
+    value: ${{ steps.start.outputs.keycloak-url }}
+  issuer:
+    description: 'OIDC issuer URL for tamshai-corp realm'
+    value: ${{ steps.start.outputs.issuer }}
+  jwks-uri:
+    description: 'JWKS URI for token verification'
+    value: ${{ steps.start.outputs.jwks-uri }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Start Keycloak container
+      id: start
+      shell: bash
+      run: |
+        docker run -d --name keycloak \
+          -p ${{ inputs.keycloak-port }}:8080 \
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+          -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+          -e KC_HTTP_RELATIVE_PATH=/auth \
+          -v ${{ github.workspace }}/${{ inputs.realm-export-path }}:/opt/keycloak/data/import/realm.json \
+          quay.io/keycloak/keycloak:${{ inputs.keycloak-version }} \
+          start-dev --import-realm --http-port=8080
+        echo "Keycloak container started"
+
+        # Set outputs
+        echo "keycloak-url=http://localhost:${{ inputs.keycloak-port }}" >> $GITHUB_OUTPUT
+        echo "issuer=http://localhost:${{ inputs.keycloak-port }}/auth/realms/tamshai-corp" >> $GITHUB_OUTPUT
+        echo "jwks-uri=http://localhost:${{ inputs.keycloak-port }}/auth/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
+
+    - name: Wait for Keycloak
+      shell: bash
+      run: |
+        echo "Waiting for Keycloak to be ready..."
+        TIMEOUT=${{ inputs.wait-timeout }}
+        ATTEMPTS=$((TIMEOUT / 5))
+        for i in $(seq 1 $ATTEMPTS); do
+          if curl -sf http://localhost:${{ inputs.keycloak-port }}/auth/realms/master > /dev/null 2>&1; then
+            echo "Keycloak is ready after $i attempts"
+            sleep 5
+            exit 0
+          fi
+          echo "Attempt $i/$ATTEMPTS: Keycloak not ready yet..."
+          sleep 5
+        done
+        echo "Keycloak failed to start within $TIMEOUT seconds"
+        docker logs keycloak
+        exit 1
+
+    - name: Verify Keycloak Realm
+      shell: bash
+      run: |
+        REALM_CHECK=$(curl -sf http://localhost:${{ inputs.keycloak-port }}/auth/realms/tamshai-corp/.well-known/openid-configuration || echo "FAILED")
+        if [[ "$REALM_CHECK" == "FAILED" ]]; then
+          echo "ERROR: tamshai-corp realm not found"
+          docker logs keycloak | tail -50
+          exit 1
+        fi
+        echo "Keycloak realm 'tamshai-corp' is available"
+        echo "JWKS URI: $(echo $REALM_CHECK | jq -r '.jwks_uri')"

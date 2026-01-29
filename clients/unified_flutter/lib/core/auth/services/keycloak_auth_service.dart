@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:logger/logger.dart';
 import '../models/auth_state.dart';
 import '../models/keycloak_config.dart';
 import '../../storage/secure_storage_service.dart';
+import '../../utils/jwt_utils.dart';
 import 'auth_service.dart';
 
 /// Keycloak authentication service using OAuth 2.0 / OIDC
@@ -61,7 +61,7 @@ class KeycloakAuthService implements AuthService {
         idToken: result.idToken!,
         refreshToken: result.refreshToken,
         accessTokenExpirationDateTime: result.accessTokenExpirationDateTime!,
-        idTokenClaims: result.idToken != null ? _parseJwtClaims(result.idToken!) : null,
+        idTokenClaims: result.idToken != null ? JwtUtils.tryParsePayload(result.idToken!) : null,
       );
 
       await _storage.storeTokens(storedTokens);
@@ -135,7 +135,7 @@ class KeycloakAuthService implements AuthService {
         idToken: result.idToken!,
         refreshToken: result.refreshToken ?? refreshToken, // Keep old if not provided
         accessTokenExpirationDateTime: result.accessTokenExpirationDateTime!,
-        idTokenClaims: result.idToken != null ? _parseJwtClaims(result.idToken!) : null,
+        idTokenClaims: result.idToken != null ? JwtUtils.tryParsePayload(result.idToken!) : null,
       );
 
       await _storage.storeTokens(storedTokens);
@@ -207,73 +207,21 @@ class KeycloakAuthService implements AuthService {
     return await _storage.getUserProfile();
   }
 
-  /// Parse JWT claims from token
-  Map<String, dynamic> _parseJwtClaims(String token) {
-    try {
-      final parts = token.split('.');
-      if (parts.length != 3) {
-        throw const FormatException('Invalid JWT format');
-      }
-
-      // Decode payload (second part)
-      final payload = parts[1];
-      final normalized = base64Url.normalize(payload);
-      final decoded = utf8.decode(base64Url.decode(normalized));
-      
-      return jsonDecode(decoded) as Map<String, dynamic>;
-    } catch (e, stackTrace) {
-      _logger.e('Failed to parse JWT claims', error: e, stackTrace: stackTrace);
-      return {};
-    }
-  }
-
   /// Extract user profile from ID token claims
   AuthUser _extractUserFromIdToken(String idToken) {
-    final claims = _parseJwtClaims(idToken);
+    final claims = JwtUtils.tryParsePayload(idToken);
 
     return AuthUser(
       id: claims['sub'] as String? ?? '',
-      username: claims['preferred_username'] as String? ?? 
-                claims['name'] as String? ?? 
+      username: claims['preferred_username'] as String? ??
+                claims['name'] as String? ??
                 'Unknown',
       email: claims['email'] as String?,
       firstName: claims['given_name'] as String?,
       lastName: claims['family_name'] as String?,
       fullName: claims['name'] as String?,
-      roles: _extractRoles(claims),
+      roles: JwtUtils.getAllRoles(idToken, clientId: _config.clientId),
       attributes: claims,
     );
-  }
-
-  /// Extract roles from token claims
-  /// 
-  /// Keycloak can store roles in different places:
-  /// - realm_access.roles
-  /// - resource_access.{client-id}.roles
-  List<String> _extractRoles(Map<String, dynamic> claims) {
-    final roles = <String>[];
-
-    // Extract realm roles
-    final realmAccess = claims['realm_access'] as Map<String, dynamic>?;
-    if (realmAccess != null) {
-      final realmRoles = realmAccess['roles'] as List?;
-      if (realmRoles != null) {
-        roles.addAll(realmRoles.cast<String>());
-      }
-    }
-
-    // Extract client roles
-    final resourceAccess = claims['resource_access'] as Map<String, dynamic>?;
-    if (resourceAccess != null) {
-      final clientAccess = resourceAccess[_config.clientId] as Map<String, dynamic>?;
-      if (clientAccess != null) {
-        final clientRoles = clientAccess['roles'] as List?;
-        if (clientRoles != null) {
-          roles.addAll(clientRoles.cast<String>());
-        }
-      }
-    }
-
-    return roles;
   }
 }

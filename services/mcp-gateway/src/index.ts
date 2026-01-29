@@ -68,6 +68,7 @@ const config = {
   claude: {
     apiKey: process.env.CLAUDE_API_KEY || '',
     model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514',
+    maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || '4096'),
   },
   mcpServers: {
     hr: process.env.MCP_HR_URL || 'http://localhost:3001',
@@ -177,20 +178,6 @@ const mcpServerConfigs: MCPServerConfig[] = [
 ];
 
 // =============================================================================
-// JWT VALIDATION (Phase 5 Refactoring)
-// =============================================================================
-// Note: JWT validation is now handled by jwtValidator instance (JWTValidator class)
-// The validateToken export below is a legacy wrapper for backwards compatibility
-
-/**
- * Legacy validateToken wrapper for backwards compatibility
- * @deprecated Use jwtValidator.validateToken() directly
- */
-async function validateToken(token: string): Promise<UserContext> {
-  return jwtValidator.validateToken(token);
-}
-
-// =============================================================================
 // MCP SERVER INTERACTION
 // =============================================================================
 
@@ -218,23 +205,6 @@ const mcpClient = new MCPClient(
   logger
 );
 
-/**
- * Query an MCP server with configurable timeout (v1.5 Performance)
- *
- * Legacy wrapper that delegates to MCPClient.queryServer()
- * @deprecated Use mcpClient.queryServer() directly for new code
- */
-async function queryMCPServer(
-  server: MCPServerConfig,
-  query: string,
-  userContext: UserContext,
-  cursor?: string,
-  autoPaginate: boolean = true,
-  isWriteOperation: boolean = false
-): Promise<MCPQueryResult> {
-  return mcpClient.queryServer(server, query, userContext, cursor, autoPaginate, isWriteOperation);
-}
-
 // =============================================================================
 // CLAUDE API INTEGRATION (Phase 8 Refactoring - Extracted to ClaudeClient)
 // =============================================================================
@@ -246,7 +216,7 @@ const anthropic = new Anthropic({
 // Create ClaudeClient instance with configuration
 const claudeClient = new ClaudeClient(anthropic, {
   model: config.claude.model,
-  maxTokens: 4096,
+  maxTokens: config.claude.maxTokens,
   apiKey: config.claude.apiKey,
 }, logger);
 
@@ -442,7 +412,7 @@ const aiQueryRouter = createAIQueryRoutes({
   logger,
   getAccessibleServers: getAccessibleMCPServersForUser,
   getDeniedServers: getDeniedMCPServersForUser,
-  queryMCPServer,
+  queryMCPServer: mcpClient.queryServer.bind(mcpClient),
   sendToClaudeWithContext,
   rateLimiter: aiQueryLimiter,
 });
@@ -480,7 +450,7 @@ const streamingRouter = createStreamingRoutes({
     heartbeatIntervalMs: 15000,
   },
   getAccessibleServers: getAccessibleMCPServersForUser,
-  queryMCPServer,
+  queryMCPServer: mcpClient.queryServer.bind(mcpClient),
   rateLimiter: aiQueryLimiter,
 });
 
@@ -635,8 +605,6 @@ startServer().catch((error) => {
 // Export internal functions and configurations for unit testing
 // Only used in test environment
 export {
-  validateToken,
-  queryMCPServer,
   mcpServerConfigs,
   getAccessibleMCPServersForUser,
   getDeniedMCPServersForUser,

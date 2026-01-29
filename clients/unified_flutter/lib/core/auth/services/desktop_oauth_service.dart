@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/auth_state.dart';
 import '../models/keycloak_config.dart';
 import '../../storage/secure_storage_service.dart';
+import '../../utils/jwt_utils.dart';
 import 'auth_service.dart';
 
 /// Desktop OAuth service using browser + local HTTP server callback
@@ -171,7 +172,7 @@ class DesktopOAuthService implements AuthService {
           accessTokenExpirationDateTime: DateTime.now().add(
             Duration(seconds: tokenResponse['expires_in'] as int? ?? 300),
           ),
-          idTokenClaims: _parseJwtClaims(tokenResponse['id_token'] as String),
+          idTokenClaims: JwtUtils.tryParsePayload(tokenResponse['id_token'] as String),
         );
 
         await _storage.storeTokens(tokens);
@@ -396,7 +397,7 @@ class DesktopOAuthService implements AuthService {
         idToken: tokenResponse['id_token'] as String,
         refreshToken: tokenResponse['refresh_token'] as String?,
         accessTokenExpirationDateTime: expirationDateTime,
-        idTokenClaims: _parseJwtClaims(tokenResponse['id_token'] as String),
+        idTokenClaims: JwtUtils.tryParsePayload(tokenResponse['id_token'] as String),
       );
     } finally {
       client.close();
@@ -421,26 +422,8 @@ class DesktopOAuthService implements AuthService {
     return base64UrlEncode(values).replaceAll('=', '');
   }
 
-  Map<String, dynamic> _parseJwtClaims(String token) {
-    try {
-      final parts = token.split('.');
-      if (parts.length != 3) {
-        throw const FormatException('Invalid JWT format');
-      }
-
-      final payload = parts[1];
-      final normalized = base64Url.normalize(payload);
-      final decoded = utf8.decode(base64Url.decode(normalized));
-
-      return jsonDecode(decoded) as Map<String, dynamic>;
-    } catch (e, stackTrace) {
-      _logger.e('Failed to parse JWT claims', error: e, stackTrace: stackTrace);
-      return {};
-    }
-  }
-
   AuthUser _extractUserFromIdToken(String idToken) {
-    final claims = _parseJwtClaims(idToken);
+    final claims = JwtUtils.tryParsePayload(idToken);
 
     final firstName = claims['given_name'] as String?;
     final lastName = claims['family_name'] as String?;
@@ -471,35 +454,8 @@ class DesktopOAuthService implements AuthService {
       firstName: firstName,
       lastName: lastName,
       fullName: fullName,
-      roles: _extractRoles(claims),
+      roles: JwtUtils.getAllRoles(idToken, clientId: _config.clientId),
       attributes: claims,
     );
-  }
-
-  List<String> _extractRoles(Map<String, dynamic> claims) {
-    final roles = <String>[];
-
-    // Extract realm roles
-    final realmAccess = claims['realm_access'] as Map<String, dynamic>?;
-    if (realmAccess != null) {
-      final realmRoles = realmAccess['roles'] as List?;
-      if (realmRoles != null) {
-        roles.addAll(realmRoles.cast<String>());
-      }
-    }
-
-    // Extract client roles
-    final resourceAccess = claims['resource_access'] as Map<String, dynamic>?;
-    if (resourceAccess != null) {
-      final clientAccess = resourceAccess[_config.clientId] as Map<String, dynamic>?;
-      if (clientAccess != null) {
-        final clientRoles = clientAccess['roles'] as List?;
-        if (clientRoles != null) {
-          roles.addAll(clientRoles.cast<String>());
-        }
-      }
-    }
-
-    return roles;
   }
 }

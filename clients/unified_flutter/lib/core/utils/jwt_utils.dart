@@ -287,6 +287,43 @@ class JwtUtils {
     return expiration.difference(now);
   }
 
+  /// Parse JWT payload, returning empty map on error.
+  ///
+  /// Unlike [parsePayload], this method never throws.
+  /// Returns an empty map if the token is null, empty, or malformed.
+  ///
+  /// Useful for cases where you want to gracefully handle invalid tokens.
+  static Map<String, dynamic> tryParsePayload(String? jwt) {
+    if (jwt == null || jwt.isEmpty) {
+      return {};
+    }
+
+    try {
+      return parsePayload(jwt);
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /// Get all roles (realm + client) from a Keycloak JWT token.
+  ///
+  /// Combines roles from both:
+  /// - `realm_access.roles` (realm-level roles)
+  /// - `resource_access.<clientId>.roles` (client-specific roles)
+  ///
+  /// Returns an empty list if no roles are found or token is invalid.
+  ///
+  /// Example:
+  /// ```dart
+  /// final roles = JwtUtils.getAllRoles(token, clientId: 'mcp-gateway');
+  /// // ['user', 'employee', 'hr-read', 'hr-write']
+  /// ```
+  static List<String> getAllRoles(String? jwt, {required String clientId}) {
+    final realmRoles = getRealmRoles(jwt);
+    final clientRoles = getRoles(jwt, clientId: clientId);
+    return [...realmRoles, ...clientRoles];
+  }
+
   /// Decode a base64url-encoded JWT segment.
   ///
   /// Handles JWT's base64url encoding which may lack padding.
