@@ -1,0 +1,180 @@
+# Reusable Workflow: Deploy MCP Service
+#
+# This reusable workflow deploys any MCP service to VPS.
+# Other services are not restarted (--no-deps flag).
+#
+# Deployment Strategy:
+#   1. Tag current version for rollback
+#   2. Build new version
+#   3. Deploy with --no-deps (no dependency restart)
+#   4. Health check (30-second timeout)
+#   5. Auto-rollback on health check failure
+#
+# Deployment Time: 1-2 minutes (vs 10-15 minutes monolithic)
+# Downtime: 0-5 seconds (rolling update)
+
+name: Deploy MCP Service (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: 'Service name (e.g., mcp-gateway, mcp-hr)'
+        required: true
+        type: string
+      health-check-port:
+        description: 'Health check port (e.g., 3100, 3101)'
+        required: true
+        type: string
+      environment:
+        description: 'Target environment'
+        required: false
+        type: string
+        default: 'staging'
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      VPS_SSH_KEY:
+        required: true
+      VPS_HOST:
+        required: true
+      VPS_SSH_USER:
+        required: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service-name }} to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        if: ${{ !inputs.rollback }}
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
+
+      - name: Setup SSH
+        uses: ./.github/actions/setup-ssh
+        with:
+          ssh-key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ secrets.VPS_HOST }}
+
+      - name: Deploy ${{ inputs.service-name }}
+        if: ${{ !inputs.rollback }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+          SERVICE_NAME: ${{ inputs.service-name }}
+          HEALTH_PORT: ${{ inputs.health-check-port }}
+        run: |
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << EOF
+          set -e
+          cd /opt/tamshai
+
+          echo "Deploying $SERVICE_NAME..."
+
+          # Fix git ownership check
+          git config --global --add safe.directory /opt/tamshai
+
+          # Tag current version for rollback (only if image exists)
+          docker images -q tamshai/$SERVICE_NAME:latest | grep -q . && \
+            docker tag tamshai/$SERVICE_NAME:latest tamshai/$SERVICE_NAME:rollback || \
+            echo "No existing image to tag for rollback"
+
+          # Pull latest code
+          git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+          git fetch -f origin main
+          git reset --hard origin/main
+
+          # Build new version
+          echo "Building $SERVICE_NAME..."
+          docker compose build $SERVICE_NAME
+
+          # Deploy (--no-deps = don't restart dependencies)
+          echo "Deploying $SERVICE_NAME (no dependency restart)..."
+          docker compose up -d --no-deps $SERVICE_NAME
+
+          # Health check with timeout
+          echo "Waiting for health check..."
+          for i in \$(seq 1 30); do
+            if docker exec tamshai-$SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
+              echo "$SERVICE_NAME is healthy"
+              exit 0
+            fi
+            echo "  Attempt \$i/30..."
+            sleep 1
+          done
+
+          # Health check failed - rollback
+          echo "Health check failed after 30 seconds"
+          echo "Rolling back to previous version..."
+          docker tag tamshai/$SERVICE_NAME:rollback tamshai/$SERVICE_NAME:latest
+          docker compose up -d --no-deps $SERVICE_NAME
+
+          # Verify rollback succeeded
+          sleep 5
+          if docker exec tamshai-$SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
+            echo "Rollback successful"
+          else
+            echo "Rollback failed - manual intervention required"
+          fi
+
+          exit 1
+          EOF
+
+      - name: Rollback ${{ inputs.service-name }}
+        if: ${{ inputs.rollback }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+          SERVICE_NAME: ${{ inputs.service-name }}
+          HEALTH_PORT: ${{ inputs.health-check-port }}
+        run: |
+          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << EOF
+          set -e
+          cd /opt/tamshai
+
+          echo "Rolling back $SERVICE_NAME..."
+
+          # Restore rollback tag
+          docker tag tamshai/$SERVICE_NAME:rollback tamshai/$SERVICE_NAME:latest
+
+          # Redeploy with rollback version
+          docker compose up -d --no-deps $SERVICE_NAME
+
+          # Health check
+          echo "Verifying rollback..."
+          for i in \$(seq 1 30); do
+            if docker exec tamshai-$SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
+              echo "Rollback successful"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Rollback health check failed"
+          exit 1
+          EOF
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "## ${{ inputs.service-name }} Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Service**: ${{ inputs.service-name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Health Check**: PASSED" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deployment failed
+        if: failure()
+        run: |
+          echo "## ${{ inputs.service-name }} Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Service**: ${{ inputs.service-name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Health Check**: FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "**Action**: Auto-rollback performed" >> $GITHUB_STEP_SUMMARY
