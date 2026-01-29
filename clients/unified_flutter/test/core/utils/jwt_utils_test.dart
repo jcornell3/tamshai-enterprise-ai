@@ -294,6 +294,94 @@ void main() {
         );
       });
     });
+
+    group('tryParsePayload', () {
+      test('returns claims for valid JWT', () {
+        final claims = JwtUtils.tryParsePayload(validJwt);
+
+        expect(claims['sub'], equals('user-123'));
+        expect(claims['name'], equals('Alice'));
+      });
+
+      test('returns empty map for invalid JWT', () {
+        final claims = JwtUtils.tryParsePayload('not-a-jwt');
+
+        expect(claims, isEmpty);
+      });
+
+      test('returns empty map for null', () {
+        final claims = JwtUtils.tryParsePayload(null);
+
+        expect(claims, isEmpty);
+      });
+
+      test('returns empty map for empty string', () {
+        final claims = JwtUtils.tryParsePayload('');
+
+        expect(claims, isEmpty);
+      });
+
+      test('returns empty map for malformed base64', () {
+        final claims = JwtUtils.tryParsePayload('header.!!!invalid!!!.signature');
+
+        expect(claims, isEmpty);
+      });
+    });
+
+    group('getAllRoles', () {
+      // JWT with both realm and client roles
+      // {"realm_access":{"roles":["user","employee"]},"resource_access":{"mcp-gateway":{"roles":["hr-read","hr-write"]}}}
+      const combinedRolesJwt = 'eyJhbGciOiJSUzI1NiJ9.'
+          'eyJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsidXNlciIsImVtcGxveWVlIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsibWNwLWdhdGV3YXkiOnsicm9sZXMiOlsiaHItcmVhZCIsImhyLXdyaXRlIl19fX0.'
+          'signature';
+
+      test('combines realm and client roles', () {
+        final roles = JwtUtils.getAllRoles(combinedRolesJwt, clientId: 'mcp-gateway');
+
+        expect(roles, contains('user'));
+        expect(roles, contains('employee'));
+        expect(roles, contains('hr-read'));
+        expect(roles, contains('hr-write'));
+        expect(roles.length, equals(4));
+      });
+
+      test('returns only realm roles when no client roles exist', () {
+        // JWT with only realm roles
+        const realmOnlyJwt = 'eyJhbGciOiJSUzI1NiJ9.'
+            'eyJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsidXNlciIsImVtcGxveWVlIl19fQ.'
+            'signature';
+
+        final roles = JwtUtils.getAllRoles(realmOnlyJwt, clientId: 'mcp-gateway');
+
+        expect(roles, contains('user'));
+        expect(roles, contains('employee'));
+        expect(roles.length, equals(2));
+      });
+
+      test('returns only client roles when no realm roles exist', () {
+        // JWT with only client roles
+        const clientOnlyJwt = 'eyJhbGciOiJSUzI1NiJ9.'
+            'eyJyZXNvdXJjZV9hY2Nlc3MiOnsibWNwLWdhdGV3YXkiOnsicm9sZXMiOlsiaHItcmVhZCJdfX19.'
+            'signature';
+
+        final roles = JwtUtils.getAllRoles(clientOnlyJwt, clientId: 'mcp-gateway');
+
+        expect(roles, contains('hr-read'));
+        expect(roles.length, equals(1));
+      });
+
+      test('returns empty list for null token', () {
+        final roles = JwtUtils.getAllRoles(null, clientId: 'mcp-gateway');
+
+        expect(roles, isEmpty);
+      });
+
+      test('returns empty list for token without roles', () {
+        final roles = JwtUtils.getAllRoles(noExpJwt, clientId: 'mcp-gateway');
+
+        expect(roles, isEmpty);
+      });
+    });
   });
 
   group('Edge cases', () {
