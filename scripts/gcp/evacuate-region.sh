@@ -1589,14 +1589,37 @@ phase5_configure_users() {
     warmup_keycloak "$keycloak_url" "${KEYCLOAK_REALM}" 5 || true
 
     # =========================================================================
+    # Step 1.5: Sync mcp-hr-service client to Keycloak (Bug #35 fix)
+    # =========================================================================
+    # The realm-export.json does NOT include mcp-hr-service client.
+    # This client is created by sync-realm.sh, but evacuate-region.sh can't
+    # run kcadm.sh (only available inside Keycloak container).
+    # Solution: Use REST API to create the client directly.
+    log_step "Syncing mcp-hr-service client to Keycloak (Bug #35 fix)..."
+
+    # Get Keycloak admin password from Secret Manager (needed for multiple steps)
+    export KEYCLOAK_ADMIN_PASSWORD
+    KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest \
+        --secret="${SECRET_KEYCLOAK_ADMIN_PASSWORD}" 2>/dev/null || echo "")
+
+    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+        log_error "Could not retrieve Keycloak admin password - cannot sync clients"
+        log_error "Identity-sync will fail without mcp-hr-service client"
+        exit 1
+    fi
+
+    if ! sync_keycloak_mcp_hr_client "https://${KEYCLOAK_DR_DOMAIN}/auth" "$KEYCLOAK_ADMIN_PASSWORD"; then
+        log_error "Failed to sync mcp-hr-service client to Keycloak"
+        log_error "Identity-sync will fail without this client"
+        exit 1
+    fi
+
+    # =========================================================================
     # Step 2: Configure TOTP for test-user.journey
     # =========================================================================
     log_step "Configuring TOTP for test-user.journey..."
 
-    # Get Keycloak admin password from Secret Manager
-    export KEYCLOAK_ADMIN_PASSWORD
-    KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest \
-        --secret="${SECRET_KEYCLOAK_ADMIN_PASSWORD}" 2>/dev/null || echo "")
+    # KEYCLOAK_ADMIN_PASSWORD already retrieved above
 
     if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
         log_warn "Could not retrieve Keycloak admin password - skipping TOTP configuration"

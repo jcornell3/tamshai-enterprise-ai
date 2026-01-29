@@ -604,6 +604,166 @@ check_provision_job_exists() {
     fi
 }
 
+# =============================================================================
+# Bug #35 Fix: Sync mcp-hr-service client to Keycloak via REST API
+# =============================================================================
+# Creates the mcp-hr-service confidential client needed for identity-sync.
+# Uses Keycloak REST API directly (no kcadm.sh required).
+#
+# Usage: sync_keycloak_mcp_hr_client <keycloak_url> <admin_password> [client_secret]
+#   keycloak_url: Keycloak base URL (e.g., https://auth-dr.tamshai.com/auth)
+#   admin_password: Keycloak admin password
+#   client_secret: Client secret for mcp-hr-service (optional, fetched from Secret Manager)
+#
+# Returns 0 on success, 1 on failure
+# =============================================================================
+sync_keycloak_mcp_hr_client() {
+    local keycloak_url="${1:?Keycloak URL required}"
+    local admin_password="${2:?Admin password required}"
+    local client_secret="${3:-}"
+    local realm="tamshai-corp"
+
+    log_secrets_info "Syncing mcp-hr-service client to Keycloak (Bug #35 fix)..."
+    log_secrets_info "  Keycloak URL: $keycloak_url"
+
+    # Get client secret from Secret Manager if not provided
+    if [ -z "$client_secret" ]; then
+        client_secret=$(gcloud secrets versions access latest \
+            --secret="mcp-hr-service-client-secret" 2>/dev/null || echo "")
+        if [ -z "$client_secret" ]; then
+            log_secrets_error "Could not retrieve mcp-hr-service-client-secret from Secret Manager"
+            return 1
+        fi
+    fi
+
+    # Step 1: Get admin access token
+    log_secrets_info "  Getting admin access token..."
+    local token_response
+    token_response=$(curl -sf -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        -d "password=${admin_password}" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" 2>/dev/null)
+
+    if [ -z "$token_response" ]; then
+        log_secrets_error "Failed to get admin token from Keycloak"
+        return 1
+    fi
+
+    local access_token
+    access_token=$(echo "$token_response" | jq -r '.access_token' 2>/dev/null)
+    if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+        log_secrets_error "Failed to parse access token from response"
+        return 1
+    fi
+
+    # Step 2: Check if client already exists
+    log_secrets_info "  Checking if mcp-hr-service client exists..."
+    local existing_client
+    existing_client=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients?clientId=mcp-hr-service" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+
+    local client_uuid=""
+    if [ -n "$existing_client" ] && [ "$existing_client" != "[]" ]; then
+        client_uuid=$(echo "$existing_client" | jq -r '.[0].id' 2>/dev/null)
+        log_secrets_info "  Client exists with UUID: $client_uuid"
+    fi
+
+    # Step 3: Create or update client
+    local client_json
+    client_json=$(cat <<EOF
+{
+  "clientId": "mcp-hr-service",
+  "name": "MCP HR Service",
+  "enabled": true,
+  "clientAuthenticatorType": "client-secret",
+  "secret": "${client_secret}",
+  "serviceAccountsEnabled": true,
+  "standardFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "publicClient": false,
+  "fullScopeAllowed": true,
+  "protocol": "openid-connect"
+}
+EOF
+)
+
+    if [ -z "$client_uuid" ]; then
+        log_secrets_info "  Creating mcp-hr-service client..."
+        local create_response
+        create_response=$(curl -sf -X POST "${keycloak_url}/admin/realms/${realm}/clients" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "$client_json" 2>/dev/null)
+
+        # Get the created client UUID
+        existing_client=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients?clientId=mcp-hr-service" \
+            -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+        client_uuid=$(echo "$existing_client" | jq -r '.[0].id' 2>/dev/null)
+
+        if [ -z "$client_uuid" ] || [ "$client_uuid" = "null" ]; then
+            log_secrets_error "Failed to create mcp-hr-service client"
+            return 1
+        fi
+        log_secrets_info "  Client created with UUID: $client_uuid"
+    else
+        log_secrets_info "  Updating mcp-hr-service client..."
+        curl -sf -X PUT "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}" \
+            -H "Authorization: Bearer ${access_token}" \
+            -H "Content-Type: application/json" \
+            -d "$client_json" 2>/dev/null || true
+    fi
+
+    # Step 4: Get service account user ID
+    log_secrets_info "  Getting service account user..."
+    local service_account
+    service_account=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/service-account-user" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+
+    local service_account_id
+    service_account_id=$(echo "$service_account" | jq -r '.id' 2>/dev/null)
+    if [ -z "$service_account_id" ] || [ "$service_account_id" = "null" ]; then
+        log_secrets_error "Failed to get service account user"
+        return 1
+    fi
+
+    # Step 5: Get realm-management client UUID and manage-users role
+    log_secrets_info "  Getting realm-management client..."
+    local realm_mgmt
+    realm_mgmt=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients?clientId=realm-management" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+
+    local realm_mgmt_uuid
+    realm_mgmt_uuid=$(echo "$realm_mgmt" | jq -r '.[0].id' 2>/dev/null)
+    if [ -z "$realm_mgmt_uuid" ] || [ "$realm_mgmt_uuid" = "null" ]; then
+        log_secrets_error "Failed to get realm-management client"
+        return 1
+    fi
+
+    # Step 6: Get manage-users role
+    log_secrets_info "  Getting manage-users role..."
+    local manage_users_role
+    manage_users_role=$(curl -sf "${keycloak_url}/admin/realms/${realm}/clients/${realm_mgmt_uuid}/roles/manage-users" \
+        -H "Authorization: Bearer ${access_token}" 2>/dev/null)
+
+    if [ -z "$manage_users_role" ]; then
+        log_secrets_error "Failed to get manage-users role"
+        return 1
+    fi
+
+    # Step 7: Assign manage-users role to service account
+    log_secrets_info "  Assigning manage-users role to service account..."
+    local role_json="[${manage_users_role}]"
+    curl -sf -X POST "${keycloak_url}/admin/realms/${realm}/users/${service_account_id}/role-mappings/clients/${realm_mgmt_uuid}" \
+        -H "Authorization: Bearer ${access_token}" \
+        -H "Content-Type: application/json" \
+        -d "$role_json" 2>/dev/null || true
+
+    log_secrets_success "mcp-hr-service client synced successfully"
+    return 0
+}
+
 # Trigger identity-sync workflow to provision corporate users (Gap #53)
 # Usage: trigger_identity_sync [wait_for_completion] [repo] [action] [force_password_reset] [region] [cloud_sql_instance]
 #   wait_for_completion: true/false - whether to wait for workflow (default: true)
