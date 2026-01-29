@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/chat/models/chat_state.dart';
+import '../../../core/theme/color_extensions.dart';
 
 /// Message bubble widget for displaying chat messages
 class MessageBubble extends StatelessWidget {
@@ -219,10 +220,4 @@ class MessageBubble extends StatelessWidget {
       return '${timestamp.month}/${timestamp.day} $timeStr';
     }
   }
-}
-
-// Extension for warning colors (Material 3)
-extension WarningColors on ColorScheme {
-  Color get warningContainer => const Color(0xFFFFF3CD);
-  Color get onWarningContainer => const Color(0xFF856404);
 }
