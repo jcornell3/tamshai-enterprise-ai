@@ -20,6 +20,26 @@
     # Health check endpoint for Cloud Run
     respond /health 200
 
+    # API reverse proxy (Bug #37 fix)
+    # Proxies /api/* requests to MCP Gateway Cloud Run service
+    # MCP_GATEWAY_URL is passed as environment variable by terraform
+    handle /api/* {
+        reverse_proxy {$MCP_GATEWAY_URL} {
+            header_up Host {upstream_hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+
+            # SSE streaming support for AI queries
+            flush_interval -1
+
+            # Longer timeout for AI responses (120 seconds)
+            transport http {
+                response_header_timeout 120s
+            }
+        }
+    }
+
     # Redirect root to portal
     redir / /app/ permanent
 

@@ -695,8 +695,12 @@ resource "google_cloud_run_service" "web_portal" {
           }
         }
 
-        # Caddy serves static files - no env vars needed
-        # OAuth config is baked into the built React app
+        # Bug #37 fix: Pass MCP Gateway URL for API reverse proxy
+        # Caddy uses this to proxy /api/* requests to MCP Gateway
+        env {
+          name  = "MCP_GATEWAY_URL"
+          value = google_cloud_run_service.mcp_gateway.status[0].url
+        }
       }
 
       service_account_name = var.web_portal_service_account
