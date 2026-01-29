@@ -280,6 +280,9 @@ app.use(cors({
       // Production environment
       'https://prod.tamshai.com',
       'https://app.tamshai.com',
+      // DR environment (Bug #37 fix)
+      'https://app-dr.tamshai.com',
+      'https://prod-dr.tamshai.com',
     ];
 
     // Allow requests with no origin (like mobile apps, curl, or same-origin)
