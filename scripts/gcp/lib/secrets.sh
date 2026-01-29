@@ -588,6 +588,22 @@ fetch_totp_secret() {
 # Used by both phoenix-rebuild.sh and evacuate-region.sh to provision users.
 # =============================================================================
 
+# Bug #32 Fix: Check if provision-users Cloud Run Job exists in the specified region
+# Returns 0 if exists, 1 if not
+# Usage: check_provision_job_exists <region> [project]
+check_provision_job_exists() {
+    local region="${1:?Region required}"
+    local project="${2:-$GCP_PROJECT}"
+
+    if gcloud run jobs describe provision-users \
+        --region="$region" \
+        --project="$project" &>/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Trigger identity-sync workflow to provision corporate users (Gap #53)
 # Usage: trigger_identity_sync [wait_for_completion] [repo] [action] [force_password_reset] [region] [cloud_sql_instance]
 #   wait_for_completion: true/false - whether to wait for workflow (default: true)
@@ -618,6 +634,15 @@ trigger_identity_sync() {
     log_secrets_info "  Force password reset: $force_password_reset"
     [ -n "$region" ] && log_secrets_info "  Region: $region"
     [ -n "$cloud_sql_instance" ] && log_secrets_info "  Cloud SQL: $cloud_sql_instance"
+
+    # Bug #32 Fix: Check if provision-users job exists in target region
+    local target_region="${region:-${GCP_REGION:-us-central1}}"
+    if ! check_provision_job_exists "$target_region"; then
+        log_secrets_error "provision-users job not found in $target_region"
+        log_secrets_error "BUILD FAILURE: Job must exist before provisioning can run"
+        log_secrets_error "Ensure terraform apply included module.security with enable_provision_job=true"
+        return 1
+    fi
 
     # Check gh CLI
     if ! command -v gh &>/dev/null; then
@@ -725,6 +750,15 @@ trigger_sample_data_load() {
     log_secrets_info "  Data set: $data_set"
     [ -n "$region" ] && log_secrets_info "  Region: $region"
     [ -n "$cloud_sql_instance" ] && log_secrets_info "  Cloud SQL: $cloud_sql_instance"
+
+    # Bug #32 Fix: Check if provision-users job exists in target region
+    local target_region="${region:-${GCP_REGION:-us-central1}}"
+    if ! check_provision_job_exists "$target_region"; then
+        log_secrets_error "provision-users job not found in $target_region"
+        log_secrets_error "BUILD FAILURE: Job must exist before data loading can run"
+        log_secrets_error "Ensure terraform apply included module.security with enable_provision_job=true"
+        return 1
+    fi
 
     # Check gh CLI
     if ! command -v gh &>/dev/null; then

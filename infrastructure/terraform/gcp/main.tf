@@ -112,9 +112,9 @@ module "security" {
   # User Provisioning Job configuration
   # Gap #49 Fix: Use enable_provision_job boolean (known at plan time) instead of
   # checking vpc_connector_id (unknown until apply) to avoid count dependency errors
-  # Disabled in recovery mode: the provision job image only exists in the primary region's
-  # Artifact Registry, and user provisioning is not critical for core DR functionality.
-  enable_provision_job      = !var.recovery_mode
+  # Bug #32 Fix: Always enable - each region needs its own provision-users job.
+  # The job image is built for each region during deployment (Phase 1.5 in evacuate-region.sh).
+  enable_provision_job      = true
   vpc_connector_id          = module.networking.serverless_connector_id
   cloud_sql_connection_name = "${var.project_id}:${var.region}:${local.postgres_instance_name}"
   keycloak_url              = var.keycloak_provisioning_url
