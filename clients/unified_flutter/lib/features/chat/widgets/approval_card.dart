@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/chat/models/chat_state.dart';
+import '../../../core/theme/color_extensions.dart';
 
 /// Approval card widget for human-in-the-loop confirmations (v1.4 requirement)
 ///
@@ -230,10 +231,4 @@ class ApprovalCard extends StatelessWidget {
             : '')
         .join(' ');
   }
-}
-
-// Extension for warning colors (Material 3)
-extension ApprovalWarningColors on ColorScheme {
-  Color get warningContainer => const Color(0xFFFFF3CD);
-  Color get onWarningContainer => const Color(0xFF856404);
 }
