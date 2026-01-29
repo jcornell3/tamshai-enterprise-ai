@@ -1281,6 +1281,7 @@ phase2_deploy_infrastructure() {
     log_info "SSL certificate provisioning typically takes 10-15 minutes"
 
     # Common terraform variables for all stages
+    # Bug #34 Fix: Include keycloak_provisioning_url so provision-users job targets DR Keycloak
     local TF_COMMON_VARS=(
         -var="region=$NEW_REGION"
         -var="zone=$NEW_ZONE"
@@ -1291,6 +1292,7 @@ phase2_deploy_infrastructure() {
         -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
         -var="app_domain=${APP_DR_DOMAIN}"
         -var="api_domain=${API_DR_DOMAIN}"
+        -var="keycloak_provisioning_url=https://${KEYCLOAK_DR_DOMAIN}/auth"
     )
 
     # Bug #9 Fix: Delete existing domain mappings so Terraform can recreate them fresh.
