@@ -13,16 +13,18 @@
 # Usage:
 #   ./cleanup-recovery.sh <ENV_ID> [options]
 #   ./cleanup-recovery.sh --list              # List existing recovery stacks
+#   ./cleanup-recovery.sh --cleanup-stale     # Clean up all stale state-only stacks
 #
 # Arguments:
 #   ENV_ID        The recovery environment ID (e.g., recovery-20260122-1430)
 #
 # Options:
-#   --list        List all recovery stacks in the state bucket
-#   --force       Skip confirmation prompts (DANGEROUS)
-#   --dry-run     Show what would be destroyed without destroying
-#   --keep-dns    Don't revert DNS CNAMEs to primary
-#   -h, --help    Show this help message
+#   --list           List all recovery stacks with status (stale vs has resources)
+#   --cleanup-stale  Clean up all stale stacks (state-only, no GCP resources)
+#   --force          Skip confirmation prompts (DANGEROUS)
+#   --dry-run        Show what would be destroyed without destroying
+#   --keep-dns       Don't revert DNS CNAMEs to primary
+#   -h, --help       Show this help message
 #
 # Examples:
 #   ./cleanup-recovery.sh --list
@@ -118,6 +120,7 @@ FORCE=false
 DRY_RUN=false
 KEEP_DNS=false
 LIST_MODE=false
+CLEANUP_STALE_MODE=false
 ENV_ID=""
 
 # Colors and logging (fallback if common.sh not loaded)
@@ -157,6 +160,32 @@ confirm() {
 }
 
 # =============================================================================
+# CHECK IF STACK HAS ACTUAL GCP RESOURCES
+# =============================================================================
+
+check_stack_has_resources() {
+    local env_id="$1"
+    local recovery_vpc="tamshai-prod-${env_id}-vpc"
+    local recovery_sql="tamshai-prod-postgres-${env_id}"
+
+    # Check for VPC
+    if gcloud compute networks describe "$recovery_vpc" --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        echo "vpc"
+        return 0
+    fi
+
+    # Check for Cloud SQL
+    if gcloud sql instances describe "$recovery_sql" --project="$PROJECT_ID" &>/dev/null 2>&1; then
+        echo "sql"
+        return 0
+    fi
+
+    # No resources found - stale state only
+    echo "stale"
+    return 0
+}
+
+# =============================================================================
 # LIST RECOVERY STACKS
 # =============================================================================
 
@@ -180,23 +209,138 @@ list_recovery_stacks() {
         exit 0
     fi
 
+    log_step "Checking GCP resources for each stack..."
     echo ""
     echo -e "${CYAN}Found recovery stacks:${NC}"
-    echo "─────────────────────────────────────────"
-    printf "%-30s %s\n" "ENV_ID" "STATE PATH"
-    echo "─────────────────────────────────────────"
+    echo "──────────────────────────────────────────────────────────────────"
+    printf "%-30s %-12s %s\n" "ENV_ID" "STATUS" "DETAILS"
+    echo "──────────────────────────────────────────────────────────────────"
+
+    local stale_count=0
+    local resource_count=0
 
     for stack in $stacks; do
-        printf "%-30s %s\n" "$stack" "gcp/recovery/$stack"
+        local status
+        status=$(check_stack_has_resources "$stack")
+
+        case "$status" in
+            vpc)
+                printf "%-30s ${YELLOW}%-12s${NC} %s\n" "$stack" "HAS VPC" "VPC: tamshai-prod-${stack}-vpc"
+                ((resource_count++)) || true
+                ;;
+            sql)
+                printf "%-30s ${YELLOW}%-12s${NC} %s\n" "$stack" "HAS SQL" "Cloud SQL: tamshai-prod-postgres-${stack}"
+                ((resource_count++)) || true
+                ;;
+            stale)
+                printf "%-30s ${GREEN}%-12s${NC} %s\n" "$stack" "STALE" "State only (no GCP resources)"
+                ((stale_count++)) || true
+                ;;
+        esac
     done
 
-    echo "─────────────────────────────────────────"
+    echo "──────────────────────────────────────────────────────────────────"
     echo ""
-    log_info "To destroy a recovery stack, run:"
-    echo "  ./cleanup-recovery.sh <ENV_ID>"
+
+    if [ "$stale_count" -gt 0 ]; then
+        log_info "Found $stale_count stale stack(s) (state-only, no GCP resources)"
+        echo ""
+        log_info "To clean up all stale stacks at once, run:"
+        echo -e "  ${CYAN}./cleanup-recovery.sh --cleanup-stale${NC}"
+        echo ""
+    fi
+
+    if [ "$resource_count" -gt 0 ]; then
+        log_info "Found $resource_count stack(s) with actual GCP resources"
+        echo ""
+        log_info "To destroy a stack with resources, run:"
+        echo "  ./cleanup-recovery.sh <ENV_ID>"
+        echo ""
+        log_info "Example:"
+        echo "  ./cleanup-recovery.sh $(echo "$stacks" | head -1)"
+    fi
+}
+
+# =============================================================================
+# CLEANUP STALE STACKS (STATE-ONLY)
+# =============================================================================
+
+cleanup_stale_stacks() {
+    log_phase "CLEANUP" "STALE RECOVERY STACKS"
+
+    log_step "Scanning for stale recovery stacks (state-only, no GCP resources)..."
+
+    # List all prefixes under gcp/recovery/
+    local stacks
+    stacks=$(gcloud storage ls "gs://${STATE_BUCKET}/gcp/recovery/" 2>/dev/null | \
+        sed 's|gs://'"${STATE_BUCKET}"'/gcp/recovery/||g' | \
+        sed 's|/$||g' | \
+        grep -v '^$' || true)
+
+    if [ -z "$stacks" ]; then
+        log_info "No recovery stacks found"
+        exit 0
+    fi
+
+    # Find stale stacks
+    local stale_stacks=()
+    for stack in $stacks; do
+        local status
+        status=$(check_stack_has_resources "$stack")
+        if [ "$status" == "stale" ]; then
+            stale_stacks+=("$stack")
+        fi
+    done
+
+    if [ ${#stale_stacks[@]} -eq 0 ]; then
+        log_success "No stale stacks found - all stacks have GCP resources"
+        echo ""
+        log_info "Run './cleanup-recovery.sh --list' to see all stacks"
+        exit 0
+    fi
+
     echo ""
-    log_info "Example:"
-    echo "  ./cleanup-recovery.sh $(echo "$stacks" | head -1)"
+    log_info "Found ${#stale_stacks[@]} stale stack(s):"
+    for stack in "${stale_stacks[@]}"; do
+        echo "  - $stack"
+    done
+    echo ""
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "DRY RUN: Would delete state for:"
+        for stack in "${stale_stacks[@]}"; do
+            echo "  gs://${STATE_BUCKET}/gcp/recovery/${stack}/"
+        done
+        log_warn "DRY RUN: No state files were deleted"
+        exit 0
+    fi
+
+    if ! confirm "Delete Terraform state for ${#stale_stacks[@]} stale stack(s)?"; then
+        log_error "Cancelled by user"
+        exit 1
+    fi
+
+    # Delete stale state files
+    local success_count=0
+    local fail_count=0
+
+    for stack in "${stale_stacks[@]}"; do
+        log_step "Deleting state for: $stack"
+        if gcloud storage rm -r "gs://${STATE_BUCKET}/gcp/recovery/${stack}/" 2>/dev/null; then
+            log_success "  Deleted: $stack"
+            ((success_count++)) || true
+        else
+            log_error "  Failed to delete: $stack"
+            ((fail_count++)) || true
+        fi
+    done
+
+    echo ""
+    log_success "Stale stack cleanup complete"
+    echo "  Deleted: $success_count"
+    if [ "$fail_count" -gt 0 ]; then
+        echo "  Failed:  $fail_count"
+    fi
 }
 
 # =============================================================================
@@ -808,6 +952,10 @@ main() {
                 LIST_MODE=true
                 shift
                 ;;
+            --cleanup-stale)
+                CLEANUP_STALE_MODE=true
+                shift
+                ;;
             --force)
                 FORCE=true
                 shift
@@ -842,6 +990,12 @@ main() {
     # List mode
     if [[ "$LIST_MODE" == "true" ]]; then
         list_recovery_stacks
+        exit 0
+    fi
+
+    # Cleanup stale mode
+    if [[ "$CLEANUP_STALE_MODE" == "true" ]]; then
+        cleanup_stale_stacks
         exit 0
     fi
 
