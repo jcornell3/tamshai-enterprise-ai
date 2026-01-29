@@ -1639,12 +1639,13 @@ phase5_configure_users() {
     log_info "DR Cloud SQL instance: $dr_cloud_sql_instance"
 
     # Bug #32 Fix: Fail on provisioning errors - missing job is a build failure
-    if ! trigger_identity_sync "true" "" "all" "true" "$NEW_REGION" "$dr_cloud_sql_instance"; then
+    # Bug #33 Fix: Prod uses PROD_USER_PASSWORD directly, not force_password_reset
+    if ! trigger_identity_sync "true" "" "all" "false" "$NEW_REGION" "$dr_cloud_sql_instance"; then
         log_error "Identity sync failed - this is a build failure"
         log_error "Ensure provision-users job exists in $NEW_REGION"
         exit 1
     fi
-    log_success "Corporate users provisioned with force password reset"
+    log_success "Corporate users provisioned with PROD_USER_PASSWORD"
 
     # =========================================================================
     # Step 5: Load sample data (Finance, Sales, Support) (Issue #102)
