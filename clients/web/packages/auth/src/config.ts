@@ -58,6 +58,24 @@ const GCP_PROD_HOSTS = [
 ];
 
 /**
+ * Get the appropriate Keycloak authority URL based on hostname.
+ * Detects DR domains at runtime and routes to DR Keycloak.
+ *
+ * Primary domains → auth.tamshai.com
+ * DR domains (-dr suffix) → auth-dr.tamshai.com
+ */
+function getKeycloakAuthority(hostname: string): string {
+  // Check if this is a DR domain (contains -dr before .tamshai.com)
+  const isDRDomain = hostname.includes('-dr.');
+
+  if (isDRDomain) {
+    return 'https://auth-dr.tamshai.com/auth/realms/tamshai-corp';
+  }
+
+  return 'https://auth.tamshai.com/auth/realms/tamshai-corp';
+}
+
+/**
  * Determine environment-specific Keycloak configuration
  */
 function getKeycloakConfig() {
@@ -66,12 +84,10 @@ function getKeycloakConfig() {
   const basePath = getAppBasePath();
 
   // GCP Production (Primary or DR) - Keycloak on separate Cloud Run URL (not proxied)
-  // VITE_KEYCLOAK_URL must be set at build time to point to either:
-  //   - Primary: https://auth.tamshai.com/auth/realms/tamshai-corp
-  //   - DR: https://auth-dr.tamshai.com/auth/realms/tamshai-corp
+  // Runtime detection: -dr domains use auth-dr.tamshai.com, others use auth.tamshai.com
   if (GCP_PROD_HOSTS.includes(hostname)) {
     return {
-      authority: import.meta.env.VITE_KEYCLOAK_URL,
+      authority: getKeycloakAuthority(hostname),
       client_id: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'web-portal',
       redirect_uri: `${origin}${basePath}/callback`,
       post_logout_redirect_uri: origin,
