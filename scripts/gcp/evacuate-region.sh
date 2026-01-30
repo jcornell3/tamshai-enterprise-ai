@@ -212,7 +212,8 @@ ENV_ID="${ENV_ID:-recovery-$(date +%Y%m%d-%H%M)}"
 PROJECT_ID="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
 
 # Bucket names: Environment vars > derived from project
-STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
+# Bug #32 fix: DR uses separate state bucket to avoid contaminating production state
+STATE_BUCKET="${GCP_DR_STATE_BUCKET:-tamshai-terraform-state-dr}"
 BACKUP_BUCKET="${TFVAR_BACKUP_BUCKET:-${GCP_BACKUP_BUCKET:-tamshai-backups-us}}"
 
 # Service account names: Environment vars > defaults

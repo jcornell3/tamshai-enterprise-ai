@@ -101,7 +101,8 @@ load_tfvars_config || true
 PROJECT_ID="${GCP_PROJECT:-${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}}"
 
 # Bucket names: Environment vars > defaults
-STATE_BUCKET="${GCP_STATE_BUCKET:-tamshai-terraform-state-prod}"
+# Bug #32 fix: DR uses separate state bucket to avoid contaminating production state
+STATE_BUCKET="${GCP_DR_STATE_BUCKET:-tamshai-terraform-state-dr}"
 
 # Keycloak configuration: Environment vars > tfvars > defaults
 KEYCLOAK_DR_DOMAIN="${KEYCLOAK_DR_DOMAIN:-${TFVAR_KEYCLOAK_DOMAIN:-auth-dr.tamshai.com}}"
@@ -601,9 +602,35 @@ terraform_destroy() {
     # Storage buckets are shared with production. Do NOT empty them.
     log_step "Skipping storage bucket emptying (shared with prod — Bug #15)..."
 
-    # Step 3: DO NOT delete secrets during recovery cleanup (Bug #5)
-    # Secrets (tamshai-prod-*) are shared between prod and DR environments.
-    log_step "Skipping secret deletion (shared with prod — Bug #5)..."
+    # Step 3: Delete recovery-specific secrets (Bug #5 update)
+    # Shared secrets (tamshai-prod-*) are preserved.
+    # Recovery-specific secrets (*-recovery-{ENV_ID}) are deleted.
+    log_step "Cleaning up recovery-specific secrets..."
+    local recovery_secrets
+    recovery_secrets=$(gcloud secrets list --project="$PROJECT_ID" \
+        --filter="name~-${ENV_ID}$" \
+        --format="value(name)" 2>/dev/null || true)
+
+    if [[ -n "$recovery_secrets" ]]; then
+        local secret_count
+        secret_count=$(echo "$recovery_secrets" | wc -l)
+        log_info "Found $secret_count recovery-specific secrets to delete"
+
+        while IFS= read -r secret_name; do
+            if [[ -n "$secret_name" ]]; then
+                if [[ "$DRY_RUN" == "true" ]]; then
+                    log_info "DRY RUN: Would delete secret: $secret_name"
+                else
+                    gcloud secrets delete "$secret_name" --project="$PROJECT_ID" --quiet 2>/dev/null && \
+                        log_info "  Deleted secret: $secret_name" || \
+                        log_warn "  Failed to delete secret: $secret_name"
+                fi
+            fi
+        done <<< "$recovery_secrets"
+        log_success "Recovery-specific secrets cleaned up"
+    else
+        log_info "No recovery-specific secrets found for ${ENV_ID}"
+    fi
 
     # Step 4: Recovery-safe gcloud cleanup (VPC, Cloud SQL, networking only)
     # This replaces cleanup_leftover_resources() which would destroy Cloud Run

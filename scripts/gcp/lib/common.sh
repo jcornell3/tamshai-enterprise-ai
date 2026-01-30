@@ -144,6 +144,20 @@ get_tfvar() {
 # =============================================================================
 # STATE MANAGEMENT
 # =============================================================================
+# Bug #32 fix: Separate buckets for prod and DR to prevent state contamination
+#
+# Bucket structure:
+#   tamshai-terraform-state-prod  - Production state only (gcp/phase1/)
+#   tamshai-terraform-state-dr    - DR state only (gcp/recovery/<env_id>/)
+#
+# Environment variables:
+#   GCP_STATE_BUCKET     - Override for prod bucket (phoenix-rebuild, phoenix-preflight)
+#   GCP_DR_STATE_BUCKET  - Override for DR bucket (evacuate-region, cleanup-recovery)
+# =============================================================================
+
+# Bucket name constants
+readonly PROD_STATE_BUCKET="tamshai-terraform-state-prod"
+readonly DR_STATE_BUCKET="tamshai-terraform-state-dr"
 
 # Get terraform state prefix for environment
 # Usage: PREFIX=$(get_state_prefix "primary")
@@ -158,11 +172,25 @@ get_state_prefix() {
     fi
 }
 
+# Get the appropriate state bucket for an environment type
+# Usage: BUCKET=$(get_state_bucket "primary")   # Returns prod bucket
+#        BUCKET=$(get_state_bucket "dr")        # Returns DR bucket
+get_state_bucket() {
+    local env_type="${1:-primary}"
+
+    if [[ "$env_type" == "primary" || "$env_type" == "prod" ]]; then
+        echo "${GCP_STATE_BUCKET:-$PROD_STATE_BUCKET}"
+    else
+        echo "${GCP_DR_STATE_BUCKET:-$DR_STATE_BUCKET}"
+    fi
+}
+
 # Check if a state path exists in GCS
 # Usage: if state_exists "gcp/recovery/test-01"; then ...
+# Note: Uses STATE_BUCKET which should be set by the calling script
 state_exists() {
     local state_prefix="$1"
-    local bucket="${STATE_BUCKET:-tamshai-terraform-state-prod}"
+    local bucket="${STATE_BUCKET:-$PROD_STATE_BUCKET}"
 
     gcloud storage ls "gs://${bucket}/${state_prefix}/" &>/dev/null 2>&1
 }
@@ -206,5 +234,5 @@ wait_for() {
 export -f log_phase log_step log_info log_success log_warn log_error
 export -f confirm
 export -f get_project_id get_default_region
-export -f get_tfvar get_state_prefix state_exists
+export -f get_tfvar get_state_prefix get_state_bucket state_exists
 export -f wait_for
