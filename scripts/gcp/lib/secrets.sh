@@ -349,48 +349,71 @@ sync_secrets_from_env() {
     return 0
 }
 
-# Create mcp-hr-service-client-secret if it doesn't exist (Gap #41 helper)
-# This is needed because the secret is created by Terraform but may not have a version
-ensure_mcp_hr_client_secret() {
-    local project="${GCP_PROJECT_ID:-}"
+# =============================================================================
+# Issue #102: Sync MCP_HR_SERVICE_CLIENT_SECRET from GitHub to GCP
+# =============================================================================
+# GitHub Secrets is the source of truth for MCP_HR_SERVICE_CLIENT_SECRET.
+# This function syncs the value from environment (set by GitHub Actions) to
+# GCP Secret Manager. It NEVER generates random values - if the secret is not
+# available in environment, it fails with instructions.
+#
+# This replaces the old ensure_mcp_hr_client_secret() which had backwards logic:
+# generating random values locally and telling users to sync back to GitHub.
+#
+# Usage: sync_mcp_hr_client_secret
+#   Reads MCP_HR_SERVICE_CLIENT_SECRET from environment variable.
+#   Updates the mcp-hr-service-client-secret in GCP Secret Manager.
+#   Returns 0 on success, 1 if secret not available in environment.
+# =============================================================================
+sync_mcp_hr_client_secret() {
+    local project="${GCP_PROJECT_ID:-${GCP_PROJECT:-}}"
     local secret_name="mcp-hr-service-client-secret"
 
     if [ -z "$project" ]; then
-        log_secrets_error "GCP_PROJECT_ID not set"
+        log_secrets_error "GCP_PROJECT_ID not set - cannot sync MCP HR client secret"
         return 1
     fi
 
-    # Check if secret exists
-    if ! gcp_secret_exists "$secret_name"; then
-        log_secrets_info "Creating $secret_name..."
-        local new_secret
-        new_secret=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
-        ensure_gcp_secret "$secret_name" "$new_secret"
-        log_secrets_success "Created $secret_name with random value"
-        echo ""
-        log_secrets_warn "Remember to sync this value back to GitHub:"
-        echo "  gh secret set MCP_HR_SERVICE_CLIENT_SECRET < <(gcloud secrets versions access latest --secret=$secret_name)"
-        return 0
+    log_secrets_info "Syncing MCP_HR_SERVICE_CLIENT_SECRET to GCP Secret Manager (Issue #102 fix)..."
+
+    # Check if secret is available in environment (set by GitHub Actions)
+    if [ -n "${MCP_HR_SERVICE_CLIENT_SECRET:-}" ]; then
+        log_secrets_info "MCP_HR_SERVICE_CLIENT_SECRET found in environment - updating GCP secret..."
+        if ensure_gcp_secret "$secret_name" "$MCP_HR_SERVICE_CLIENT_SECRET"; then
+            log_secrets_success "mcp-hr-service-client-secret updated in GCP Secret Manager"
+            return 0
+        else
+            log_secrets_error "Failed to update mcp-hr-service-client-secret in GCP Secret Manager"
+            return 1
+        fi
     fi
 
-    # Check if secret has any versions
-    local version_count
-    version_count=$(gcloud secrets versions list "$secret_name" --project="$project" --format="value(name)" 2>/dev/null | wc -l)
-
-    if [ "$version_count" -eq 0 ]; then
-        log_secrets_info "$secret_name exists but has no versions - adding one..."
-        local new_secret
-        new_secret=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
-        echo -n "$new_secret" | gcloud secrets versions add "$secret_name" --project="$project" --data-file=-
-        log_secrets_success "Added version to $secret_name"
-        echo ""
-        log_secrets_warn "Remember to sync this value back to GitHub:"
-        echo "  gh secret set MCP_HR_SERVICE_CLIENT_SECRET < <(gcloud secrets versions access latest --secret=$secret_name)"
-    else
-        log_secrets_success "$secret_name already has $version_count version(s)"
+    # Check if secret already has a version in GCP (fallback for existing deployments)
+    if gcp_secret_exists "$secret_name"; then
+        local version_count
+        version_count=$(gcloud secrets versions list "$secret_name" --project="$project" --format="value(name)" 2>/dev/null | wc -l)
+        if [ "$version_count" -gt 0 ]; then
+            log_secrets_info "$secret_name already has $version_count version(s) in GCP - skipping"
+            return 0
+        fi
     fi
 
-    return 0
+    # Secret not in environment and doesn't exist in GCP - error (don't generate random)
+    log_secrets_error "MCP_HR_SERVICE_CLIENT_SECRET not set in environment"
+    log_secrets_error "This secret must be set by GitHub Actions workflow"
+    log_secrets_warn "Ensure workflow exports: MCP_HR_SERVICE_CLIENT_SECRET=\${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}"
+    log_secrets_warn ""
+    log_secrets_warn "If running manually, set the environment variable first:"
+    log_secrets_warn "  export MCP_HR_SERVICE_CLIENT_SECRET='your-secret-value'"
+    log_secrets_warn "  # Or fetch from GitHub using gh CLI:"
+    log_secrets_warn "  # (requires authenticated gh CLI and read access to secrets)"
+    return 1
+}
+
+# Backwards compatibility alias (deprecated - use sync_mcp_hr_client_secret)
+ensure_mcp_hr_client_secret() {
+    log_secrets_warn "ensure_mcp_hr_client_secret() is deprecated - use sync_mcp_hr_client_secret()"
+    sync_mcp_hr_client_secret
 }
 
 # =============================================================================

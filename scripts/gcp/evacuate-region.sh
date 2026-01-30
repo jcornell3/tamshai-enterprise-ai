@@ -400,16 +400,36 @@ preflight_checks() {
         log_warn "read-github-secrets.sh not found at $secrets_script"
     fi
 
-    # Gap #41: Ensure global secrets have versions before terraform runs
-    # These secrets are created by terraform as empty containers, but need values.
-    # This mirrors phoenix-rebuild.sh behavior for DR/prod alignment.
-    log_step "Ensuring global secrets have versions (Gap #41)..."
+    # =============================================================================
+    # Issue #102: Sync secrets from environment to GCP (DR/Prod alignment)
+    # =============================================================================
+    # These calls match phoenix-rebuild.sh to ensure both scripts handle secrets
+    # identically. GitHub Secrets is the source of truth.
+    # =============================================================================
 
-    # 1. mcp-hr-service-client-secret
-    if type ensure_mcp_hr_client_secret &>/dev/null; then
-        ensure_mcp_hr_client_secret || log_warn "Could not ensure mcp-hr-service-client-secret"
+    # Sync all secrets from environment variables to GCP (Gap #41)
+    if type sync_secrets_from_env &>/dev/null; then
+        log_step "Syncing secrets from environment to GCP (Issue #102)..."
+        sync_secrets_from_env || log_warn "Some secrets could not be synced from environment"
     else
-        log_warn "ensure_mcp_hr_client_secret function not available"
+        log_warn "sync_secrets_from_env function not available"
+    fi
+
+    # Validate secret hygiene (whitespace, encoding issues - Issue #25)
+    if type check_all_secrets_hygiene &>/dev/null; then
+        log_step "Checking secrets hygiene (Issue #25)..."
+        check_all_secrets_hygiene || log_warn "Some secrets have hygiene issues"
+    else
+        log_warn "check_all_secrets_hygiene function not available"
+    fi
+
+    # Gap #41: Ensure mcp-hr-service-client-secret is synced from GitHub
+    # Issue #102: Use sync function (GitHub is source of truth, not random generation)
+    log_step "Syncing MCP HR client secret (Issue #102)..."
+    if type sync_mcp_hr_client_secret &>/dev/null; then
+        sync_mcp_hr_client_secret || log_error "MCP_HR_SERVICE_CLIENT_SECRET not synced - check GitHub Actions env vars"
+    else
+        log_warn "sync_mcp_hr_client_secret function not available"
     fi
 
     # 2. prod-user-password - sync from GitHub Secrets if available

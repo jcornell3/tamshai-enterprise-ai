@@ -320,14 +320,16 @@ phase_2_secret_sync() {
     log_step "Syncing secrets from environment variables (Gap #41)..."
     sync_secrets_from_env || log_warn "Some secrets could not be synced from environment"
 
-    # Gap #41 CRITICAL: Ensure mcp-hr-service-client-secret has a version
+    # Gap #41 / Issue #102: Sync mcp-hr-service-client-secret from GitHub
     # This MUST happen BEFORE any Terraform operations because Terraform creates
     # the secret shell but doesn't add a version, causing Cloud Run deployment to fail.
-    log_step "CRITICAL: Ensuring mcp-hr-service-client-secret has a version (Gap #41)..."
-    ensure_mcp_hr_client_secret || {
-        log_error "FAILED to ensure mcp-hr-service-client-secret has a version"
+    # Issue #102: GitHub Secrets is the source of truth - sync from env, don't generate random.
+    log_step "CRITICAL: Syncing mcp-hr-service-client-secret from GitHub (Gap #41, Issue #102)..."
+    sync_mcp_hr_client_secret || {
+        log_error "FAILED to sync mcp-hr-service-client-secret from GitHub"
         log_error "This will cause Cloud Run deployment to fail!"
-        log_error "Manual fix: openssl rand -base64 32 | gcloud secrets versions add mcp-hr-service-client-secret --data-file=-"
+        log_error "Ensure MCP_HR_SERVICE_CLIENT_SECRET is set in environment (from GitHub Actions)"
+        log_error "Manual fix: export MCP_HR_SERVICE_CLIENT_SECRET='value' then re-run"
         exit 1
     }
 
@@ -1118,9 +1120,9 @@ EOF
         --service=sqladmin.googleapis.com \
         --project="${GCP_PROJECT_ID}" 2>/dev/null || log_warn "Could not create Cloud SQL Service Agent (may already exist)"
 
-    # Gap #26/41: Ensure mcp-hr-service-client-secret has a version
-    log_step "Ensuring mcp-hr-service-client-secret has a version (Gap #26/41)..."
-    ensure_mcp_hr_client_secret || log_warn "Could not ensure mcp-hr-service-client-secret"
+    # Gap #26/41 / Issue #102: Sync mcp-hr-service-client-secret from GitHub
+    log_step "Syncing mcp-hr-service-client-secret from GitHub (Gap #26/41, Issue #102)..."
+    sync_mcp_hr_client_secret || log_warn "Could not sync mcp-hr-service-client-secret"
 
     save_checkpoint 4 "completed"
     log_success "Phase 4 complete - Infrastructure created"
