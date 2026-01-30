@@ -219,7 +219,7 @@ services:
       # KEYCLOAK_URL: Used for container-to-container communication (includes /auth prefix)
       KEYCLOAK_URL: http://keycloak:8080/auth
       # KEYCLOAK_ISSUER: Must match the "iss" claim in JWT tokens (what clients see via Caddy)
-      KEYCLOAK_ISSUER: https://www.tamshai.local/auth/realms/tamshai-corp
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai.local/auth/realms/tamshai-corp}
       # JWKS_URI: Internal container URL to fetch public keys (includes /auth prefix)
       JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp
