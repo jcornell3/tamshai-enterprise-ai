@@ -96,9 +96,6 @@ check_docker_containers() {
     fi
 
     local compose_file="$PROJECT_ROOT/infrastructure/docker/docker-compose.yml"
-    if [ "$ENV" = "stage" ]; then
-        compose_file="$PROJECT_ROOT/docker-compose.yml"
-    fi
 
     if [ ! -f "$compose_file" ]; then
         log_warn "Compose file not found: $compose_file"

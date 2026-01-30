@@ -92,7 +92,7 @@ jobs:
           git reset --hard origin/main
 
           # Restart Kong with updated config (no build needed - using official image)
-          docker compose up -d --no-deps kong
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps kong
 
           echo "⏳ Waiting for health check..."
           for i in {1..30}; do
@@ -105,9 +105,9 @@ jobs:
           done
 
           echo "❌ Health check failed - rolling back..."
-          docker compose down kong
+          docker compose -f infrastructure/docker/docker-compose.yml down kong
           docker tag kong:rollback kong:3.4
-          docker compose up -d --no-deps kong
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps kong
           exit 1
           EOF
 
@@ -124,7 +124,7 @@ jobs:
 
           # Restore previous image
           docker tag kong:rollback kong:3.4
-          docker compose up -d --no-deps kong
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps kong
 
           echo "⏳ Verifying rollback..."
           for i in {1..30}; do

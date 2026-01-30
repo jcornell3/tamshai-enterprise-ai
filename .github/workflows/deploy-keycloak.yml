@@ -90,8 +90,8 @@ jobs:
           git update-ref -d refs/remotes/origin/main 2>/dev/null || true
           git fetch -f origin main
           git reset --hard origin/main
-          docker compose pull keycloak
-          docker compose up -d --no-deps keycloak
+          docker compose -f infrastructure/docker/docker-compose.yml pull keycloak
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps keycloak
           # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for Keycloak to start (can take 30-60 seconds)..."
           for i in {1..60}; do
@@ -103,7 +103,7 @@ jobs:
             sleep 1
           done
           echo "❌ Health check failed - restarting Keycloak..."
-          docker compose restart keycloak
+          docker compose -f infrastructure/docker/docker-compose.yml restart keycloak
           exit 1
           EOF
 
@@ -118,7 +118,7 @@ jobs:
           cd /opt/tamshai
           # Keycloak uses official pinned image - restart the service
           echo "🔄 Restarting Keycloak..."
-          docker compose restart keycloak
+          docker compose -f infrastructure/docker/docker-compose.yml restart keycloak
           # Health check (use docker exec - ports not exposed to host)
           echo "⏳ Waiting for Keycloak to restart..."
           for i in {1..60}; do

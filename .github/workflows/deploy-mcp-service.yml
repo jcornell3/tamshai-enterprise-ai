@@ -90,11 +90,11 @@ jobs:
 
           # Build new version
           echo "Building $SERVICE_NAME..."
-          docker compose build $SERVICE_NAME
+          docker compose -f infrastructure/docker/docker-compose.yml build $SERVICE_NAME
 
           # Deploy (--no-deps = don't restart dependencies)
           echo "Deploying $SERVICE_NAME (no dependency restart)..."
-          docker compose up -d --no-deps $SERVICE_NAME
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps $SERVICE_NAME
 
           # Health check with timeout
           echo "Waiting for health check..."
@@ -111,7 +111,7 @@ jobs:
           echo "Health check failed after 30 seconds"
           echo "Rolling back to previous version..."
           docker tag tamshai/$SERVICE_NAME:rollback tamshai/$SERVICE_NAME:latest
-          docker compose up -d --no-deps $SERVICE_NAME
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps $SERVICE_NAME
 
           # Verify rollback succeeded
           sleep 5
@@ -142,7 +142,7 @@ jobs:
           docker tag tamshai/$SERVICE_NAME:rollback tamshai/$SERVICE_NAME:latest
 
           # Redeploy with rollback version
-          docker compose up -d --no-deps $SERVICE_NAME
+          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps $SERVICE_NAME
 
           # Health check
           echo "Verifying rollback..."

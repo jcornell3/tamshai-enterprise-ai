@@ -1311,6 +1311,12 @@ phase2_deploy_infrastructure() {
         -var="app_domain=${APP_DR_DOMAIN}"
         -var="api_domain=${API_DR_DOMAIN}"
         -var="keycloak_provisioning_url=https://${KEYCLOAK_DR_DOMAIN}/auth"
+        # Bug #38 fix: Keep Keycloak warm to avoid cold start timeout when MCP Gateway validates JWKS
+        -var="keycloak_min_instances=1"
+        # Bug #38 fix: Align with dr.tfvars - disable utility VM in DR (no Redis needed)
+        -var="enable_utility_vm=false"
+        # Bug #38 fix: Enable data restore from backup bucket
+        -var="source_backup_bucket=${BACKUP_BUCKET}"
     )
 
     # Bug #9 Fix: Delete existing domain mappings so Terraform can recreate them fresh.
