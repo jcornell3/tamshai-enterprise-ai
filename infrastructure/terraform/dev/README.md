@@ -104,6 +104,58 @@ terraform apply -var-file=dev.tfvars
 
 **Deployment Time**: ~3-5 minutes (includes service health checks)
 
+## Phoenix Rebuild (Destroy + Apply)
+
+The **Phoenix Rebuild** process completely destroys and recreates the dev environment from scratch. This validates that your infrastructure-as-code can reliably rebuild the entire system.
+
+### When to Use
+
+- After making changes to `docker-compose.yml` or Terraform configs
+- When the environment is in an unknown or broken state
+- To validate the "Phoenix principle" - the system can rise from the ashes
+- Before committing infrastructure changes to ensure they work cleanly
+
+### Commands
+
+```bash
+cd infrastructure/terraform/dev
+
+# Step 1: Destroy everything
+terraform destroy -var-file=dev.tfvars
+# Type 'yes' when prompted
+
+# Step 2: Recreate from scratch
+terraform apply -var-file=dev.tfvars
+# Type 'yes' when prompted
+```
+
+### What Gets Validated
+
+| Component | Validation |
+|-----------|------------|
+| `.env` generation | Credentials correctly templated |
+| Docker Compose | All services start successfully |
+| Service health checks | PostgreSQL, Keycloak, Kong, MCP Gateway healthy |
+| Keycloak realm | Imported via `--import-realm` |
+| Network connectivity | Services can communicate |
+| Volume mounts | Paths resolve correctly |
+
+### Expected Outcome
+
+- All containers running (`docker ps` shows 13+ containers)
+- Services accessible at `https://www.tamshai.local`
+- MCP Gateway health check passing: `curl http://localhost:3100/health`
+- Keycloak admin console accessible: `http://localhost:8180/auth`
+
+### Troubleshooting Phoenix Rebuild
+
+If the rebuild fails:
+
+1. **Check Docker Desktop** - Ensure it's running with sufficient resources (8GB+ RAM)
+2. **Check logs** - `docker compose -f infrastructure/docker/docker-compose.yml logs`
+3. **Port conflicts** - Ensure no other services are using ports 3100, 8180, 8100
+4. **Hosts file** - Verify `127.0.0.1 www.tamshai.local` entry exists
+
 ### 6. Verify Deployment
 
 ```bash
@@ -280,17 +332,20 @@ cd infrastructure/docker
 docker compose down
 ```
 
-**Remove All Data** (⚠️ destructive):
+**Remove All Data** (destructive):
 ```bash
 cd infrastructure/docker
 docker compose down -v  # Deletes volumes
 ```
 
-**Clean Terraform State**:
+**Full Phoenix Rebuild** (destroy + recreate):
 ```bash
 cd infrastructure/terraform/dev
 terraform destroy -var-file=dev.tfvars
+terraform apply -var-file=dev.tfvars
 ```
+
+See [Phoenix Rebuild](#phoenix-rebuild-destroy--apply) section for details.
 
 ## Troubleshooting
 
@@ -455,5 +510,5 @@ terraform apply -var-file=dev.tfvars
 ---
 
 **Created**: 2025-12-30
-**Last Updated**: 2025-12-30
+**Last Updated**: 2026-01-29
 **Maintained By**: Tamshai Dev Team
