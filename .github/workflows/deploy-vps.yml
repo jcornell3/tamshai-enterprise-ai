@@ -235,19 +235,20 @@ jobs:
           git checkout ${{ env.DEPLOY_BRANCH }}
           git reset --hard origin/${{ env.DEPLOY_BRANCH }}
 
-          echo "=== Loading environment ==="
-          export $(cat .env | grep -v '^#' | xargs)
-
           # =========================================================================
           # Fix .env paths for docker-compose running from infrastructure/docker/
           # Old format: ./infrastructure/docker/Caddyfile.stage (root-relative)
           # New format: ./Caddyfile.stage (relative to docker-compose.yml)
+          # MUST run BEFORE exporting environment variables
           # =========================================================================
           echo "=== Fixing .env paths for docker-compose directory ==="
           sed -i 's|CADDYFILE=./infrastructure/docker/|CADDYFILE=./|g' .env
           sed -i 's|KONG_CONFIG=./infrastructure/kong/|KONG_CONFIG=../kong/|g' .env
           sed -i 's|KEYCLOAK_REALM=./keycloak/|KEYCLOAK_REALM=../../keycloak/|g' .env
           echo "[OK] .env paths updated for infrastructure/docker/ working directory"
+
+          echo "=== Loading environment ==="
+          export $(cat .env | grep -v '^#' | xargs)
 
           # =========================================================================
           # PHOENIX: Substitute secrets in realm-export-stage.json
