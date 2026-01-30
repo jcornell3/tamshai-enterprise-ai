@@ -460,6 +460,24 @@ preflight_checks() {
 
     log_success "Global secrets verified"
 
+    # =============================================================================
+    # Stale Terraform Lock Detection (Issue #102: Added to pre-flight)
+    # =============================================================================
+    # Clean up any stale terraform state locks from previous interrupted runs.
+    # This prevents "Error acquiring the state lock" failures in Phase 2.
+    # =============================================================================
+    if type cleanup_terraform_state_lock &>/dev/null; then
+        log_step "Checking for stale terraform state locks..."
+        cleanup_terraform_state_lock "$STATE_BUCKET" "gcp/recovery/${ENV_ID}" || true
+    else
+        # Fallback: direct lock file removal if function not available
+        local lock_file="gs://${STATE_BUCKET}/gcp/recovery/${ENV_ID}/default.tflock"
+        if gcloud storage cat "$lock_file" &>/dev/null 2>&1; then
+            log_warn "Found stale lock file - removing..."
+            gcloud storage rm "$lock_file" 2>/dev/null || true
+        fi
+    fi
+
     log_success "All pre-flight checks passed"
 }
 
@@ -827,6 +845,77 @@ phase1_init_state() {
 # to the recovery region before deploying Cloud Run services.
 # =============================================================================
 
+# Calculate source code checksum for a service
+# Usage: get_source_checksum <service_name>
+# Returns: SHA256 checksum of source code or empty string if directory not found
+# Issue #102 Fix: Use source checksums instead of image digests for rebuild decisions
+get_source_checksum() {
+    local service="$1"
+    local source_dir=""
+
+    # Map service names to source directories
+    case "$service" in
+        keycloak)
+            source_dir="${PROJECT_ROOT}/keycloak"
+            ;;
+        mcp-gateway)
+            source_dir="${PROJECT_ROOT}/services/mcp-gateway"
+            ;;
+        mcp-hr|mcp-finance|mcp-sales|mcp-support)
+            source_dir="${PROJECT_ROOT}/services/${service}"
+            ;;
+        web-portal)
+            source_dir="${PROJECT_ROOT}/clients/web-portal"
+            ;;
+        provision-job)
+            source_dir="${PROJECT_ROOT}/services/provision-job"
+            ;;
+        *)
+            echo ""
+            return 1
+            ;;
+    esac
+
+    if [ ! -d "$source_dir" ]; then
+        echo ""
+        return 1
+    fi
+
+    # Calculate checksum of key files: Dockerfile*, package*.json, and src/
+    # This is faster than hashing everything and captures meaningful changes
+    local checksum
+    checksum=$(find "$source_dir" \
+        \( -name "Dockerfile*" -o -name "package*.json" -o -path "*/src/*" \) \
+        -type f -print0 2>/dev/null | \
+        sort -z | \
+        xargs -0 sha256sum 2>/dev/null | \
+        sha256sum | \
+        cut -d' ' -f1)
+
+    echo "${checksum:-}"
+}
+
+# Get source checksum label from a container image
+# Usage: get_image_source_checksum <image_uri>
+# Returns: Source checksum label value or empty string
+get_image_source_checksum() {
+    local image="$1"
+    local checksum
+
+    # Try to get the source-checksum label from the image
+    checksum=$(gcloud artifacts docker images describe "$image" \
+        --project="$PROJECT_ID" \
+        --format="value(image_summary.metadata.source-checksum)" 2>/dev/null || echo "")
+
+    # Fallback: check OCI labels via crane/gcrane if available
+    if [ -z "$checksum" ] && command -v crane &>/dev/null; then
+        checksum=$(crane config "$image" 2>/dev/null | \
+            jq -r '.config.Labels["source-checksum"] // empty' 2>/dev/null || echo "")
+    fi
+
+    echo "${checksum:-}"
+}
+
 phase1_5_replicate_images() {
     log_phase "1.5" "REPLICATE CONTAINER IMAGES TO RECOVERY REGION"
 
@@ -876,30 +965,47 @@ phase1_5_replicate_images() {
 
         log_info "  Copying: $image"
 
-        # Check if target image already exists AND matches source digest
-        # Stale images from previous DR runs must be replaced with current builds
+        # Issue #102 Fix: Use source code checksum instead of image digest for rebuild decisions
+        # Image digests change even when source code is identical (timestamps, metadata, etc.)
+        # Source checksums ensure we only rebuild when actual code changes
+        local current_source_checksum=""
+        current_source_checksum=$(get_source_checksum "$image_name")
+
+        # Check if target image already exists AND matches source code
         if gcloud artifacts docker images describe "$target_image" \
             --project="$PROJECT_ID" &>/dev/null 2>&1; then
 
-            # Get source and target digests for freshness comparison
-            local source_digest target_digest
-            source_digest=$(gcloud artifacts docker images describe "$source_image" \
-                --project="$PROJECT_ID" \
-                --format="value(image_summary.digest)" 2>/dev/null || echo "")
-            target_digest=$(gcloud artifacts docker images describe "$target_image" \
-                --project="$PROJECT_ID" \
-                --format="value(image_summary.digest)" 2>/dev/null || echo "")
+            # Get source checksum from target image label (if available)
+            local target_source_checksum=""
+            target_source_checksum=$(get_image_source_checksum "$target_image")
 
-            if [[ -n "$source_digest" && "$source_digest" == "$target_digest" ]]; then
-                log_info "    Already exists with matching digest (skipping)"
-                log_info "    Digest: ${source_digest:0:19}..."
+            if [[ -n "$current_source_checksum" && -n "$target_source_checksum" && \
+                  "$current_source_checksum" == "$target_source_checksum" ]]; then
+                log_info "    Already exists with matching source checksum (skipping)"
+                log_info "    Checksum: ${current_source_checksum:0:16}..."
                 continue
-            elif [[ -n "$source_digest" && -n "$target_digest" ]]; then
-                log_warn "    Target exists but STALE (digest mismatch) — will re-copy"
-                log_info "    Source: ${source_digest:0:19}..."
-                log_info "    Target: ${target_digest:0:19}..."
-            elif [[ -z "$source_digest" ]]; then
-                log_warn "    Cannot read source digest — will attempt copy anyway"
+            elif [[ -n "$current_source_checksum" && -n "$target_source_checksum" ]]; then
+                log_warn "    Target exists but source code changed — will rebuild"
+                log_info "    Current: ${current_source_checksum:0:16}..."
+                log_info "    Target:  ${target_source_checksum:0:16}..."
+            elif [[ -z "$target_source_checksum" ]]; then
+                # Fallback to image digest comparison for images without checksum labels
+                local source_digest target_digest
+                source_digest=$(gcloud artifacts docker images describe "$source_image" \
+                    --project="$PROJECT_ID" \
+                    --format="value(image_summary.digest)" 2>/dev/null || echo "")
+                target_digest=$(gcloud artifacts docker images describe "$target_image" \
+                    --project="$PROJECT_ID" \
+                    --format="value(image_summary.digest)" 2>/dev/null || echo "")
+
+                if [[ -n "$source_digest" && "$source_digest" == "$target_digest" ]]; then
+                    log_info "    Already exists with matching digest (skipping)"
+                    log_info "    Digest: ${source_digest:0:19}..."
+                    continue
+                elif [[ -n "$source_digest" && -n "$target_digest" ]]; then
+                    log_info "    No source checksum label — using digest comparison"
+                    log_warn "    Target exists but STALE (digest mismatch) — will re-copy"
+                fi
             fi
         fi
 
@@ -933,6 +1039,9 @@ phase1_5_replicate_images() {
         if [ "$copy_success" = false ]; then
             log_warn "  Copy failed, attempting rebuild in target region..."
 
+            # Issue #102: Add source checksum label to enable checksum-based rebuild decisions
+            local source_label="${current_source_checksum:-unknown}"
+
             case "$image_name" in
                 keycloak)
                     # Keycloak uses Dockerfile.cloudbuild (no BuildKit syntax)
@@ -942,7 +1051,14 @@ phase1_5_replicate_images() {
                     cat > "$keycloak_config" <<KEYCLOAK_EOF
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', '${target_image}', '-f', 'Dockerfile.cloudbuild', '.']
+    args:
+      - 'build'
+      - '-t'
+      - '${target_image}'
+      - '-f'
+      - 'Dockerfile.cloudbuild'
+      - '--label=source-checksum=${source_label}'
+      - '.'
 images:
   - '${target_image}'
 KEYCLOAK_EOF
@@ -982,6 +1098,7 @@ steps:
       - 'VITE_MCP_GATEWAY_URL='
       - '--build-arg'
       - 'VITE_RELEASE_TAG=v1.0.0-dr'
+      - '--label=source-checksum=${source_label}'
       - '.'
 images:
   - '${target_image}'
@@ -997,16 +1114,30 @@ WEBPORTAL_EOF
                     rm -f "$webportal_config"
                     ;;
                 mcp-gateway|mcp-hr|mcp-finance|mcp-sales|mcp-support)
-                    # Standard MCP services - can use --tag directly
+                    # Standard MCP services - use config to add source checksum label
                     log_info "    Building ${image_name} (standard Dockerfile)..."
+                    local mcp_config="/tmp/${image_name}-cloudbuild-$$.yaml"
+                    cat > "$mcp_config" <<MCP_EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${target_image}'
+      - '--label=source-checksum=${source_label}'
+      - '.'
+images:
+  - '${target_image}'
+MCP_EOF
                     if submit_cloud_build_async gcloud builds submit "${PROJECT_ROOT}/services/${image_name}" \
-                        --tag="$target_image" \
+                        --config="$mcp_config" \
                         --region=global \
                         --project="$PROJECT_ID" \
                         --quiet; then
                         log_success "    Rebuilt ${image_name} successfully"
                         copy_success=true
                     fi
+                    rm -f "$mcp_config"
                     ;;
                 provision-job)
                     # Provision job is at scripts/gcp/provision-job/
@@ -1023,7 +1154,14 @@ WEBPORTAL_EOF
                     cat > "$provision_config" <<PROVISION_EOF
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', '${target_image}', '-f', 'scripts/gcp/provision-job/Dockerfile', '.']
+    args:
+      - 'build'
+      - '-t'
+      - '${target_image}'
+      - '-f'
+      - 'scripts/gcp/provision-job/Dockerfile'
+      - '--label=source-checksum=${source_label}'
+      - '.'
 images:
   - '${target_image}'
 PROVISION_EOF
@@ -1186,18 +1324,12 @@ phase2_deploy_infrastructure() {
     log_step "Pre-importing existing global resources (service accounts, secrets)..."
 
     # Common vars for all terraform commands
-    # NOTE: keycloak_domain must use DR domain (e.g., auth-dr.tamshai.com) for recovery mode
-    # because domain mappings are region-bound (auth.tamshai.com is bound to the primary region)
+    # Issue #102 Fix: Use -var-file like prod instead of explicit -var overrides
+    # Domain values come from dr.tfvars; only override runtime values (env_id, project_id)
     local TF_VARS=(
-        -var="region=$NEW_REGION"
-        -var="zone=$NEW_ZONE"
+        -var-file="${SCRIPT_DIR}/../../infrastructure/terraform/gcp/environments/dr.tfvars"
         -var="env_id=$ENV_ID"
         -var="project_id=$PROJECT_ID"
-        -var="recovery_mode=true"
-        -var="phoenix_mode=true"
-        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
-        -var="app_domain=${APP_DR_DOMAIN}"
-        -var="api_domain=${API_DR_DOMAIN}"
     )
 
     # Import service accounts if they exist
@@ -1360,23 +1492,13 @@ phase2_deploy_infrastructure() {
     log_info "SSL certificate provisioning typically takes 10-15 minutes"
 
     # Common terraform variables for all stages
-    # Bug #34 Fix: Include keycloak_provisioning_url so provision-users job targets DR Keycloak
+    # Issue #102 Fix: Use -var-file like prod instead of explicit -var overrides
+    # This ensures terraform module conditionals work the same as phoenix-rebuild.sh
+    # Only override env_id (unique per recovery run) and source_backup_bucket (runtime value)
     local TF_COMMON_VARS=(
-        -var="region=$NEW_REGION"
-        -var="zone=$NEW_ZONE"
+        -var-file="${SCRIPT_DIR}/../../infrastructure/terraform/gcp/environments/dr.tfvars"
         -var="env_id=$ENV_ID"
         -var="project_id=$PROJECT_ID"
-        -var="recovery_mode=true"
-        -var="phoenix_mode=true"
-        -var="keycloak_domain=${KEYCLOAK_DR_DOMAIN}"
-        -var="app_domain=${APP_DR_DOMAIN}"
-        -var="api_domain=${API_DR_DOMAIN}"
-        -var="keycloak_provisioning_url=https://${KEYCLOAK_DR_DOMAIN}/auth"
-        # Bug #38 fix: Keep Keycloak warm to avoid cold start timeout when MCP Gateway validates JWKS
-        -var="keycloak_min_instances=1"
-        # Bug #38 fix: Align with dr.tfvars - disable utility VM in DR (no Redis needed)
-        -var="enable_utility_vm=false"
-        # Bug #38 fix: Enable data restore from backup bucket
         -var="source_backup_bucket=${BACKUP_BUCKET}"
     )
 
