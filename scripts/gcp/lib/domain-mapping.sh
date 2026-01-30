@@ -449,15 +449,19 @@ staged_terraform_deploy() {
         # Don't fail here - let user decide whether to continue
     fi
 
-    # Stage 3: Deploy mcp-gateway
-    log_step "Stage 3: Deploying mcp-gateway..."
-    local stage2_targets
-    stage2_targets=$(get_stage2_terraform_targets)
+    # Stage 3: Full terraform apply (now that SSL is ready)
+    # Bug #39 Fix: Use FULL apply like phoenix-rebuild instead of targeted apply.
+    # When Stage 1 targets web_portal, terraform creates mcp_gateway as an implicit
+    # dependency (via MCP_GATEWAY_URL env var). If Keycloak SSL isn't ready yet,
+    # mcp_gateway's startup probe fails but terraform succeeds (probe is async).
+    # A targeted Stage 3 apply sees "no changes" and leaves mcp_gateway unhealthy.
+    # A full apply ensures all resources get proper revisions after SSL is ready.
+    log_step "Stage 3: Final terraform apply (SSL is ready)..."
 
-    if ! terraform apply -auto-approve ${stage2_targets} "${tf_args[@]}"; then
-        log_error "Stage 3 terraform apply failed (mcp-gateway)"
+    if ! terraform apply -auto-approve "${tf_args[@]}"; then
+        log_error "Stage 3 terraform apply failed"
         log_error "This usually means Keycloak SSL isn't ready yet"
-        log_error "Wait a few minutes and run: terraform apply ${stage2_targets}"
+        log_error "Wait a few minutes and run: terraform apply"
         return 1
     fi
 
