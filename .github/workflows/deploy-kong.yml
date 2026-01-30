@@ -79,6 +79,7 @@ jobs:
           ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
+          export COMPOSE_PROJECT_NAME=tamshai-vps
           echo "📦 Deploying Kong Gateway..."
           echo "⚠️  WARNING: Kong downtime affects ALL API requests"
           git config --global --add safe.directory /opt/tamshai
@@ -120,6 +121,7 @@ jobs:
           ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
+          export COMPOSE_PROJECT_NAME=tamshai-vps
           echo "🔄 Rolling back Kong Gateway..."
 
           # Restore previous image

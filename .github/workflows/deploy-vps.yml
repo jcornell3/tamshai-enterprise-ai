@@ -227,6 +227,7 @@ jobs:
           set +H  # Disable history expansion to handle passwords with special characters like !
 
           cd /opt/tamshai
+          export COMPOSE_PROJECT_NAME=tamshai-vps
 
           echo "=== Pulling latest code ==="
           git config --global --add safe.directory /opt/tamshai
