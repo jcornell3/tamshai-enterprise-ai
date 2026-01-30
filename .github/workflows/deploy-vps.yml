@@ -266,20 +266,21 @@ jobs:
 
           echo "=== Building and deploying services ==="
           # Build images on VPS (no container registry configured yet)
-          COMPOSE_FILE="infrastructure/docker/docker-compose.yml"
+          # Change to docker compose directory (paths in docker-compose.yml are relative to compose file)
+          cd infrastructure/docker
           if [ "${{ github.event.inputs.build }}" = "true" ]; then
             echo "Force rebuilding with --no-cache..."
             # Stop containers to prevent cache reuse
-            docker compose -f $COMPOSE_FILE down
+            docker compose --env-file ../../.env down
             # Remove web app images to force complete rebuild
             docker rmi -f web-finance:latest web-sales:latest web-portal:latest 2>/dev/null || true
             # Build without cache
-            docker compose -f $COMPOSE_FILE build --no-cache
+            docker compose --env-file ../../.env build --no-cache
             # Start containers
-            docker compose -f $COMPOSE_FILE up -d
+            docker compose --env-file ../../.env up -d
           else
             # Normal deployment with build
-            docker compose -f $COMPOSE_FILE up -d --build
+            docker compose --env-file ../../.env up -d --build
           fi
 
           echo "=== Cleaning up ==="
@@ -415,12 +416,12 @@ jobs:
           # Use -T to disable TTY allocation (prevents consuming heredoc stdin)
           # PHOENIX: Identity-sync is REQUIRED for stage - fail deployment if it fails
           # Pass environment variables for password rotation (Phoenix: align all user passwords)
-          if ! docker compose -f infrastructure/docker/docker-compose.yml run -T --rm --build \
+          if ! docker compose --env-file ../../.env run -T --rm --build \
             -e ENVIRONMENT=stage \
             -e STAGE_USER_PASSWORD='${{ secrets.STAGE_USER_PASSWORD }}' \
             identity-sync ${{ github.event.inputs.force_password_reset == 'true' && '--force-password-reset' || '' }}; then
             echo "[ERROR] Identity sync FAILED - deployment aborted"
-            echo "Check logs: docker compose -f infrastructure/docker/docker-compose.yml logs identity-sync"
+            echo "Check logs: docker compose --env-file ../../.env logs identity-sync"
             echo "This is fatal for stage environment (Phoenix principle: all users must exist)"
             exit 1
           fi
