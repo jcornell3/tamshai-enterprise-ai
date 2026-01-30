@@ -400,6 +400,46 @@ preflight_checks() {
         log_warn "read-github-secrets.sh not found at $secrets_script"
     fi
 
+    # Gap #41: Ensure global secrets have versions before terraform runs
+    # These secrets are created by terraform as empty containers, but need values.
+    # This mirrors phoenix-rebuild.sh behavior for DR/prod alignment.
+    log_step "Ensuring global secrets have versions (Gap #41)..."
+
+    # 1. mcp-hr-service-client-secret
+    if type ensure_mcp_hr_client_secret &>/dev/null; then
+        ensure_mcp_hr_client_secret || log_warn "Could not ensure mcp-hr-service-client-secret"
+    else
+        log_warn "ensure_mcp_hr_client_secret function not available"
+    fi
+
+    # 2. prod-user-password - sync from GitHub Secrets if available
+    if type sync_prod_user_password &>/dev/null; then
+        sync_prod_user_password || log_warn "Could not sync prod-user-password"
+    else
+        # Fallback: ensure secret has a version
+        if ! gcloud secrets versions list prod-user-password --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | grep -q .; then
+            log_info "Adding version to prod-user-password..."
+            if [ -n "${PROD_USER_PASSWORD:-}" ]; then
+                echo -n "$PROD_USER_PASSWORD" | gcloud secrets versions add prod-user-password --project="$PROJECT_ID" --data-file=- 2>/dev/null || true
+            else
+                openssl rand -base64 32 | tr -d '/+=' | head -c 32 | gcloud secrets versions add prod-user-password --project="$PROJECT_ID" --data-file=- 2>/dev/null || true
+            fi
+        fi
+    fi
+
+    # 3. tamshai-prod-keycloak-admin-password - sync from GitHub Secrets if available
+    local keycloak_admin_secret="${SECRET_KEYCLOAK_ADMIN_PASSWORD:-tamshai-prod-keycloak-admin-password}"
+    if ! gcloud secrets versions list "$keycloak_admin_secret" --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | grep -q .; then
+        log_info "Adding version to $keycloak_admin_secret..."
+        if [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
+            echo -n "$KEYCLOAK_ADMIN_PASSWORD" | gcloud secrets versions add "$keycloak_admin_secret" --project="$PROJECT_ID" --data-file=- 2>/dev/null || true
+        else
+            openssl rand -base64 32 | tr -d '/+=' | head -c 32 | gcloud secrets versions add "$keycloak_admin_secret" --project="$PROJECT_ID" --data-file=- 2>/dev/null || true
+        fi
+    fi
+
+    log_success "Global secrets verified"
+
     log_success "All pre-flight checks passed"
 }
 
