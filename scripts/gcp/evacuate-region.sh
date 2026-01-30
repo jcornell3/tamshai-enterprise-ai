@@ -865,7 +865,7 @@ get_source_checksum() {
             source_dir="${PROJECT_ROOT}/services/${service}"
             ;;
         web-portal)
-            source_dir="${PROJECT_ROOT}/clients/web-portal"
+            source_dir="${PROJECT_ROOT}/clients/web"
             ;;
         provision-job)
             source_dir="${PROJECT_ROOT}/services/provision-job"
