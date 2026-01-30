@@ -139,6 +139,7 @@ jobs:
         run: |
           echo "Starting bootstrap with PULL_LATEST=$PULL_LATEST, REBUILD=$REBUILD, FRESH_START=$FRESH_START"
           ssh $VPS_USER@$VPS_HOST "cd /opt/tamshai && \
+            export COMPOSE_PROJECT_NAME=tamshai-vps && \
             git config --global --add safe.directory /opt/tamshai && \
             if [ '$PULL_LATEST' = 'true' ]; then git fetch origin && git reset --hard origin/main; fi && \
             echo 'Stopping all tamshai containers...' && \
@@ -161,6 +162,7 @@ jobs:
         run: |
           echo "Running health checks..."
           ssh $VPS_USER@$VPS_HOST "cd /opt/tamshai && \
+            export COMPOSE_PROJECT_NAME=tamshai-vps && \
             docker compose -f infrastructure/docker/docker-compose.yml ps && \
             echo '' && \
             echo 'Health Checks:' && \

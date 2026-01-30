@@ -80,6 +80,7 @@ jobs:
           ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
+          export COMPOSE_PROJECT_NAME=tamshai-vps
           echo "📦 Deploying Keycloak..."
           echo "⚠️  WARNING: Keycloak downtime affects authentication for ALL users"
           echo "⚠️  Existing sessions may be invalidated"
@@ -116,6 +117,7 @@ jobs:
           ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'EOF'
           set -e
           cd /opt/tamshai
+          export COMPOSE_PROJECT_NAME=tamshai-vps
           # Keycloak uses official pinned image - restart the service
           echo "🔄 Restarting Keycloak..."
           docker compose -f infrastructure/docker/docker-compose.yml restart keycloak
