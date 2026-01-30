@@ -144,10 +144,10 @@ jobs:
             echo 'Stopping all tamshai containers...' && \
             docker ps -aq --filter 'name=tamshai' | xargs -r docker stop || true && \
             docker ps -aq --filter 'name=tamshai' | xargs -r docker rm -f || true && \
-            docker compose down --remove-orphans || true && \
-            if [ '$FRESH_START' = 'true' ]; then docker compose down -v || true; fi && \
-            if [ '$REBUILD' = 'true' ]; then docker image prune -f && docker compose build --no-cache; fi && \
-            docker compose up -d"
+            docker compose -f infrastructure/docker/docker-compose.yml down --remove-orphans || true && \
+            if [ '$FRESH_START' = 'true' ]; then docker compose -f infrastructure/docker/docker-compose.yml down -v || true; fi && \
+            if [ '$REBUILD' = 'true' ]; then docker image prune -f && docker compose -f infrastructure/docker/docker-compose.yml build --no-cache; fi && \
+            docker compose -f infrastructure/docker/docker-compose.yml up -d"
 
       - name: Wait for services
         run: |
@@ -161,7 +161,7 @@ jobs:
         run: |
           echo "Running health checks..."
           ssh $VPS_USER@$VPS_HOST "cd /opt/tamshai && \
-            docker compose ps && \
+            docker compose -f infrastructure/docker/docker-compose.yml ps && \
             echo '' && \
             echo 'Health Checks:' && \
             docker exec tamshai-redis redis-cli ping && \
