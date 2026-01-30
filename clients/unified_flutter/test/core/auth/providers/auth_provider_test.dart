@@ -5,6 +5,7 @@
 // Tested on Windows and Linux environments.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:unified_flutter/core/auth/models/auth_state.dart';
@@ -149,33 +150,47 @@ class MockAuthService implements AuthService {
 void main() {
   group('AuthNotifier', () {
     late MockAuthService mockAuthService;
-    late Logger logger;
-    late AuthNotifier authNotifier;
+    late ProviderContainer container;
 
     setUp(() {
       mockAuthService = MockAuthService();
-      // Use PrettyPrinter with minimal output for tests
-      logger = Logger(
+
+      // Create a test logger
+      final testLogger = Logger(
         printer: PrettyPrinter(methodCount: 0, errorMethodCount: 0, lineLength: 50),
-        level: Level.off, // Disable logging during tests
+        level: Level.off,
       );
+
+      // Create mock storage
       final mockStorage = SecureStorageService(
         storage: MockFlutterSecureStorage(),
         biometricStorage: MockFlutterSecureStorage(),
-        logger: logger,
+        logger: testLogger,
       );
-      authNotifier = AuthNotifier(
-        authService: mockAuthService,
-        storage: mockStorage,
-        logger: logger,
+
+      // Create container with overrides for testing
+      container = ProviderContainer(
+        overrides: [
+          loggerProvider.overrideWithValue(testLogger),
+          secureStorageProvider.overrideWithValue(mockStorage),
+          authServiceProvider.overrideWithValue(mockAuthService),
+        ],
       );
     });
 
+    tearDown(() {
+      container.dispose();
+    });
+
+    // Helper functions to read from container (Riverpod 3.x pattern)
+    AuthNotifier getNotifier() => container.read(authNotifierProvider.notifier);
+    AuthState getState() => container.read(authNotifierProvider);
+
     group('initial state', () {
       test('starts with unauthenticated state', () {
-        expect(authNotifier.state, const AuthState.unauthenticated());
-        expect(authNotifier.isAuthenticated, false);
-        expect(authNotifier.currentUser, null);
+        expect(getState(), const AuthState.unauthenticated());
+        expect(getNotifier().isAuthenticated, false);
+        expect(getNotifier().currentUser, null);
       });
     });
 
@@ -183,9 +198,9 @@ void main() {
       test('remains unauthenticated when no valid session exists', () async {
         mockAuthService.hasValidSessionResult = false;
 
-        await authNotifier.initialize();
+        await getNotifier().initialize();
 
-        expect(authNotifier.state, const AuthState.unauthenticated());
+        expect(container.read(authNotifierProvider), const AuthState.unauthenticated());
       });
 
       test('restores authenticated state when valid session exists', () async {
@@ -197,19 +212,19 @@ void main() {
           roles: ['hr-read'],
         );
 
-        await authNotifier.initialize();
+        await getNotifier().initialize();
 
-        expect(authNotifier.isAuthenticated, true);
-        expect(authNotifier.currentUser?.username, 'alice');
+        expect(getNotifier().isAuthenticated, true);
+        expect(getNotifier().currentUser?.username, 'alice');
       });
 
       test('handles missing user profile gracefully', () async {
         mockAuthService.hasValidSessionResult = true;
         mockAuthService.currentUserResult = null;
 
-        await authNotifier.initialize();
+        await getNotifier().initialize();
 
-        expect(authNotifier.state, const AuthState.unauthenticated());
+        expect(container.read(authNotifierProvider), const AuthState.unauthenticated());
       });
     });
 
@@ -217,28 +232,29 @@ void main() {
       test('successful login transitions to authenticated state', () async {
         mockAuthService.shouldSucceedLogin = true;
 
-        await authNotifier.login();
+        await getNotifier().login();
 
-        expect(authNotifier.isAuthenticated, true);
-        expect(authNotifier.currentUser?.id, 'test-user-id');
-        expect(authNotifier.currentUser?.username, 'testuser');
+        expect(getNotifier().isAuthenticated, true);
+        expect(getNotifier().currentUser?.id, 'test-user-id');
+        expect(getNotifier().currentUser?.username, 'testuser');
       });
 
       test('cancelled login returns to unauthenticated state', () async {
         mockAuthService.shouldCancelLogin = true;
 
-        await authNotifier.login();
+        await getNotifier().login();
 
-        expect(authNotifier.state, const AuthState.unauthenticated());
+        expect(container.read(authNotifierProvider), const AuthState.unauthenticated());
       });
 
       test('network error sets error state', () async {
         mockAuthService.shouldThrowNetworkError = true;
 
-        await authNotifier.login();
+        await getNotifier().login();
 
-        expect(authNotifier.state, isA<AuthError>());
-        authNotifier.state.maybeMap(
+        final state = container.read(authNotifierProvider);
+        expect(state, isA<AuthError>());
+        state.maybeMap(
           error: (state) {
             expect(state.message, contains('Network error'));
           },
@@ -249,9 +265,9 @@ void main() {
       test('auth error sets error state', () async {
         mockAuthService.shouldSucceedLogin = false;
 
-        await authNotifier.login();
+        await getNotifier().login();
 
-        expect(authNotifier.state, isA<AuthError>());
+        expect(container.read(authNotifierProvider), isA<AuthError>());
       });
 
       test('prevents concurrent login attempts', () async {
@@ -259,16 +275,16 @@ void main() {
         mockAuthService.shouldSucceedLogin = true;
 
         // Start first login
-        final firstLogin = authNotifier.login();
+        final firstLogin = getNotifier().login();
 
         // Immediately try second login while first is in progress
         // The AuthNotifier should skip if already authenticating
-        authNotifier.login();
+        getNotifier().login();
 
         await firstLogin;
 
         // Should still result in authenticated state
-        expect(authNotifier.isAuthenticated, true);
+        expect(getNotifier().isAuthenticated, true);
       });
     });
 
@@ -277,29 +293,30 @@ void main() {
         mockAuthService.shouldSucceedLogin = true;
 
         // First login
-        await authNotifier.login();
-        expect(authNotifier.isAuthenticated, true);
+        await getNotifier().login();
+        expect(getNotifier().isAuthenticated, true);
 
         // Refresh
-        await authNotifier.refreshToken();
+        await getNotifier().refreshToken();
 
-        expect(authNotifier.isAuthenticated, true);
-        expect(authNotifier.currentUser?.username, 'testuser');
+        expect(getNotifier().isAuthenticated, true);
+        expect(getNotifier().currentUser?.username, 'testuser');
       });
 
       test('logs out and shows error on refresh failure', () async {
         mockAuthService.shouldSucceedLogin = true;
 
         // First login
-        await authNotifier.login();
-        expect(authNotifier.isAuthenticated, true);
+        await getNotifier().login();
+        expect(getNotifier().isAuthenticated, true);
 
         // Fail refresh
         mockAuthService.shouldSucceedLogin = false;
-        await authNotifier.refreshToken();
+        await getNotifier().refreshToken();
 
-        expect(authNotifier.state, isA<AuthError>());
-        authNotifier.state.maybeMap(
+        final state = container.read(authNotifierProvider);
+        expect(state, isA<AuthError>());
+        state.maybeMap(
           error: (state) {
             expect(state.message, contains('expired'));
           },
@@ -313,26 +330,26 @@ void main() {
         mockAuthService.shouldSucceedLogin = true;
 
         // First login
-        await authNotifier.login();
-        expect(authNotifier.isAuthenticated, true);
+        await getNotifier().login();
+        expect(getNotifier().isAuthenticated, true);
 
         // Logout
-        await authNotifier.logout();
+        await getNotifier().logout();
 
-        expect(authNotifier.state, const AuthState.unauthenticated());
-        expect(authNotifier.isAuthenticated, false);
-        expect(authNotifier.currentUser, null);
+        expect(container.read(authNotifierProvider), const AuthState.unauthenticated());
+        expect(getNotifier().isAuthenticated, false);
+        expect(getNotifier().currentUser, null);
       });
 
       test('clears state even if logout fails', () async {
         mockAuthService.shouldSucceedLogin = true;
 
-        await authNotifier.login();
+        await getNotifier().login();
 
         // Even if logout throws, state should be cleared
-        await authNotifier.logout();
+        await getNotifier().logout();
 
-        expect(authNotifier.state, const AuthState.unauthenticated());
+        expect(container.read(authNotifierProvider), const AuthState.unauthenticated());
       });
     });
 
@@ -340,14 +357,14 @@ void main() {
       test('returns true during login', () async {
         mockAuthService.shouldSucceedLogin = true;
 
-        final loginFuture = authNotifier.login();
+        final loginFuture = getNotifier().login();
 
         // During login, isAuthenticating should be true at some point
         // This is hard to test without delays, but we verify final state
         await loginFuture;
 
         // After completion, should not be authenticating
-        expect(authNotifier.isAuthenticating, false);
+        expect(getNotifier().isAuthenticating, false);
       });
     });
   });

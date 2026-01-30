@@ -19,10 +19,10 @@ dependencies:
   local_auth: ^3.0.0
 
   # HTTP & API
-  dio: ^5.4.0
+  dio: ^5.9.0
 
   # State Management
-  flutter_riverpod: ^2.5.1
+  flutter_riverpod: ^3.2.0
 
   # Navigation
   go_router: ^17.0.1
@@ -54,7 +54,7 @@ dev_dependencies:
   # Code Generation
   build_runner: ^2.5.4
   freezed: ^3.0.0
-  json_serializable: ^6.11.4
+  json_serializable: ^6.11.2
 
 # Override broken beta Windows speech plugin with local stub
 dependency_overrides:

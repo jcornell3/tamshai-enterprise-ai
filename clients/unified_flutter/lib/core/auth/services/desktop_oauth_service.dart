@@ -19,7 +19,7 @@ import 'auth_service.dart';
 /// Uses OAuth 2.0 Authorization Code Flow with PKCE.
 ///
 /// Flow:
-/// 1. Start local HTTP server on available port
+/// 1. Start local HTTP server on preferred fixed port (fallback to dynamic)
 /// 2. Generate PKCE code verifier and challenge
 /// 3. Open browser to Keycloak authorization endpoint
 /// 4. User authenticates (including TOTP if required)
@@ -30,6 +30,10 @@ class DesktopOAuthService implements AuthService {
   final SecureStorageService _storage;
   final KeycloakConfig _config;
   final Logger _logger;
+
+  /// Preferred ports for OAuth callback (in order of preference)
+  /// These ports must be registered in Keycloak client redirect URIs
+  static const List<int> _preferredPorts = [18765, 18766, 18767, 18768, 18769];
 
   HttpServer? _server;
   Completer<String>? _authCodeCompleter;
@@ -259,7 +263,19 @@ class DesktopOAuthService implements AuthService {
   // Private helper methods
 
   Future<HttpServer> _startLocalServer() async {
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    // Try preferred fixed ports first (for Keycloak redirect URI matching)
+    for (final port in _preferredPorts) {
+      try {
+        _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+        _logger.i('Started local HTTP server on preferred port $port');
+        break;
+      } catch (e) {
+        _logger.d('Port $port not available, trying next...');
+      }
+    }
+
+    // Fallback to dynamic port if all preferred ports are in use
+    _server ??= await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _logger.i('Started local HTTP server on port ${_server!.port}');
 
     _server!.listen((request) async {

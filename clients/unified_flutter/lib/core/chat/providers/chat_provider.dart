@@ -15,29 +15,31 @@ final chatServiceProvider = Provider<ChatService>((ref) {
   );
 });
 
-/// Chat state provider
-final chatNotifierProvider =
-    StateNotifierProvider<ChatNotifier, ChatState>((ref) {
-  return ChatNotifier(
-    chatService: ref.watch(chatServiceProvider),
-    logger: ref.watch(loggerProvider),
-  );
+/// Chat state provider (Riverpod 3.x NotifierProvider)
+final chatNotifierProvider = NotifierProvider<ChatNotifier, ChatState>(() {
+  return ChatNotifier();
 });
 
-/// Chat state notifier
-class ChatNotifier extends StateNotifier<ChatState> {
-  final ChatService _chatService;
-  final Logger _logger;
+/// Chat state notifier (Riverpod 3.x Notifier pattern)
+class ChatNotifier extends Notifier<ChatState> {
+  late final ChatService _chatService;
+  late final Logger _logger;
   final Uuid _uuid = const Uuid();
 
   StreamSubscription<SSEChunk>? _currentStream;
 
-  ChatNotifier({
-    required ChatService chatService,
-    Logger? logger,
-  })  : _chatService = chatService,
-        _logger = logger ?? Logger(),
-        super(const ChatState());
+  @override
+  ChatState build() {
+    _chatService = ref.watch(chatServiceProvider);
+    _logger = ref.watch(loggerProvider);
+
+    // Cleanup on dispose
+    ref.onDispose(() {
+      _currentStream?.cancel();
+    });
+
+    return const ChatState();
+  }
 
   /// Send a message and stream the response
   Future<void> sendMessage(String content) async {
@@ -245,11 +247,5 @@ class ChatNotifier extends StateNotifier<ChatState> {
   void clearChat() {
     cancelStream();
     state = const ChatState();
-  }
-
-  @override
-  void dispose() {
-    _currentStream?.cancel();
-    super.dispose();
   }
 }

@@ -20,8 +20,7 @@ final secureStorageProvider = Provider<SecureStorageService>((ref) {
 
 /// Keycloak configuration provider
 final keycloakConfigProvider = Provider<KeycloakConfig>((ref) {
-  // TODO: Switch to production config when deploying
-  return KeycloakConfigProvider.getDevelopmentConfig();
+  return KeycloakConfigProvider.getConfig();
 });
 
 /// Check if running on desktop platform
@@ -78,30 +77,29 @@ final hasBiometricRefreshTokenProvider = FutureProvider<bool>((ref) async {
   return await storage.hasBiometricRefreshToken();
 });
 
-/// Authentication state notifier
-class AuthNotifier extends StateNotifier<AuthState> {
-  final AuthService _authService;
-  final SecureStorageService _storage;
-  final Logger _logger;
+/// Authentication state notifier (Riverpod 3.x Notifier pattern)
+class AuthNotifier extends Notifier<AuthState> {
+  late final AuthService _authService;
+  late final SecureStorageService _storage;
+  late final Logger _logger;
 
-  AuthNotifier({
-    required AuthService authService,
-    required SecureStorageService storage,
-    required Logger logger,
-  })  : _authService = authService,
-        _storage = storage,
-        _logger = logger,
-        super(const AuthState.unauthenticated());
+  @override
+  AuthState build() {
+    _authService = ref.watch(authServiceProvider);
+    _storage = ref.watch(secureStorageProvider);
+    _logger = ref.watch(loggerProvider);
+    return const AuthState.unauthenticated();
+  }
 
   /// Initialize authentication state
-  /// 
+  ///
   /// Checks for existing valid session and restores user if found
   Future<void> initialize() async {
     try {
       _logger.i('Initializing authentication');
 
       final hasSession = await _authService.hasValidSession();
-      
+
       if (!hasSession) {
         _logger.i('No valid session found');
         state = const AuthState.unauthenticated();
@@ -109,7 +107,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       final user = await _authService.getCurrentUser();
-      
+
       if (user == null) {
         _logger.w('Session exists but no user profile found');
         state = const AuthState.unauthenticated();
@@ -136,7 +134,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _logger.i('Starting login');
 
       final user = await _authService.login();
-      
+
       state = AuthState.authenticated(user);
       _logger.i('Login successful');
     } on LoginCancelledException {
@@ -155,14 +153,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Refresh authentication token
-  /// 
+  ///
   /// Called automatically when token expires or on 401 responses
   Future<void> refreshToken() async {
     try {
       _logger.i('Refreshing token');
 
       final user = await _authService.refreshToken();
-      
+
       state = AuthState.authenticated(user);
       _logger.i('Token refresh successful');
     } on TokenRefreshException catch (e) {
@@ -178,14 +176,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Perform logout
-  /// 
+  ///
   /// [endKeycloakSession] - if true, also ends session on Keycloak server
   Future<void> logout({bool endKeycloakSession = true}) async {
     try {
       _logger.i('Logging out');
 
       await _authService.logout(endKeycloakSession: endKeycloakSession);
-      
+
       state = const AuthState.unauthenticated();
       _logger.i('Logout successful');
     } catch (e, stackTrace) {
@@ -300,14 +298,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 }
 
-/// Authentication state provider
-final authNotifierProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(
-    authService: ref.watch(authServiceProvider),
-    storage: ref.watch(secureStorageProvider),
-    logger: ref.watch(loggerProvider),
-  );
+/// Authentication state provider (Riverpod 3.x NotifierProvider)
+final authNotifierProvider = NotifierProvider<AuthNotifier, AuthState>(() {
+  return AuthNotifier();
 });
 
 /// Convenience provider for current user

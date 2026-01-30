@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logger/logger.dart';
 import 'package:unified_flutter/features/chat/widgets/chat_input.dart';
 import 'package:unified_flutter/core/speech/providers/speech_provider.dart';
 import 'package:unified_flutter/core/speech/models/speech_state.dart';
@@ -34,8 +32,8 @@ void main() {
 
       return ProviderScope(
         overrides: [
-          // Override the speech provider with a test notifier
-          speechProvider.overrideWith((ref) => TestSpeechNotifier(speechState)),
+          // Override the speech provider with a test notifier (Riverpod 3.x pattern)
+          speechProvider.overrideWith(() => TestSpeechNotifier(speechState)),
         ],
         child: MaterialApp(
           theme: ThemeData.light(useMaterial3: true),
@@ -159,15 +157,20 @@ void main() {
   });
 }
 
-/// Test speech notifier for mocking speech provider
+/// Test speech notifier for mocking speech provider (Riverpod 3.x pattern)
 ///
-/// This mock prevents actual speech recognition from running during tests
+/// This mock prevents actual speech recognition from running during tests.
+/// In Riverpod 3.x, Notifiers don't have constructor parameters - instead
+/// we override build() to return the initial state.
 class TestSpeechNotifier extends SpeechNotifier {
   final SpeechState _initialState;
 
-  TestSpeechNotifier(this._initialState) : super(logger: Logger()) {
-    // Override initial state after construction
-    state = _initialState;
+  TestSpeechNotifier(this._initialState);
+
+  @override
+  SpeechState build() {
+    // Return mock state instead of initializing real speech recognition
+    return _initialState;
   }
 
   @override

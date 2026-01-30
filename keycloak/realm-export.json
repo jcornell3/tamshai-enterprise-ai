@@ -420,10 +420,19 @@
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
-        "http://localhost:*/callback",
-        "http://127.0.0.1:*/callback",
+        "http://127.0.0.1:18765/callback",
+        "http://127.0.0.1:18766/callback",
+        "http://127.0.0.1:18767/callback",
+        "http://127.0.0.1:18768/callback",
+        "http://127.0.0.1:18769/callback",
+        "http://localhost:18765/callback",
+        "http://localhost:18766/callback",
+        "http://localhost:18767/callback",
+        "http://localhost:18768/callback",
+        "http://localhost:18769/callback",
         "com.tamshai.ai://callback",
-        "com.tamshai.unifiedflutter://callback"
+        "com.tamshai.unifiedflutter://callback",
+        "com.tamshai.stage://callback"
       ],
       "webOrigins": [
         "http://localhost",
@@ -431,10 +440,10 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:*/logout##http://127.0.0.1:*/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout"
+        "post.logout.redirect.uris": "http://127.0.0.1:18765/logout##http://127.0.0.1:18766/logout##http://127.0.0.1:18767/logout##http://127.0.0.1:18768/logout##http://127.0.0.1:18769/logout##http://localhost:18765/logout##http://localhost:18766/logout##http://localhost:18767/logout##http://localhost:18768/logout##http://localhost:18769/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout##com.tamshai.stage://logout"
       },
       "defaultClientScopes": [
-
+        "openid",
         "profile",
         "email",
         "roles"

@@ -19,31 +19,38 @@ class SpeechConfig {
   static const double minSoundLevel = 0.1;
 }
 
-/// Speech recognition service provider
-final speechProvider = StateNotifierProvider<SpeechNotifier, SpeechState>((ref) {
-  return SpeechNotifier(
-    logger: ref.watch(loggerProvider),
-  );
+/// Speech recognition service provider (Riverpod 3.x NotifierProvider)
+final speechProvider = NotifierProvider<SpeechNotifier, SpeechState>(() {
+  return SpeechNotifier();
 });
 
-/// Speech recognition state notifier
+/// Speech recognition state notifier (Riverpod 3.x Notifier pattern)
 ///
 /// Manages voice-to-text functionality with:
 /// - Configurable silence timeout (3 seconds)
 /// - Maximum recording duration (60 seconds)
 /// - Sound level feedback for UI visualization
 /// - Graceful error handling
-class SpeechNotifier extends StateNotifier<SpeechState> {
+class SpeechNotifier extends Notifier<SpeechState> {
   final SpeechToText _speech = SpeechToText();
-  final Logger _logger;
+  late final Logger _logger;
   Timer? _silenceTimer;
   Timer? _maxDurationTimer;
 
-  SpeechNotifier({
-    Logger? logger,
-  })  : _logger = logger ?? Logger(),
-        super(const SpeechState()) {
+  @override
+  SpeechState build() {
+    _logger = ref.watch(loggerProvider);
+
+    // Cleanup on dispose
+    ref.onDispose(() {
+      _cancelTimers();
+      _speech.stop();
+    });
+
+    // Initialize asynchronously
     _initialize();
+
+    return const SpeechState();
   }
 
   /// Initialize the speech recognition service
@@ -291,12 +298,5 @@ class SpeechNotifier extends StateNotifier<SpeechState> {
     _silenceTimer = null;
     _maxDurationTimer?.cancel();
     _maxDurationTimer = null;
-  }
-
-  @override
-  void dispose() {
-    _cancelTimers();
-    _speech.stop();
-    super.dispose();
   }
 }
