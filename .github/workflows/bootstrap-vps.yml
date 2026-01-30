@@ -98,9 +98,9 @@ jobs:
           KEYCLOAK_URL=https://www.tamshai.com/auth
           KEYCLOAK_ISSUER=https://www.tamshai.com/auth/realms/tamshai-corp
           KEYCLOAK_INTERNAL_URL=http://keycloak:8080/auth
-          # Caddyfile location (stage config with Cloudflare proxy support)
-          CADDYFILE=./infrastructure/docker/Caddyfile.stage
-          KONG_CONFIG=./infrastructure/kong/kong.vps.yml
+          # Caddyfile location (paths relative to docker-compose.yml in infrastructure/docker/)
+          CADDYFILE=./Caddyfile.stage
+          KONG_CONFIG=../kong/kong.vps.yml
           # API keys
           CLAUDE_API_KEY=$CLAUDE_API_KEY
           # Database passwords
@@ -113,8 +113,8 @@ jobs:
           # Client secrets
           MCP_GATEWAY_CLIENT_SECRET=$MCP_GATEWAY_CLIENT_SECRET
           MCP_HR_SERVICE_CLIENT_SECRET=$MCP_HR_SERVICE_CLIENT_SECRET
-          # Keycloak realm (stage uses pre-seeded users with group assignments)
-          KEYCLOAK_REALM=./keycloak/realm-export-stage.json
+          # Keycloak realm (path relative to docker-compose.yml in infrastructure/docker/)
+          KEYCLOAK_REALM=../../keycloak/realm-export-stage.json
           # Web Apps (VITE_* are build-time variables for OAuth)
           VITE_KEYCLOAK_URL=https://www.tamshai.com/auth/realms/tamshai-corp
           VITE_KEYCLOAK_CLIENT_ID=web-portal
