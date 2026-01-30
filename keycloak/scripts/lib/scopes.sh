@@ -207,7 +207,8 @@ assign_client_scopes() {
     fi
 
     # Default scopes - always included in tokens
-    local default_scopes=("roles" "web-origins")
+    # Note: "openid" is the core OIDC scope and must be assigned for OIDC flows to work
+    local default_scopes=("openid" "roles" "web-origins")
 
     # Optional scopes - can be requested via scope parameter
     local optional_scopes=("profile" "email" "address" "phone" "offline_access")
