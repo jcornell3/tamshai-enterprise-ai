@@ -92,8 +92,11 @@ jobs:
           git fetch -f origin main
           git reset --hard origin/main
 
+          # Change to docker compose directory (paths in docker-compose.yml are relative to compose file)
+          cd infrastructure/docker
+
           # Restart Kong with updated config (no build needed - using official image)
-          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps kong
+          docker compose --env-file ../../.env up -d --no-deps kong
 
           echo "⏳ Waiting for health check..."
           for i in {1..30}; do
@@ -106,9 +109,9 @@ jobs:
           done
 
           echo "❌ Health check failed - rolling back..."
-          docker compose -f infrastructure/docker/docker-compose.yml down kong
+          docker compose --env-file ../../.env down kong
           docker tag kong:rollback kong:3.4
-          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps kong
+          docker compose --env-file ../../.env up -d --no-deps kong
           exit 1
           EOF
 
@@ -124,9 +127,12 @@ jobs:
           export COMPOSE_PROJECT_NAME=tamshai-vps
           echo "🔄 Rolling back Kong Gateway..."
 
+          # Change to docker compose directory
+          cd infrastructure/docker
+
           # Restore previous image
           docker tag kong:rollback kong:3.4
-          docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps kong
+          docker compose --env-file ../../.env up -d --no-deps kong
 
           echo "⏳ Verifying rollback..."
           for i in {1..30}; do
