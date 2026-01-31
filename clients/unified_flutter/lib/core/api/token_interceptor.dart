@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import '../storage/secure_storage_service.dart';
@@ -58,6 +59,19 @@ class AuthTokenInterceptor extends Interceptor {
         // Add authorization header
         options.headers['Authorization'] = 'Bearer $accessToken';
         _logger.d('Added auth token to request: ${options.path}');
+
+        // Debug: Log JWT audience claim to verify mapper is working
+        try {
+          final parts = accessToken.split('.');
+          if (parts.length == 3) {
+            final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+            final claims = jsonDecode(payload) as Map<String, dynamic>;
+            _logger.i('JWT audience: ${claims['aud']}');
+            _logger.i('JWT azp (authorized party): ${claims['azp']}');
+          }
+        } catch (e) {
+          _logger.w('Could not parse JWT for debugging: $e');
+        }
       } else {
         _logger.w('No access token available for request: ${options.path}');
       }
