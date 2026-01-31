@@ -109,17 +109,24 @@ create_standard_scopes() {
     log_info "Ensuring standard OIDC client scopes exist..."
 
     # OpenID scope - the core OIDC scope required for all OIDC flows
-    local openid_id=$(get_scope_id "openid")
+    log_info "  Checking for 'openid' scope..."
+    local openid_id
+    openid_id=$(get_scope_id "openid") || true
+    log_info "  openid_id result: '${openid_id:-empty}'"
     if [ -z "$openid_id" ]; then
         log_info "  Creating 'openid' scope..."
-        _kcadm create client-scopes -r "$REALM" \
+        if _kcadm create client-scopes -r "$REALM" \
             -s name=openid \
             -s protocol=openid-connect \
             -s description="OpenID Connect built-in scope: openid" \
             -s attributes.'include.in.token.scope'=true \
-            -s attributes.'display.on.consent.screen'=false 2>/dev/null || log_warn "  Failed to create openid scope"
+            -s attributes.'display.on.consent.screen'=false 2>&1; then
+            log_info "  Successfully created 'openid' scope"
+        else
+            log_warn "  Failed to create openid scope"
+        fi
     else
-        log_info "  Scope 'openid' already exists"
+        log_info "  Scope 'openid' already exists (id: $openid_id)"
     fi
 
     # Profile scope - for user profile claims
