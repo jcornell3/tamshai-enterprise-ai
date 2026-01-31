@@ -48,14 +48,14 @@ class EnvironmentConfig {
     scopes: ['openid', 'profile', 'email', 'roles'],
   );
 
-  /// Stage environment - VPS at vps.tamshai.com
+  /// Stage environment - VPS at www.tamshai.com
   static const stage = EnvironmentConfig(
     name: 'stage',
     // VPS API via Cloudflare (Kong → MCP Gateway)
     // Note: Do NOT include /api suffix - chat_service.dart adds /api/query path
-    apiBaseUrl: 'https://vps.tamshai.com',
+    apiBaseUrl: 'https://www.tamshai.com',
     // VPS Keycloak via Cloudflare
-    keycloakIssuer: 'https://vps.tamshai.com/auth/realms/tamshai-corp',
+    keycloakIssuer: 'https://www.tamshai.com/auth/realms/tamshai-corp',
     keycloakClientId: 'tamshai-flutter-client',
     // Mobile deep links for OAuth callback
     redirectUrl: 'com.tamshai.stage://callback',
