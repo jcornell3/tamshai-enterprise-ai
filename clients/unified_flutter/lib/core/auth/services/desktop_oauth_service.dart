@@ -359,9 +359,11 @@ class DesktopOAuthService implements AuthService {
       'state': state,
       'code_challenge': codeChallenge,
       'code_challenge_method': 'S256',
-      // Force fresh login to ensure we get current client scopes
-      // This prevents issues with cached browser sessions
+      // Force fresh login with no session reuse
+      // - prompt=login: force re-authentication
+      // - max_age=0: reject any cached session
       'prompt': 'login',
+      'max_age': '0',
     };
 
     return Uri.parse(authEndpoint).replace(queryParameters: params).toString();
