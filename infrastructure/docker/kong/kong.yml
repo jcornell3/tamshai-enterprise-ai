@@ -29,12 +29,14 @@ services:
 routes:
   # SSE Query Endpoint (v1.4 - Section 6.1)
   # GET /api/query?q=...&token=... for streaming AI responses
+  # POST /api/query with JSON body also supported for Flutter/mobile clients
   - name: sse-query-route
     service: mcp-gateway-service
     paths:
       - /api/query
     methods:
       - GET
+      - POST
       - OPTIONS
     strip_path: false
     preserve_host: true
