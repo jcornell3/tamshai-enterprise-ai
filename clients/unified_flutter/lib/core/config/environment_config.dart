@@ -52,7 +52,8 @@ class EnvironmentConfig {
   static const stage = EnvironmentConfig(
     name: 'stage',
     // VPS API via Cloudflare (Kong → MCP Gateway)
-    apiBaseUrl: 'https://vps.tamshai.com/api',
+    // Note: Do NOT include /api suffix - chat_service.dart adds /api/query path
+    apiBaseUrl: 'https://vps.tamshai.com',
     // VPS Keycloak via Cloudflare
     keycloakIssuer: 'https://vps.tamshai.com/auth/realms/tamshai-corp',
     keycloakClientId: 'tamshai-flutter-client',
