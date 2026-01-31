@@ -404,6 +404,9 @@ jobs:
 
           echo "=== Syncing Keycloak configuration ==="
           # Copy sync script and library modules, then fix permissions
+          # IMPORTANT: Remove old /tmp/lib first to prevent docker cp nesting issue
+          # (docker cp creates /tmp/lib/lib if /tmp/lib already exists)
+          docker exec -u 0 tamshai-keycloak rm -rf /tmp/lib /tmp/sync-realm.sh 2>/dev/null || true
           docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
           docker cp /opt/tamshai/keycloak/scripts/lib tamshai-keycloak:/tmp/lib
           docker exec -u 0 tamshai-keycloak bash -c '
