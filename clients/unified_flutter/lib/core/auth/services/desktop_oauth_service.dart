@@ -70,13 +70,12 @@ class DesktopOAuthService implements AuthService {
         state: state,
       );
 
-      _logger.i('Opening browser for authentication');
+      _logger.i('Opening browser for authentication (private mode)');
 
-      // Open browser
-      if (!await launchUrl(
-        Uri.parse(authUrl),
-        mode: LaunchMode.externalApplication,
-      )) {
+      // Open browser in private/incognito mode to avoid saved credentials
+      // This prevents Windows Hello from auto-filling passwords for the wrong user
+      final launched = await _launchBrowserPrivate(authUrl);
+      if (!launched) {
         await _stopServer();
         throw AuthException('Could not open browser for authentication');
       }
@@ -261,6 +260,65 @@ class DesktopOAuthService implements AuthService {
   }
 
   // Private helper methods
+
+  /// Launch browser in private/incognito mode to avoid saved credentials
+  /// This prevents Windows Hello from auto-filling passwords
+  Future<bool> _launchBrowserPrivate(String url) async {
+    if (Platform.isWindows) {
+      // Try Microsoft Edge first (default on Windows)
+      try {
+        final edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+        final edgePathAlt = 'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe';
+
+        String? browserPath;
+        if (await File(edgePath).exists()) {
+          browserPath = edgePath;
+        } else if (await File(edgePathAlt).exists()) {
+          browserPath = edgePathAlt;
+        }
+
+        if (browserPath != null) {
+          final result = await Process.run(browserPath, ['--inprivate', url]);
+          if (result.exitCode == 0) {
+            _logger.i('Launched Edge in InPrivate mode');
+            return true;
+          }
+        }
+      } catch (e) {
+        _logger.d('Edge not available: $e');
+      }
+
+      // Try Chrome as fallback
+      try {
+        final chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+        final chromePathAlt = 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe';
+
+        String? browserPath;
+        if (await File(chromePath).exists()) {
+          browserPath = chromePath;
+        } else if (await File(chromePathAlt).exists()) {
+          browserPath = chromePathAlt;
+        }
+
+        if (browserPath != null) {
+          final result = await Process.run(browserPath, ['--incognito', url]);
+          if (result.exitCode == 0) {
+            _logger.i('Launched Chrome in Incognito mode');
+            return true;
+          }
+        }
+      } catch (e) {
+        _logger.d('Chrome not available: $e');
+      }
+    }
+
+    // Fallback to default browser (may use saved credentials)
+    _logger.w('No private browser found, falling back to default browser');
+    return await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+  }
 
   Future<HttpServer> _startLocalServer() async {
     // Try preferred fixed ports first (for Keycloak redirect URI matching)
