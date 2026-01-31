@@ -197,7 +197,8 @@ get_flutter_client_json() {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://127.0.0.1:18765/logout##http://127.0.0.1:18766/logout##http://127.0.0.1:18767/logout##http://127.0.0.1:18768/logout##http://127.0.0.1:18769/logout##http://localhost:18765/logout##http://localhost:18766/logout##http://localhost:18767/logout##http://localhost:18768/logout##http://localhost:18769/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout##com.tamshai.stage://logout"
     },
-    "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    "defaultClientScopes": ["openid", "profile", "email", "roles", "web-origins"],
+    "optionalClientScopes": ["offline_access"]
 }
 EOF
 }
@@ -248,7 +249,8 @@ get_web_portal_client_json() {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "$logout_uris"
     },
-    "defaultClientScopes": ["openid", "profile", "email", "roles"]
+    "defaultClientScopes": ["openid", "profile", "email", "roles", "web-origins"],
+    "optionalClientScopes": ["offline_access"]
 }
 EOF
 }
