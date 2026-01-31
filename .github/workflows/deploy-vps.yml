@@ -295,6 +295,12 @@ jobs:
             docker compose --env-file ../../.env up -d --build
           fi
 
+          # Always restart Kong to reload declarative config
+          # (Docker doesn't restart Kong when only the mounted config file changes)
+          echo "=== Restarting Kong to load updated config ==="
+          docker restart tamshai-kong
+          sleep 5
+
           echo "=== Cleaning up ==="
           docker image prune -f
 
