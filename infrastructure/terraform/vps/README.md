@@ -5,310 +5,351 @@ Automated VPS deployment with no manual SSH login required.
 ## Overview
 
 This Terraform configuration provisions a single VPS with:
-- Docker and Docker Compose
-- All Tamshai services (Keycloak, MCP Gateway, databases)
-- Caddy reverse proxy (HTTP-only, proxied by Cloudflare for TLS)
-- **Path-based routing** (single domain, no subdomains required)
-- Automatic secret generation
-- GitHub Actions CI/CD integration
+
+* Docker and Docker Compose
+* All Tamshai services (Keycloak, MCP Gateway, databases)
+* Caddy reverse proxy (HTTP-only, proxied by Cloudflare for TLS)
+* **Path-based routing** (single domain, no subdomains required)
+* Automatic secret generation
+* GitHub Actions CI/CD integration
 
 ## Supported Cloud Providers
 
-- **Hetzner Cloud** (recommended) - $5-18/month (most cost-effective)
-- **DigitalOcean** - $24-48/month
+* **Hetzner Cloud** (recommended) - $5-18/month (most cost-effective)
+* **DigitalOcean** - $24-48/month
 
 ## Prerequisites
 
 1. **Terraform** (v1.5+): [Install guide](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
-2. **Hetzner Cloud account** with API token: https://console.hetzner.cloud/ (project > API Tokens)
+2. **Hetzner Cloud account** with API token: [https://console.hetzner.cloud/](https://console.hetzner.cloud/) (project \> API Tokens)
 3. **Cloudflare account** with domain configured:
-   - Domain added to Cloudflare
-   - SSL/TLS mode: **Flexible** (Cloudflare→Origin over HTTP)
-   - DNS managed by Cloudflare
-4. **Claude API key**: https://console.anthropic.com/settings/keys
+  * Domain added to Cloudflare
+  * SSL/TLS mode: **Flexible** (Cloudflare→Origin over HTTP)
+  * DNS managed by Cloudflare
+4. **Claude API key**: [https://console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
 
 ## Quick Start
 
-### 1. Configure Variables
+### 1\. Configure Variables 
+    
+    `cd infrastructure/terraform/vps  
+    cp terraform.tfvars.example terraform.tfvars  
+    `
 
-```bash
-cd infrastructure/terraform/vps
-cp terraform.tfvars.example terraform.tfvars
-```
+Edit `terraform.tfvars`: 
+    
+    `# Cloud Provider - Hetzner (already configured)  
+    cloud_provider = "hetzner"  
+    hcloud_token = "YOUR_HETZNER_API_TOKEN"  # Update this  
+      
+    # Required  
+    domain = "vps.tamshai.com"  # Your Cloudflare domain  
+    email = "johncornell@tamshai.com"  
+    claude_api_key = "sk-ant-api03-..."  # Update this  
+      
+    # Optional - Hetzner configuration  
+    region = "hil"  # hil (Hillsboro OR), ash (Ashburn VA), nbg1 (Germany), fsn1 (Germany), hel1 (Finland)  
+    vps_size = "cpx31"  # cpx31 = 4 vCPU AMD, 8GB RAM (~$13/mo)  
+    environment = "staging"  
+    `
 
-Edit `terraform.tfvars`:
+### 2\. Deploy 
+    
+    `terraform init  
+    terraform plan  
+    terraform apply  
+    `
 
-```hcl
-# Cloud Provider - Hetzner (already configured)
-cloud_provider = "hetzner"
-hcloud_token = "YOUR_HETZNER_API_TOKEN"  # Update this
+### 3\. Configure Cloudflare DNS
 
-# Required
-domain = "vps.tamshai.com"  # Your Cloudflare domain
-email = "johncornell@tamshai.com"
-claude_api_key = "sk-ant-api03-..."  # Update this
-
-# Optional - Hetzner configuration
-region = "hil"  # hil (Hillsboro OR), ash (Ashburn VA), nbg1 (Germany), fsn1 (Germany), hel1 (Finland)
-vps_size = "cpx31"  # cpx31 = 4 vCPU AMD, 8GB RAM (~$13/mo)
-environment = "staging"
-```
-
-### 2. Deploy
-
-```bash
-terraform init
-terraform plan
-terraform apply
-```
-
-### 3. Configure Cloudflare DNS
-
-After deployment, get the VPS IP:
-```bash
-terraform output vps_ip
-```
+After deployment, get the VPS IP: 
+    
+    `terraform output vps_ip  
+    `
 
 **In Cloudflare Dashboard:**
-1. Go to DNS settings for your domain
-2. Add an A record:
-   - Type: **A**
-   - Name: **vps** (or your subdomain)
-   - IPv4 address: **<VPS_IP from terraform output>**
-   - Proxy status: **Proxied** (orange cloud) ← IMPORTANT
-   - TTL: Auto
 
-3. Verify SSL/TLS settings:
-   - SSL/TLS > Overview
-   - Encryption mode: **Flexible** (Cloudflare→Origin over HTTP)
+1. Go to DNS settings for your domain  
+2. Add an A record:  
+  * Type: **A**
+  * Name: **vps** (or your subdomain)
+  * IPv4 address: ****
+  * Proxy status: **Proxied** (orange cloud) ← IMPORTANT
+  * TTL: Auto
+3. Verify SSL/TLS settings:  
+  * SSL/TLS \> Overview
+  * Encryption mode: **Flexible** (Cloudflare→Origin over HTTP)
 
 That's it - one A record. All services use path-based routing:
-- `https://vps.tamshai.com/` - Main portal (HTTPS via Cloudflare)
-- `https://vps.tamshai.com/auth` - Keycloak
-- `https://vps.tamshai.com/api` - MCP Gateway
-- `https://vps.tamshai.com/hr` - HR App
-- `https://vps.tamshai.com/finance` - Finance App
-- `https://vps.tamshai.com/sales` - Sales App
-- `https://vps.tamshai.com/support` - Support App
 
-### 4. Wait for Initialization
+* `https://vps.tamshai.com/` - Main portal (HTTPS via Cloudflare)
+* `https://vps.tamshai.com/auth` - Keycloak
+* `https://vps.tamshai.com/api` - MCP Gateway
+* `https://vps.tamshai.com/hr` - HR App
+* `https://vps.tamshai.com/finance` - Finance App
+* `https://vps.tamshai.com/sales` - Sales App
+* `https://vps.tamshai.com/support` - Support App
+
+### 4\. Wait for Initialization
 
 The VPS takes 5-10 minutes to fully initialize (Docker install, service startup).
 
-Check status:
-```bash
-# From local machine
-./scripts/deploy-vps.sh --status
-```
+Check status: 
+    
+    `# From local machine  
+    ./scripts/deploy-vps.sh --status  
+    `
 
 ## Remote Updates (No SSH Required)
 
 ### Option 1: GitHub Actions (Recommended)
 
 Configure these GitHub Secrets in your repository:
-
-| Secret | Description | How to Get |
-|--------|-------------|------------|
-| `VPS_HOST` | VPS IP address | Terraform output: `vps_ip` |
-| `VPS_SSH_KEY` | Deploy private key | Contents of `.keys/deploy_key` |
-| `VPS_SSH_USER` | SSH username | `root` (default) |
+Secret
+Description
+How to Get
+`VPS_HOST`
+VPS IP address
+Terraform output: `vps_ip`
+`VPS_SSH_KEY`
+Deploy private key
+Contents of `.keys/deploy_key`
+`VPS_SSH_USER`
+SSH username
+`root` (default)
 
 Then deployments happen automatically:
-- Push to `main` branch triggers deployment
-- Manual trigger: Actions > Deploy to VPS > Run workflow
+
+* Push to `main` branch triggers deployment
+* Manual trigger: Actions \> Deploy to VPS \> Run workflow
 
 ### Option 2: Local Script
 
-If you enabled SSH access (`allowed_ssh_ips` is set):
+If you enabled SSH access (`allowed_ssh_ips` is set): 
+    
+    `# Deploy latest code  
+    ./scripts/deploy-vps.sh  
+      
+    # Rebuild containers  
+    ./scripts/deploy-vps.sh --build  
+      
+    # Deploy specific branch  
+    ./scripts/deploy-vps.sh --branch feature-branch  
+      
+    # Check status only  
+    ./scripts/deploy-vps.sh --status  
+    `
 
-```bash
-# Deploy latest code
-./scripts/deploy-vps.sh
-
-# Rebuild containers
-./scripts/deploy-vps.sh --build
-
-# Deploy specific branch
-./scripts/deploy-vps.sh --branch feature-branch
-
-# Check status only
-./scripts/deploy-vps.sh --status
-```
-
-## Architecture
-
-```
-                Internet
-                    |
-            [Caddy Reverse Proxy]
-             ports 80, 443 (TLS)
-             path-based routing
-                    |
-        +-----------+-----------+
-        |           |           |
-   [Keycloak]  [MCP Gateway]  [Web Apps]
-    /auth        /api         /hr /finance...
-        |           |           |
-        +-----------+-----------+
-                    |
-            [Internal Network]
-                    |
-    +-------+-------+-------+-------+
-    |       |       |       |       |
-[Postgres] [MongoDB] [ES] [Redis] [MinIO]
-  (no external ports - internal only)
-```
+## Architecture 
+    
+    ` Internet  
+    |  
+    [Caddy Reverse Proxy]  
+    ports 80, 443 (TLS)  
+    path-based routing  
+    |  
+    +-----------+-----------+  
+    |           |           |  
+    [Keycloak]  [MCP Gateway]  [Web Apps]  
+    /auth        /api         /hr /finance...  
+    |           |           |  
+    +-----------+-----------+  
+    |  
+    [Internal Network]  
+    |  
+    +-------+-------+-------+-------+  
+    |       |       |       |       |  
+    [Postgres] [MongoDB] [ES] [Redis] [MinIO]  
+    (no external ports - internal only)  
+    `
 
 ## Security Features
 
-- **TLS**: Cloudflare-managed TLS termination (no Let's Encrypt needed)
-- **Firewall**: Only port 80 exposed (Cloudflare proxies HTTPS traffic, SSH optional)
-- **No exposed databases**: All databases internal-only
-- **Generated secrets**: All passwords auto-generated by Terraform
-- **fail2ban**: SSH brute-force protection
-- **No manual login**: All updates via CI/CD
-- **Cloudflare DDoS Protection**: Built-in protection from Cloudflare proxy
+* **TLS**: Cloudflare-managed TLS termination (no Let's Encrypt needed)
+* **Firewall**: Only port 80 exposed (Cloudflare proxies HTTPS traffic, SSH optional)
+* **No exposed databases**: All databases internal-only
+* **Generated secrets**: All passwords auto-generated by Terraform
+* **fail2ban**: SSH brute-force protection
+* **No manual login**: All updates via CI/CD
+* **Cloudflare DDoS Protection**: Built-in protection from Cloudflare proxy
 
 ## Terraform Outputs
+Output
+Description
+`vps_ip`
+VPS public IP address
+`app_url`
+Main application URL
+`keycloak_url`
+Keycloak admin URL
+`api_url`
+MCP Gateway API URL
+`keycloak_admin_password`
+Generated Keycloak admin password
+`deploy_command`
+Local deploy script path
+`emergency_ssh`
+SSH command (if enabled)
+`dns_records`
+Required DNS records
 
-| Output | Description |
-|--------|-------------|
-| `vps_ip` | VPS public IP address |
-| `app_url` | Main application URL |
-| `keycloak_url` | Keycloak admin URL |
-| `api_url` | MCP Gateway API URL |
-| `keycloak_admin_password` | Generated Keycloak admin password |
-| `deploy_command` | Local deploy script path |
-| `emergency_ssh` | SSH command (if enabled) |
-| `dns_records` | Required DNS records |
-
-View outputs:
-```bash
-terraform output
-terraform output keycloak_admin_password  # Reveal sensitive
-```
+View outputs: 
+    
+    `terraform output  
+    terraform output keycloak_admin_password  # Reveal sensitive  
+    `
 
 ## Troubleshooting
 
 ### Check cloud-init logs
 
-If SSH is enabled:
-```bash
-ssh -i .keys/deploy_key root@<VPS_IP>
-cat /var/log/cloud-init-output.log
-```
+If SSH is enabled: 
+    
+    `ssh -i .keys/deploy_key root@<VPS_IP>  
+    cat /var/log/cloud-init-output.log  
+    `
 
 Otherwise, use cloud provider console:
-- DigitalOcean: Droplet > Console
-- Hetzner: Server > Console
+
+* DigitalOcean: Droplet \> Console
+* Hetzner: Server \> Console
 
 ### Service not responding
 
-1. Check cloud-init completed:
-   ```
-   # Should show "Tamshai VPS setup complete"
-   tail /var/log/cloud-init-output.log
-   ```
+1. Check cloud-init completed:  
 
-2. Check Docker services:
-   ```
-   cd /opt/tamshai
-   docker compose ps
-   docker compose logs
-   ```
+    `# Should show "Tamshai VPS setup complete"  
+    tail /var/log/cloud-init-output.log  
+    `
 
-3. Check Caddy (reverse proxy):
-   ```
-   docker logs tamshai-caddy
-   ```
+2. Check Docker services:  
+
+    `cd /opt/tamshai  
+    docker compose ps  
+    docker compose logs  
+    `
+
+3. Check Caddy (reverse proxy):  
+
+    `docker logs tamshai-caddy  
+    `
 
 ### DNS not resolving
 
-- DNS propagation can take up to 48 hours (usually faster with Cloudflare)
-- Verify with: `dig +short vps.tamshai.com`
-- Check Cloudflare DNS dashboard to confirm A record exists
-- Ensure proxy status is **Proxied** (orange cloud)
+* DNS propagation can take up to 48 hours (usually faster with Cloudflare)
+* Verify with: `dig +short vps.tamshai.com`
+* Check Cloudflare DNS dashboard to confirm A record exists
+* Ensure proxy status is **Proxied** (orange cloud)
 
 ### HTTPS/TLS issues
 
 Cloudflare handles TLS automatically. If HTTPS not working:
+
 1. Verify Cloudflare proxy status is **Proxied** (orange cloud icon)
 2. Check SSL/TLS mode is set to **Flexible**
 3. Disable "Always Use HTTPS" if getting redirect loops
-4. Check Cloudflare SSL/TLS > Edge Certificates > Minimum TLS Version
+4. Check Cloudflare SSL/TLS \> Edge Certificates \> Minimum TLS Version
 
 ## Cost Estimates
-
-| Provider | Size | vCPUs | RAM | Monthly Cost |
-|----------|------|-------|-----|--------------|
-| DigitalOcean | s-2vcpu-4gb | 2 | 4GB | ~$24 |
-| DigitalOcean | s-4vcpu-8gb | 4 | 8GB | ~$48 |
-| Hetzner | CX21 (Intel) | 2 | 4GB | ~$5 |
-| Hetzner | CX31 (Intel) | 2 | 8GB | ~$10 |
-| Hetzner | CPX21 (AMD) | 3 | 4GB | ~$7 |
-| **Hetzner** | **CPX31 (AMD)** | **4** | **8GB** | **~$13** ← **Current** |
-| Hetzner | CPX41 (AMD) | 8 | 16GB | ~$26 |
+Provider
+Size
+vCPUs
+RAM
+Monthly Cost
+DigitalOcean
+s-2vcpu-4gb
+2
+4GB
+~$24
+DigitalOcean
+s-4vcpu-8gb
+4
+8GB
+~$48
+Hetzner
+CX21 (Intel)
+2
+4GB
+~$5
+Hetzner
+CX31 (Intel)
+2
+8GB
+~$10
+Hetzner
+CPX21 (AMD)
+3
+4GB
+~$7
+**Hetzner**
+**CPX31 (AMD)**
+**4**
+**8GB**
+**~$13** ← **Current**
+Hetzner
+CPX41 (AMD)
+8
+16GB
+~$26
 
 **Currently Deployed**: Hetzner CPX31 in Hillsboro, OR (~$13/month)
 
 ## Cleanup
 
-To destroy all resources:
-
-```bash
-terraform destroy
-```
+To destroy all resources: 
+    
+    `terraform destroy  
+    `
 
 This removes:
-- VPS instance
-- SSH keys
-- Firewall rules
-- Local key files
+
+* VPS instance
+* SSH keys
+* Firewall rules
+* Local key files
 
 **Warning**: This is irreversible. All data on the VPS will be lost.
 
-## Files
+## Files 
+    
+    `infrastructure/terraform/vps/  
+    ├── main.tf                    # Terraform configuration  
+    ├── cloud-init.yaml            # VPS bootstrap script  
+    ├── terraform.tfvars.example   # Example variables (copy to terraform.tfvars)  
+    ├── SECRETS_MANAGEMENT.md      # Secrets configuration guide  
+    ├── README.md                  # This file  
+    └── .keys/                     # Generated SSH keys (gitignored)  
+    ├── deploy_key             # Private key (for SSH access)  
+    └── deploy_key.pub         # Public key  
+      
+    docker-compose.yml             # Unified compose file (dev + VPS)  
+    scripts/deploy-vps.sh          # Local deployment script  
+    scripts/infra/rebuild.sh       # Container management (stop/restart, preserves infrastructure)  
+    scripts/infra/teardown.sh      # Full Terraform destroy (DESTROYS infrastructure)  
+    .github/workflows/deploy-vps.yml    # CI/CD deploy workflow  
+    .github/workflows/bootstrap-vps.yml # Full VPS bootstrap workflow  
+    `
 
-```
-infrastructure/terraform/vps/
-├── main.tf                    # Terraform configuration
-├── cloud-init.yaml            # VPS bootstrap script
-├── terraform.tfvars.example   # Example variables (copy to terraform.tfvars)
-├── SECRETS_MANAGEMENT.md      # Secrets configuration guide
-├── README.md                  # This file
-└── .keys/                     # Generated SSH keys (gitignored)
-    ├── deploy_key             # Private key (for SSH access)
-    └── deploy_key.pub         # Public key
+## Phoenix Tear Down and Redeploy
 
-docker-compose.yml             # Unified compose file (dev + VPS)
-scripts/deploy-vps.sh          # Local deployment script
-scripts/infra/rebuild.sh       # Container management (stop/restart, preserves infrastructure)
-scripts/infra/teardown.sh      # Full Terraform destroy (DESTROYS infrastructure)
-.github/workflows/deploy-vps.yml    # CI/CD deploy workflow
-.github/workflows/bootstrap-vps.yml # Full VPS bootstrap workflow
-```
-
-## Tear Down and Redeploy
-
-### Method 1: Terraform (Complete Infrastructure Rebuild)
-
-```bash
-cd infrastructure/terraform/vps
-
-# Set required secrets (use STAGE-specific API key, separate from dev!)
-export TF_VAR_claude_api_key_stage="sk-ant-api03-your-stage-key-here"
-
-# Destroy current VPS
-terraform destroy
-
-# Create new VPS with fresh cloud-init
-terraform apply
-```
+### Method 1: Terraform (Complete Infrastructure Rebuild) 
+    
+    `cd infrastructure/terraform/vps  
+      
+    # Set required secrets (use STAGE-specific API key, separate from dev!)  
+    export TF_VAR_claude_api_key_stage="sk-ant-api03-your-stage-key-here"  
+      
+    # Destroy current VPS  
+    terraform destroy  
+      
+    # Create new VPS with fresh cloud-init  
+    terraform apply  
+    `
 
 ### Method 2: Bootstrap Workflow (Keep VPS, Redeploy Services)
 
-1. Ensure GitHub Secrets are configured (see SECRETS_MANAGEMENT.md)
-2. Go to GitHub Actions > Bootstrap VPS > Run workflow
+1. Ensure GitHub Secrets are configured (see SECRETS\_MANAGEMENT.md)
+2. Go to GitHub Actions \> Bootstrap VPS \> Run workflow
 3. Select options:
-   - `fresh_start: true` to delete data volumes
-   - `rebuild: true` to rebuild all images
+  * `fresh_start: true` to delete data volumes
+  * `rebuild: true` to rebuild all images
