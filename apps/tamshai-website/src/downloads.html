@@ -48,7 +48,7 @@
                     </div>
                     <h3>Tamshai AI Client</h3>
                     <p>Native application for Windows, Android, macOS, and Linux providing seamless access to Tamshai AI services with secure SSO authentication.</p>
-                    <p style="margin-top: 1rem; color: #666;"><strong>Latest:</strong> v1.0.4</p>
+                    <p style="margin-top: 1rem; color: #666;"><strong>Latest:</strong> <span id="latest-version">loading...</span></p>
                     <a href="https://github.com/jcornell3/tamshai-enterprise-ai/releases/latest" class="btn btn-primary" style="margin-top: 1rem;" target="_blank">Download from GitHub</a>
                 </div>
 
@@ -78,6 +78,18 @@
             <p>&copy; 2025 Tamshai Corp. All rights reserved.</p>
         </div>
     </footer>
+
+    <script>
+        // Fetch latest release version from GitHub API
+        fetch('https://api.github.com/repos/jcornell3/tamshai-enterprise-ai/releases/latest')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('latest-version').textContent = data.tag_name;
+            })
+            .catch(() => {
+                document.getElementById('latest-version').textContent = 'See GitHub';
+            });
+    </script>
 
 </body>
 </html>
