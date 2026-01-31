@@ -243,7 +243,9 @@ class ChatService {
         return 'Cannot connect to server. Is the MCP Gateway running?';
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
-        final message = e.response?.data?['error'] ?? e.message;
+        // Handle both Map responses (JSON) and ResponseBody (SSE stream)
+        final data = e.response?.data;
+        final message = (data is Map<String, dynamic> ? data['error'] : null) ?? e.message;
         if (statusCode == 401) {
           return 'Session expired. Please log in again.';
         } else if (statusCode == 403) {
