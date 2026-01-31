@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 import '../auth/models/auth_state.dart';
+import '../config/environment_config.dart';
 
 /// Secure storage service for authentication tokens and user data
 ///
@@ -25,6 +26,7 @@ class SecureStorageService {
   static const _tokenExpiryKey = 'token_expiry';
   static const _userProfileKey = 'user_profile';
   static const _biometricEnabledKey = 'biometric_enabled';
+  static const _tokenIssuerKey = 'token_issuer';
 
   SecureStorageService({
     FlutterSecureStorage? storage,
@@ -56,19 +58,61 @@ class SecureStorageService {
     }
   }
 
+  /// Validate that stored tokens match current environment issuer.
+  /// Clears all tokens if issuer has changed (e.g., switching from vps to www).
+  /// Returns true if tokens are valid for current environment, false if cleared.
+  Future<bool> validateStoredIssuer() async {
+    try {
+      final storedIssuer = await _storage.read(key: _tokenIssuerKey);
+      final currentIssuer = EnvironmentConfig.current.keycloakIssuer;
+
+      if (storedIssuer == null) {
+        _logger.d('No stored issuer - tokens may be from older version');
+        // Check if we have tokens - if so, clear them for safety
+        final hasTokens = await getAccessToken() != null;
+        if (hasTokens) {
+          _logger.w('Clearing tokens from unknown issuer');
+          await clearAll();
+          return false;
+        }
+        return true;
+      }
+
+      if (storedIssuer != currentIssuer) {
+        _logger.w('Issuer mismatch detected!');
+        _logger.w('  - stored: $storedIssuer');
+        _logger.w('  - current: $currentIssuer');
+        _logger.w('Clearing stale tokens from different environment');
+        await clearAll();
+        return false;
+      }
+
+      _logger.d('Stored issuer matches current environment');
+      return true;
+    } catch (e, stackTrace) {
+      _logger.e('Failed to validate issuer', error: e, stackTrace: stackTrace);
+      // Clear tokens on error for safety
+      await clearAll();
+      return false;
+    }
+  }
+
   /// Store authentication tokens
   Future<void> storeTokens(StoredTokens tokens) async {
     try {
       final expiryString = tokens.accessTokenExpirationDateTime.toIso8601String();
+      final currentIssuer = EnvironmentConfig.current.keycloakIssuer;
       _logger.i('Storing tokens:');
       _logger.i('  - access_token: ${tokens.accessToken.substring(0, 20)}...');
       _logger.i('  - refresh_token present: ${tokens.refreshToken != null}');
       _logger.i('  - expiry: $expiryString');
+      _logger.i('  - issuer: $currentIssuer');
 
       // Store tokens sequentially to ensure all writes complete
       await _storage.write(key: _accessTokenKey, value: tokens.accessToken);
       await _storage.write(key: _idTokenKey, value: tokens.idToken);
       await _storage.write(key: _tokenExpiryKey, value: expiryString);
+      await _storage.write(key: _tokenIssuerKey, value: currentIssuer);
 
       if (tokens.refreshToken != null) {
         await _storage.write(key: _refreshTokenKey, value: tokens.refreshToken);
@@ -197,6 +241,7 @@ class SecureStorageService {
         _storage.delete(key: _tokenExpiryKey),
         _storage.delete(key: _userProfileKey),
         _storage.delete(key: _biometricEnabledKey),
+        _storage.delete(key: _tokenIssuerKey),
         _biometricStorage.delete(key: _refreshTokenKey),
       ]);
       _logger.d('All auth data cleared');

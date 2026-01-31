@@ -93,10 +93,22 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Initialize authentication state
   ///
-  /// Checks for existing valid session and restores user if found
+  /// Checks for existing valid session and restores user if found.
+  /// Also validates that stored tokens match the current environment's
+  /// Keycloak issuer - clears stale tokens if environment has changed.
   Future<void> initialize() async {
     try {
       _logger.i('Initializing authentication');
+
+      // Validate stored tokens match current environment issuer
+      // This clears stale tokens when switching between environments
+      // (e.g., vps.tamshai.com -> www.tamshai.com)
+      final issuerValid = await _storage.validateStoredIssuer();
+      if (!issuerValid) {
+        _logger.i('Stale tokens cleared - environment changed');
+        state = const AuthState.unauthenticated();
+        return;
+      }
 
       final hasSession = await _authService.hasValidSession();
 
