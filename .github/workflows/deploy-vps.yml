@@ -285,15 +285,13 @@ jobs:
             # Stop containers to prevent cache reuse
             docker compose --env-file ../../.env down
             # Remove web app images to force complete rebuild
-            docker rmi -f tamshai-website:latest web-finance:latest web-sales:latest web-portal:latest 2>/dev/null || true
+            docker rmi -f web-finance:latest web-sales:latest web-portal:latest 2>/dev/null || true
             # Build without cache
             docker compose --env-file ../../.env build --no-cache
             # Start containers
             docker compose --env-file ../../.env up -d
           else
             # Normal deployment with build
-            # Remove tamshai-website image to ensure fresh static files are picked up
-            docker rmi -f tamshai-website:latest 2>/dev/null || true
             docker compose --env-file ../../.env up -d --build
           fi
 
