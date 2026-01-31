@@ -1450,8 +1450,18 @@ phase2_deploy_infrastructure() {
     import_shared_bucket "tamshai-prod-public-docs-${PROJECT_ID}" \
         'module.storage.google_storage_bucket.public_docs'
 
-    import_shared_bucket "prod.tamshai.com" \
-        'module.storage.google_storage_bucket.static_website[0]'
+    # Static website bucket: Only import if DR uses the SAME bucket as prod.
+    # If DR uses a different domain (prod-dr.tamshai.com), let terraform create it fresh.
+    # Otherwise, importing prod.tamshai.com while dr.tfvars specifies prod-dr.tamshai.com
+    # causes terraform to plan destroy+create, blocked by lifecycle.prevent_destroy.
+    if [[ "$STATIC_DR_DOMAIN" == "$STATIC_PROD_BUCKET" ]]; then
+        import_shared_bucket "$STATIC_PROD_BUCKET" \
+            'module.storage.google_storage_bucket.static_website[0]'
+    else
+        log_info "  Skipping static_website import: DR uses different bucket ($STATIC_DR_DOMAIN)"
+        # Remove from state if previously imported (prevents destroy conflict)
+        terraform state rm 'module.storage.google_storage_bucket.static_website[0]' &>/dev/null 2>&1 || true
+    fi
 
     import_shared_bucket "tamshai-prod-backups-${PROJECT_ID}" \
         'module.storage.google_storage_bucket.backups[0]'
