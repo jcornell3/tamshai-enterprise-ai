@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Unified Flutter</string>
+	<string>Tamshai AI</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>unified_flutter</string>
+	<string>Tamshai AI</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -50,5 +50,17 @@
 	<string>Tamshai AI uses speech recognition to convert your voice to text for AI queries.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Tamshai AI needs microphone access to enable voice input for AI queries.</string>
+	<!-- OAuth Redirect URL Schemes -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>OAuth Callback</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>tamshaiauth</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

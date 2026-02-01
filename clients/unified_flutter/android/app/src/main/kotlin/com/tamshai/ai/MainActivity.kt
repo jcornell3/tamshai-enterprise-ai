@@ -1,4 +1,4 @@
-package com.tamshai.unified_flutter
+package com.tamshai.ai
 
 import io.flutter.embedding.android.FlutterActivity
 
