@@ -42,10 +42,10 @@ class EnvironmentConfig {
     // Local Keycloak
     keycloakIssuer: 'http://127.0.0.1:8180/realms/tamshai-corp',
     keycloakClientId: 'tamshai-flutter-client',
-    // Desktop OAuth uses dynamic port
-    redirectUrl: 'http://127.0.0.1/callback',
-    endSessionRedirectUrl: 'http://127.0.0.1/logout',
-    scopes: ['openid', 'profile', 'email', 'roles'],
+    // Use tamshaiauth scheme for mobile, desktop uses DesktopOAuthService with dynamic port
+    redirectUrl: 'tamshaiauth://callback',
+    endSessionRedirectUrl: 'tamshaiauth://logout',
+    scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
   );
 
   /// Stage environment - VPS at www.tamshai.com
@@ -71,9 +71,10 @@ class EnvironmentConfig {
     // Production Keycloak
     keycloakIssuer: 'https://auth.tamshai.com/realms/tamshai-corp',
     keycloakClientId: 'tamshai-flutter-client',
-    // Production deep links
-    redirectUrl: 'com.tamshai.ai://callback',
-    endSessionRedirectUrl: 'com.tamshai.ai://logout',
+    // Use tamshaiauth scheme for mobile (simple scheme without dots for Android compatibility)
+    // Desktop uses DesktopOAuthService with dynamic port override
+    redirectUrl: 'tamshaiauth://callback',
+    endSessionRedirectUrl: 'tamshaiauth://logout',
     scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
   );
 
