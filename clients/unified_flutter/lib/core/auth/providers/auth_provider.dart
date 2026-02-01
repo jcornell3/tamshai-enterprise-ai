@@ -7,8 +7,13 @@ import '../models/keycloak_config.dart';
 import '../services/auth_service.dart';
 import '../services/keycloak_auth_service.dart';
 import '../services/desktop_oauth_service.dart';
+import '../services/direct_grant_auth_service.dart';
 import '../services/biometric_service.dart';
 import '../../storage/secure_storage_service.dart';
+
+// Re-export exceptions for convenience
+export '../services/direct_grant_auth_service.dart'
+    show TotpRequiredException, InvalidCredentialsException;
 
 /// Logger provider
 final loggerProvider = Provider<Logger>((ref) => Logger());
@@ -28,10 +33,15 @@ bool get isDesktopPlatform {
   return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 }
 
+/// Check if running on mobile platform
+bool get isMobilePlatform {
+  return Platform.isIOS || Platform.isAndroid;
+}
+
 /// Auth service provider - automatically selects the right implementation
 ///
 /// - Desktop (Windows/macOS/Linux): Uses DesktopOAuthService with browser + local HTTP server
-/// - Mobile (iOS/Android): Uses KeycloakAuthService with flutter_appauth
+/// - Mobile (iOS/Android): Uses DirectGrantAuthService with native login UI
 final authServiceProvider = Provider<AuthService>((ref) {
   final config = ref.watch(keycloakConfigProvider);
   final storage = ref.watch(secureStorageProvider);
@@ -45,13 +55,31 @@ final authServiceProvider = Provider<AuthService>((ref) {
       logger: logger,
     );
   } else {
-    logger.i('Using KeycloakAuthService for ${Platform.operatingSystem}');
-    return KeycloakAuthService(
+    logger.i('Using DirectGrantAuthService for ${Platform.operatingSystem}');
+    return DirectGrantAuthService(
       config: config,
       storage: storage,
       logger: logger,
     );
   }
+});
+
+/// Direct grant auth service provider for native login on mobile
+///
+/// Use this provider to access the DirectGrantAuthService directly
+/// for calling loginWithCredentials and loginWithTotp methods.
+final directGrantAuthServiceProvider = Provider<DirectGrantAuthService?>((ref) {
+  if (!isMobilePlatform) return null;
+
+  final config = ref.watch(keycloakConfigProvider);
+  final storage = ref.watch(secureStorageProvider);
+  final logger = ref.watch(loggerProvider);
+
+  return DirectGrantAuthService(
+    config: config,
+    storage: storage,
+    logger: logger,
+  );
 });
 
 /// Keycloak auth service provider (for backwards compatibility)
@@ -221,6 +249,95 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Check if authentication is in progress
   bool get isAuthenticating {
     return state is Authenticating;
+  }
+
+  // ============================================================
+  // Native Login Methods (Mobile Only)
+  // ============================================================
+
+  /// Login with username and password (native login for mobile)
+  ///
+  /// Throws [TotpRequiredException] if TOTP is needed.
+  /// Throws [InvalidCredentialsException] if credentials are wrong.
+  Future<void> loginWithCredentials({
+    required String username,
+    required String password,
+  }) async {
+    if (state is Authenticating) {
+      _logger.w('Login already in progress');
+      return;
+    }
+
+    final directGrantService = _authService as DirectGrantAuthService;
+
+    try {
+      state = const AuthState.authenticating();
+      _logger.i('Starting native login for: $username');
+
+      final user = await directGrantService.loginWithCredentials(
+        username: username,
+        password: password,
+      );
+
+      state = AuthState.authenticated(user);
+      _logger.i('Native login successful');
+    } on TotpRequiredException {
+      // Don't change state - let the UI handle TOTP prompt
+      state = const AuthState.unauthenticated();
+      rethrow;
+    } on InvalidCredentialsException {
+      state = const AuthState.unauthenticated();
+      rethrow;
+    } on AuthException catch (e) {
+      _logger.e('Auth error during native login', error: e);
+      state = AuthState.error(e.message);
+      rethrow;
+    } catch (e, stackTrace) {
+      _logger.e('Unexpected error during native login', error: e, stackTrace: stackTrace);
+      state = const AuthState.error('An unexpected error occurred. Please try again.');
+      rethrow;
+    }
+  }
+
+  /// Complete login with TOTP code (native login for mobile)
+  ///
+  /// Called after [loginWithCredentials] throws [TotpRequiredException].
+  Future<void> loginWithTotp({
+    required String username,
+    required String password,
+    required String totpCode,
+  }) async {
+    if (state is Authenticating) {
+      _logger.w('Login already in progress');
+      return;
+    }
+
+    final directGrantService = _authService as DirectGrantAuthService;
+
+    try {
+      state = const AuthState.authenticating();
+      _logger.i('Completing native login with TOTP for: $username');
+
+      final user = await directGrantService.loginWithTotp(
+        username: username,
+        password: password,
+        totpCode: totpCode,
+      );
+
+      state = AuthState.authenticated(user);
+      _logger.i('Native login with TOTP successful');
+    } on InvalidCredentialsException {
+      state = const AuthState.unauthenticated();
+      rethrow;
+    } on AuthException catch (e) {
+      _logger.e('Auth error during TOTP login', error: e);
+      state = AuthState.error(e.message);
+      rethrow;
+    } catch (e, stackTrace) {
+      _logger.e('Unexpected error during TOTP login', error: e, stackTrace: stackTrace);
+      state = const AuthState.error('An unexpected error occurred. Please try again.');
+      rethrow;
+    }
   }
 
   // ============================================================

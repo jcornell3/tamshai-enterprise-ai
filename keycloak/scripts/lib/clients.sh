@@ -171,7 +171,7 @@ get_flutter_client_json() {
     "enabled": true,
     "publicClient": true,
     "standardFlowEnabled": true,
-    "directAccessGrantsEnabled": false,
+    "directAccessGrantsEnabled": true,
     "serviceAccountsEnabled": false,
     "protocol": "openid-connect",
     "redirectUris": [
