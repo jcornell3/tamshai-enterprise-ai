@@ -57,9 +57,9 @@ class EnvironmentConfig {
     // VPS Keycloak via Cloudflare
     keycloakIssuer: 'https://www.tamshai.com/auth/realms/tamshai-corp',
     keycloakClientId: 'tamshai-flutter-client',
-    // Mobile deep links for OAuth callback
-    redirectUrl: 'com.tamshai.stage://callback',
-    endSessionRedirectUrl: 'com.tamshai.stage://logout',
+    // Mobile deep links for OAuth callback (simple scheme without dots for Android compatibility)
+    redirectUrl: 'tamshaiauth://callback',
+    endSessionRedirectUrl: 'tamshaiauth://logout',
     scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
   );
 

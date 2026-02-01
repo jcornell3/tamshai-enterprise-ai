@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.tamshai.unified_flutter"
+    namespace = "com.tamshai.ai"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -20,14 +20,15 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.tamshai.unified_flutter"
+        applicationId = "com.tamshai.ai"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
         // Required by flutter_appauth for OAuth redirect
-        manifestPlaceholders["appAuthRedirectScheme"] = "com.tamshai.unified_flutter"
+        // Must match the redirect URL scheme in environment_config.dart
+        manifestPlaceholders["appAuthRedirectScheme"] = "tamshaiauth"
     }
 
     buildTypes {
