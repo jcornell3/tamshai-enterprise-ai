@@ -51,6 +51,9 @@
   "engines": {
     "node": ">=18"
   },
+  "overrides": {
+    "fast-xml-parser": ">=5.3.4"
+  },
   "react-native-windows": {
     "init-windows": {
       "name": "TamshaiAiUnified",
