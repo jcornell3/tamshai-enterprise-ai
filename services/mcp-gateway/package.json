@@ -16,7 +16,7 @@
     "type-coverage:report": "type-coverage --detail --json-output > type-coverage.json"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.2",
+    "@anthropic-ai/sdk": "^0.72.1",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "axios": "^1.6.2",
     "google-auth-library": "^9.14.0",
