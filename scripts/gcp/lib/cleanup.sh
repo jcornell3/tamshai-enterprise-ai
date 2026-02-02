@@ -1263,6 +1263,41 @@ delete_persisted_secrets_prod() {
     done
 }
 
+# Issue #108: Delete stale DR-suffixed secrets
+# DR evacuations create secrets with recovery-YYYYMMDD-HHMM suffixes.
+# These persist after DR cleanup and accumulate over time.
+#
+# Usage: delete_stale_dr_secrets
+# Returns: 0 always (best-effort cleanup)
+delete_stale_dr_secrets() {
+    log_step "Cleaning stale DR-suffixed secrets (Issue #108)..."
+
+    # Find secrets with recovery suffix pattern
+    local stale_secrets
+    stale_secrets=$(gcloud secrets list --project="$PROJECT" \
+        --filter="name~recovery-[0-9]{8}-[0-9]{4}" \
+        --format="value(name)" 2>/dev/null || echo "")
+
+    if [[ -z "$stale_secrets" ]]; then
+        log_info "No stale DR secrets found"
+        return 0
+    fi
+
+    local count=0
+    while read -r secret; do
+        [[ -z "$secret" ]] && continue
+        if gcloud secrets delete "$secret" --project="$PROJECT" --quiet 2>/dev/null; then
+            log_info "  Deleted: $secret"
+            count=$((count + 1))
+        else
+            log_warn "  Failed to delete: $secret"
+        fi
+    done <<< "$stale_secrets"
+
+    log_success "Deleted $count stale DR secrets"
+    return 0
+}
+
 # =============================================================================
 # VPC PEERING DEPENDENCY CHECK (Issue #103)
 # =============================================================================
