@@ -491,6 +491,60 @@ phase_3_destroy() {
     fi
 
     # =============================================================================
+    # Gap #105: Remove orphaned Cloud SQL child resources from state
+    # =============================================================================
+    # If Cloud SQL instance was deleted externally, child resources (databases, users)
+    # remain in terraform state but can't be refreshed. This causes terraform plan/destroy
+    # to fail with "instance does not exist" errors.
+    # =============================================================================
+    log_step "Checking for orphaned Cloud SQL child resources (Gap #105)..."
+    if ! gcloud sql instances describe "$instance_name" --project="${GCP_PROJECT_ID}" &>/dev/null 2>&1; then
+        log_warn "Cloud SQL instance $instance_name not found in GCP - removing orphaned children from state"
+        terraform state rm 'module.database.google_sql_database_instance.postgres' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.keycloak_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.hr_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_database.finance_db' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.keycloak_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.tamshai_user' 2>/dev/null || true
+        terraform state rm 'module.database.google_sql_user.postgres_user' 2>/dev/null || true
+        log_success "Orphaned Cloud SQL resources removed from state"
+    fi
+
+    # =============================================================================
+    # Gap #106: Remove orphaned secret IAM bindings from state
+    # =============================================================================
+    # If secrets were deleted externally, their IAM bindings remain in terraform state.
+    # Terraform refresh fails with "secret not found" when trying to read IAM policy.
+    # =============================================================================
+    log_step "Checking for orphaned secret IAM bindings (Gap #106)..."
+    local secrets_to_check=(
+        "tamshai-prod-keycloak-db-password:keycloak_db_access"
+        "tamshai-prod-db-password:mcp_servers_db_access,cloudbuild_db_password,provision_job_db_password"
+        "tamshai-prod-keycloak-admin-password:keycloak_admin_access,cloudbuild_keycloak_admin,provision_job_keycloak_admin"
+        "tamshai-prod-claude-api-key:mcp_gateway_anthropic_access"
+        "tamshai-prod-mcp-gateway-client-secret:mcp_gateway_client_secret_access"
+        "tamshai-prod-jwt-secret:mcp_gateway_jwt_access"
+        "mcp-hr-service-client-secret:cloudbuild_mcp_hr_client,provision_job_mcp_hr_client"
+        "prod-user-password:cloudbuild_prod_user_password,provision_job_prod_user_password"
+    )
+    for entry in "${secrets_to_check[@]}"; do
+        local secret_name="${entry%%:*}"
+        local iam_bindings="${entry#*:}"
+        if ! gcloud secrets describe "$secret_name" --project="${GCP_PROJECT_ID}" &>/dev/null 2>&1; then
+            log_warn "Secret $secret_name not found - removing orphaned IAM bindings from state"
+            IFS=',' read -ra bindings <<< "$iam_bindings"
+            for binding in "${bindings[@]}"; do
+                terraform state rm "module.security.google_secret_manager_secret_iam_member.${binding}" 2>/dev/null || true
+            done
+            # Also remove the secret itself and its version from state
+            local secret_tf_name="${secret_name//tamshai-prod-/}"
+            secret_tf_name="${secret_tf_name//-/_}"
+            terraform state rm "module.security.google_secret_manager_secret.${secret_tf_name}" 2>/dev/null || true
+            terraform state rm "module.security.google_secret_manager_secret_version.${secret_tf_name}" 2>/dev/null || true
+        fi
+    done
+
+    # =============================================================================
     # PROACTIVE cleanup for KNOWN destroy issues (Gaps #39, #40, #23, #24, #25)
     # These are handled BEFORE terraform destroy to prevent failures
     # =============================================================================
