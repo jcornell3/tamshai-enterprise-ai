@@ -196,11 +196,8 @@ resource "local_file" "docker_env" {
     claude_api_key = var.claude_api_key
 
     # MCP Journey (Project History Agent)
-    # Use fetched key from GitHub secrets, fallback to variable
-    gemini_api_key = coalesce(
-      data.external.github_secrets.result.gemini_api_key,
-      var.gemini_api_key
-    )
+    # Fetched from GitHub secrets via export-test-secrets.yml workflow
+    gemini_api_key = data.external.github_secrets.result.gemini_api_key
 
     # Environment
     environment = var.environment
