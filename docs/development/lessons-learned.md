@@ -2456,7 +2456,7 @@ Architecture v1.4 Section 5.6 requires write operations (delete, update) to retu
    {
      "status": "pending_confirmation",
      "confirmationId": "bc482353-28be-4b02-b3a3-376cf5de86e7",
-     "message": "⚠️ Delete employee Lisa Anderson (lisa.a@tamshai.local)?\n\nDepartment: Finance\nPosition: Senior Accountant\n\nThis action will permanently mark the employee record as inactive...",
+     "message": "⚠️ Delete employee Lisa Anderson (lisa.a@tamshai-playground.local)?\n\nDepartment: Finance\nPosition: Senior Accountant\n\nThis action will permanently mark the employee record as inactive...",
      "confirmationData": {
        "action": "delete_employee",
        "mcpServer": "hr",
@@ -2464,7 +2464,7 @@ Architecture v1.4 Section 5.6 requires write operations (delete, update) to retu
        "timestamp": 1765422720244,
        "employeeId": "e1000000-0000-0000-0000-000000000021",
        "employeeName": "Lisa Anderson",
-       "employeeEmail": "lisa.a@tamshai.local",
+       "employeeEmail": "lisa.a@tamshai-playground.local",
        "department": "Finance",
        "jobTitle": "Senior Accountant",
        "reason": "No reason provided"

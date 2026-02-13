@@ -3,10 +3,10 @@
 ## Project Overview
 
 **Project**: Tamshai Corp Enterprise AI Access System
-**Version**: 1.4 (December 2025)
+**Version**: 1.5 (February 2026)
 **Type**: Microservices Architecture with AI Orchestration
 **Primary Language**: TypeScript/Node.js
-**Status**: VPS Staging Deployed - MCP Gateway Refactoring in Progress
+**Status**: App Ecosystem Expansion - Payroll Module Implementation
 
 ### Purpose
 
@@ -29,12 +29,58 @@ git config user.email "claude-qa@tamshai.com"
 ```
 
 **Verify Configuration**:
+
 ```bash
 git config user.name
 git config user.email
 ```
 
 **Why This Matters**: Separates commits by role for audit trails and authorship tracking.
+
+---
+
+## GitHub Authentication
+
+**CRITICAL**: Always use these settings for GitHub operations:
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **GitHub Account** | `bunnyfoo` | Never use `jcornell3` |
+| **Repository** | `Tamshai-AI-Playground` | Not `Tamshai-AI-Playground-new` |
+| **Token Variable** | `BUNNYFOO_GH_TOKEN` | Never use `GITHUB_TOKEN` |
+
+**Authentication Method**:
+
+```bash
+# Authenticate via gh CLI (preferred)
+unset GITHUB_TOKEN
+gh auth login --with-token <<< "$BUNNYFOO_GH_TOKEN"
+
+# Verify correct account
+gh api user --jq '.login'  # Must return: bunnyfoo
+```
+
+**Git Push Method**:
+
+The Windows Credential Manager may cache incorrect credentials (jcornell3) that override gh CLI authentication. To reliably push:
+
+```bash
+# 1. Unset GITHUB_TOKEN (it may point to wrong account)
+unset GITHUB_TOKEN
+
+# 2. Get bunnyfoo's token from gh CLI
+TOKEN=$(gh auth token)
+
+# 3. Push using token directly (bypasses credential manager)
+git -c credential.helper= push https://bunnyfoo:${TOKEN}@github.com/bunnyfoo/Tamshai-AI-Playground.git main
+```
+
+**Note**: This embeds the token in the command but NOT in git config. The token is ephemeral in the shell session only.
+
+**NEVER**:
+- Use `GITHUB_TOKEN` environment variable (points to wrong account)
+- Push to or reference `jcornell3` repositories
+- Store tokens in `.git/config` or git credential store
 
 ---
 
@@ -54,7 +100,7 @@ git config user.email
 | Audience Mapper | tamshai-website client | Adds `mcp-gateway` to token audience claim |
 | MCP Gateway Client | Created by sync-realm.sh | Confidential client for API gateway |
 | Group Assignments | sync-realm.sh | Maps users to groups for role inheritance |
-| Sample Data | sample-data/*.sql, *.js, *.ndjson | Reloadable via `./scripts/infra/deploy.sh --reseed` |
+| Sample Data | sample-data/*.sql,*.js, *.ndjson | Reloadable via `./scripts/infra/deploy.sh --reseed` |
 
 ### Environment-Specific Files
 
@@ -131,7 +177,7 @@ This ensures the user can immediately pull and test the changes on their local m
 cd infrastructure/terraform/dev
 terraform init                           # First time only
 terraform apply -var-file=dev.tfvars     # Deploy environment
-# Access at: https://www.tamshai.local
+# Access at: https://www.tamshai-playground.local
 
 # Teardown and redeploy
 terraform destroy -var-file=dev.tfvars   # Stop services
@@ -160,20 +206,17 @@ curl http://localhost:8100/api/health    # Kong Gateway
 Scripts for managing services in dev and stage environments. All scripts are idempotent and safe to run multiple times.
 
 ```bash
-# Check service status (dev or stage)
+# Check service status
 ./scripts/infra/status.sh dev            # Check local dev services
-./scripts/infra/status.sh stage          # Check stage VPS services
 
 # Deploy services
 ./scripts/infra/deploy.sh dev            # Deploy all dev services
 ./scripts/infra/deploy.sh dev --build    # Rebuild containers
 ./scripts/infra/deploy.sh dev --sync     # Deploy and sync Keycloak
-./scripts/infra/deploy.sh dev --reseed   # Reload all sample data (Finance, Sales, Support)
-./scripts/infra/deploy.sh stage          # Deploy to stage VPS
+./scripts/infra/deploy.sh dev --reseed   # Reload all sample data (Finance, Sales, Support, Payroll)
 
 # Keycloak management
 ./scripts/infra/keycloak.sh sync dev     # Sync Keycloak clients/config
-./scripts/infra/keycloak.sh sync stage   # Sync stage Keycloak
 ./scripts/infra/keycloak.sh status dev   # Check Keycloak status
 ./scripts/infra/keycloak.sh clients dev  # List all clients
 ./scripts/infra/keycloak.sh users dev    # List all users
@@ -182,12 +225,10 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 
 # MCP health check
 ./scripts/mcp/health-check.sh dev        # Check all MCP servers
-./scripts/mcp/health-check.sh stage      # Check stage MCP servers
 
 # MCP server restart
 ./scripts/mcp/restart.sh dev             # Restart all MCP servers
 ./scripts/mcp/restart.sh dev gateway     # Restart only MCP Gateway
-./scripts/mcp/restart.sh stage all       # Restart all on stage
 
 # Database backup/restore
 ./scripts/db/backup.sh dev               # Backup all databases
@@ -226,42 +267,15 @@ Scripts for managing services in dev and stage environments. All scripts are ide
 # Container rebuild (stop containers, preserve infrastructure)
 ./scripts/infra/rebuild.sh dev            # Stop dev containers
 ./scripts/infra/rebuild.sh dev --volumes  # Remove data volumes (DESTRUCTIVE)
-./scripts/infra/rebuild.sh stage          # Stop stage containers
 
 # Environment teardown (DESTROYS infrastructure via Terraform)
 ./scripts/infra/teardown.sh dev           # Terraform destroy dev environment
-./scripts/infra/teardown.sh stage         # Terraform destroy VPS (IRREVERSIBLE!)
-./scripts/infra/teardown.sh stage --force # Destroy without confirmation (DANGEROUS)
 
 # Database backup (alternative location)
 ./scripts/infra/backup.sh                # Backup all databases
 ./scripts/infra/backup.sh postgres       # Backup PostgreSQL only
 ./scripts/infra/backup.sh mongodb        # Backup MongoDB
 ```
-
-**Environment Variables for Stage Scripts:**
-```bash
-export VPS_HOST="<your-vps-ip>"          # VPS IP address (get from Terraform output)
-export VPS_SSH_USER="root"               # SSH user
-export KEYCLOAK_ADMIN_PASSWORD="xxx"     # For Keycloak admin commands
-```
-
-> **Important: VPS_HOST vs VPS_DOMAIN**
->
-> These variables serve different purposes due to Cloudflare proxy configuration:
->
-> | Variable | Purpose | Value | Why |
-> |----------|---------|-------|-----|
-> | `VPS_HOST` | SSH connections (port 22) | Raw IP address (e.g., `203.0.113.100`) | Cloudflare cannot proxy SSH traffic |
-> | `VPS_DOMAIN` | OAuth redirect URIs | Domain (e.g., `vps.tamshai.com`) | HTTPS traffic routes through Cloudflare |
-> | `VITE_STAGE_HOST` | Browser hostname detection | IP address | Matches URL bar when accessing via IP |
->
-> **Never use `vps.tamshai.com` for SSH** - it will timeout because Cloudflare only proxies HTTP/HTTPS (ports 80/443).
-
-> **IMPORTANT FOR CLAUDE CODE**: Do NOT attempt direct SSH to the VPS. The SSH private key is stored ONLY in GitHub Secrets (`VPS_SSH_KEY`) and is not available locally. All stage/VPS operations must be done through:
-> 1. **GitHub Actions workflows** (deploy-vps.yml) - trigger via `gh workflow run`
-> 2. **User-initiated SSH** - ask the user to run SSH commands manually
-> 3. **Web endpoints** - use `curl` or `WebFetch` to check HTTPS endpoints
 
 ### MCP Gateway Development
 
@@ -290,33 +304,6 @@ npm test
 npm run test:integration
 ```
 
-### Flutter Unified Client Development
-
-```bash
-cd clients/unified_flutter
-
-# Get dependencies
-flutter pub get
-
-# Generate Freezed/JSON serialization code
-flutter pub run build_runner build --delete-conflicting-outputs
-
-# Run on Windows (debug)
-flutter run -d windows
-
-# Build Windows release
-flutter build windows --release
-
-# Run tests
-flutter test
-```
-
-**Key Flutter Files**:
-- `lib/core/auth/` - OAuth service, secure storage, auth state
-- `lib/core/api/` - Dio HTTP client with auth interceptor
-- `lib/features/chat/` - Chat UI, SSE streaming, message handling
-- `lib/features/home/` - Home screen, user profile display
-
 ---
 
 ## Architecture v1.4 Overview
@@ -326,10 +313,12 @@ flutter test
 Architecture v1.4 introduces critical enhancements for AI reliability and user safety:
 
 #### 1. SSE Transport Protocol
+
 **Problem**: HTTP requests timeout during Claude's 30-60 second multi-step reasoning.
 **Solution**: Server-Sent Events (SSE) streaming using EventSource API.
 
 **Gateway Implementation**:
+
 ```typescript
 app.post('/api/query', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -350,6 +339,7 @@ app.post('/api/query', async (req, res) => {
 ```
 
 **Client Implementation**:
+
 ```typescript
 const eventSource = new EventSource('/api/query');
 eventSource.onmessage = (event) => {
@@ -363,10 +353,12 @@ eventSource.onmessage = (event) => {
 ```
 
 #### 2. Truncation Warnings
+
 **Problem**: Users unaware when AI responses are based on incomplete data (50-record limit).
 **Solution**: MCP servers detect truncation and inject AI-visible warnings.
 
 **MCP Server LIMIT+1 Pattern**:
+
 ```typescript
 async function listEmployees(limit = 50): Promise<MCPToolResponse> {
   const result = await db.query(
@@ -391,6 +383,7 @@ async function listEmployees(limit = 50): Promise<MCPToolResponse> {
 ```
 
 #### 3. LLM-Friendly Error Schemas
+
 **Problem**: Raw exceptions don't help Claude self-correct.
 **Solution**: Discriminated union responses with `suggestedAction` fields.
 
@@ -421,10 +414,12 @@ async function getEmployee(employeeId: string): Promise<MCPToolResponse> {
 ```
 
 #### 4. Human-in-the-Loop Confirmations
+
 **Problem**: Accidental destructive operations without user approval.
 **Solution**: Write tools return `pending_confirmation`, user approves via UI.
 
 **MCP Server Write Tool**:
+
 ```typescript
 async function deleteEmployee(employeeId: string): Promise<MCPToolResponse> {
   const confirmationId = crypto.randomUUID();
@@ -449,6 +444,7 @@ async function deleteEmployee(employeeId: string): Promise<MCPToolResponse> {
 ```
 
 **Gateway Confirmation Endpoint**:
+
 ```typescript
 app.post('/api/confirm/:confirmationId', async (req, res) => {
   const { approved } = req.body;
@@ -478,7 +474,7 @@ app.post('/api/confirm/:confirmationId', async (req, res) => {
 **Pattern**: API Gateway + Service Mesh
 **Implementation**: Kong Gateway → MCP Gateway → Domain MCP Servers
 
-```
+```text
              ┌──────────┐
    Clients   │Desktop/  │
       │      │Mobile    │
@@ -526,6 +522,7 @@ app.post('/api/confirm/:confirmationId', async (req, res) => {
 **Flow**: OIDC PKCE → JWT Issuance → Token Validation → Role Extraction
 
 **JWT Validation in MCP Gateway** (services/mcp-gateway/src/index.ts:80-120):
+
 ```typescript
 async function validateToken(authHeader: string) {
   const token = authHeader.replace('Bearer ', '');
@@ -552,7 +549,8 @@ async function validateToken(authHeader: string) {
 ### 3. Authorization: Hierarchical RBAC
 
 **Role Hierarchy**:
-```
+
+```text
 executive (composite role)
   ├─ hr-read → hr-write
   ├─ finance-read → finance-write
@@ -564,6 +562,7 @@ Access Levels:
 ```
 
 **Role-to-MCP Routing** (services/mcp-gateway/src/index.ts:200-250):
+
 ```typescript
 const ROLE_TO_MCP: Record<string, string[]> = {
   'hr-read': ['mcp-hr'],
@@ -688,6 +687,7 @@ Performance and load testing uses [k6](https://k6.io/) with TDD-style threshold 
 | Soak | 4hr | 25 | P95 < 500ms, Error < 0.1% |
 
 **Commands**:
+
 ```bash
 cd tests/performance
 
@@ -722,11 +722,12 @@ Browser-based E2E tests with full authentication flow including TOTP.
 **Test Environments**:
 | Environment | App URL | Keycloak URL | TOTP Secret Source |
 |-------------|---------|--------------|-------------------|
-| dev | https://www.tamshai.local | https://www.tamshai.local/auth | Hardcoded (dev only) |
-| stage | https://www.tamshai.com | https://www.tamshai.com/auth | Environment variable |
-| prod | https://prod.tamshai.com | https://keycloak-fn44nd7wba-uc.a.run.app/auth | Secrets manager |
+| dev | <https://www.tamshai-playground.local> | <https://www.tamshai-playground.local/auth> | Hardcoded (dev only) |
+| stage | <https://www.tamshai.com> | <https://www.tamshai.com/auth> | Environment variable |
+| prod | <https://prod.tamshai.com> | <https://keycloak-fn44nd7wba-uc.a.run.app/auth> | Secrets manager |
 
 **Commands**:
+
 ```bash
 cd tests/e2e
 
@@ -752,12 +753,13 @@ npm run test:report
 ```
 
 **Environment Variables**:
+
 ```bash
 # Test user service account (exists in ALL environments: dev, stage, prod)
 # See docs/testing/TEST_USER_JOURNEY.md for details
 export TEST_USERNAME="test-user.journey"      # Default: test-user.journey
-export TEST_USER_PASSWORD="***REDACTED_PASSWORD***"        # Default: ***REDACTED_PASSWORD***
-export TEST_USER_TOTP_SECRET="JBSWY3DPEHPK3PXP"    # Default: JBSWY3DPEHPK3PXP
+export TEST_USER_PASSWORD="<from-secrets>"    # GitHub Secret: TEST_USER_PASSWORD
+export TEST_USER_TOTP_SECRET="<from-secrets>" # GitHub Secret: TEST_USER_TOTP_SECRET
 
 # Optional: Override with custom credentials
 export TEST_USERNAME="<custom-username>"
@@ -767,10 +769,25 @@ export TEST_USER_TOTP_SECRET="<custom-totp-secret>"
 
 **Important**: The `test-user.journey` account is a dedicated service account for E2E testing that exists in all environments (dev, stage, prod). It has no data access privileges (safe for testing) and uses the same credentials across all environments.
 
+**Customer Portal Test Users**:
+
+```bash
+# Customer user password (GitHub Secret: CUSTOMER_USER_PASSWORD)
+export CUSTOMER_USER_PASSWORD="<from-secrets>"  # GitHub Secret: CUSTOMER_USER_PASSWORD
+
+# Customer test users (all use the same password):
+# - jane.smith@acme.com (Lead - Acme Corporation)
+# - bob.developer@acme.com (Basic - Acme Corporation)
+# - mike.manager@globex.com (Lead - Globex Industries)
+```
+
+**Important**: Customer users are provisioned in the `tamshai-customers` realm (separate from employee realm). They do NOT require TOTP - only username/password authentication.
+
 **TOTP Code Generation**:
+
 ```bash
 # Generate TOTP code manually for testing (test-user.journey)
-oathtool --totp --base32 "JBSWY3DPEHPK3PXP"
+oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 # Output: 6-digit code (e.g., 123456) valid for 30 seconds
 ```
 
@@ -836,6 +853,7 @@ sudo sysctl -w vm.max_map_count=262144
 ```
 
 **Verification**:
+
 ```bash
 sysctl vm.max_map_count
 # Should output: vm.max_map_count = 262144
@@ -855,6 +873,8 @@ sysctl vm.max_map_count
 | MCP Sales | 3103 | Sales MCP |
 | MCP Support | 3104 | Support MCP |
 | MCP Journey | 3105 | Project History Agent |
+| MCP Payroll | 3106 | Payroll MCP |
+| Web Payroll | 4005 | Payroll Web App |
 | PostgreSQL | 5433 | Relational DB |
 | MongoDB | 27018 | Document DB |
 | Elasticsearch | 9201 | Search Engine |
@@ -944,85 +964,6 @@ docker compose up -d
 **Network**: `tamshai-network` (172.30.0.0/16)
 **Volumes**: Named volumes for data persistence
 
-### VPS Staging (Current)
-
-**Status**: ✅ **Deployed and Running**
-**Platform**: Hetzner Cloud
-**Location**: Hillsboro, Oregon (hil datacenter)
-**Server**: CPX31 (4 vCPU, 8GB RAM)
-**IP**: Set via `VPS_HOST` environment variable (get from Terraform: `terraform output -raw vps_ip`)
-**Domain**: `vps.tamshai.com` (Cloudflare-proxied)
-
-**Deployment Method**: Terraform + cloud-init
-**Files**:
-- `infrastructure/terraform/vps/main.tf` - Hetzner Cloud infrastructure
-- `infrastructure/cloud-init/cloud-init.yaml` - Automated VPS provisioning
-- `.github/workflows/deploy-vps.yml` - CI/CD deployment pipeline
-
-**Services Deployed**:
-- MCP Gateway (Port 3100)
-- Keycloak (Port 8080)
-- PostgreSQL, MongoDB, Redis
-- Caddy reverse proxy (HTTPS via Cloudflare)
-
-**Deployment Commands**:
-```bash
-cd infrastructure/terraform/vps
-terraform init
-terraform plan
-terraform apply
-
-# IMPORTANT: After terraform apply (especially destroy+apply), update SSH secret:
-gh secret set VPS_SSH_KEY < infrastructure/terraform/vps/.keys/deploy_key
-
-# Then deploy via GitHub Actions
-gh workflow run deploy-vps.yml --ref main
-```
-
-**VPS Teardown and Redeploy (Full Reprovision)**:
-
-Use this process to completely destroy and recreate the VPS. This is useful when:
-- Cloud-init changes need to be applied
-- The VPS is in an unrecoverable state
-- A fresh environment is needed
-
-```bash
-# Step 1: Navigate to VPS terraform directory
-cd infrastructure/terraform/vps
-
-# Step 2: Destroy the existing VPS (DESTRUCTIVE - removes all data)
-terraform destroy -auto-approve
-# This destroys: VPS, firewall, SSH keys, passwords
-# Takes ~30 seconds
-
-# Step 3: Reprovision a new VPS
-terraform apply -auto-approve
-# This creates: new VPS, firewall, SSH keys, generates new passwords
-# Takes ~30-60 seconds
-# NOTE: Terraform automatically updates the GitHub VPS_SSH_KEY secret
-
-# Step 4: Wait for cloud-init to complete on the VPS (~5-10 minutes)
-# Cloud-init installs Docker, clones repo, and starts initial services
-
-# Step 5: Trigger the deployment workflow
-gh workflow run deploy-vps.yml --ref main
-
-# Step 6: Monitor deployment progress
-gh run list --workflow=deploy-vps.yml --limit 5
-gh run watch  # Watch the latest run
-```
-
-**Important Notes**:
-- The VPS IP may change after reprovisioning (check terraform output)
-- Terraform automatically updates `VPS_SSH_KEY` GitHub secret during apply
-- The deploy-vps workflow handles Keycloak sync and identity provisioning
-- Cloud-init logs: `ssh root@<VPS_IP> 'cat /var/log/cloud-init-output.log'`
-
-**Access**:
-- API Gateway: `https://vps.tamshai.com/api`
-- Keycloak: `https://vps.tamshai.com/auth`
-- Health Check: `https://vps.tamshai.com/health`
-
 ### Production (Planned)
 
 **Platform**: Google Cloud Platform (GCP)
@@ -1042,46 +983,144 @@ gh run watch  # Watch the latest run
 
 ## Current Development Status
 
-### Active Work: MCP Gateway Refactoring
+### Active Work: App Ecosystem Expansion
 
-**Objective**: Increase test coverage from 31% to 70%+ by refactoring 1,533-line `index.ts` monolith.
+Transform sample applications into enterprise-grade modules with unified UX, adding Payroll and Tax modules. All employees are US-based remote workers across multiple states, supporting a SaaS-focused financial/LLC management services enterprise.
 
-**Documentation**: `.specify/specs/003-mcp-gateway/REFACTORING_PLAN.md` (3,477 lines)
+**Plan File**: `.claude/plans/playful-zooming-willow.md`
 
-**Status**: Ready for implementation by QA Lead
-**Timeline**: 5 weeks (4 phases + optional error handler)
-**Review Status**: ✅ All 3 review rounds complete (Tech Lead, QA Lead, Final Review)
+### Implementation Phases
 
-**Critical Implementation Requirements**:
-1. 🔴 **Client disconnect handling** in Phase 3 (prevents $570/month Anthropic API waste)
-2. 🔴 **HTTP mocking with nock** in Phase 4.2 (prevents flaky CI, 8x faster tests)
-3. 🔴 **JWTValidator singleton** in Phase 2 (prevents JWKS cache bypass)
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Specification Reorganization | ⏳ Planned |
+| Phase 2 | App Enhancements (HR, Finance, Sales, Support) | ⏳ Planned |
+| Phase 2.1 | **Expense Reports (v1.5)** | 🔄 **In Progress** |
+| Phase 3.1 | **Payroll Module** | ✅ **Complete** |
+| Phase 3.2 | Tax Module | ⏳ Planned |
+| Phase 4 | Data Layer Expansion | ⏳ Planned |
+| Phase 5 | TDD Implementation Strategy | ✅ In Use |
+| Phase 6 | E2E Testing & Journey Validation | ⏳ Planned |
 
-**Target Metrics**:
-- Overall coverage: 31% → 60%+ (diff: 90%+)
-- Type coverage: 85%+
-- index.ts LOC: 1,533 → <200
+### Phase 3.1 - Payroll Module (Complete)
 
-### Completed Work
+**Payroll Web App** (124 tests passing):
+- Pages: DashboardPage, PayRunsPage, PayStubsPage, ContractorsPage, DirectDepositPage
+- Pages: TaxWithholdingsPage, BenefitsPage, AIQueryPage
+- All pages use conditional rendering pattern for consistent header display
 
-**Phase 1**: ✅ Docker Compose infrastructure, Keycloak SSO, sample data
-**Phase 2**: ✅ JWT validation, token revocation, prompt injection defense
-**Phase 3**: ✅ MCP Gateway implementation, Claude API integration, role-based routing
-**Phase 4**: ✅ MCP Suite servers (complete - 4 servers, 15 tools)
-**Phase 5**: ✅ Sample web apps (GREEN phase complete)
-  - Finance App: InvoicesPage, ExpenseReportsPage, BudgetsPage, DashboardPage, AIQueryPage
-  - Sales App: CustomerDetail, CloseOpportunityModal, PipelineDashboard, OpportunitiesList
-  - Support App: CloseTicketModal (500+ lines), TicketDetail, ArticleDetailPage, DashboardPage
-  - RLS Policies: `tamshai_app` user (no BYPASSRLS), public read policies for reference tables
-**Phase 6**: ✅ Flutter unified desktop client (Windows complete)
-**Phase 7**: ⚠️ Monitoring & alerting (planned)
-**Phase 8**: ✅ VPS staging deployment (Hetzner Cloud)
+**MCP Payroll Server** (port 3106):
+- 8 tools: list_pay_runs, list_pay_stubs, get_pay_stub, list_contractors
+- 4 more: get_tax_withholdings, get_benefits, get_direct_deposit, get_payroll_summary
+- PostgreSQL with RLS, Redis for confirmations, Winston logging
+
+**Database Schema** (`infrastructure/database/payroll/`):
+- 10 tables: employees, pay_runs, pay_stubs, contractors, etc.
+- RLS policies for role-based access
+- Sample data with 8 employees, pay runs, tax withholdings, benefits
+
+**Infrastructure**:
+- Docker: mcp-payroll (3106), web-payroll (4005)
+- Keycloak: payroll-read, payroll-write roles, Payroll-Team group
+- PostgreSQL: tamshai_payroll database
+
+### Phase 2.1 - Expense Reports v1.5 (In Progress)
+
+**Database Schema** (`sample-data/finance-data.sql`):
+- `finance.expense_reports` - Container table with workflow status tracking
+- `finance.expense_items` - Line items with receipt tracking
+- Status workflow: DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED → REIMBURSED (or REJECTED)
+- RLS policies for 3-tier access (self, manager, finance)
+
+**MCP Finance Tools** (port 3102):
+- `list_expense_reports` - Cursor-based pagination, status/department/date filters
+- `get_expense_report` - Full report with line items
+- `approve_expense_report` - Human-in-the-loop confirmation (SUBMITTED/UNDER_REVIEW → APPROVED)
+- `reject_expense_report` - Requires rejection reason, confirmation flow
+- `reimburse_expense_report` - Payment reference tracking (APPROVED → REIMBURSED)
+
+**Integration Tests** (`services/mcp-gateway/src/__tests__/integration/expense-reports.test.ts`):
+- 32 test cases covering schema, RLS, tools, and workflow
+- Test fixture reset for idempotent test runs
+- 8 test expense reports across all status states
+
+**Sample Data**:
+- 8 expense reports across various statuses and departments
+- 25+ line items covering travel, meals, supplies, software, equipment
+- Realistic amounts ($500-$4,200 per report)
+
+### Next Steps
+
+1. Run and validate expense reports integration tests
+2. Phase 3.2: Tax Module (TDD RED → GREEN)
+3. Phase 2: Enhance existing apps (HR, Finance, Sales, Support)
+4. Phase 6: Cross-app E2E testing
+
+### Completed Foundation Work
+
+**Phase 1-4**: ✅ Docker Compose, Keycloak SSO, JWT validation, MCP Gateway
+**Phase 5**: ✅ Sample web apps (Finance, Sales, Support)
 **Phase 9**: ✅ Security remediation (Terraform infrastructure)
-  - 10 GCP issues resolved (SSL, logging, encryption, access controls)
-  - 4 VPS issues suppressed with defense-in-depth justifications
-  - Security documentation created (state security, firewall justification)
-  - Remaining: 2-3 low-priority items deferred to Phase 6 (monitoring)
-**Phase 10**: ✅ Documentation (this file, security docs)
+**Phase 10**: ✅ Documentation
+
+### Generative UI Fixes (v1.5 - February 2026)
+
+**Status**: ✅ Complete (6 of 7 components operational)
+
+**Plan Files**:
+- `.claude/plans/generative-ui-fixes.md` - Complete implementation plan
+- `.claude/plans/generative-ui-validation.md` - MCP tool validation results
+- `.claude/plans/generative-ui-testing-guide.md` - Manual testing procedures
+
+**Completed Work**:
+
+**Phase 1 - Infrastructure** ✅
+- Docker Compose build args for VITE_MCP_UI_URL
+- .env files created for Sales, Finance, Support apps
+- Caddy reverse proxy configuration at /mcp-ui/*
+
+**Phase 2 - Frontend Fixes** ✅
+- AIQueryPage URL fallback: `/mcp-ui/api/display` (all apps)
+- Component styling: Converted to semantic tokens (secondary-*, primary-*, success/danger/warning-*)
+- Components updated: ForecastChart, BudgetSummaryCard, QuarterlyReportDashboard
+
+**Phase 3 - Component Registry Transforms** ✅
+- `hr:org_chart` - Maps employee_id → id, extracts self/directReports
+- `sales:customer` - Extracts customer/contacts, maps contact._id → id
+- `sales:leads` - Handles leads as direct array
+- `sales:forecast` - Maps forecast data (validation pending)
+- `finance:budget` - Maps BudgetSummary to BudgetData with categories
+- `approvals:pending` - Multi-source transform (HR + Finance) with field mapping
+
+**Phase 4 - MCP Tool Validation** ✅
+- 9 of 10 tools implemented and validated
+- Missing: `finance.get_quarterly_report` (blocks QuarterlyReportDashboard)
+
+**Phase 5 - Manual Testing** ⏳
+- Testing guide created
+- 6 components ready for testing
+- 1 component blocked (quarterly_report)
+
+**Phase 6 - Documentation** ✅
+- Validation report generated
+- Testing procedures documented
+- CLAUDE.md updated
+
+**Operational Components**:
+1. ✅ HR Org Chart (display:hr:org_chart)
+2. ✅ Sales Customer Detail (display:sales:customer)
+3. ✅ Sales Leads Table (display:sales:leads)
+4. ✅ Sales Forecast Chart (display:sales:forecast)
+5. ✅ Finance Budget Summary (display:finance:budget)
+6. ✅ Approvals Queue (display:approvals:pending)
+7. ❌ Finance Quarterly Report (display:finance:quarterly_report) - Tool not implemented
+
+**Known Limitations**:
+- `approvals:pending.budgetAmendments.currentBudget` - Always 0 (tool returns new budget submissions, not amendments to existing budgets)
+- `finance:quarterly_report` - Cannot test until get_quarterly_report tool is implemented
+
+**Testing Instructions**:
+See `.claude/plans/generative-ui-testing-guide.md` for complete manual testing procedures.
 
 ---
 
@@ -1096,6 +1135,33 @@ gh run watch  # Watch the latest run
 **Prompt Defense**: 5-layer injection protection (validation, blocking, delimiters, reinforcement, output validation)
 
 See `docs/architecture/security-model.md` for complete security documentation.
+
+### OAuth Flow Policy
+
+**ROPC (Resource Owner Password Credentials) Flow**:
+
+The `direct_access_grants_enabled` setting controls whether the ROPC flow (password grant) is allowed for the `mcp-gateway` Keycloak client. **ROPC is disabled in all environments** as of 2026-02-13.
+
+**Security Assessment** (2026-02-12, updated 2026-02-13):
+- **Production Runtime**: Does NOT use ROPC flow - all production apps use Authorization Code + PKCE
+- **Integration Tests**: Use token exchange (mcp-integration-runner service account) - no ROPC
+- **Performance Tests**: Use token exchange with per-VU caching - no ROPC
+- **Admin API Access**: Uses admin-cli client credentials (KEYCLOAK_ADMIN_CLIENT_SECRET) with ROPC fallback
+
+**Environment Policy** (Updated 2026-02-13 - Migration Complete):
+
+| Environment | direct_access_grants_enabled | Justification |
+|-------------|------------------------------|---------------|
+| **Production** | `false` | No runtime usage, security best practice |
+| **Stage** | `false` | Mirror production security posture |
+| **Dev** | `false` | Migration complete - using token exchange and client credentials |
+| **CI** | `false` | Migration complete - using token exchange and client credentials |
+
+**Exception**: E2E browser tests (Playwright) may use ROPC for UI login validation. This is an acceptable exception documented in `docs/security/ROPC_ASSESSMENT.md`.
+
+**Configuration**: Set via `direct_access_grants_enabled` variable in `infrastructure/terraform/keycloak/environments/*.tfvars`
+
+**See Also**: `docs/security/ROPC_ASSESSMENT.md` for complete security analysis and migration results.
 
 ### Compliance
 
@@ -1124,6 +1190,7 @@ Keycloak configuration (clients, roles, etc.) is managed through:
 ### Adding a New Keycloak Client
 
 1. **Add to realm export** (`keycloak/realm-export-dev.json`):
+
 ```json
 {
   "clientId": "my-new-app",
@@ -1138,7 +1205,8 @@ Keycloak configuration (clients, roles, etc.) is managed through:
 }
 ```
 
-2. **Add to sync script** (`keycloak/scripts/sync-realm.sh`):
+1. **Add to sync script** (`keycloak/scripts/sync-realm.sh`):
+
 ```bash
 sync_my_new_app_client() {
     local client_json='{...}'
@@ -1146,7 +1214,8 @@ sync_my_new_app_client() {
 }
 ```
 
-3. **Apply locally**:
+1. **Apply locally**:
+
 ```bash
 # Option 1: Run sync script (updates existing Keycloak)
 cd keycloak/scripts
@@ -1159,36 +1228,23 @@ docker volume rm $(docker volume ls -q | grep keycloak) 2>/dev/null
 docker compose up -d keycloak
 ```
 
-4. **Deploy to stage**: Push to main - CI/CD will sync automatically
+1. **Deploy to stage**: Push to main - CI/CD will sync automatically
 
 ### Manual Keycloak Sync
 
 **Local Development:**
+
 ```bash
 cd keycloak/scripts
 ./docker-sync-realm.sh dev tamshai-keycloak
 ```
 
-**Stage/VPS (via SSH):**
-```bash
-ssh root@$VPS_HOST  # Use IP address, not domain (Cloudflare can't proxy SSH)
-cd /opt/tamshai
-docker cp keycloak/scripts/sync-realm.sh keycloak:/tmp/
-docker exec keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh'
-docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
-  keycloak /tmp/sync-realm.sh stage
-```
-
 ### Keycloak Admin Access
 
 **Local Dev:**
-- URL: http://localhost:8180/auth/admin
+- URL: <http://localhost:8180/auth/admin>
 - Username: admin
 - Password: admin
-
-**Stage/Prod:**
-- URL: https://[VPS_IP]/auth/admin
-- Credentials: Stored in Terraform state or secrets manager
 
 ---
 
@@ -1197,6 +1253,7 @@ docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
 ### Common Issues
 
 **1. Port Conflicts**
+
 ```bash
 # Check if ports are in use
 lsof -i :3100
@@ -1210,6 +1267,7 @@ KEYCLOAK_PORT=8280
 ```
 
 **2. Docker Compose Fails**
+
 ```bash
 # Check Docker status
 docker info
@@ -1222,6 +1280,7 @@ docker system prune -a
 ```
 
 **3. Keycloak Not Ready**
+
 ```bash
 # Check Keycloak logs
 docker compose logs keycloak
@@ -1233,6 +1292,7 @@ curl http://localhost:8180/health/ready
 ```
 
 **4. JWT Validation Fails**
+
 ```bash
 # Verify Keycloak JWKS is accessible
 docker compose exec mcp-gateway curl http://keycloak:8080/realms/tamshai/protocol/openid-connect/certs
@@ -1244,6 +1304,7 @@ docker compose exec mcp-gateway ping keycloak
 ```
 
 **5. Claude API Errors**
+
 ```bash
 # Verify API key is set
 docker compose exec mcp-gateway printenv CLAUDE_API_KEY
@@ -1252,6 +1313,7 @@ docker compose exec mcp-gateway printenv CLAUDE_API_KEY
 ```
 
 **6. Database Connection Issues**
+
 ```bash
 # Check PostgreSQL
 docker compose exec postgres psql -U tamshai -d tamshai_hr -c "SELECT 1;"
@@ -1263,6 +1325,7 @@ docker compose exec mongodb mongosh --eval "db.adminCommand('ping')"
 ### Debugging Tips
 
 **Enable Verbose Logging**:
+
 ```typescript
 // services/mcp-gateway/src/index.ts
 const logger = winston.createLogger({
@@ -1271,21 +1334,31 @@ const logger = winston.createLogger({
 ```
 
 **Inspect JWT Token**:
+
 ```bash
-# Get token from Keycloak
-TOKEN=$(curl -X POST http://localhost:8180/realms/tamshai/protocol/openid-connect/token \
-  -d "client_id=mcp-gateway" \
-  -d "client_secret=[REDACTED-DEV-SECRET]" \
-  -d "username=alice.chen" \
-  -d "password=[REDACTED-DEV-PASSWORD]" \
-  -d "grant_type=password" \
-  -d "scope=openid" | jq -r '.access_token')
+# Get token via token exchange (preferred - no user password needed)
+SVC_TOKEN=$(curl -s -X POST http://localhost:8180/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-integration-runner" \
+  -d "client_secret=$MCP_INTEGRATION_RUNNER_SECRET" \
+  -d "grant_type=client_credentials" | jq -r '.access_token')
+
+TOKEN=$(curl -s -X POST http://localhost:8180/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-integration-runner" \
+  -d "client_secret=$MCP_INTEGRATION_RUNNER_SECRET" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+  -d "subject_token=$SVC_TOKEN" \
+  -d "requested_subject=alice.chen" \
+  -d "scope=openid profile roles" | jq -r '.access_token')
+
+# Or use the helper script
+TOKEN=$(./scripts/get-keycloak-token.sh alice.chen)
 
 # Decode token
 echo $TOKEN | cut -d. -f2 | base64 -d | jq .
 ```
 
 **Monitor Redis**:
+
 ```bash
 # Watch token revocations
 docker compose exec redis redis-cli MONITOR
@@ -1299,30 +1372,35 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 ## Key Documentation References
 
 ### Architecture & Design
+
 - [Architecture Overview](docs/architecture/overview.md)
 - [Security Model](docs/architecture/security-model.md)
 - [Architecture Specs](.specify/ARCHITECTURE_SPECS.md)
 - [V1.4 Update Status](.specify/V1.4_UPDATE_STATUS.md)
 
 ### Security
+
 - [Terraform State Security](docs/security/TERRAFORM_STATE_SECURITY.md)
 - [VPS Firewall Justification](docs/security/VPS_FIREWALL_JUSTIFICATION.md)
 - [Security Remediation Plan](docs/archived/keycloak-debugging-2025-12/2025-12-31-security-remediation-plan.md)
 - [Phase 5 Security Analysis](docs/archived/keycloak-debugging-2025-12/2025-12-31-phase5-remaining-issues.md)
 
 ### Development
+
 - [Port Allocation](docs/development/PORT_ALLOCATION.md)
 - [Lessons Learned](docs/development/lessons-learned.md)
 - [Test Coverage Strategy](.specify/specs/011-qa-testing/TEST_COVERAGE_STRATEGY.md)
 - [Testing & CI/CD Config](.specify/specs/011-qa-testing/TESTING_CI_CD_CONFIG.md)
 
 ### Refactoring (Active Work)
+
 - [Refactoring Plan](.specify/specs/003-mcp-gateway/REFACTORING_PLAN.md) (3,477 lines)
   - Review #1: Technical Lead feedback (JWKS singleton, StreamingService, integration tests)
   - Review #2: QA Lead feedback (SSE scenarios, mock factories, type coverage)
   - Review #3: Final execution safeguards (disconnect handling, HTTP mocking)
 
 ### Specifications
+
 - [001 - Foundation](.specify/specs/001-foundation/)
 - [002 - Security](.specify/specs/002-security-iam/)
 - [003 - MCP Gateway](.specify/specs/003-mcp-gateway/)
@@ -1331,6 +1409,7 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 - [011 - QA Testing](.specify/specs/011-qa-testing/)
 
 ### External Links
+
 - [Anthropic Claude API Docs](https://docs.anthropic.com/claude/reference/getting-started-with-the-api)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Keycloak Documentation](https://www.keycloak.org/documentation)
@@ -1340,12 +1419,133 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 
 ## Project Repository
 
-**GitHub**: https://github.com/jcornell3/tamshai-enterprise-ai
+**GitHub**: <https://github.com/jcornell3/tamshai-enterprise-ai>
 **Issues**: Use GitHub Issues for bug reports
 **Project Sponsor**: John Cornell
 
 ---
 
-*Last Updated: January 5, 2026*
-*Architecture Version: 1.4 (Flutter Desktop Complete, VPS Staging Deployed, Sample Apps GREEN Phase)*
-*Document Version: 2.2 (Sample Apps & RLS Implementation)*
+## Current Implementation State
+
+**Last Updated**: 2026-02-06
+**Active Phase**: Expense Reports v1.5 Implementation
+**Working Branch**: main
+
+### Current Work: Expense Reports v1.5
+
+**Status**: Integration tests created, MCP tools implemented, database schema complete
+
+**Completed**:
+- ✅ Database schema (expense_reports, expense_items tables)
+- ✅ RLS policies (self, manager, finance access)
+- ✅ MCP tools (list, get, approve, reject, reimburse)
+- ✅ Human-in-the-loop confirmation flows
+- ✅ Sample data (8 reports, 25+ line items)
+- ✅ Integration tests (32 test cases)
+
+**In Progress**:
+- 🔄 Test fixture reset validation
+- 🔄 Budget approval test reliability fixes
+
+### Enterprise UX Hardening Complete (v1.5)
+
+**Phase 0-1: Research & Specification**
+- ✅ Deep domain research (Salesforce, Gusto, ServiceNow patterns)
+- ✅ UI tokens and patterns documented in `.specify/specs/005-sample-apps/`
+- ✅ BULK_ACTIONS_PATTERN.md and WIZARD_PATTERN.md created
+
+**Phase 2: Shared Component Library** (`clients/web/packages/ui/`)
+- ✅ DataTable component (bulk actions, sorting, pagination, selection)
+- ✅ Wizard component (multi-step, validation, breadcrumbs)
+- ✅ AuditTrail component (S-OX compliance, posted indicator)
+- ✅ 114 passing tests in UI package
+
+**Phase 3: E2E Test Infrastructure** (`tests/e2e/`)
+- ✅ Wizard utilities (navigation, validation, step assertions)
+- ✅ Bulk action utilities (selection, toolbar, action execution)
+- ✅ Database snapshot/rollback helpers
+- ✅ Payroll wizard E2E tests
+
+**Phase 4.1: Finance Invoice Batch Approval**
+- ✅ InvoicesPage with DataTable bulk selection
+- ✅ Bulk approve/reject/export actions
+- ✅ Confirmation dialog integration
+- ✅ CSV export functionality
+
+**Phase 5: Edge Case Data & Audit Compliance**
+- ✅ Overdue invoices (30-90 days, various statuses)
+- ✅ Terminated employees (3 records with terminated_at)
+- ✅ Breached SLA tickets (3 records past resolution_deadline)
+- ✅ AuditTrail UI component with S-OX posted indicator
+
+**Phase 6: Quality Audit**
+- ✅ UI package tests: 114 passing
+- ✅ Wizard component: 29 passing tests
+- ✅ AuditTrail component: 22 passing tests
+- ✅ DataTable component: all tests passing
+
+### Generative UI Replication Complete (Phase C.5)
+
+**Status**: ✅ Complete (2026-02-10)
+**Scope**: Replicate generative UI + voice integration from HR app to all 5 remaining apps
+**Architecture Version**: v1.5 (Generative UI + Voice I/O)
+
+**Apps Updated**:
+1. **Sales** (Commit: cc2340c8)
+   - Directive detection: `display:sales:customer:*`, `display:sales:leads:*`
+   - SSEQueryClient integration with onQueryComplete callback
+   - Voice input/output hooks (useVoiceInput, useVoiceOutput)
+   - VITE_MCP_UI_URL configuration
+
+2. **Support** (Commit: cc2340c8)
+   - Directive detection: `display:support:tickets:*`
+   - SSEQueryClient integration
+   - Voice I/O with toggle control
+   - VITE_MCP_UI_URL configuration
+
+3. **Finance** (Commit: eed467df)
+   - Directive detection: `display:finance:budget:*`, `display:finance:quarterly_report:*`
+   - EventSource integration with currentMessageContentRef tracking
+   - Preserved existing features: message history, markdown, confirmations
+   - Voice I/O with visual indicators
+
+4. **Payroll** (Commit: 6f7bc858)
+   - Directive detection: `display:payroll:pay_stub:*`, `display:payroll:pay_runs:*`
+   - ReadableStream integration with directive detection on completion
+   - Created .env.example with VITE_MCP_UI_URL
+   - Voice I/O with listening indicator
+
+5. **Tax** (Commit: 6f7bc858)
+   - Directive detection: `display:tax:quarterly_estimate:*`, `display:tax:filings:*`
+   - ReadableStream integration
+   - Created .env.example
+   - Voice I/O complete
+
+**Key Patterns Implemented**:
+- **Pattern 1** (HR, Sales, Support): SSEQueryClient callback integration
+- **Pattern 2** (Finance): EventSource with content ref tracking
+- **Pattern 3** (Payroll, Tax): ReadableStream with post-completion detection
+
+**Technical Achievement**: Successfully adapted generative UI pattern to three different streaming architectures while preserving existing functionality.
+
+**Documentation**: `.claude/generative-ui-hr-implementation.md`
+
+### Technical Debt Log
+
+- Finance app vitest configuration needs workspace package resolution fix
+- Pre-existing test failures in Finance/Budget/Expense pages (module mocking)
+- Budget approval tests require fixture reset for idempotent runs
+
+### Next Phase: Tax Module
+
+After completing expense reports v1.5, begin Phase 3.2 - Tax Module implementation using TDD:
+1. Write failing tests (RED phase)
+2. Implement minimal code (GREEN phase)
+3. MCP Tax server (port 3107)
+4. Database schema and sample data
+
+---
+
+*Last Updated: February 10, 2026*
+*Architecture Version: 1.5 (Generative UI + Expense Reports)*
+*Document Version: 3.3 (Phase C.5 Generative UI Complete)*

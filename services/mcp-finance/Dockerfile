@@ -1,5 +1,8 @@
 # Tamshai Corp MCP Finance Server
 # Multi-stage build for minimal production image
+#
+# Build context: Repository root (for access to services/shared)
+# Usage: docker build -f services/mcp-finance/Dockerfile .
 
 # =============================================================================
 # BUILD STAGE
@@ -8,15 +11,24 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy shared package first (dependency)
+COPY services/shared ./shared
 
-# Install dependencies
-RUN npm ci
+# Copy mcp-finance package files
+COPY services/mcp-finance/package*.json ./
+
+# Update shared dependency to use local path in container
+RUN sed -i 's|"file:../shared"|"file:./shared"|' package.json
+
+# Build shared package first (required dependency)
+RUN cd shared && npm ci && npm run build
+
+# Install dependencies (regenerates lock file with correct shared path)
+RUN npm install --package-lock-only && npm ci
 
 # Copy source code
-COPY tsconfig.json ./
-COPY src ./src
+COPY services/mcp-finance/tsconfig.json ./
+COPY services/mcp-finance/src ./src
 
 # Build TypeScript
 RUN npm run build
@@ -42,20 +54,18 @@ WORKDIR /app
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+# Copy shared package (referenced via file: link in node_modules)
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
-# Set environment
+# Set environment (PORT set by docker-compose from GitHub variables)
 ENV NODE_ENV=production
-ENV PORT=3102
 
 # Switch to non-root user
 USER nodejs
 
-# Expose port
-EXPOSE 3102
-
-# Health check
+# Health check (PORT from environment)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3102/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
 # Start server
 CMD ["node", "dist/index.js"]

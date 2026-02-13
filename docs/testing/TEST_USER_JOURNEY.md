@@ -10,7 +10,7 @@ This document describes the **test-user.journey** account, a dedicated test acco
 |-------|-------|-------|
 | **Username** | `test-user.journey` | Unique identifier |
 | **Password** | `[STORED IN GITHUB SECRETS]` | See `TEST_USER_PASSWORD` secret |
-| **Email** | `test-user@tamshai.local` | Test email address |
+| **Email** | `test-user@tamshai-playground.local` | Test email address |
 | **TOTP Secret** | Stored in GitHub Secrets | See [TOTP Secret Management](#totp-secret-management) below |
 | **Employee ID** | `TEST001` | Attribute for tracking |
 | **Department** | `Testing` | Attribute for identification |
@@ -43,6 +43,7 @@ The `secretData` field in realm-export.json **ONLY accepts the `value` field**. 
 ```
 
 **⚠️ WRONG FORMAT** (causes Keycloak container crash):
+
 ```json
 {
   "secretData": "{\"value\":\"...\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
@@ -67,11 +68,44 @@ All credentials are stored securely in GitHub Secrets, **not in the codebase**.
 | Secret Name | Environment | Purpose | Env Var Name |
 |-------------|-------------|---------|--------------|
 | `TEST_USER_PASSWORD` | All | Password for test-user.journey E2E account | `TEST_USER_PASSWORD` |
+| `MCP_INTEGRATION_RUNNER_SECRET` | Dev, CI | Client secret for mcp-integration-runner service account (token exchange) | `MCP_INTEGRATION_RUNNER_SECRET` |
 | `DEV_USER_PASSWORD` | Dev | Password for identity-synced corporate users | `DEV_USER_PASSWORD` |
 | `STAGE_USER_PASSWORD` | Stage | Password for identity-synced corporate users | `STAGE_USER_PASSWORD` |
 | `PROD_USER_PASSWORD` | Prod | Password for identity-synced corporate users | `PROD_USER_PASSWORD` |
+| `CUSTOMER_USER_PASSWORD` | All | Password for customer portal test users | `CUSTOMER_USER_PASSWORD` |
 
-**Note**: `TEST_USER_PASSWORD` is for the dedicated E2E test account (test-user.journey), while `{ENV}_USER_PASSWORD` secrets are for corporate employees provisioned via identity-sync.
+**Note**: `TEST_USER_PASSWORD` is for the dedicated E2E test account (test-user.journey), `MCP_INTEGRATION_RUNNER_SECRET` is for integration test authentication via token exchange (primary method — no user passwords needed), `{ENV}_USER_PASSWORD` secrets are for corporate employees provisioned via identity-sync, and `CUSTOMER_USER_PASSWORD` is for customer realm users (<jane.smith@acme.com>, etc.). ROPC (direct access grants) is disabled in all environments.
+
+### Integration Test Service Account
+
+**New in February 2026**: Integration tests now use **Token Exchange (RFC 8693)** via the `mcp-integration-runner` service account instead of ROPC.
+
+**Service Account Details**:
+- **Client ID**: `mcp-integration-runner`
+- **Client Secret**: Stored in `MCP_INTEGRATION_RUNNER_SECRET` GitHub Secret
+- **Client Type**: CONFIDENTIAL
+- **Enabled Flows**: Client Credentials + Token Exchange (impersonation)
+- **Disabled Flows**: ROPC, Standard Flow (no browser)
+- **Permissions**: `impersonation` role from `realm-management` client
+- **Environment**: Dev and CI only (not created in stage/prod)
+
+**Authentication Flow**:
+1. Integration test obtains client credentials token using `MCP_INTEGRATION_RUNNER_SECRET`
+2. Test exchanges token to impersonate a test user (e.g., alice.chen, bob.martinez)
+3. Test uses impersonated token to call MCP endpoints
+4. No user passwords required in test code (only service account secret)
+
+**Benefits**:
+- ✅ Follows OAuth 2.0 Security Best Current Practice (RFC 8252)
+- ✅ No user passwords in test code (centralized secret management)
+- ✅ Fine-grained permissions (impersonation only, no other privileges)
+- ✅ Clear audit trail (service account shown in logs)
+- ✅ Easier secret rotation (single secret vs. multiple user passwords)
+- ✅ Test environments only (dev/CI), not in stage/prod
+
+**Note**: ROPC (direct access grants) is disabled in all environments. `MCP_INTEGRATION_RUNNER_SECRET` is required for integration test authentication.
+
+**See Also**: `.claude/plans/test-auth-refactoring.md` for complete migration plan.
 
 #### TOTP Secrets
 
@@ -81,6 +115,7 @@ All credentials are stored securely in GitHub Secrets, **not in the codebase**.
 | `TEST_USER_TOTP_SECRET` | BASE32-encoded | Used by E2E tests for TOTP code generation |
 
 **Setting up the secrets**:
+
 ```bash
 # 1. Choose your raw secret (keep this secure)
 RAW_SECRET="YourSecretKeyHere"
@@ -146,16 +181,51 @@ All deployment workflows now use a **consistent approach** for test-user.journey
 
 **Reference**: See `deploy-vps.yml` and `deploy-to-gcp.yml` for implementation details.
 
-### E2E Test TOTP Auto-Capture
+### E2E Test TOTP Provisioning (globalSetup)
 
-The E2E test framework automatically handles TOTP configuration:
+The E2E test framework uses a `globalSetup` hook (`tests/e2e/global-setup.ts`) that runs before all tests:
 
-1. **If TOTP is pre-configured**: Test uses the secret from environment variable or cached file
-2. **If TOTP setup page appears**: Test clicks "Unable to scan?", extracts the secret, configures TOTP, and saves the secret for future runs
+1. **When `TEST_USER_TOTP_SECRET` is set**: globalSetup deletes and recreates `test-user.journey` via the Keycloak Partial Import API with the known TOTP secret, then writes a **Base32 bridge value** to the cache file.
+2. **When `TEST_USER_TOTP_SECRET` is NOT set**: globalSetup does nothing; tests fall back to auto-capture + cached file.
+
+**Base32 Encoding Bridge** (February 2026):
+
+Keycloak and otplib use different TOTP key formats. globalSetup bridges this:
+- Keycloak stores the raw string in `secretData.value` and uses `value.getBytes(UTF-8)` as the HMAC key
+- otplib expects a Base32-encoded string and `Base32.decode()`s it before using as HMAC key
+- globalSetup computes `Base32.encode(Buffer.from(rawSecret, 'utf-8'))` and writes **that** to the cache file
+- When tests read the cache file and pass it to otplib, `Base32.decode()` produces the same UTF-8 bytes Keycloak uses
+
+```
+TEST_USER_TOTP_SECRET="<raw-secret>"       (env var, stored raw in Keycloak)
+                  ↓ Base32.encode(Buffer.from(..., 'utf-8'))
+Cache file:    "<base32-bridge-value>"     (Base32 bridge value for otplib)
+                  ↓ otplib Base32.decode()
+HMAC key bytes: same as Keycloak's UTF-8 bytes → matching TOTP codes
+```
 
 **Cached secrets location**: `tests/e2e/.totp-secrets/test-user.journey-{env}.secret`
 
 **Important**: Run E2E tests with `--workers=1` to avoid session conflicts when multiple tests authenticate as the same user simultaneously.
+
+## Customer Test Users
+
+Customer users authenticate against the **tamshai-customers** realm (separate from the employee `tamshai-corp` realm). They do NOT require TOTP — only username/password.
+
+| Username | Role | Organization | Password Source |
+|----------|------|--------------|-----------------|
+| `jane.smith@acme.com` | Lead Contact | Acme Corporation | `CUSTOMER_USER_PASSWORD` |
+| `bob.developer@acme.com` | Basic Contact | Acme Corporation | `CUSTOMER_USER_PASSWORD` |
+| `mike.manager@globex.com` | Lead Contact | Globex Industries | `CUSTOMER_USER_PASSWORD` |
+| `sara.support@globex.com` | Basic Contact | Globex Industries | `CUSTOMER_USER_PASSWORD` |
+| `peter.principal@initech.com` | Lead Contact | Initech Solutions | `CUSTOMER_USER_PASSWORD` |
+| `tim.tech@initech.com` | Basic Contact | Initech Solutions | `CUSTOMER_USER_PASSWORD` |
+
+**Provisioning**: Customer users are imported from `keycloak/realm-export-customers-dev.json` by Docker, then `sync-customer-realm.sh` **idempotently** ensures their passwords and group membership are correct. This is critical after a Phoenix rebuild — the realm import creates users but with hashed/unknown passwords.
+
+**E2E Tests**: `tests/e2e/specs/customer-login-journey.ui.spec.ts` (13 tests)
+
+**Required env var**: `CUSTOMER_USER_PASSWORD` (GitHub Secret: `CUSTOMER_USER_PASSWORD`)
 
 ## Access Privileges
 
@@ -181,18 +251,25 @@ The E2E test framework automatically handles TOTP configuration:
 The test user is configured in **all environments**:
 
 ### Dev (Local Development)
-- **Realm Export**: `keycloak/realm-export-dev.json`
-- **Base URL**: `https://www.tamshai.local`
-- **Keycloak URL**: `https://www.tamshai.local/auth`
-- **Client ID**: `tamshai-website`
+
+- **Realm Export**: `keycloak/realm-export-dev.json` (employee), `keycloak/realm-export-customers-dev.json` (customer)
+- **Base URL**: `https://www.tamshai-playground.local:${PORT_CADDY_HTTPS}`
+- **Keycloak URL**: `https://www.tamshai-playground.local:${PORT_CADDY_HTTPS}/auth` (via Caddy) or `http://localhost:${PORT_KEYCLOAK}/auth` (direct)
+- **Keycloak Admin**: `https://www.tamshai-playground.local:${PORT_CADDY_HTTPS}/auth/admin` (admin/admin)
+- **Client ID**: `tamshai-website` (employee), `customer-portal` (customer)
+- **Customer Portal**: `https://customers.tamshai-playground.local:${PORT_CADDY_HTTPS}`
+
+> **Port variables** are defined in `infrastructure/docker/.env` (generated by Terraform). Default dev values: `PORT_CADDY_HTTPS=443`, `PORT_KEYCLOAK=8180`.
 
 ### Stage (VPS)
+
 - **Realm Export**: `keycloak/realm-export.json` (synced to VPS)
 - **Base URL**: `https://vps.tamshai.com`
 - **Keycloak URL**: `https://vps.tamshai.com/auth`
 - **Client ID**: `tamshai-website`
 
 ### Prod (GCP)
+
 - **Realm Export**: `keycloak/realm-export.json` (synced to GCP)
 - **Marketing Site URL**: `https://prod.tamshai.com` (GCS bucket - employee-login.html)
 - **Portal App URL**: `https://app.tamshai.com/app` (Cloud Run - SPA)
@@ -210,6 +287,7 @@ The test user is configured in **all environments**:
 **Location**: `scripts/test/journey-e2e-automated.sh`
 
 **Usage**:
+
 ```bash
 # Test local dev environment
 ./scripts/test/journey-e2e-automated.sh dev
@@ -229,6 +307,7 @@ The test user is configured in **all environments**:
 
 **Dependencies**:
 - `oathtool` - For TOTP code generation
+
   ```bash
   # Ubuntu/Debian
   sudo apt-get install oathtool
@@ -242,6 +321,7 @@ The test user is configured in **all environments**:
 **Location**: `tests/e2e/specs/login-journey.ui.spec.ts`
 
 **Prerequisites**:
+
 ```bash
 cd tests/e2e
 
@@ -268,36 +348,42 @@ This retrieves:
 
 **Running E2E Tests**:
 
-**IMPORTANT**: Always use `--workers=1` to avoid session conflicts when multiple tests authenticate as the same user.
+The Playwright config enforces `workers: 1` and `fullyParallel: false`, so you do NOT need to pass `--workers=1` manually.
 
 ```bash
 cd tests/e2e
 
-# Set environment variables (get from GitHub Secrets)
-export TEST_ENV=dev           # or stage, prod
-export TEST_USER_PASSWORD="..."    # From GitHub Secrets
-export TEST_USER_TOTP_SECRET="..." # From GitHub Secrets (BASE32)
+# Load secrets from GitHub (outputs export statements)
+eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
 
-# Run login journey tests (MUST use --workers=1)
-npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+# Also load DEV_USER_PASSWORD and CUSTOMER_USER_PASSWORD from .env
+# (needed for gateway API tests and customer login tests)
+export DEV_USER_PASSWORD=$(grep '^DEV_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
+export CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
 
-# Run with visible browser
-npx playwright test login-journey.ui.spec.ts --workers=1 --headed
+# Run employee login journey tests (6 tests, ~13s)
+npx playwright test specs/login-journey.ui.spec.ts --reporter=list
+
+# Run customer login journey tests (13 tests, ~16s)
+npx playwright test specs/customer-login-journey.ui.spec.ts --reporter=list
+
+# Run API gateway tests (21 tests, ~3s)
+npx playwright test specs/gateway.api.spec.ts --reporter=list
+
+# Run all core login + API tests together
+npx playwright test specs/login-journey.ui.spec.ts specs/customer-login-journey.ui.spec.ts specs/gateway.api.spec.ts --reporter=list
+
+# Run with visible browser (headed mode)
+npx playwright test specs/login-journey.ui.spec.ts --headed
 
 # Debug mode (step through)
-npx playwright test login-journey.ui.spec.ts --workers=1 --debug
-
-# Run all tests for a specific environment
-TEST_ENV=dev npx playwright test --workers=1
+npx playwright test specs/login-journey.ui.spec.ts --debug
 ```
 
-**Quick Start (One-liner)**:
-```bash
-# Dev environment
-cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env) && TEST_ENV=dev npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+**Quick Start (One-liner for dev)**:
 
-# Stage environment
-cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env) && TEST_ENV=stage npx playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+```bash
+cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env) && export DEV_USER_PASSWORD=$(grep '^DEV_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2) && export CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2) && npx playwright test specs/login-journey.ui.spec.ts specs/customer-login-journey.ui.spec.ts --reporter=list
 ```
 
 **TOTP Auto-Capture**: If test-user.journey doesn't have TOTP configured, the test framework will automatically:
@@ -307,6 +393,7 @@ cd tests/e2e && eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
 4. Complete TOTP setup
 
 **Example Test Case**:
+
 ```typescript
 test('test-user.journey can login and access app', async ({ page }) => {
   // TOTP secret from environment variable (BASE32-encoded)
@@ -357,6 +444,7 @@ oathtool --totp --base32 "$TEST_USER_TOTP_SECRET"
 ### Automated Generation (in scripts)
 
 **Bash**:
+
 ```bash
 # Get BASE32 secret from environment variable (set in CI or local .env)
 TOTP_SECRET="${TEST_USER_TOTP_SECRET:?TEST_USER_TOTP_SECRET environment variable required}"
@@ -365,6 +453,7 @@ echo "Current TOTP: $TOTP_CODE"
 ```
 
 **Node.js/TypeScript**:
+
 ```typescript
 import * as OTPAuth from 'otpauth';
 
@@ -384,6 +473,7 @@ console.log('Current TOTP:', code);
 ```
 
 **Python**:
+
 ```python
 import os
 import pyotp
@@ -485,12 +575,14 @@ npx playwright test --grep "test-user.journey"
 After making changes to the test user in realm exports, sync to Keycloak:
 
 ### Dev (Local)
+
 ```bash
 cd keycloak/scripts
 ./docker-sync-realm.sh dev
 ```
 
 ### Stage (VPS)
+
 ```bash
 # Deploy updated realm to VPS
 gh workflow run deploy-vps.yml --ref main
@@ -502,6 +594,7 @@ cd /opt/tamshai
 ```
 
 ### Prod (GCP)
+
 ```bash
 # Sync to GCP Keycloak instance
 # (Requires manual implementation - see Phase 2)
@@ -512,16 +605,31 @@ cd /opt/tamshai
 Verify the test user exists in Keycloak:
 
 ```bash
-# Dev (local)
-curl -s http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/token \
-  -d "client_id=tamshai-website" \
-  -d "username=test-user.journey" \
-  -d "password=$TEST_USER_PASSWORD" \
-  -d "grant_type=password" \
+# Dev (local) — use PORT_KEYCLOAK from .env (direct) or PORT_CADDY_HTTPS (via Caddy)
+# Load port from .env:
+source infrastructure/docker/.env
+
+# Preferred: Token exchange via mcp-integration-runner (no password needed)
+# Step 1: Get service account token
+SVC_TOKEN=$(curl -s http://localhost:${PORT_KEYCLOAK}/auth/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-integration-runner" \
+  -d "client_secret=$MCP_INTEGRATION_RUNNER_SECRET" \
+  -d "grant_type=client_credentials" \
+  | jq -r '.access_token')
+
+# Step 2: Exchange for user token
+curl -s http://localhost:${PORT_KEYCLOAK}/auth/realms/tamshai-corp/protocol/openid-connect/token \
+  -d "client_id=mcp-integration-runner" \
+  -d "client_secret=$MCP_INTEGRATION_RUNNER_SECRET" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+  -d "subject_token=$SVC_TOKEN" \
+  -d "requested_subject=test-user.journey" \
+  -d "scope=openid profile roles" \
   | jq -r '.access_token'
 
 # If successful, you'll get an access token
-# If failed, check Keycloak logs
+# If failed, check Keycloak logs: docker logs tamshai-pg-keycloak
+# Note: ROPC (grant_type=password) is disabled in all environments
 ```
 
 ## Troubleshooting
@@ -531,6 +639,7 @@ curl -s http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/t
 **Cause**: User not synced to Keycloak yet
 
 **Fix**:
+
 ```bash
 # Sync realm configuration
 cd keycloak/scripts
@@ -542,6 +651,7 @@ cd keycloak/scripts
 **Cause**: Time drift, incorrect secret, wrong format (raw vs BASE32), or **TOTP secret mismatch after deployment**
 
 **Fix**:
+
 ```bash
 # Verify system time is correct
 date
@@ -567,6 +677,7 @@ The `deploy-vps.yml` workflow clears TOTP credentials on each stage deployment. 
 3. But env var overrides cached file, using OLD secret
 
 **Solution**: After fresh deployment, run WITHOUT `TEST_USER_TOTP_SECRET` env var:
+
 ```bash
 # Clear cached secret and let test auto-capture
 rm -rf tests/e2e/.totp-secrets/test-user.journey-stage.secret
@@ -585,6 +696,7 @@ cd tests/e2e && npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright
 - Test targets wrong environment URLs
 
 **Solution**: Use `cross-env` package:
+
 ```bash
 # WRONG (Windows)
 set TEST_ENV=stage && set TEST_USER_PASSWORD=xxx && npx playwright test ...
@@ -613,22 +725,24 @@ npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-jour
 4. **Secret Caching**: Saves captured secret to `.totp-secrets/` for future test runs
 
 **Test Command**:
+
 ```bash
 cd tests/e2e
 TEST_ENV=prod npx playwright test login-journey.ui.spec.ts:375 --project=chromium --workers=1
 ```
 
-**For Fresh Deployments (Phoenix Principle)**:
+**For Fresh Deployments (Phoenix Rebuild)**:
 
-When doing a full infrastructure rebuild (terraform destroy + apply):
+When doing a full infrastructure rebuild (`terraform destroy + terraform apply`):
 
-1. **GitHub Secrets must be set**:
-   - `TEST_USER_TOTP_SECRET_RAW` = raw secret for Keycloak
-   - `TEST_USER_TOTP_SECRET` = BASE32 secret for E2E tests
+1. **Terraform handles** everything: containers start, realms import, sync scripts run
+2. **Employee realm**: `sync-realm.sh` sets corporate user passwords from `DEV_USER_PASSWORD`
+3. **Customer realm**: `sync-customer-realm.sh` idempotently sets customer passwords from `CUSTOMER_USER_PASSWORD`
+4. **test-user.journey**: globalSetup recreates the user with TOTP on first E2E test run (requires `TEST_USER_PASSWORD` + `TEST_USER_TOTP_SECRET` env vars)
 
-2. **deploy-to-gcp.yml** substitutes the secret into realm-export.json during build
+**Key insight (February 2026)**: The `sync-customer-realm.sh` script always sets passwords and group membership, even when users already exist from the realm import. This is critical because Docker's `--import-realm` creates users with hashed passwords that don't match `CUSTOMER_USER_PASSWORD`.
 
-3. **First container start** imports the realm with TOTP credentials
+**Container names**: Docker Compose uses project name `tamshai-playground`, so containers are prefixed `tamshai-pg-` (e.g., `tamshai-pg-keycloak`, not `tamshai-keycloak`).
 
 **Manual Alternative** (if E2E capture fails):
 1. Login to Keycloak Admin Console
@@ -710,7 +824,7 @@ Then use `urls.site` for employee-login.html and `urls.app` for portal pages.
 - Shell command lines via cross-env
 - kcadm.sh password setting
 
-**Resolution**: Changed `TEST_USER_PASSWORD` from `Tu97db27a50651!Tst` to `Tu97db27a50651@Tst` (replaced `!` with `@`).
+**Resolution**: Changed `TEST_USER_PASSWORD` to replace the `!` character with `@` (bash-safe character).
 
 **Safe special characters for passwords**: `@`, `#`, `%`, `^`, `_`, `-`, `+`, `=`
 
@@ -751,14 +865,19 @@ See [E2E_USER_TESTS.md](./E2E_USER_TESTS.md#special-characters-in-passwords) for
 
 ---
 
-**Last Updated**: January 16, 2026
+**Last Updated**: February 9, 2026
 **Maintainer**: QA Team
-**Status**: ✅ Active - Verified on stage and prod (January 16, 2026)
+**Status**: ✅ Active - Verified on dev (February 9, 2026: 6/6 employee + 13/13 customer tests passing)
 
 ## Change Log
 
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-02-09 | Added customer test users section and CUSTOMER_USER_PASSWORD | Customer realm provisioning now fully wired through Terraform |
+| 2026-02-09 | Documented TOTP Base32 encoding bridge (globalSetup) | Fixed TOTP mismatch between Keycloak raw storage and otplib Base32 expectation |
+| 2026-02-09 | Updated running syntax with correct export-based commands | Verified working commands from Phoenix rebuild testing |
+| 2026-02-09 | Updated Keycloak URLs to use PORT_KEYCLOAK/PORT_CADDY_HTTPS variables | Avoid hardcoded ports; reference .env variables |
+| 2026-02-09 | Added Phoenix rebuild insights (container names, idempotent sync) | Container prefix is `tamshai-pg-`, sync script always sets passwords |
 | 2026-01-16 | Verified E2E tests on stage and prod | All 6 tests passing on both environments |
 | 2026-01-16 | Added Windows cross-env requirement | Windows env vars don't propagate to child processes |
 | 2026-01-16 | Documented TOTP secret mismatch after deployment | Stage clears TOTP on each deploy - use auto-capture |

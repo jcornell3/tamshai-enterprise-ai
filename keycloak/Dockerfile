@@ -4,7 +4,7 @@
 # =============================================================================
 # Stage 1: Fetch the Cloud SQL JDBC Socket Factory and jq binary
 # =============================================================================
-FROM alpine:latest AS deps
+FROM alpine:3.19 AS deps
 RUN apk add --no-cache curl
 WORKDIR /libs
 
@@ -66,6 +66,10 @@ COPY --from=deps /usr/local/bin/jq /usr/local/bin/jq
 ENV CURL_CA_BUNDLE=/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 
 # The realm recreation script needs curl and jq, both are now available as static binaries
+
+# Security: Explicitly run as keycloak user (UID 1000, inherited from base image)
+# This makes the non-root user explicit for security scanners
+USER 1000
 
 # Start Keycloak in production mode with realm import
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]

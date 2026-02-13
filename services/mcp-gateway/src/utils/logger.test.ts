@@ -120,5 +120,40 @@ describe('Logger', () => {
       expect(capturedLogs).toHaveLength(1);
       expect(capturedLogs[0]).toContain('Should appear');
     });
+
+    it('should include stack trace when logging Error objects', () => {
+      const testLogger = createTestLogger();
+      const error = new Error('Something went wrong');
+      testLogger.error(error.message, { stack: error.stack });
+
+      expect(capturedLogs.length).toBe(1);
+      expect(capturedLogs[0]).toContain('[ERROR]');
+      expect(capturedLogs[0]).toContain('Something went wrong');
+      expect(capturedLogs[0]).toContain('stack');
+    });
+
+    it('should handle metadata with multiple fields', () => {
+      const testLogger = createTestLogger();
+      testLogger.info('Request received', {
+        method: 'POST',
+        path: '/api/query',
+        userId: 'user-123',
+        duration: 42,
+      });
+
+      expect(capturedLogs.length).toBe(1);
+      expect(capturedLogs[0]).toContain('"method":"POST"');
+      expect(capturedLogs[0]).toContain('"path":"/api/query"');
+      expect(capturedLogs[0]).toContain('"userId":"user-123"');
+      expect(capturedLogs[0]).toContain('"duration":42');
+    });
+
+    it('should handle special characters in log messages', () => {
+      const testLogger = createTestLogger();
+      testLogger.info('Query: "SELECT * FROM users WHERE name = \'alice\'"');
+
+      expect(capturedLogs.length).toBe(1);
+      expect(capturedLogs[0]).toContain('SELECT * FROM users');
+    });
   });
 });

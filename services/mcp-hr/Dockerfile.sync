@@ -1,6 +1,9 @@
 # Tamshai Corp Identity Sync
 # Runs the identity sync script to provision HR employees in Keycloak
 #
+# Build context: Repository root (for access to services/shared)
+# Usage: docker build -f services/mcp-hr/Dockerfile.sync .
+#
 # This is a one-shot container that:
 # 1. Waits for PostgreSQL and Keycloak to be healthy
 # 2. Syncs all active HR employees to Keycloak
@@ -19,15 +22,24 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy shared package first (dependency)
+COPY services/shared ./shared
+
+# Copy mcp-hr package files
+COPY services/mcp-hr/package*.json ./
+
+# Update shared dependency to use local path in container
+RUN sed -i 's|"file:../shared"|"file:./shared"|' package.json
+
+# Build shared package first (required dependency)
+RUN cd shared && npm ci && npm run build
 
 # Install all dependencies (including devDependencies for tsx)
-RUN npm ci
+RUN npm install --package-lock-only && npm ci
 
 # Copy source code
-COPY tsconfig.json ./
-COPY src ./src
+COPY services/mcp-hr/tsconfig.json ./
+COPY services/mcp-hr/src ./src
 
 # =============================================================================
 # RUNTIME STAGE
@@ -47,6 +59,9 @@ COPY --from=builder /app/tsconfig.json ./
 
 # Set environment
 ENV NODE_ENV=production
+
+# Security: Run as non-root user
+USER node
 
 # Use ENTRYPOINT so docker compose run can append arguments (e.g., --force-password-reset)
 # CMD would be replaced entirely by arguments, ENTRYPOINT appends them

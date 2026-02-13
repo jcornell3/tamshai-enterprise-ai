@@ -357,13 +357,13 @@ export default function CustomerDetail({
                   </p>
                   <p className="text-sm text-secondary-600">Total</p>
                 </div>
-                <div className="bg-green-50 p-3 rounded-lg text-center">
+                <div className="bg-green-50 p-3 rounded-lg text-center" data-testid="total-revenue-card">
                   <p className="text-2xl font-bold text-green-600">
                     ${totalRevenue.toLocaleString()}
                   </p>
                   <p className="text-sm text-secondary-600">Total Revenue</p>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
+                <div className="bg-blue-50 p-3 rounded-lg text-center" data-testid="pipeline-card">
                   <p className="text-2xl font-bold text-blue-600">
                     ${pipelineValue.toLocaleString()}
                   </p>

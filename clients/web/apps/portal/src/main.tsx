@@ -57,10 +57,19 @@ try {
   );
 } catch (error) {
   console.error('Fatal initialization error:', error);
-  document.getElementById('root')!.innerHTML = `
-    <div style="padding:20px;color:red;font-family:monospace">
-      <h1>Initialization Error</h1>
-      <pre>${error}</pre>
-    </div>
-  `;
+  // Security: Create DOM elements safely to prevent XSS via error message
+  const rootEl = document.getElementById('root')!;
+  const container = document.createElement('div');
+  container.style.cssText = 'padding:20px;color:red;font-family:monospace';
+
+  const heading = document.createElement('h1');
+  heading.textContent = 'Initialization Error';
+
+  const pre = document.createElement('pre');
+  pre.textContent = error instanceof Error ? error.message : String(error);
+
+  container.appendChild(heading);
+  container.appendChild(pre);
+  rootEl.innerHTML = '';
+  rootEl.appendChild(container);
 }

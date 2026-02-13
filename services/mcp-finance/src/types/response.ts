@@ -64,6 +64,7 @@ export interface MCPPendingConfirmationResponse {
   message: string;
   action: string;
   data: Record<string, unknown>;
+  confirmationData: Record<string, unknown>; // Alias for data (test compatibility)
 }
 
 /**
@@ -125,5 +126,6 @@ export function createPendingConfirmationResponse(
     message,
     action: data.action as string,
     data,
+    confirmationData: data, // Alias for test compatibility
   };
 }

@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
-import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
+import { ApprovalCard, TruncationWarning, DataTable, ConfirmDialog } from '@tamshai/ui';
+import type { ColumnDef, BulkAction } from '@tamshai/ui';
 import type { Invoice } from '../types';
 
 /**
@@ -46,13 +47,70 @@ export function InvoicesPage() {
   // Modal state
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
-  // Confirmation state
+  // Selection state for bulk operations
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+
+  // Confirmation state (API-based human-in-the-loop)
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     confirmationId: string;
     message: string;
-    invoice: Invoice;
-    action: 'approve' | 'delete' | 'pay';
+    invoice?: Invoice;
+    invoices?: Invoice[];
+    action: 'approve' | 'delete' | 'pay' | 'bulk_approve' | 'bulk_reject';
   } | null>(null);
+
+  // Local bulk action confirmation dialog state
+  const [bulkConfirmDialog, setBulkConfirmDialog] = useState<{
+    isOpen: boolean;
+    action: string;
+    invoices: Invoice[];
+    isProcessing: boolean;
+  }>({ isOpen: false, action: '', invoices: [], isProcessing: false });
+
+  // Helper functions (defined early for use in callbacks)
+  const formatCurrency = useCallback((amount: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  }, []);
+
+  const formatDate = useCallback((dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }, []);
+
+  const getStatusBadgeClass = useCallback((status: string): string => {
+    switch (status) {
+      case 'PAID':
+        return 'badge-success';
+      case 'PENDING':
+        return 'badge-warning';
+      case 'APPROVED':
+        return 'badge-primary';
+      case 'DRAFT':
+        return 'badge-secondary';
+      case 'REJECTED':
+      case 'CANCELLED':
+        return 'badge-danger';
+      default:
+        return 'badge-secondary';
+    }
+  }, []);
+
+  const isOverdue = useCallback((invoice: Invoice): boolean => {
+    if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') return false;
+    const dueDate = new Date(invoice.due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  }, []);
 
   // Fetch invoices
   const {
@@ -203,19 +261,253 @@ export function InvoicesPage() {
   const invoices = invoicesResponse?.data || [];
   const isTruncated = invoicesResponse?.metadata?.truncated;
 
-  // Check if invoice is overdue
-  const isOverdue = (invoice: Invoice): boolean => {
-    if (invoice.status === 'PAID' || invoice.status === 'CANCELLED') return false;
-    const dueDate = new Date(invoice.due_date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return dueDate < today;
+  // Bulk approve mutation
+  const bulkApproveMutation = useMutation({
+    mutationFn: async (invoiceIds: string[]) => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const url = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/bulk_approve_invoices`
+        : '/api/mcp/finance/bulk_approve_invoices';
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ invoiceIds }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to bulk approve invoices');
+      }
+      return response.json() as Promise<APIResponse<{ approved: number }>>;
+    },
+    onSuccess: (data, invoiceIds) => {
+      if (data.status === 'pending_confirmation') {
+        const selectedInvoices = invoices.filter((i) => invoiceIds.includes(i.id));
+        const totalAmount = selectedInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+        setPendingConfirmation({
+          confirmationId: data.confirmationId!,
+          message: data.message || `Approve ${selectedInvoices.length} invoices totaling ${formatCurrency(totalAmount)}?`,
+          invoices: selectedInvoices,
+          action: 'bulk_approve',
+        });
+      } else {
+        setSelectedRows([]);
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      }
+    },
+  });
+
+  // Handle bulk actions - show confirmation dialog first
+  const handleBulkAction = useCallback((actionId: string, selectedItems: Invoice[]) => {
+    if (actionId === 'export') {
+      // Export doesn't need confirmation
+      handleExportInvoices(selectedItems);
+      return;
+    }
+
+    // Show confirmation dialog for approve/reject actions
+    setBulkConfirmDialog({
+      isOpen: true,
+      action: actionId,
+      invoices: selectedItems,
+      isProcessing: false,
+    });
+  }, []);
+
+  // Execute bulk action after confirmation
+  const handleBulkConfirm = useCallback(async (reason?: string) => {
+    const { action, invoices: selectedInvoices } = bulkConfirmDialog;
+    const selectedIds = selectedInvoices.map((i) => i.id);
+
+    setBulkConfirmDialog((prev) => ({ ...prev, isProcessing: true }));
+
+    try {
+      switch (action) {
+        case 'approve':
+          await bulkApproveMutation.mutateAsync(selectedIds);
+          break;
+        case 'reject':
+          // TODO: Implement bulk reject with reason
+          console.log('Bulk reject with reason:', reason);
+          break;
+        default:
+          console.warn('Unknown bulk action:', action);
+      }
+      setSelectedRows([]);
+    } finally {
+      setBulkConfirmDialog({ isOpen: false, action: '', invoices: [], isProcessing: false });
+    }
+  }, [bulkConfirmDialog, bulkApproveMutation]);
+
+  // Cancel bulk action
+  const handleBulkCancel = useCallback(() => {
+    setBulkConfirmDialog({ isOpen: false, action: '', invoices: [], isProcessing: false });
+  }, []);
+
+  // Export invoices as CSV
+  const handleExportInvoices = (invoicesToExport: Invoice[]) => {
+    const headers = ['Invoice #', 'Vendor', 'Amount', 'Due Date', 'Department', 'Status'];
+    const rows = invoicesToExport.map((i) => [
+      i.invoice_number,
+      i.vendor_name,
+      i.amount.toString(),
+      i.due_date,
+      i.department_code || '',
+      i.status,
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `invoices-export-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
+
+  // Define table columns
+  const columns: ColumnDef<Invoice>[] = useMemo(() => [
+    {
+      id: 'invoice_number',
+      header: 'Invoice #',
+      accessor: 'invoice_number',
+      sortable: true,
+      cell: (value, row) => (
+        <button
+          onClick={() => setSelectedInvoice(row)}
+          className="text-primary-600 hover:underline font-medium"
+          data-testid="invoice-link"
+        >
+          {String(value)}
+        </button>
+      ),
+    },
+    {
+      id: 'vendor_name',
+      header: 'Vendor',
+      accessor: 'vendor_name',
+      sortable: true,
+    },
+    {
+      id: 'amount',
+      header: 'Amount',
+      accessor: 'amount',
+      sortable: true,
+      align: 'right',
+      cell: (value) => formatCurrency(Number(value)),
+    },
+    {
+      id: 'due_date',
+      header: 'Due Date',
+      accessor: 'due_date',
+      sortable: true,
+      cell: (value, row) => {
+        const overdue = isOverdue(row);
+        return (
+          <span className={overdue ? 'text-danger-600 font-medium' : ''}>
+            {formatDate(String(value))}
+            {overdue && <span className="ml-1 text-xs">(Overdue)</span>}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'department_code',
+      header: 'Department',
+      accessor: (row) => row.department_code || 'N/A',
+      sortable: true,
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      accessor: 'status',
+      sortable: true,
+      cell: (value) => (
+        <span className={getStatusBadgeClass(String(value))} data-testid="status-badge">
+          {String(value)}
+        </span>
+      ),
+    },
+  ], []);
+
+  // Define bulk actions
+  const bulkActions: BulkAction[] = useMemo(() => {
+    if (!canWrite) return [];
+
+    return [
+      {
+        id: 'approve',
+        label: 'Approve',
+        variant: 'primary',
+        requiresConfirmation: true,
+      },
+      {
+        id: 'reject',
+        label: 'Reject',
+        variant: 'destructive',
+        requiresConfirmation: true,
+      },
+      {
+        id: 'export',
+        label: 'Export',
+        variant: 'neutral',
+      },
+    ];
+  }, [canWrite]);
+
+  // Row actions renderer
+  const renderRowActions = useCallback((invoice: Invoice) => {
+    if (!canWrite) return null;
+
+    return (
+      <div className="flex gap-2">
+        {invoice.status === 'PENDING' && (
+          <button
+            onClick={() => approveMutation.mutate(invoice.id)}
+            disabled={approveMutation.isPending}
+            className="text-success-600 hover:text-success-700 text-sm font-medium"
+            data-testid="approve-button"
+          >
+            Approve
+          </button>
+        )}
+        {invoice.status === 'APPROVED' && (
+          <button
+            onClick={() => payMutation.mutate(invoice.id)}
+            disabled={payMutation.isPending}
+            className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+            data-testid="pay-button"
+          >
+            Mark Paid
+          </button>
+        )}
+        {invoice.status === 'DRAFT' && (
+          <button
+            onClick={() => deleteMutation.mutate(invoice.id)}
+            disabled={deleteMutation.isPending}
+            className="text-danger-600 hover:text-danger-700 text-sm font-medium"
+            data-testid="delete-button"
+          >
+            Delete
+          </button>
+        )}
+      </div>
+    );
+  }, [canWrite, approveMutation, payMutation, deleteMutation]);
 
   // Apply filters
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
-      if (statusFilter && invoice.status !== statusFilter) return false;
+      if (statusFilter && invoice.status.toUpperCase() !== statusFilter.toUpperCase()) return false;
       if (vendorFilter && !invoice.vendor_name.toLowerCase().includes(vendorFilter.toLowerCase())) return false;
       if (departmentFilter && invoice.department_code !== departmentFilter) return false;
       if (startDate && new Date(invoice.due_date) < new Date(startDate)) return false;
@@ -251,49 +543,14 @@ export function InvoicesPage() {
     setShowOverdueOnly(false);
   };
 
-  // Format currency
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  // Format date
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
-  // Get status badge class
-  const getStatusBadgeClass = (status: string): string => {
-    switch (status) {
-      case 'PAID':
-        return 'badge-success';
-      case 'PENDING':
-        return 'badge-warning';
-      case 'APPROVED':
-        return 'badge-primary';
-      case 'DRAFT':
-        return 'badge-secondary';
-      case 'REJECTED':
-      case 'CANCELLED':
-        return 'badge-danger';
-      default:
-        return 'badge-secondary';
-    }
-  };
-
   // Handle confirmation complete
   const handleConfirmationComplete = (success: boolean) => {
     setPendingConfirmation(null);
     if (success) {
+      // Clear selection on successful bulk operations
+      if (pendingConfirmation?.action?.startsWith('bulk_')) {
+        setSelectedRows([]);
+      }
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     }
   };
@@ -360,18 +617,48 @@ export function InvoicesPage() {
         <p className="page-subtitle">Manage vendor invoices and payments</p>
       </div>
 
-      {/* Pending Confirmation */}
+      {/* Bulk Action Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={bulkConfirmDialog.isOpen}
+        title={`${bulkConfirmDialog.action === 'approve' ? 'Approve' : 'Reject'} Invoices`}
+        message={`Are you sure you want to ${bulkConfirmDialog.action} ${bulkConfirmDialog.invoices.length} invoice${bulkConfirmDialog.invoices.length !== 1 ? 's' : ''}?`}
+        confirmLabel={bulkConfirmDialog.action === 'approve' ? 'Approve' : 'Reject'}
+        variant={bulkConfirmDialog.action === 'reject' ? 'destructive' : 'primary'}
+        isLoading={bulkConfirmDialog.isProcessing}
+        showReasonInput={bulkConfirmDialog.action === 'reject'}
+        reasonPlaceholder="Enter reason for rejection..."
+        onConfirm={handleBulkConfirm}
+        onCancel={handleBulkCancel}
+        details={{
+          count: bulkConfirmDialog.invoices.length,
+          totalAmount: formatCurrency(
+            bulkConfirmDialog.invoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
+          ),
+        }}
+      />
+
+      {/* Pending Confirmation (API-based human-in-the-loop) */}
       {pendingConfirmation && (
-        <div className="mb-6" data-testid="confirmation-dialog">
+        <div className="mb-6" data-testid="api-confirmation">
           <ApprovalCard
             confirmationId={pendingConfirmation.confirmationId}
             message={pendingConfirmation.message}
-            confirmationData={{
-              action: pendingConfirmation.action,
-              invoiceNumber: pendingConfirmation.invoice.invoice_number,
-              vendorName: pendingConfirmation.invoice.vendor_name,
-              amount: formatCurrency(pendingConfirmation.invoice.amount),
-            }}
+            confirmationData={
+              pendingConfirmation.invoices
+                ? {
+                    action: pendingConfirmation.action,
+                    count: pendingConfirmation.invoices.length,
+                    totalAmount: formatCurrency(
+                      pendingConfirmation.invoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
+                    ),
+                  }
+                : {
+                    action: pendingConfirmation.action,
+                    invoiceNumber: pendingConfirmation.invoice?.invoice_number || '',
+                    vendorName: pendingConfirmation.invoice?.vendor_name || '',
+                    amount: formatCurrency(pendingConfirmation.invoice?.amount || 0),
+                  }
+            }
             onComplete={handleConfirmationComplete}
           />
         </div>
@@ -567,106 +854,29 @@ export function InvoicesPage() {
         </div>
       </div>
 
-      {/* Invoice Table */}
-      <div className="card overflow-hidden">
-        {filteredInvoices.length === 0 ? (
-          <div className="py-12 text-center" data-testid="no-results">
-            <p className="text-secondary-600">No invoices found matching your filters</p>
-            <button onClick={clearFilters} className="btn-primary mt-4">
-              Clear Filters
-            </button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table" data-testid="invoice-table">
-              <thead>
-                <tr>
-                  <th className="table-header">Invoice #</th>
-                  <th className="table-header">Vendor</th>
-                  <th className="table-header">Amount</th>
-                  <th className="table-header">Due Date</th>
-                  <th className="table-header">Department</th>
-                  <th className="table-header">Status</th>
-                  {canWrite && <th className="table-header">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-secondary-200">
-                {filteredInvoices.map((invoice) => {
-                  const overdue = isOverdue(invoice);
-
-                  return (
-                    <tr
-                      key={invoice.id}
-                      className={`table-row ${overdue ? 'bg-danger-50' : ''}`}
-                      data-testid="invoice-row"
-                      data-overdue={overdue}
-                    >
-                      <td className="table-cell">
-                        <button
-                          onClick={() => setSelectedInvoice(invoice)}
-                          className="text-primary-600 hover:underline font-medium"
-                          data-testid="invoice-link"
-                        >
-                          {invoice.invoice_number}
-                        </button>
-                      </td>
-                      <td className="table-cell" data-testid="vendor-name">{invoice.vendor_name}</td>
-                      <td className="table-cell" data-testid="amount">
-                        {formatCurrency(invoice.amount)}
-                      </td>
-                      <td className={`table-cell ${overdue ? 'text-danger-600 font-medium' : ''}`} data-testid="due-date">
-                        {formatDate(invoice.due_date)}
-                        {overdue && <span className="ml-1 text-xs">(Overdue)</span>}
-                      </td>
-                      <td className="table-cell">{invoice.department_code || 'N/A'}</td>
-                      <td className="table-cell">
-                        <span className={getStatusBadgeClass(invoice.status)} data-testid="status-badge">
-                          {invoice.status}
-                        </span>
-                      </td>
-                      {canWrite && (
-                        <td className="table-cell">
-                          <div className="flex gap-2">
-                            {invoice.status === 'PENDING' && (
-                              <button
-                                onClick={() => approveMutation.mutate(invoice.id)}
-                                disabled={approveMutation.isPending}
-                                className="text-success-600 hover:text-success-700 text-sm font-medium"
-                                data-testid="approve-button"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {invoice.status === 'APPROVED' && (
-                              <button
-                                onClick={() => payMutation.mutate(invoice.id)}
-                                disabled={payMutation.isPending}
-                                className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                                data-testid="pay-button"
-                              >
-                                Mark Paid
-                              </button>
-                            )}
-                            {invoice.status === 'DRAFT' && (
-                              <button
-                                onClick={() => deleteMutation.mutate(invoice.id)}
-                                disabled={deleteMutation.isPending}
-                                className="text-danger-600 hover:text-danger-700 text-sm font-medium"
-                                data-testid="delete-button"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Invoice Table with Bulk Actions */}
+      <div className="card overflow-hidden" data-testid="invoice-table">
+        <DataTable<Invoice>
+          data={filteredInvoices}
+          columns={columns}
+          keyField="id"
+          selectable={canWrite}
+          selectedRows={selectedRows}
+          onSelectionChange={setSelectedRows}
+          bulkActions={bulkActions}
+          onBulkAction={handleBulkAction}
+          sortable
+          stickyHeader
+          rowActions={canWrite ? renderRowActions : undefined}
+          emptyState={
+            <div className="py-12 text-center" data-testid="no-results">
+              <p className="text-secondary-600">No invoices found matching your filters</p>
+              <button onClick={clearFilters} className="btn-primary mt-4">
+                Clear Filters
+              </button>
+            </div>
+          }
+        />
       </div>
     </div>
   );

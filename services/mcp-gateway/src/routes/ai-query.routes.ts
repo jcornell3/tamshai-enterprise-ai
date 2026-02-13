@@ -19,6 +19,7 @@ import { scrubPII } from '../utils/pii-scrubber';
 import { sanitizeForLog, MCPServerConfig } from '../utils/gateway-utils';
 import { MCPQueryResult } from '../mcp/mcp-client';
 import { UserContext } from '../test-utils/mock-user-context';
+import { getMCPContext as getMCPContextDefault, storeMCPContext as storeMCPContextDefault } from '../utils/redis';
 
 // Extended Request type with userContext property
 interface AuthenticatedRequest extends Request {
@@ -29,6 +30,7 @@ interface AIQueryRequest {
   query: string;
   conversationId?: string;
   context?: Record<string, unknown>;
+  forceRefresh?: boolean;
 }
 
 interface AuditLog {
@@ -58,6 +60,16 @@ export interface AIQueryRoutesDependencies {
     mcpData: Array<{ server: string; data: unknown }>,
     userContext: UserContext
   ) => Promise<string>;
+  /** Send query to Claude with pre-formatted data context string (for cached contexts) */
+  queryWithContext?: (
+    query: string,
+    dataContext: string,
+    userContext: UserContext
+  ) => Promise<string>;
+  /** Get cached MCP context from Redis (injectable for testing) */
+  getMCPContext?: (userId: string) => Promise<string | null>;
+  /** Store MCP context in Redis (injectable for testing) */
+  storeMCPContext?: (userId: string, context: string, ttl?: number) => Promise<void>;
   rateLimiter: RequestHandler;
 }
 
@@ -72,6 +84,9 @@ export function createAIQueryRoutes(deps: AIQueryRoutesDependencies): Router {
     getDeniedServers,
     queryMCPServer,
     sendToClaudeWithContext,
+    queryWithContext: queryWithContextFn,
+    getMCPContext: getMCPContextFn = getMCPContextDefault,
+    storeMCPContext: storeMCPContextFn = storeMCPContextDefault,
     rateLimiter,
   } = deps;
 
@@ -83,7 +98,7 @@ export function createAIQueryRoutes(deps: AIQueryRoutesDependencies): Router {
     const startTime = Date.now();
     const requestId = req.headers['x-request-id'] as string;
     const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-    const { query, conversationId }: AIQueryRequest = req.body;
+    const { query, conversationId, forceRefresh }: AIQueryRequest = req.body;
 
     if (!query || typeof query !== 'string') {
       res.status(400).json({ error: 'Query is required' });
@@ -102,15 +117,84 @@ export function createAIQueryRoutes(deps: AIQueryRoutesDependencies): Router {
       const accessibleServers = getAccessibleServers(userContext.roles);
       const deniedServers = getDeniedServers(userContext.roles);
 
-      // Query all accessible MCP servers in parallel
-      const mcpPromises = accessibleServers.map((server) =>
-        queryMCPServer(server, query, userContext)
-      );
-      const mcpResults = await Promise.all(mcpPromises);
+      // Check Redis for cached MCP context
+      let mcpDataString: string | null = null;
+      let cacheHit = false;
 
-      // v1.5: Separate successful from failed results
-      const successfulResults = mcpResults.filter((r) => r.status === 'success');
-      const failedResults = mcpResults.filter((r) => r.status !== 'success');
+      if (!forceRefresh) {
+        try {
+          mcpDataString = await getMCPContextFn(userContext.userId);
+          if (mcpDataString) {
+            cacheHit = true;
+            logger.info('MCP context cache hit', { requestId, userId: userContext.userId });
+          }
+        } catch (err) {
+          logger.warn('Failed to read MCP context cache', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      let resolvedResults: MCPQueryResult[];
+      let successfulResults: MCPQueryResult[];
+      let failedResults: MCPQueryResult[];
+
+      if (!cacheHit) {
+        // Cache miss: Query all accessible MCP servers in parallel with timeout
+        const MCP_TIMEOUT_MS = parseInt(process.env.MCP_QUERY_TIMEOUT_MS || '5000');
+
+        const mcpPromises = accessibleServers.map(async (server) => {
+          try {
+            // Race between actual query and timeout
+            const result = await Promise.race([
+              queryMCPServer(server, query, userContext),
+              new Promise<MCPQueryResult>((_, reject) =>
+                setTimeout(() => reject(new Error('MCP_QUERY_TIMEOUT')), MCP_TIMEOUT_MS)
+              ),
+            ]);
+            return result;
+          } catch (error) {
+            // Handle timeout or query failure gracefully
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            logger.warn(`MCP server query failed`, {
+              server: server.name,
+              error: errorMessage,
+              timeout: errorMessage === 'MCP_QUERY_TIMEOUT',
+            });
+            return {
+              server: server.name,
+              status: 'error' as const,
+              error: errorMessage,
+              data: null,
+              durationMs: MCP_TIMEOUT_MS,
+            };
+          }
+        });
+
+        const mcpResults = await Promise.allSettled(mcpPromises);
+        resolvedResults = mcpResults
+          .filter((r): r is PromiseFulfilledResult<MCPQueryResult> => r.status === 'fulfilled')
+          .map((r) => r.value);
+
+        successfulResults = resolvedResults.filter((r) => r.status === 'success');
+        failedResults = resolvedResults.filter((r) => r.status !== 'success');
+
+        // Serialize and cache the successful results
+        mcpDataString = successfulResults
+          .filter((d) => d.data !== null)
+          .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
+          .join('\n\n');
+
+        // Store in Redis (fire-and-forget, don't block response)
+        storeMCPContextFn(userContext.userId, mcpDataString).catch((err) =>
+          logger.warn('Failed to cache MCP context', { error: err instanceof Error ? err.message : String(err) })
+        );
+      } else {
+        // Cache hit: no individual server results available
+        resolvedResults = [];
+        successfulResults = [];
+        failedResults = [];
+      }
 
       // Log any partial response issues
       if (failedResults.length > 0) {
@@ -121,8 +205,15 @@ export function createAIQueryRoutes(deps: AIQueryRoutesDependencies): Router {
         });
       }
 
-      // Send to Claude with context (only successful results)
-      const aiResponse = await sendToClaudeWithContext(query, successfulResults, userContext);
+      // Send to Claude with context
+      let aiResponse: string;
+      if (queryWithContextFn && mcpDataString !== null) {
+        // Use queryWithContext for byte-identical cached prompts
+        aiResponse = await queryWithContextFn(query, mcpDataString, userContext);
+      } else {
+        // Fallback to original method (backwards compatibility)
+        aiResponse = await sendToClaudeWithContext(query, successfulResults, userContext);
+      }
 
       const durationMs = Date.now() - startTime;
 

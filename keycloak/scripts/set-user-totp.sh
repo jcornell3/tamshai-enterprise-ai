@@ -81,7 +81,7 @@ if [[ -n "${KEYCLOAK_URL:-}" ]]; then
 else
     case "$ENV" in
         dev)
-            KEYCLOAK_URL="https://www.tamshai.local/auth"
+            KEYCLOAK_URL="https://www.tamshai-playground.local/auth"
             ;;
         stage)
             KEYCLOAK_URL="https://www.tamshai.com/auth"
@@ -128,16 +128,26 @@ check_prerequisites() {
     log_success "Prerequisites met"
 }
 
-# Authenticate to Keycloak Admin API
+# Authenticate to Keycloak Admin API (prefer client credentials over ROPC)
 authenticate() {
     log_info "Authenticating to Keycloak Admin API at $KEYCLOAK_URL..."
 
-    TOKEN_RESPONSE=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=${ADMIN_USER}" \
-        --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
-        -d "grant_type=password" \
-        -d "client_id=admin-cli")
+    if [[ -n "${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" ]]; then
+        log_info "  Using client credentials (KEYCLOAK_ADMIN_CLIENT_SECRET)"
+        TOKEN_RESPONSE=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=admin-cli" \
+            -d "client_secret=${KEYCLOAK_ADMIN_CLIENT_SECRET}" \
+            -d "grant_type=client_credentials")
+    else
+        log_info "  Using ROPC fallback (admin username/password)"
+        TOKEN_RESPONSE=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=${ADMIN_USER}" \
+            --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli")
+    fi
 
     ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 

@@ -253,7 +253,7 @@ function maskSalary(employee: Employee, userRoles: string[]): Employee {
 4. **No Flutter Web**: We intentionally avoid Flutter Web to keep web apps lightweight
 
 **User Journey**:
-1. Employee visits `tamshai.local` → **React** corporate website
+1. Employee visits `tamshai-playground.local` → **React** corporate website
 2. Clicks "Employee Login" → Redirects to Keycloak SSO
 3. After SSO → **React** portal with HR/Finance/Sales/Support web apps
 4. Portal includes "Downloads" page → Links to **Flutter** native clients
@@ -1213,7 +1213,7 @@ The project requires both web-based access (browser) and native desktop/mobile a
 
 **User Journey**:
 ```
-Employee → tamshai.local → [React] Corporate Site
+Employee → tamshai-playground.local → [React] Corporate Site
                         ↓
                Employee Login → Keycloak SSO
                         ↓

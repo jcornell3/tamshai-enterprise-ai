@@ -3,16 +3,41 @@
 Complete guide to installing and configuring HashiCorp Vault for Tamshai secrets management.
 
 ## Table of Contents
-1. [Why HashiCorp Vault](#why-hashicorp-vault)
-2. [Architecture Overview](#architecture-overview)
-3. [Installation](#installation)
-4. [Initial Configuration](#initial-configuration)
-5. [Secrets Management](#secrets-management)
-6. [GitHub Actions Integration](#github-actions-integration)
-7. [Application Integration](#application-integration)
-8. [Backup & Recovery](#backup--recovery)
-9. [Security Hardening](#security-hardening)
-10. [Troubleshooting](#troubleshooting)
+
+1. [Prerequisites](#prerequisites)
+2. [Why HashiCorp Vault](#why-hashicorp-vault)
+3. [Architecture Overview](#architecture-overview)
+4. [Installation](#installation)
+5. [Initial Configuration](#initial-configuration)
+6. [Secrets Management](#secrets-management)
+7. [GitHub Actions Integration](#github-actions-integration)
+8. [Application Integration](#application-integration)
+9. [Backup & Recovery](#backup--recovery)
+10. [Security Hardening](#security-hardening)
+11. [Troubleshooting](#troubleshooting)
+
+## Prerequisites
+
+**GitHub Secrets Required:**
+
+The following GitHub Secrets must be configured before running Vault setup commands:
+
+| Secret Name | Description | Used In |
+|-------------|-------------|---------|
+| `DB_PASSWORD` | PostgreSQL database password | Database connection |
+| `KEYCLOAK_CLIENT_SECRET` | Keycloak client secret for authentication | SSO configuration |
+| `CLAUDE_API_KEY` | Anthropic Claude API key | AI service |
+| `PINECONE_API_KEY` | Pinecone vector database API key | Vector search |
+| `VAULT_DB_PASSWORD` | Vault's PostgreSQL admin password | Vault database plugin |
+| `VAULT_ADMIN_PASSWORD` | Vault admin user password | Vault authentication |
+
+**Configure via GitHub UI:**
+
+```text
+Repository → Settings → Secrets and variables → Actions → New repository secret
+```
+
+**Note:** All example commands below use `${SECRET_NAME}` syntax to reference these GitHub Secrets.
 
 ## Why HashiCorp Vault
 
@@ -69,7 +94,7 @@ Complete guide to installing and configuring HashiCorp Vault for Tamshai secrets
 
 ## Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Hetzner VPS                          │
 │                                                         │
@@ -107,7 +132,7 @@ Complete guide to installing and configuring HashiCorp Vault for Tamshai secrets
 
 ## Installation
 
-### Prerequisites
+### System Requirements
 
 - Hetzner VPS running Ubuntu 22.04
 - Root or sudo access
@@ -265,18 +290,20 @@ vault kv put kv/production/database \
     port="5432" \
     database="tamshai" \
     username="tamshai_user" \
-    password="SuperSecretPassword123"
+    password="${DB_PASSWORD}"
 
 # Store Keycloak secrets
+# Use GitHub Secrets: KEYCLOAK_CLIENT_SECRET
 vault kv put kv/production/keycloak \
     realm="tamshai" \
     client_id="tamshai-flutter-client" \
-    client_secret="keycloak-secret-abc123"
+    client_secret="${KEYCLOAK_CLIENT_SECRET}"
 
 # Store API keys
+# Use GitHub Secrets: CLAUDE_API_KEY, PINECONE_API_KEY
 vault kv put kv/production/api-keys \
-    anthropic_api_key="sk-ant-api03-..." \
-    pinecone_api_key="pcsk-..."
+    anthropic_api_key="${CLAUDE_API_KEY}" \
+    pinecone_api_key="${PINECONE_API_KEY}"
 
 # Read secrets
 vault kv get kv/production/database
@@ -297,7 +324,7 @@ vault write database/config/postgresql \
     allowed_roles="tamshai-app" \
     connection_url="postgresql://{{username}}:{{password}}@localhost:5432/tamshai?sslmode=disable" \
     username="vault_admin" \
-    password="vault_admin_password"
+    password="${VAULT_DB_PASSWORD}"
 
 # Create role (defines permissions)
 vault write database/roles/tamshai-app \
@@ -638,6 +665,7 @@ vault kv list kv/production
 - Most secure, but manual
 
 **Option 2: Auto-Unseal (Production)**
+
 ```hcl
 # vault.hcl
 seal "transit" {
@@ -649,6 +677,7 @@ seal "transit" {
 ```
 
 **Option 3: Cloud Auto-Unseal**
+
 ```hcl
 # AWS KMS
 seal "awskms" {
@@ -703,7 +732,7 @@ tail -f /var/log/vault/audit.log | jq .
 vault auth enable userpass
 
 vault write auth/userpass/users/admin \
-    password="SecureAdminPassword123" \
+    password="${VAULT_ADMIN_PASSWORD}" \
     policies="admin"
 
 # Login as admin

@@ -13,6 +13,13 @@ import { createMockLogger } from '../test-utils/mock-logger';
 jest.mock('jsonwebtoken');
 jest.mock('jwks-rsa');
 
+// Test configuration - uses DEV_KEYCLOAK environment variable
+const TEST_KEYCLOAK_PORT = process.env.DEV_KEYCLOAK;
+const TEST_KEYCLOAK_URL = `http://localhost:${TEST_KEYCLOAK_PORT}`;
+const TEST_KEYCLOAK_REALM = 'tamshai';
+const TEST_ISSUER = `${TEST_KEYCLOAK_URL}/realms/${TEST_KEYCLOAK_REALM}`;
+const TEST_JWKS_URI = `${TEST_ISSUER}/protocol/openid-connect/certs`;
+
 describe('JWTValidator', () => {
   let validator: JWTValidator;
   let mockLogger: ReturnType<typeof createMockLogger>;
@@ -30,8 +37,8 @@ describe('JWTValidator', () => {
     (jwksRsa as unknown as jest.Mock).mockReturnValue(mockJwksClient);
 
     config = {
-      jwksUri: 'http://localhost:8180/realms/tamshai/protocol/openid-connect/certs',
-      issuer: 'http://localhost:8180/realms/tamshai',
+      jwksUri: TEST_JWKS_URI,
+      issuer: TEST_ISSUER,
       clientId: 'mcp-gateway',
     };
 
@@ -100,6 +107,7 @@ describe('JWTValidator', () => {
       // Mock JWT verification
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-123',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'alice.chen',
         email: 'alice@tamshai.com',
         name: 'Alice Chen',
@@ -142,6 +150,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-456',
+        iss: TEST_ISSUER,  // Required for issuer validation
         name: 'Bob Martinez',
         email: 'bob@tamshai.com',
         realm_access: { roles: ['finance-read'] },
@@ -174,6 +183,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-789',
+        iss: TEST_ISSUER,  // Required for issuer validation
         given_name: 'Carol',
         email: 'carol@tamshai.com',
         realm_access: { roles: ['sales-read'] },
@@ -202,6 +212,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: '12345678-1234-1234-1234-123456789012',
+        iss: TEST_ISSUER,  // Required for issuer validation
         email: 'user@tamshai.com',
         realm_access: { roles: ['user'] },
         groups: [],
@@ -226,6 +237,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-999',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'testuser',
         realm_access: { roles: ['intern'] },
         groups: [],
@@ -256,6 +268,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-000',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'newuser',
         email: 'new@tamshai.com',
         groups: [],
@@ -279,6 +292,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-client-roles',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'client.user',
         email: 'client@tamshai.com',
         resource_access: {
@@ -308,6 +322,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-merged',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'merged.user',
         email: 'merged@tamshai.com',
         realm_access: {
@@ -344,7 +359,8 @@ describe('JWTValidator', () => {
         callback(mockError);
       });
 
-      await expect(validator.validateToken(mockToken)).rejects.toThrow('invalid signature');
+      // Generic error message for security (don't expose internals)
+      await expect(validator.validateToken(mockToken)).rejects.toThrow('Invalid or expired token');
     });
 
     it('should reject token when JWKS key not found', async () => {
@@ -365,7 +381,8 @@ describe('JWTValidator', () => {
         );
       });
 
-      await expect(validator.validateToken(mockToken)).rejects.toThrow('Unable to find a signing key');
+      // Generic error message for security (don't expose internals)
+      await expect(validator.validateToken(mockToken)).rejects.toThrow('Invalid or expired token');
     });
 
     it('should reject token when signing key is undefined', async () => {
@@ -387,7 +404,8 @@ describe('JWTValidator', () => {
         );
       });
 
-      await expect(validator.validateToken(mockToken)).rejects.toThrow('No signing key found');
+      // Generic error message for security (don't expose internals)
+      await expect(validator.validateToken(mockToken)).rejects.toThrow('Invalid or expired token');
     });
 
     it('should use configured algorithms for verification', async () => {
@@ -405,6 +423,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-123',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'testuser',
         email: 'test@example.com',
         realm_access: { roles: [] },
@@ -428,6 +447,7 @@ describe('JWTValidator', () => {
 
       const mockPayload: jwt.JwtPayload = {
         sub: 'user-123',
+        iss: TEST_ISSUER,  // Required for issuer validation
         preferred_username: 'testuser',
         email: 'test@example.com',
         realm_access: { roles: [] },
@@ -435,8 +455,8 @@ describe('JWTValidator', () => {
       };
 
       (jwt.verify as jest.Mock).mockImplementation((token, getKey, options, callback) => {
-        expect(options.issuer).toBe('http://localhost:8180/realms/tamshai');
-        expect(options.audience).toEqual(['mcp-gateway', 'account']);
+        // Note: issuer is now validated manually after jwt.verify (multi-issuer support)
+        expect(options.audience).toEqual(['mcp-gateway', 'account', 'mcp-integration-runner']);
         callback(null, mockPayload);
       });
 

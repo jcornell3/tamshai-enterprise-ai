@@ -23,7 +23,7 @@ winget install MongoDB.Shell
 # Linux (Ubuntu/Debian)
 sudo apt-get install -y google-cloud-sdk postgresql-client
 # mongosh: https://www.mongodb.com/try/download/shell
-```
+```bash
 
 ### Authenticate
 
@@ -36,7 +36,7 @@ gcloud config set project ${GCP_PROJECT}
 
 # For service account authentication
 gcloud auth activate-service-account --key-file=path/to/key.json
-```
+```bash
 
 ## Scripts
 
@@ -60,7 +60,7 @@ gcloud auth activate-service-account --key-file=path/to/key.json
 
 # Resume from specific phase
 ./scripts/gcp/phoenix-rebuild.sh --yes --phase=5
-```
+```bash
 
 See [PHOENIX_RUNBOOK.md](../../docs/operations/PHOENIX_RUNBOOK.md) for detailed phase documentation.
 
@@ -88,7 +88,7 @@ Loads sample data from `sample-data/` into Cloud SQL and MongoDB Atlas.
 
 # Preview without making changes
 ./scripts/gcp/load-sample-data.sh --dry-run
-```
+```bash
 
 **Data Sources:**
 - HR: `sample-data/hr-data.sql` → Cloud SQL `tamshai_hr`
@@ -113,7 +113,7 @@ Removes sample data from production databases. **Destructive operation!**
 
 # Preview without making changes
 ./scripts/gcp/remove-sample-data.sh --dry-run
-```
+```bash
 
 ## Environment Variables
 
@@ -148,7 +148,7 @@ cloud-sql-proxy ${GCP_PROJECT}:${GCP_REGION}:tamshai-prod-postgres --port=5432
 # Test connection
 PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-password) \
   psql -h localhost -p 5432 -U tamshai -d tamshai_hr -c "SELECT 1;"
-```
+```bash
 
 ### MongoDB Atlas Connection Issues
 
@@ -156,7 +156,7 @@ PGPASSWORD=$(gcloud secrets versions access latest --secret=tamshai-prod-db-pass
 # Test connection
 MONGODB_URI=$(gcloud secrets versions access latest --secret=tamshai-prod-mongodb-uri)
 mongosh "$MONGODB_URI" --eval "db.adminCommand('ping')"
-```
+```bash
 
 ### Permission Errors
 
@@ -178,7 +178,7 @@ The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with *
 
 ### Architecture
 
-```
+```bash
 ┌──────────────────┐      ┌─────────────────┐      ┌──────────────────┐
 │ Cloud Run Job    │──────│ VPC Connector   │──────│ Private Cloud SQL│
 │ provision-users  │      │ tamshai-prod-   │      │ 10.x.x.x:5432    │
@@ -193,7 +193,7 @@ The production Cloud SQL instance (`tamshai-prod-postgres`) is configured with *
     │ - identity-sync  │
     │   (--no-redis)   │
     └──────────────────┘
-```
+```bash
 
 ### Files
 
@@ -252,6 +252,7 @@ This is useful when:
 | EXEC | executive (composite role) |
 
 **Example:**
+
 ```bash
 # Reset passwords and assign roles for all synced users
 gcloud run jobs execute provision-users \
@@ -259,7 +260,7 @@ gcloud run jobs execute provision-users \
   --project=${GCP_PROJECT} \
   --update-env-vars="ACTION=sync-users,FORCE_PASSWORD_RESET=true" \
   --wait
-```
+```bash
 
 ### The `--no-redis` Flag
 
@@ -270,7 +271,7 @@ The identity-sync script normally uses Redis (via BullMQ) for async cleanup job 
 const noOpQueue: CleanupQueue = {
   add: async () => ({ id: 'no-op' }),
 };
-```
+```bash
 
 The entrypoint.sh automatically passes `--no-redis` to identity-sync. This is safe because:
 - The sync operation doesn't queue any jobs
@@ -300,7 +301,7 @@ cd scripts/gcp
 # With options
 ./provision-users-job.sh run sync-users --force-password-reset
 ./provision-users-job.sh all --dry-run
-```
+```bash
 
 #### Via gcloud CLI Directly
 
@@ -329,7 +330,7 @@ gcloud run jobs execute provision-users \
   --project=${GCP_PROJECT} \
   --update-env-vars=ACTION=all,FORCE_PASSWORD_RESET=true \
   --wait
-```
+```bash
 
 ### Setting the Production User Password
 
@@ -346,11 +347,11 @@ The `PROD_USER_PASSWORD` GitHub Secret is the **source of truth** for the `provi
 
 ```bash
 # Set the GitHub Secret (one-time)
-echo "YourSecurePassword123!" | gh secret set PROD_USER_PASSWORD
+echo "<your-secure-password>" | gh secret set PROD_USER_PASSWORD
 
 # Trigger the provisioning workflow
 gh workflow run provision-prod-users.yml -f action=all
-```
+```bash
 
 **Option 2: Via Cloud Run Job (Direct GCP)**
 
@@ -358,7 +359,7 @@ For running provisioning directly via Cloud Run Job (without GitHub Actions):
 
 ```bash
 # Update password in GCP Secret Manager
-echo -n 'YourNewPassword123!' | gcloud secrets versions add prod-user-password \
+echo -n '<your-new-password>' | gcloud secrets versions add prod-user-password \
   --data-file=- --project=${GCP_PROJECT}
 
 # Then run the provisioning job with force password reset
@@ -367,16 +368,16 @@ gcloud run jobs execute provision-users \
   --project=${GCP_PROJECT} \
   --update-env-vars="ACTION=sync-users,FORCE_PASSWORD_RESET=true" \
   --wait
-```
+```bash
 
 **Option 3: Via Terraform Variable**
 
 For initial infrastructure setup, you can pass the password to Terraform:
 
 ```bash
-export TF_VAR_prod_user_password="YourSecurePassword123!"
+export TF_VAR_prod_user_password="<your-secure-password>"
 terraform apply
-```
+```bash
 
 **Note:** The Terraform configuration uses `ignore_changes` on the secret data to prevent accidental overwrites of manually set passwords. For ongoing user provisioning, use Option 1 (GitHub Actions) or Option 2 (Cloud Run Job).
 
@@ -403,7 +404,7 @@ echo -n "YOUR_CLIENT_SECRET" | gcloud secrets create mcp-hr-service-client-secre
 echo -n "YOUR_USER_PASSWORD" | gcloud secrets create prod-user-password \
   --data-file=- \
   --project=${GCP_PROJECT}
-```
+```bash
 
 ### Cloud Run Job Steps
 
@@ -417,7 +418,7 @@ The entrypoint.sh script runs these steps:
 
 ### Example Output
 
-```
+```bash
 ==============================================
 PROVISIONING SUMMARY
 ==============================================
@@ -433,9 +434,9 @@ AFTER:
   Synced to KC:      50
   Keycloak Users:    51
 ==============================================
-```
+```bash
 
-### Prerequisites
+### User Provisioning Prerequisites
 
 1. **gcloud CLI** authenticated with appropriate permissions
 2. **Terraform applied** - Cloud Run Job and IAM permissions are managed in Terraform:
@@ -461,7 +462,7 @@ All resources for user provisioning are managed in Terraform:
 
 The container image is built via Cloud Build (`scripts/gcp/provision-job/cloudbuild.yaml`) and stored in Artifact Registry.
 
-### Troubleshooting
+### User Provisioning Troubleshooting
 
 **"Permission denied accessing secret"**
 - Verify Terraform has been applied (`terraform apply`)
@@ -493,6 +494,7 @@ The container image is built via Cloud Build (`scripts/gcp/provision-job/cloudbu
 - Or destroy and recreate the job via Terraform
 
 **View job logs**
+
 ```bash
 # Get recent executions
 gcloud run jobs executions list --job=provision-users --region=${GCP_REGION} --limit=5
@@ -500,7 +502,7 @@ gcloud run jobs executions list --job=provision-users --region=${GCP_REGION} --l
 # View logs for specific execution
 gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=provision-users" \
   --project=${GCP_PROJECT} --limit=100 --format="table(timestamp,textPayload)"
-```
+```bash
 
 ---
 
@@ -515,11 +517,11 @@ The **Phoenix Rebuild** is a complete environment teardown and rebuild from scra
 ./scripts/gcp/phoenix-rebuild.sh --yes
 
 # Typical duration: 75-100 minutes (varies based on SSL provisioning time)
-```
+```bash
 
 ### Phoenix Rebuild Sequence (10 Phases)
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    GCP PROD PHOENIX REBUILD SEQUENCE                    │
 ├─────────────────────────────────────────────────────────────────────────┤
@@ -533,7 +535,7 @@ The **Phoenix Rebuild** is a complete environment teardown and rebuild from scra
 │  Phase 9: Configure TOTP         │ Set test-user.journey credentials    │
 │  Phase 10: Provision & Verify    │ provision-users + E2E tests          │
 └─────────────────────────────────────────────────────────────────────────┘
-```
+```bash
 
 **Typical Durations** (from v11 rebuild):
 - Phases 1-2: ~2 min
@@ -577,7 +579,7 @@ gh workflow run provision-prod-users.yml -f action=all -f dry_run=false
 
 # 5. Load Finance, Sales, Support sample data
 gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=false
-```
+```bash
 
 ### Related Documentation
 
@@ -613,7 +615,7 @@ gh workflow run provision-prod-data.yml -f data_set=support -f dry_run=false
 
 # Dry run (preview without making changes)
 gh workflow run provision-prod-data.yml -f data_set=all -f dry_run=true
-```
+```bash
 
 **Workflow Inputs:**
 | Input | Type | Default | Description |
@@ -649,18 +651,20 @@ mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_sales').customers.countD
 
 # Check Support data
 mongosh "$MONGODB_URI" --eval "db.getSiblingDB('tamshai_support').tickets.countDocuments()"
-```
+```bash
 
 ---
 
 ## See Also
 
 ### Phoenix Rebuild Documentation
+
 - [PHOENIX_RUNBOOK.md](../../docs/operations/PHOENIX_RUNBOOK.md) - Detailed step-by-step runbook with checkpoints
 - [PHOENIX_RECOVERY.md](../../docs/operations/PHOENIX_RECOVERY.md) - Disaster recovery procedures (13 scenarios)
 - [PHOENIX_MANUAL_ACTIONSv11.md](../../docs/operations/PHOENIX_MANUAL_ACTIONSv11.md) - Latest rebuild log (0 manual actions)
 
 ### Other Documentation
+
 - [GCP Production Phase 1 Plan](../../docs/plans/GCP_PROD_PHASE_1_COST_SENSITIVE.md)
 - [Production Testing Methodology](../../docs/testing/PROD_TESTING_METHODOLOGY.md)
 - [403 Remediation Plan](../../docs/troubleshooting/PROD_403_REMEDIATION_PLAN.md)

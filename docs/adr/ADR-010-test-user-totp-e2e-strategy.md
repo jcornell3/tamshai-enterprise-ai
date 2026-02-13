@@ -54,7 +54,7 @@ Create a dedicated **test-user.journey** service account with managed TOTP secre
 | Field | Value |
 |-------|-------|
 | Username | `test-user.journey` |
-| Email | `test-user@tamshai.local` |
+| Email | `test-user@tamshai-playground.local` |
 | Department | `Testing` |
 | Title | `Journey Test Account` |
 | Roles | Minimal (no data access) |

@@ -11,79 +11,60 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { fail } from 'assert';
+import crypto from 'crypto';
+import { getTestAuthProvider } from '../shared/auth/token-exchange';
 
-// Test configuration
-// Use 127.0.0.1 instead of localhost for Windows compatibility
-// Use mcp-gateway client which has directAccessGrantsEnabled=true
+// Test configuration - all values from environment variables (required for tests)
 const CONFIG = {
-  keycloakUrl: process.env.KEYCLOAK_URL || 'http://127.0.0.1:8180',
-  keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-  mcpHrUrl: process.env.MCP_HR_URL || 'http://127.0.0.1:3101',
-  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
-  mcpSalesUrl: process.env.MCP_SALES_URL || 'http://127.0.0.1:3103',
-  mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
-  redisUrl: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
-  clientId: 'mcp-gateway',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
+  mcpHrUrl: process.env.MCP_HR_URL!,
+  mcpFinanceUrl: process.env.MCP_FINANCE_URL!,
+  mcpSalesUrl: process.env.MCP_SALES_URL!,
+  mcpSupportUrl: process.env.MCP_SUPPORT_URL!,
+  redisUrl: process.env.REDIS_URL,
+  mcpInternalSecret: process.env.MCP_INTERNAL_SECRET!,
 };
 
-// Test user password from environment variable
-const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
-if (!TEST_PASSWORD) {
-  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
-}
+// Auth provider (singleton, token exchange)
+const authProvider = getTestAuthProvider();
 
 // Test users with role assignments
 const TEST_USERS = {
   hrUser: {
     username: 'alice.chen',
-    password: TEST_PASSWORD,
     roles: ['hr-read', 'hr-write'],
     userId: 'f104eddc-21ab-457c-a254-78051ad7ad67', // Alice Chen's UUID from sample data
   },
   financeUser: {
     username: 'bob.martinez',
-    password: TEST_PASSWORD,
     roles: ['finance-read', 'finance-write'],
     userId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', // Bob Martinez's UUID
   },
   salesUser: {
     username: 'carol.johnson',
-    password: TEST_PASSWORD,
     roles: ['sales-read', 'sales-write'],
     userId: 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', // Carol Johnson's UUID
   },
   supportUser: {
     username: 'dan.williams',
-    password: TEST_PASSWORD,
     roles: ['support-read', 'support-write'],
     userId: 'd7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', // Dan Williams's UUID
   },
   executive: {
     username: 'eve.thompson',
-    password: TEST_PASSWORD,
     roles: ['executive'],
     userId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', // Eve Thompson's UUID
   },
   manager: {
     username: 'nina.patel',
-    password: TEST_PASSWORD,
     roles: ['manager'],
     userId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', // Nina Patel's UUID
   },
   intern: {
     username: 'frank.davis',
-    password: TEST_PASSWORD,
     roles: [],
     userId: 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', // Frank Davis's UUID
   },
 };
-
-interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
 
 interface MCPToolResponse<T = any> {
   status: 'success' | 'error' | 'pending_confirmation';
@@ -101,32 +82,31 @@ interface MCPToolResponse<T = any> {
 }
 
 /**
- * Get access token from Keycloak
+ * Generate internal token for MCP Gateway → MCP Server authentication
+ * Mirrors the implementation in @tamshai/shared
  */
-async function getAccessToken(username: string, password: string): Promise<string> {
-  const tokenUrl = `${CONFIG.keycloakUrl}/realms/${CONFIG.keycloakRealm}/protocol/openid-connect/token`;
+function generateInternalToken(userId: string, roles: string[]): string {
+  const secret = CONFIG.mcpInternalSecret;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const rolesString = roles.join(',');
+  const payload = `${timestamp}:${userId}:${rolesString}`;
 
-  const params = new URLSearchParams({
-    grant_type: 'password',
-    client_id: CONFIG.clientId,
-    client_secret: CONFIG.clientSecret,
-    username,
-    password,
-    scope: 'openid profile email',  // Removed "roles" - Keycloak includes roles in resource_access by default
-  });
+  const hmac = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
 
-  const response = await axios.post<TokenResponse>(tokenUrl, params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-
-  return response.data.access_token;
+  return `${payload}.${hmac}`;
 }
 
 /**
- * Create authenticated MCP client
+ * Create authenticated MCP client with gateway auth token
+ *
+ * IMPORTANT: HMAC token is generated per-request via interceptor (not cached)
+ * because the MCP server enforces a 30-second replay window.
  */
-function createMcpClient(baseURL: string, token: string, userId: string): AxiosInstance {
-  return axios.create({
+function createMcpClient(baseURL: string, token: string, userId: string, roles: string[] = []): AxiosInstance {
+  const client = axios.create({
     baseURL,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -135,6 +115,11 @@ function createMcpClient(baseURL: string, token: string, userId: string): AxiosI
     },
     timeout: 30000,
   });
+  client.interceptors.request.use((config) => {
+    config.headers['X-MCP-Internal-Token'] = generateInternalToken(userId, roles);
+    return config;
+  });
+  return client;
 }
 
 // =============================================================================
@@ -146,8 +131,8 @@ describe('MCP HR Server - Read Tools', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.hrUser.username, TEST_USERS.hrUser.password);
-    hrClient = createMcpClient(CONFIG.mcpHrUrl, token, TEST_USERS.hrUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.hrUser.username);
+    hrClient = createMcpClient(CONFIG.mcpHrUrl, token, TEST_USERS.hrUser.userId, TEST_USERS.hrUser.roles);
   });
 
   describe('list_employees', () => {
@@ -210,7 +195,8 @@ describe('MCP HR Server - Read Tools', () => {
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('success');
       expect(response.data.data).toBeDefined();
-      expect(response.data.data.employee_id).toBe(TEST_USERS.hrUser.userId);
+      // Check id (UUID primary key), not employee_id (VARCHAR employee number which may be NULL)
+      expect(response.data.data.id).toBe(TEST_USERS.hrUser.userId);
     });
 
     test('Returns LLM-friendly error for non-existent employee', async () => {
@@ -237,8 +223,8 @@ describe('MCP HR Server - Write Tools (Confirmations)', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.hrUser.username, TEST_USERS.hrUser.password);
-    hrClient = createMcpClient(CONFIG.mcpHrUrl, token, TEST_USERS.hrUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.hrUser.username);
+    hrClient = createMcpClient(CONFIG.mcpHrUrl, token, TEST_USERS.hrUser.userId, TEST_USERS.hrUser.roles);
   });
 
   describe('delete_employee', () => {
@@ -303,8 +289,8 @@ describe('MCP Finance Server - Read Tools', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
-    financeClient = createMcpClient(CONFIG.mcpFinanceUrl, token, TEST_USERS.financeUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.financeUser.username);
+    financeClient = createMcpClient(CONFIG.mcpFinanceUrl, token, TEST_USERS.financeUser.userId, TEST_USERS.financeUser.roles);
   });
 
   describe('get_budget', () => {
@@ -382,8 +368,8 @@ describe('MCP Finance Server - Write Tools (Confirmations)', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
-    financeClient = createMcpClient(CONFIG.mcpFinanceUrl, token, TEST_USERS.financeUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.financeUser.username);
+    financeClient = createMcpClient(CONFIG.mcpFinanceUrl, token, TEST_USERS.financeUser.userId, TEST_USERS.financeUser.roles);
   });
 
   describe('delete_invoice', () => {
@@ -403,22 +389,26 @@ describe('MCP Finance Server - Write Tools (Confirmations)', () => {
   });
 
   describe('approve_budget', () => {
-    test('Returns NOT_IMPLEMENTED error (v1.3 schema limitation)', async () => {
-      // The approve_budget tool is not implemented because the v1.3 schema
-      // does not have approval workflow columns (status, approved_by, approved_at)
+    test('Returns pending_confirmation for valid budget (v1.5 implementation)', async () => {
+      // The approve_budget tool was implemented in v1.5 with HITL confirmation flow
+      // It returns pending_confirmation or error depending on budget state
       const response = await financeClient.post<MCPToolResponse>('/tools/approve_budget', {
         userContext: {
           userId: TEST_USERS.financeUser.userId,
           roles: TEST_USERS.financeUser.roles,
         },
-        budgetId: '00000000-0000-0000-0000-000000000001', // Dummy UUID
-        approvedAmount: 500000,
+        budgetId: '00000000-0000-0000-0000-000000000001', // Test budget ID
       });
 
       expect(response.status).toBe(200);
-      expect(response.data.status).toBe('error');
-      expect(response.data.code).toBe('NOT_IMPLEMENTED');
-      expect(response.data.suggestedAction).toBeDefined();
+      // Either pending_confirmation (if budget exists and is pending) or error (if not found)
+      expect(['pending_confirmation', 'error']).toContain(response.data.status);
+      if (response.data.status === 'pending_confirmation') {
+        expect(response.data.confirmationId).toBeDefined();
+      } else {
+        // Budget not found is expected for non-existent test ID
+        expect(response.data.code).toBeDefined();
+      }
     });
   });
 });
@@ -432,8 +422,8 @@ describe('MCP Sales Server - Read Tools', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.salesUser.username, TEST_USERS.salesUser.password);
-    salesClient = createMcpClient(CONFIG.mcpSalesUrl, token, TEST_USERS.salesUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.salesUser.username);
+    salesClient = createMcpClient(CONFIG.mcpSalesUrl, token, TEST_USERS.salesUser.userId, TEST_USERS.salesUser.roles);
   });
 
   describe('list_opportunities', () => {
@@ -520,8 +510,8 @@ describe('MCP Sales Server - Write Tools (Confirmations)', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.salesUser.username, TEST_USERS.salesUser.password);
-    salesClient = createMcpClient(CONFIG.mcpSalesUrl, token, TEST_USERS.salesUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.salesUser.username);
+    salesClient = createMcpClient(CONFIG.mcpSalesUrl, token, TEST_USERS.salesUser.userId, TEST_USERS.salesUser.roles);
   });
 
   describe('close_opportunity', () => {
@@ -567,8 +557,8 @@ describe('MCP Support Server - Read Tools', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.supportUser.username, TEST_USERS.supportUser.password);
-    supportClient = createMcpClient(CONFIG.mcpSupportUrl, token, TEST_USERS.supportUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.supportUser.username);
+    supportClient = createMcpClient(CONFIG.mcpSupportUrl, token, TEST_USERS.supportUser.userId, TEST_USERS.supportUser.roles);
   });
 
   describe('search_tickets', () => {
@@ -655,8 +645,8 @@ describe('MCP Support Server - Write Tools (Confirmations)', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.supportUser.username, TEST_USERS.supportUser.password);
-    supportClient = createMcpClient(CONFIG.mcpSupportUrl, token, TEST_USERS.supportUser.userId);
+    token = await authProvider.getUserToken(TEST_USERS.supportUser.username);
+    supportClient = createMcpClient(CONFIG.mcpSupportUrl, token, TEST_USERS.supportUser.userId, TEST_USERS.supportUser.roles);
   });
 
   describe('close_ticket', () => {
@@ -686,11 +676,11 @@ describe('Multi-Role Access Control', () => {
     let executiveToken: string;
 
     beforeAll(async () => {
-      executiveToken = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
+      executiveToken = await authProvider.getUserToken(TEST_USERS.executive.username);
     });
 
     test('Executive can access HR data', async () => {
-      const hrClient = createMcpClient(CONFIG.mcpHrUrl, executiveToken, TEST_USERS.executive.userId);
+      const hrClient = createMcpClient(CONFIG.mcpHrUrl, executiveToken, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
       const response = await hrClient.post<MCPToolResponse>('/tools/list_employees', {
         userContext: {
           userId: TEST_USERS.executive.userId,
@@ -703,7 +693,7 @@ describe('Multi-Role Access Control', () => {
     });
 
     test('Executive can access Finance data', async () => {
-      const financeClient = createMcpClient(CONFIG.mcpFinanceUrl, executiveToken, TEST_USERS.executive.userId);
+      const financeClient = createMcpClient(CONFIG.mcpFinanceUrl, executiveToken, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
       const response = await financeClient.post<MCPToolResponse>('/tools/get_budget', {
         userContext: {
           userId: TEST_USERS.executive.userId,
@@ -717,7 +707,7 @@ describe('Multi-Role Access Control', () => {
     });
 
     test('Executive can access Sales data', async () => {
-      const salesClient = createMcpClient(CONFIG.mcpSalesUrl, executiveToken, TEST_USERS.executive.userId);
+      const salesClient = createMcpClient(CONFIG.mcpSalesUrl, executiveToken, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
       const response = await salesClient.post<MCPToolResponse>('/tools/list_opportunities', {
         userContext: {
           userId: TEST_USERS.executive.userId,
@@ -730,7 +720,7 @@ describe('Multi-Role Access Control', () => {
     });
 
     test('Executive can access Support data', async () => {
-      const supportClient = createMcpClient(CONFIG.mcpSupportUrl, executiveToken, TEST_USERS.executive.userId);
+      const supportClient = createMcpClient(CONFIG.mcpSupportUrl, executiveToken, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
       const response = await supportClient.post<MCPToolResponse>('/tools/search_tickets', {
         userContext: {
           userId: TEST_USERS.executive.userId,
@@ -748,11 +738,11 @@ describe('Multi-Role Access Control', () => {
     let internToken: string;
 
     beforeAll(async () => {
-      internToken = await getAccessToken(TEST_USERS.intern.username, TEST_USERS.intern.password);
+      internToken = await authProvider.getUserToken(TEST_USERS.intern.username);
     });
 
     test('Intern cannot access HR data (authorization failure)', async () => {
-      const hrClient = createMcpClient(CONFIG.mcpHrUrl, internToken, TEST_USERS.intern.userId);
+      const hrClient = createMcpClient(CONFIG.mcpHrUrl, internToken, TEST_USERS.intern.userId, TEST_USERS.intern.roles);
 
       try {
         await hrClient.post<MCPToolResponse>('/tools/list_employees', {
@@ -776,7 +766,7 @@ describe('Multi-Role Access Control', () => {
     });
 
     test('Intern cannot access Finance data', async () => {
-      const financeClient = createMcpClient(CONFIG.mcpFinanceUrl, internToken, TEST_USERS.intern.userId);
+      const financeClient = createMcpClient(CONFIG.mcpFinanceUrl, internToken, TEST_USERS.intern.userId, TEST_USERS.intern.roles);
 
       try {
         await financeClient.post<MCPToolResponse>('/tools/get_budget', {
@@ -803,8 +793,8 @@ describe('Multi-Role Access Control', () => {
 
   describe('Department-Specific Access', () => {
     test('HR user cannot access Finance data', async () => {
-      const hrToken = await getAccessToken(TEST_USERS.hrUser.username, TEST_USERS.hrUser.password);
-      const financeClient = createMcpClient(CONFIG.mcpFinanceUrl, hrToken, TEST_USERS.hrUser.userId);
+      const hrToken = await authProvider.getUserToken(TEST_USERS.hrUser.username);
+      const financeClient = createMcpClient(CONFIG.mcpFinanceUrl, hrToken, TEST_USERS.hrUser.userId, TEST_USERS.hrUser.roles);
 
       try {
         await financeClient.post<MCPToolResponse>('/tools/get_budget', {
@@ -829,8 +819,8 @@ describe('Multi-Role Access Control', () => {
     });
 
     test('Finance user cannot access HR data', async () => {
-      const financeToken = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
-      const hrClient = createMcpClient(CONFIG.mcpHrUrl, financeToken, TEST_USERS.financeUser.userId);
+      const financeToken = await authProvider.getUserToken(TEST_USERS.financeUser.username);
+      const hrClient = createMcpClient(CONFIG.mcpHrUrl, financeToken, TEST_USERS.financeUser.userId, TEST_USERS.financeUser.roles);
 
       try {
         await hrClient.post<MCPToolResponse>('/tools/list_employees', {
@@ -863,11 +853,11 @@ describe('Performance Tests', () => {
   let hrToken: string;
 
   beforeAll(async () => {
-    hrToken = await getAccessToken(TEST_USERS.hrUser.username, TEST_USERS.hrUser.password);
+    hrToken = await authProvider.getUserToken(TEST_USERS.hrUser.username);
   });
 
   test('list_employees completes within 2 seconds for 50 records', async () => {
-    const hrClient = createMcpClient(CONFIG.mcpHrUrl, hrToken, TEST_USERS.hrUser.userId);
+    const hrClient = createMcpClient(CONFIG.mcpHrUrl, hrToken, TEST_USERS.hrUser.userId, TEST_USERS.hrUser.roles);
 
     const startTime = Date.now();
     const response = await hrClient.post<MCPToolResponse>('/tools/list_employees', {
@@ -884,7 +874,7 @@ describe('Performance Tests', () => {
   });
 
   test('Truncation detection adds minimal overhead (<100ms)', async () => {
-    const hrClient = createMcpClient(CONFIG.mcpHrUrl, hrToken, TEST_USERS.hrUser.userId);
+    const hrClient = createMcpClient(CONFIG.mcpHrUrl, hrToken, TEST_USERS.hrUser.userId, TEST_USERS.hrUser.roles);
 
     // Test with limit detection (LIMIT+1 pattern)
     const startTime1 = Date.now();
@@ -914,7 +904,7 @@ describe('Performance Tests', () => {
   });
 
   test('Concurrent tool calls complete successfully', async () => {
-    const hrClient = createMcpClient(CONFIG.mcpHrUrl, hrToken, TEST_USERS.hrUser.userId);
+    const hrClient = createMcpClient(CONFIG.mcpHrUrl, hrToken, TEST_USERS.hrUser.userId, TEST_USERS.hrUser.roles);
 
     // Make 5 concurrent requests
     const promises = Array.from({ length: 5 }, (_, i) =>

@@ -103,3 +103,60 @@ export interface AIQueryResponse {
     warning?: string;
   };
 }
+
+/**
+ * ARR (Annual Recurring Revenue) Types
+ */
+export interface ARRMetrics {
+  arr: number;
+  mrr: number;
+  net_new_arr: number;
+  gross_revenue_retention: number;
+  net_revenue_retention: number;
+  arpu: number;
+  active_subscriptions: number;
+  as_of_date: string;
+}
+
+export interface ARRMovement {
+  period: string;
+  period_label: string;
+  starting_arr: number;
+  new_arr: number;
+  expansion_arr: number;
+  churn_arr: number;
+  net_new_arr: number;
+  ending_arr: number;
+}
+
+export interface CustomerCohort {
+  cohort_month: string;
+  cohort_label: string;
+  customer_count: number;
+  initial_arr: number;
+  months: CohortMonth[];
+}
+
+export interface CohortMonth {
+  month_offset: number;
+  remaining_customers: number;
+  retention_percent: number;
+  arr_retained: number;
+  revenue_retention_percent: number;
+}
+
+export interface Subscription {
+  subscription_id: string;
+  customer_id: string;
+  customer_name: string;
+  plan_name: string;
+  plan_tier: 'starter' | 'professional' | 'enterprise';
+  billing_cycle: 'monthly' | 'annual';
+  mrr: number;
+  arr: number;
+  start_date: string;
+  renewal_date: string;
+  status: 'active' | 'cancelled' | 'churned' | 'paused';
+  expansion_mrr?: number;
+  churn_reason?: string;
+}

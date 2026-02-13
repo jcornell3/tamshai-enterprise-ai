@@ -13,7 +13,7 @@ These tests follow Test-Driven Development principles:
 ## Prerequisites
 
 - [k6](https://k6.io/docs/getting-started/installation/) installed
-- MCP Gateway running on localhost:3100 (or set `GATEWAY_URL`)
+- MCP Gateway running (set `MCP_GATEWAY_URL` environment variable)
 - Optional: Keycloak running for authenticated endpoint tests
 
 ## Installation
@@ -154,14 +154,46 @@ SOAK_DURATION=2h k6 run scenarios/soak.js
 | Stress | < 2000ms | < 5000ms | < 5% | > 20 req/s |
 | Soak | < 500ms | < 1000ms | < 0.1% | > 30 req/s |
 
+## Authentication
+
+Performance tests use **OAuth 2.0 token exchange** (no ROPC/password grant).
+
+### Inline Token Exchange (Default)
+
+k6 scenarios acquire tokens at runtime via the `mcp-integration-runner` service account:
+1. Client credentials grant → service account token
+2. Token exchange → impersonated user token (e.g., `alice.chen`)
+3. Tokens are cached per VU with automatic refresh
+
+Required env vars: `KEYCLOAK_URL`, `MCP_INTEGRATION_RUNNER_SECRET`
+
+### Pre-Generated Tokens (Optional)
+
+For CI or long-running tests, pre-generate tokens before the k6 run:
+
+```bash
+# Generate tokens (requires KEYCLOAK_URL and MCP_INTEGRATION_RUNNER_SECRET)
+npm run generate-tokens
+
+# Run k6 with pre-generated tokens
+TOKENS_FILE=tokens.json k6 run scenarios/load.js
+```
+
+**Token refresh strategy:**
+- Smoke/load tests (< 10 min): Pre-generated tokens last the whole test
+- Stress tests (15 min): Inline exchange handles refresh automatically
+- Soak tests (4+ hours): Always use inline exchange (don't set `TOKENS_FILE`)
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GATEWAY_URL` | `http://localhost:3100` | MCP Gateway URL |
-| `KEYCLOAK_URL` | `http://localhost:8180` | Keycloak URL |
+| `MCP_GATEWAY_URL` | **(required)** | MCP Gateway URL (from `PORT_MCP_GATEWAY`) |
+| `KEYCLOAK_URL` | **(required)** | Keycloak URL (from `PORT_KEYCLOAK`) |
+| `MCP_INTEGRATION_RUNNER_SECRET` | **(required)** | Service account secret for token exchange |
 | `KEYCLOAK_REALM` | `tamshai-corp` | Keycloak realm |
-| `TEST_PASSWORD` | `[REDACTED-DEV-PASSWORD]` | Test user password |
+| `MCP_INTEGRATION_RUNNER_CLIENT_ID` | `mcp-integration-runner` | Service account client ID |
+| `TOKENS_FILE` | *(none)* | Path to pre-generated tokens JSON |
 | `SOAK_DURATION` | `4h` | Soak test duration |
 | `ENVIRONMENT` | `local` | Environment tag |
 
@@ -182,7 +214,7 @@ Add to GitHub Actions:
   with:
     filename: tests/performance/scenarios/smoke.js
   env:
-    GATEWAY_URL: http://localhost:3100
+    MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
 
 - name: Upload Results
   uses: actions/upload-artifact@v4
@@ -202,13 +234,15 @@ Add to GitHub Actions:
 ## Interpreting Results
 
 ### GREEN (All Thresholds Pass)
-```
+
+```text
 LOAD TEST RESULTS: PASSED (GREEN)
 Thresholds: 8/8 passed
 ```
 
 ### RED (Some Thresholds Fail)
-```
+
+```text
 LOAD TEST RESULTS: FAILED (RED)
 Thresholds: 5/8 passed
   ✗ http_req_duration: FAIL
@@ -222,10 +256,13 @@ When RED:
 
 ## Files
 
-```
+```text
 tests/performance/
 ├── package.json           # npm scripts
 ├── README.md              # This file
+├── lib/
+│   ├── auth.js            # k6 token exchange auth module
+│   └── generate-tokens.mjs # Node.js token pre-generation script
 └── scenarios/
     ├── smoke.js           # Quick validation
     ├── load.js            # Production load

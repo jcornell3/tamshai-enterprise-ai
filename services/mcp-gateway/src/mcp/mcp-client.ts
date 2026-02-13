@@ -14,12 +14,23 @@ import {
   MCPToolResponse,
   isSuccessResponse,
 } from '../types/mcp-response';
+import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
 
 export interface MCPClientConfig {
   readTimeout: number;   // Timeout for read operations (ms)
   writeTimeout: number;  // Timeout for write operations (ms)
   maxPages?: number;      // Maximum pages to fetch during pagination (default: 10)
   useGcpAuth?: boolean;  // Enable GCP service-to-service authentication (default: false in dev, auto-detected in GCP)
+  internalSecret?: string; // Shared secret for MCP server authentication (MCP_INTERNAL_SECRET)
+}
+
+// Internal config type with resolved defaults
+interface MCPClientConfigInternal {
+  readTimeout: number;
+  writeTimeout: number;
+  maxPages: number;
+  useGcpAuth: boolean;
+  internalSecret?: string;
 }
 
 export interface MCPQueryResult {
@@ -42,10 +53,11 @@ export interface MCPQueryResult {
  */
 export class MCPClient {
   private axios: AxiosInstance;
-  private config: Required<MCPClientConfig>;
+  private config: MCPClientConfigInternal;
   private logger: Logger;
   private googleAuth: GoogleAuth | null = null;
   private idTokenClients: Map<string, IdTokenClient> = new Map();
+  private internalSecret: string | undefined;
 
   constructor(config: MCPClientConfig, logger: Logger, axiosInstance?: AxiosInstance) {
     // Auto-detect GCP environment if not explicitly set
@@ -55,9 +67,18 @@ export class MCPClient {
       ...config,
       maxPages: config.maxPages ?? 10,
       useGcpAuth: config.useGcpAuth ?? isGcp,
+      internalSecret: config.internalSecret ?? process.env.MCP_INTERNAL_SECRET,
     };
     this.logger = logger;
     this.axios = axiosInstance || axios;
+    this.internalSecret = this.config.internalSecret;
+
+    // Warn if internal secret is not configured (security risk)
+    if (!this.internalSecret) {
+      this.logger.warn('MCP_INTERNAL_SECRET not configured - MCP servers may be vulnerable to direct access');
+    } else {
+      this.logger.info('MCP internal authentication enabled');
+    }
 
     // Initialize GoogleAuth if running in GCP
     if (this.config.useGcpAuth) {
@@ -89,8 +110,11 @@ export class MCPClient {
       }
 
       // Get the ID token
-      const headers = await client.getRequestHeaders();
-      const authHeader = headers['Authorization'] || headers['authorization'];
+      // google-auth-library v9 returns {[key: string]: string}, v10+ returns Fetch API Headers
+      const headers = await client.getRequestHeaders() as Record<string, string> | Headers;
+      const authHeader = 'get' in headers && typeof headers.get === 'function'
+        ? (headers.get('Authorization') || headers.get('authorization'))
+        : ((headers as Record<string, string>)['Authorization'] || (headers as Record<string, string>)['authorization']);
       if (authHeader && authHeader.startsWith('Bearer ')) {
         return authHeader.substring(7);
       }
@@ -141,6 +165,11 @@ export class MCPClient {
 
       try {
         do {
+          // Generate internal authentication token for MCP server
+          const internalToken = this.internalSecret
+            ? generateInternalToken(this.internalSecret, userContext.userId, userContext.roles)
+            : undefined;
+
           const response = await this.axios.post(
             targetUrl,
             {
@@ -160,6 +189,8 @@ export class MCPClient {
                 'Content-Type': 'application/json',
                 'X-User-ID': userContext.userId,
                 'X-User-Roles': userContext.roles.join(','),
+                // Add internal token for MCP server authentication (prevents direct access bypass)
+                ...(internalToken && { [INTERNAL_TOKEN_HEADER]: internalToken }),
                 // Add GCP ID token for Cloud Run service-to-service auth
                 ...(idToken && { 'Authorization': `Bearer ${idToken}` }),
               },

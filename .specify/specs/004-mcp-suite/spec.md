@@ -74,14 +74,14 @@ interface PaginationMetadata {
 | Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
 | :--- | :--- | :--- | :--- | :--- |
 | `get_customer` | Get customer details | `{ customer_id: string }` | `MCPToolResponse<Customer>` | sales-read, executive |
-| `list_opportunities` | List sales opportunities | `{ stage?: string, limit?: number }` | `MCPToolResponse<Opportunity[]>` with truncation metadata | sales-read, executive |
+| `list_deals` | List sales deals | `{ stage?: string, limit?: number }` | `MCPToolResponse<Deal[]>` with truncation metadata | sales-read, executive |
 | `get_pipeline` | Get sales pipeline summary | `{ quarter?: string }` | `MCPToolResponse<PipelineSummary>` | sales-read, executive |
 
 #### Write Tools (v1.4 - Section 5.6)
 | Tool Name | Description | Input Schema | Output Schema (v1.4) | Required Role |
 | :--- | :--- | :--- | :--- | :--- |
 | `delete_customer` | Delete customer (requires confirmation) | `{ customer_id: string }` | `MCPToolResponse` (pending_confirmation) | sales-write, executive |
-| `close_opportunity` | Close opportunity as won/lost (requires confirmation) | `{ opportunity_id: string, outcome: 'won' \| 'lost' }` | `MCPToolResponse` (pending_confirmation) | sales-write, executive |
+| `close_deal` | Close deal as won/lost (requires confirmation) | `{ deal_id: string, outcome: 'won' \| 'lost' }` | `MCPToolResponse` (pending_confirmation) | sales-write, executive |
 
 ### MCP Support Server (Port 3104)
 
@@ -102,7 +102,7 @@ interface PaginationMetadata {
 * **Self-Service HR:** Marcus (Engineer) asks "What's my PTO balance?" -> MCP HR returns `{ status: 'success', data: { pto_balance: 15 } }` -> AI responds with balance.
 * **Manager Query:** Nina (Manager) asks "Who on my team has performance reviews due?" -> MCP HR applies RLS -> Returns only Nina's team members with `{ status: 'success', data: [...] }`.
 * **Executive Dashboard:** Eve (CEO) asks "What's our Q4 budget vs actual spend?" -> MCP Finance returns company-wide data -> AI generates summary.
-* **Sales Insight:** Carol (Sales VP) asks "Show me top 5 deals closing this month" -> MCP Sales queries MongoDB -> Returns filtered opportunities.
+* **Sales Insight:** Carol (Sales VP) asks "Show me top 5 deals closing this month" -> MCP Sales queries MongoDB `deals` collection -> Returns filtered deals.
 
 ### Error Handling (v1.4 - Section 7.4)
 * **Not Found Error:** User asks "Show me employee ABC123" -> Tool returns `{ status: 'error', code: 'EMPLOYEE_NOT_FOUND', message: 'Employee not found. Verify the employee ID is correct.', suggestedAction: 'Use list_employees tool to find valid employee IDs.' }` -> AI informs user politely.
@@ -608,7 +608,7 @@ async function executeDeleteEmployee(
 |---------|------|-------------------|
 | **mcp-hr** | 3101 | `get_employee`, `list_employees`, `delete_employee` |
 | **mcp-finance** | 3102 | `get_budget`, `list_budgets`, `list_invoices`, `get_expense_report`, `delete_invoice`, `approve_budget` |
-| **mcp-sales** | 3103 | `list_opportunities`, `get_customer`, `delete_opportunity` |
+| **mcp-sales** | 3103 | `list_deals`, `get_customer`, `close_deal` |
 | **mcp-support** | 3104 | `search_tickets`, `search_knowledge_base`, `close_ticket` |
 
 **Total: 15 tools implemented** (9 read, 6 write with confirmations)
@@ -616,7 +616,7 @@ async function executeDeleteEmployee(
 ### Known Gaps
 - `update_salary` tool not implemented (can be added as needed)
 - `get_org_chart`, `get_performance_reviews` not implemented
-- `get_pipeline`, `close_opportunity` not implemented
+- `get_pipeline`, `close_deal` not implemented
 
 ### Write Tool Confirmation Flow (End-to-End)
 
@@ -729,7 +729,7 @@ app.post('/execute', authMiddleware, async (req, res) => {
   // Action-specific data:
   employeeId: 'uuid',
   employeeName: 'Marcus Johnson',
-  employeeEmail: 'marcus@tamshai.local',
+  employeeEmail: 'marcus@tamshai-playground.local',
   department: 'Engineering',
   jobTitle: 'Software Engineer',
   reason: 'No reason provided'
@@ -805,7 +805,7 @@ app.post('/execute', authMiddleware, async (req, res) => {
       "properties": {
         "action": { "type": "string", "enum": [
           "delete_employee", "update_salary", "delete_invoice",
-          "approve_budget", "delete_customer", "close_opportunity", "close_ticket"
+          "approve_budget", "delete_customer", "close_deal", "close_ticket"
         ]},
         "userId": { "type": "string", "format": "uuid" },
         "mcpServer": { "type": "string", "enum": ["hr", "finance", "sales", "support"] },
@@ -1169,18 +1169,18 @@ app.post('/execute', authMiddleware, async (req, res) => {
 }
 ```
 
-#### list_opportunities
+#### list_deals
 
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "list_opportunities Input",
+  "title": "list_deals Input",
   "type": "object",
   "properties": {
     "stage": {
       "type": "string",
-      "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"],
-      "description": "Filter by sales stage"
+      "enum": ["PROSPECTING", "DISCOVERY", "QUALIFICATION", "PROPOSAL", "NEGOTIATION", "CLOSED_WON", "CLOSED_LOST"],
+      "description": "Filter by sales stage (uppercase)"
     },
     "owner": {
       "type": "string",
@@ -1209,17 +1209,17 @@ app.post('/execute', authMiddleware, async (req, res) => {
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Opportunity",
+  "title": "Deal",
   "type": "object",
-  "required": ["_id", "customer_id", "name", "value", "stage"],
+  "required": ["_id", "customer_id", "deal_name", "value", "stage"],
   "properties": {
     "_id": { "type": "string" },
     "customer_id": { "type": "string" },
     "customer_name": { "type": "string" },
-    "name": { "type": "string" },
+    "deal_name": { "type": "string" },
     "value": { "type": "number", "minimum": 0 },
     "currency": { "type": "string", "default": "USD" },
-    "stage": { "type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"] },
+    "stage": { "type": "string", "enum": ["PROSPECTING", "DISCOVERY", "QUALIFICATION", "PROPOSAL", "NEGOTIATION", "CLOSED_WON", "CLOSED_LOST"] },
     "probability": { "type": "number", "minimum": 0, "maximum": 100 },
     "expected_close_date": { "type": "string", "format": "date" },
     "owner": { "type": "string" },
@@ -1251,16 +1251,16 @@ app.post('/execute', authMiddleware, async (req, res) => {
 }
 ```
 
-#### close_opportunity
+#### close_deal
 
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "close_opportunity Input",
+  "title": "close_deal Input",
   "type": "object",
-  "required": ["opportunity_id", "outcome"],
+  "required": ["deal_id", "outcome"],
   "properties": {
-    "opportunity_id": {
+    "deal_id": {
       "type": "string"
     },
     "outcome": {

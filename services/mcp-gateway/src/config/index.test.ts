@@ -37,15 +37,18 @@ describe('Configuration Module', () => {
 
       const config = loadConfig();
 
+      // Port has a default, but URL-based configs are undefined when not set (fail-fast design)
       expect(config.port).toBe(3000);
-      expect(config.keycloak.url).toBe('http://localhost:8180');
-      expect(config.keycloak.realm).toBe('tamshai-corp');
-      expect(config.keycloak.clientId).toBe('mcp-gateway');
+      expect(config.keycloak.url).toBeUndefined();
+      expect(config.keycloak.realm).toBeUndefined();
+      expect(config.keycloak.clientId).toBeUndefined();
       expect(config.claude.model).toBe('claude-sonnet-4-20250514');
-      expect(config.mcpServers.hr).toBe('http://localhost:3001');
-      expect(config.mcpServers.finance).toBe('http://localhost:3002');
-      expect(config.mcpServers.sales).toBe('http://localhost:3003');
-      expect(config.mcpServers.support).toBe('http://localhost:3004');
+      // MCP server URLs are undefined when not set (fail-fast design)
+      expect(config.mcpServers.hr).toBeUndefined();
+      expect(config.mcpServers.finance).toBeUndefined();
+      expect(config.mcpServers.sales).toBeUndefined();
+      expect(config.mcpServers.support).toBeUndefined();
+      // Timeouts have sensible defaults
       expect(config.timeouts.mcpRead).toBe(5000);
       expect(config.timeouts.mcpWrite).toBe(10000);
       expect(config.timeouts.claude).toBe(60000);
@@ -316,7 +319,7 @@ describe('Configuration Module', () => {
       expect(config).toHaveProperty('logLevel');
     });
 
-    it('should use defaults for all MCP servers', async () => {
+    it('should return undefined for MCP server URLs when not set (fail-fast design)', async () => {
       delete process.env.MCP_HR_URL;
       delete process.env.MCP_FINANCE_URL;
       delete process.env.MCP_SALES_URL;
@@ -324,10 +327,11 @@ describe('Configuration Module', () => {
 
       const config = await loadConfigAsync();
 
-      expect(config.mcpServers.hr).toBe('http://localhost:3001');
-      expect(config.mcpServers.finance).toBe('http://localhost:3002');
-      expect(config.mcpServers.sales).toBe('http://localhost:3003');
-      expect(config.mcpServers.support).toBe('http://localhost:3004');
+      // MCP server URLs are undefined when not set (fail-fast design)
+      expect(config.mcpServers.hr).toBeUndefined();
+      expect(config.mcpServers.finance).toBeUndefined();
+      expect(config.mcpServers.sales).toBeUndefined();
+      expect(config.mcpServers.support).toBeUndefined();
     });
 
     it('should use defaults for all timeouts', async () => {

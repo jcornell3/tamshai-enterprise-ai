@@ -137,8 +137,6 @@ resource "keycloak_role" "executive" {
 # Employee Role (base access for self-access via RLS)
 # All employees get this role to access MCP servers
 # RLS policies filter data to only show their own records
-# Added: 2026-01-13 for IAM Self-Access feature
-# Rollback: Remove this resource and keycloak_role.employee.id from all user_roles
 resource "keycloak_role" "employee" {
   realm_id    = keycloak_realm.tamshai_corp.id
   client_id   = keycloak_openid_client.mcp_gateway.id
@@ -159,11 +157,11 @@ resource "keycloak_openid_client" "mcp_gateway" {
   access_type                  = "CONFIDENTIAL"
   client_secret                = var.mcp_gateway_client_secret
   standard_flow_enabled        = true
-  direct_access_grants_enabled = true
+  direct_access_grants_enabled = var.direct_access_grants_enabled # SECURITY: ROPC disabled in stage/prod, enabled in dev/CI for testing (see docs/security/ROPC_ASSESSMENT.md)
   service_accounts_enabled     = true
 
   valid_redirect_uris = var.valid_redirect_uris
-  web_origins         = ["+"] # Allow all valid redirect URIs
+  web_origins         = var.web_origins # Explicit CORS origins (defense-in-depth)
 
   # OAuth/OIDC settings
   full_scope_allowed = true # Include all assigned client roles in tokens
@@ -187,7 +185,7 @@ resource "keycloak_openid_client" "web_portal" {
   implicit_flow_enabled        = false # Use auth code + PKCE instead
 
   valid_redirect_uris = var.valid_redirect_uris
-  web_origins         = ["+"] # Allow all valid redirect URIs
+  web_origins         = var.web_origins # Explicit CORS origins (defense-in-depth)
 
   # PKCE is enforced by default for PUBLIC clients in Keycloak 17+
   # OAuth/OIDC settings
@@ -350,6 +348,50 @@ resource "keycloak_openid_client_service_account_role" "mcp_hr_service_manage_us
 }
 
 # ============================================================
+# MCP Integration Runner Client (Test-Only Service Account)
+# ============================================================
+# This client is used by integration tests to authenticate via client credentials
+# and impersonate test users via token exchange. Only created in dev/CI environments.
+#
+# Security: This client should NEVER exist in production environments.
+# The environment check in variables.tf ensures it's only created when needed.
+
+resource "keycloak_openid_client" "mcp_integration_runner" {
+  count = var.environment == "dev" || var.environment == "ci" ? 1 : 0
+
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = "mcp-integration-runner"
+  name      = "MCP Integration Test Runner"
+  enabled   = true
+
+  access_type                  = "CONFIDENTIAL"
+  client_secret                = var.mcp_integration_runner_secret
+  service_accounts_enabled     = true  # Enable client credentials flow
+  standard_flow_enabled        = false # No browser auth
+  direct_access_grants_enabled = false # No password grant (secure)
+  full_scope_allowed           = true  # Include all user roles in exchanged tokens
+
+  valid_redirect_uris = [] # Not used for service accounts
+}
+
+# Assign impersonation role to integration runner service account
+# This allows token exchange to impersonate test users
+data "keycloak_role" "impersonation" {
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = data.keycloak_openid_client.realm_management.id
+  name      = "impersonation"
+}
+
+resource "keycloak_openid_client_service_account_role" "integration_runner_impersonation" {
+  count = var.environment == "dev" || var.environment == "ci" ? 1 : 0
+
+  realm_id                = keycloak_realm.tamshai_corp.id
+  service_account_user_id = keycloak_openid_client.mcp_integration_runner[0].service_account_user_id
+  client_id               = data.keycloak_openid_client.realm_management.id
+  role                    = data.keycloak_role.impersonation.name
+}
+
+# ============================================================
 # Test Users
 # ============================================================
 
@@ -358,7 +400,7 @@ resource "keycloak_user" "alice_chen" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "alice.chen"
   enabled    = true
-  email      = "alice@tamshai.com"
+  email      = "alice@tamshai-playground.local"
   first_name = "Alice"
   last_name  = "Chen"
 
@@ -378,7 +420,7 @@ resource "keycloak_user_roles" "alice_chen_roles" {
   user_id  = keycloak_user.alice_chen.id
 
   role_ids = [
-    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id,
     keycloak_role.hr_read.id,
     keycloak_role.hr_write.id,
   ]
@@ -389,7 +431,7 @@ resource "keycloak_user" "bob_martinez" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "bob.martinez"
   enabled    = true
-  email      = "bob@tamshai.com"
+  email      = "bob@tamshai-playground.local"
   first_name = "Bob"
   last_name  = "Martinez"
 
@@ -409,7 +451,7 @@ resource "keycloak_user_roles" "bob_martinez_roles" {
   user_id  = keycloak_user.bob_martinez.id
 
   role_ids = [
-    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id,
     keycloak_role.finance_read.id,
     keycloak_role.finance_write.id,
   ]
@@ -420,7 +462,7 @@ resource "keycloak_user" "carol_johnson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "carol.johnson"
   enabled    = true
-  email      = "carol@tamshai.com"
+  email      = "carol@tamshai-playground.local"
   first_name = "Carol"
   last_name  = "Johnson"
 
@@ -440,7 +482,7 @@ resource "keycloak_user_roles" "carol_johnson_roles" {
   user_id  = keycloak_user.carol_johnson.id
 
   role_ids = [
-    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id,
     keycloak_role.sales_read.id,
     keycloak_role.sales_write.id,
   ]
@@ -451,7 +493,7 @@ resource "keycloak_user" "dan_williams" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "dan.williams"
   enabled    = true
-  email      = "dan@tamshai.com"
+  email      = "dan@tamshai-playground.local"
   first_name = "Dan"
   last_name  = "Williams"
 
@@ -471,7 +513,7 @@ resource "keycloak_user_roles" "dan_williams_roles" {
   user_id  = keycloak_user.dan_williams.id
 
   role_ids = [
-    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id,
     keycloak_role.support_read.id,
     keycloak_role.support_write.id,
   ]
@@ -482,7 +524,7 @@ resource "keycloak_user" "eve_thompson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "eve.thompson"
   enabled    = true
-  email      = "eve@tamshai.com"
+  email      = "eve@tamshai-playground.local"
   first_name = "Eve"
   last_name  = "Thompson"
 
@@ -502,7 +544,7 @@ resource "keycloak_user_roles" "eve_thompson_roles" {
   user_id  = keycloak_user.eve_thompson.id
 
   role_ids = [
-    keycloak_role.employee.id, # Added 2026-01-13: self-access via RLS
+    keycloak_role.employee.id,
     keycloak_role.executive.id,
   ]
 }
@@ -512,7 +554,7 @@ resource "keycloak_user" "frank_davis" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "frank.davis"
   enabled    = true
-  email      = "frank@tamshai.com"
+  email      = "frank@tamshai-playground.local"
   first_name = "Frank"
   last_name  = "Davis"
 
@@ -527,7 +569,6 @@ resource "keycloak_user" "frank_davis" {
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
-# Added 2026-01-13: Employee role for self-access via RLS
 # Interns can view their own data in all MCP servers
 resource "keycloak_user_roles" "frank_davis_roles" {
   realm_id = keycloak_realm.tamshai_corp.id
@@ -543,7 +584,7 @@ resource "keycloak_user" "nina_patel" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "nina.patel"
   enabled    = true
-  email      = "nina@tamshai.com"
+  email      = "nina@tamshai-playground.local"
   first_name = "Nina"
   last_name  = "Patel"
 
@@ -558,7 +599,6 @@ resource "keycloak_user" "nina_patel" {
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
-# Added 2026-01-13: Employee role for self-access via RLS
 # Managers can view their own data in all MCP servers
 resource "keycloak_user_roles" "nina_patel_roles" {
   realm_id = keycloak_realm.tamshai_corp.id
@@ -574,7 +614,7 @@ resource "keycloak_user" "marcus_johnson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "marcus.johnson"
   enabled    = true
-  email      = "marcus@tamshai.com"
+  email      = "marcus@tamshai-playground.local"
   first_name = "Marcus"
   last_name  = "Johnson"
 
@@ -589,7 +629,6 @@ resource "keycloak_user" "marcus_johnson" {
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
-# Added 2026-01-13: Employee role for self-access via RLS
 # Engineers can view their own data in all MCP servers
 resource "keycloak_user_roles" "marcus_johnson_roles" {
   realm_id = keycloak_realm.tamshai_corp.id
@@ -607,14 +646,14 @@ resource "keycloak_user" "test_user_journey" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "test-user.journey"
   enabled    = true
-  email      = "test-user@tamshai.com"
+  email      = "test-user@tamshai-playground.local"
   first_name = "Test"
   last_name  = "User"
 
   email_verified = true
 
   initial_password {
-    value     = "***REDACTED_PASSWORD***"
+    value     = var.test_user_password
     temporary = false
   }
 
@@ -622,7 +661,6 @@ resource "keycloak_user" "test_user_journey" {
   required_actions = var.environment == "ci" ? [] : ["CONFIGURE_TOTP"]
 }
 
-# Added 2026-01-13: Employee role for self-access via RLS
 # Test user can view their own data during E2E tests
 resource "keycloak_user_roles" "test_user_journey_roles" {
   realm_id = keycloak_realm.tamshai_corp.id

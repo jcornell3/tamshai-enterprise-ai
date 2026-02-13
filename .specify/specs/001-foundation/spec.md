@@ -15,7 +15,7 @@
 No MCP tools are exposed in this phase. This is pure infrastructure setup.
 
 ## 4. User Interaction Scenarios
-* **Setup Scenario (Dev):** Administrator runs Terraform (`cd infrastructure/terraform/dev && terraform apply -var-file=dev.tfvars`) -> All services start -> Keycloak accessible at localhost:8180 -> Access via https://www.tamshai.local
+* **Setup Scenario (Dev):** Administrator runs Terraform (`cd infrastructure/terraform/dev && terraform apply -var-file=dev.tfvars`) -> All services start -> Keycloak accessible at localhost:8180 -> Access via https://www.tamshai-playground.local
 * **Setup Scenario (Legacy):** Administrator runs `./scripts/setup-dev.sh` (deprecated) -> All services start -> Keycloak accessible at localhost:8180
 * **VPS Deployment:** GitHub Actions workflow triggered -> Vault SSH authentication -> Docker Compose deployed on Hetzner VPS
 * **Health Check:** Administrator runs health checks -> All services respond healthy -> Docker network isolated -> Redis cache operational.
@@ -52,9 +52,9 @@ No MCP tools are exposed in this phase. This is pure infrastructure setup.
   - Benefits: Atomic setup (~30s), no Terraform timing issues, consistent across environments
 * **Terraform Dev Environment:**
   - Location: `infrastructure/terraform/dev/`
-  - Hosts file validation for tamshai.local
+  - Hosts file validation for tamshai-playground.local
   - Caddy health check integration
-  - HTTPS access via https://www.tamshai.local
+  - HTTPS access via https://www.tamshai-playground.local
 
 ## Status
 **COMPLETED ✓** - This phase has been successfully implemented.

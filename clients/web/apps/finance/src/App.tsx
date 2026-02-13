@@ -4,6 +4,7 @@ import { useAuth } from '@tamshai/auth';
 import { useEffect } from 'react';
 import Layout from './components/Layout';
 import { DashboardPage } from './pages/DashboardPage';
+import { ARRDashboardPage } from './pages/ARRDashboardPage';
 import { BudgetsPage } from './pages/BudgetsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { ExpenseReportsPage } from './pages/ExpenseReportsPage';
@@ -50,16 +51,22 @@ function CallbackPage() {
 function App() {
   return (
     <Routes>
-      {/* Protected routes with Layout */}
+      {/* Protected routes with Layout
+       * v1.5: Relaxed to allow all employees (tiered access enforced by MCP server + nav visibility)
+       * - Employees: Can access Expense Reports and AI Query
+       * - Managers: Can also access Budgets
+       * - Finance/Executive: Full access to Dashboard, ARR, Invoices
+       */}
       <Route
         path="/"
         element={
-          <PrivateRoute requiredRoles={['finance-read', 'finance-write', 'executive']}>
+          <PrivateRoute requiredRoles={['employee', 'manager', 'finance-read', 'finance-write', 'executive']}>
             <Layout />
           </PrivateRoute>
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="arr" element={<ARRDashboardPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="invoices" element={<InvoicesPage />} />
         <Route path="expense-reports" element={<ExpenseReportsPage />} />

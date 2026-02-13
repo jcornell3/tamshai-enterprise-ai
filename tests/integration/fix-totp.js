@@ -1,14 +1,16 @@
 const axios = require('axios');
 
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
+
 async function fixTOTP() {
-  // Get admin token
-  const tokenResp = await axios.post('http://127.0.0.1:8180/realms/master/protocol/openid-connect/token',
-    new URLSearchParams({
-      client_id: 'admin-cli',
-      username: 'admin',
-      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
-      grant_type: 'password'
-    }));
+  // Get admin token (prefer client credentials over ROPC)
+  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  const params = clientSecret
+    ? { client_id: 'admin-cli', client_secret: clientSecret, grant_type: 'client_credentials' }
+    : { client_id: 'admin-cli', username: 'admin', password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin', grant_type: 'password' };
+
+  const tokenResp = await axios.post(`${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token`,
+    new URLSearchParams(params));
   const adminToken = tokenResp.data.access_token;
   console.log('Got admin token');
 
@@ -18,7 +20,7 @@ async function fixTOTP() {
   for (const username of users) {
     // Get user
     const userResp = await axios.get(
-      `http://127.0.0.1:8180/admin/realms/${realm}/users?username=${username}`,
+      `${KEYCLOAK_URL}/admin/realms/${realm}/users?username=${username}`,
       { headers: { Authorization: `Bearer ${adminToken}` }}
     );
     if (userResp.data.length === 0) {
@@ -32,7 +34,7 @@ async function fixTOTP() {
     if (user.requiredActions && user.requiredActions.includes('CONFIGURE_TOTP')) {
       const newActions = user.requiredActions.filter(a => a !== 'CONFIGURE_TOTP');
       await axios.put(
-        `http://127.0.0.1:8180/admin/realms/${realm}/users/${user.id}`,
+        `${KEYCLOAK_URL}/admin/realms/${realm}/users/${user.id}`,
         { requiredActions: newActions },
         { headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' }}
       );

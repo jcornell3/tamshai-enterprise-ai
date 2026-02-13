@@ -5,13 +5,14 @@
  * Run with report: k6 run --out json=results.json scenarios/gateway-load.js
  *
  * Prerequisites:
- * - MCP Gateway running on GATEWAY_URL (default: http://localhost:3100)
- * - Keycloak running for authenticated tests
+ * - MCP Gateway running on MCP_GATEWAY_URL (from environment, no default)
+ * - Keycloak running on KEYCLOAK_URL (from environment, no default)
  */
 
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
+import { getAccessToken } from '../lib/auth.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
@@ -21,9 +22,7 @@ const mcpToolsDuration = new Trend('mcp_tools_duration');
 const requestCounter = new Counter('total_requests');
 
 // Configuration
-const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:3100';
-const KEYCLOAK_URL = __ENV.KEYCLOAK_URL || 'http://localhost:8180';
-const KEYCLOAK_REALM = __ENV.KEYCLOAK_REALM || 'tamshai-corp';
+const GATEWAY_URL = __ENV.MCP_GATEWAY_URL;
 
 // Test options
 export const options = {
@@ -65,47 +64,6 @@ export function setup() {
 
   console.log(`Testing gateway at: ${GATEWAY_URL}`);
   return { gatewayUrl: GATEWAY_URL };
-}
-
-// Get access token from Keycloak (cached per VU)
-let cachedToken = null;
-let tokenExpiry = 0;
-
-function getAccessToken() {
-  const now = Date.now();
-
-  // Return cached token if still valid (with 30s buffer)
-  if (cachedToken && tokenExpiry > now + 30000) {
-    return cachedToken;
-  }
-
-  const tokenUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
-
-  const response = http.post(
-    tokenUrl,
-    {
-      grant_type: 'password',
-      client_id: 'mcp-gateway',
-      username: 'alice.chen',
-      password: __ENV.DEV_USER_PASSWORD || 'dev-password-not-set',
-      scope: 'openid',
-    },
-    {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      tags: { name: 'auth-token' },
-    }
-  );
-
-  if (response.status === 200) {
-    const data = JSON.parse(response.body);
-    cachedToken = data.access_token;
-    tokenExpiry = now + (data.expires_in * 1000);
-    return cachedToken;
-  }
-
-  return null;
 }
 
 // Main test function - runs for each virtual user
@@ -246,7 +204,8 @@ export function teardown(data) {
 export function handleSummary(data) {
   return {
     stdout: textSummary(data, { indent: ' ', enableColors: true }),
-    'summary.json': JSON.stringify(data),
+    // Output to full path so CI can find it (k6-action runs from repo root)
+    'tests/performance/summary.json': JSON.stringify(data),
   };
 }
 

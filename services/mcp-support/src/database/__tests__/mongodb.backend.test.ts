@@ -300,12 +300,15 @@ describe('MongoDBBackend', () => {
       expect(mockCollection.updateOne).toHaveBeenCalledWith(
         { ticket_id: 'SUPP-001' },
         {
-          $set: {
+          $set: expect.objectContaining({
             status: 'closed',
             resolution: 'Fixed the issue',
-          },
+          }),
         }
       );
+      // Verify updated_at is also set
+      const updateCall = mockCollection.updateOne.mock.calls[0][1];
+      expect(updateCall.$set.updated_at).toBeDefined();
     });
 
     it('should return false when ticket not found', async () => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useAuth, apiConfig } from '@tamshai/auth';
 
 /**
@@ -153,12 +153,12 @@ export function ApprovalCard({
         </h4>
         <dl className="grid grid-cols-2 gap-2 text-sm">
           {Object.entries(confirmationData).map(([key, value]) => (
-            <React.Fragment key={key}>
+            <Fragment key={key}>
               <dt className="font-medium text-secondary-600 capitalize">
                 {key.replace(/([A-Z])/g, ' $1').trim()}:
               </dt>
               <dd className="text-secondary-900">{String(value)}</dd>
-            </React.Fragment>
+            </Fragment>
           ))}
         </dl>
       </div>

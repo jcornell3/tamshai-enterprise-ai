@@ -75,12 +75,11 @@ describe('Database Connection', () => {
         rowCount: 1,
       };
 
-      // Mock the main query result
+      // Mock the query results for optimized implementation:
+      // BEGIN -> set_config SELECT -> Main query -> COMMIT
       mockClient.query
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_id
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_email
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_roles
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // set_config SELECT (combined)
         .mockResolvedValueOnce(expectedResult) // Main query
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // COMMIT
 
@@ -89,14 +88,10 @@ describe('Database Connection', () => {
       expect(result).toEqual(expectedResult);
       expect(mockPool.connect).toHaveBeenCalled();
       expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
+      // Check for optimized set_config call with parameters
       expect(mockClient.query).toHaveBeenCalledWith(
-        expect.stringContaining('SET LOCAL app.current_user_id')
-      );
-      expect(mockClient.query).toHaveBeenCalledWith(
-        expect.stringContaining('SET LOCAL app.current_user_email')
-      );
-      expect(mockClient.query).toHaveBeenCalledWith(
-        expect.stringContaining('SET LOCAL app.current_user_roles')
+        expect.stringContaining('set_config'),
+        expect.arrayContaining([mockUserContext.userId, mockUserContext.email, 'hr-read,hr-write'])
       );
       expect(mockClient.query).toHaveBeenCalledWith(queryText, values);
       expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
@@ -106,11 +101,10 @@ describe('Database Connection', () => {
     it('rolls back transaction on query error', async () => {
       const queryError = new Error('Query failed');
 
+      // Mock for optimized implementation: BEGIN -> set_config -> Main query fails -> ROLLBACK
       mockClient.query
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_id
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_email
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_roles
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // set_config SELECT
         .mockRejectedValueOnce(queryError) // Main query fails
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // ROLLBACK
 
@@ -126,11 +120,10 @@ describe('Database Connection', () => {
       const queryError = new Error('Query failed');
       const rollbackError = new Error('Rollback failed');
 
+      // Mock for optimized implementation
       mockClient.query
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_id
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_email
-        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SET user_roles
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // set_config SELECT
         .mockRejectedValueOnce(queryError) // Main query fails
         .mockRejectedValueOnce(rollbackError); // ROLLBACK fails
 
@@ -152,9 +145,10 @@ describe('Database Connection', () => {
 
       await queryWithRLS(userWithoutEmail, 'SELECT 1', []);
 
-      // Should still set user_email with empty string
+      // Should still set user_email with empty string via set_config
       expect(mockClient.query).toHaveBeenCalledWith(
-        expect.stringContaining('SET LOCAL app.current_user_email')
+        expect.stringContaining('set_config'),
+        expect.arrayContaining([userWithoutEmail.userId, '', 'hr-read'])
       );
     });
 
@@ -163,11 +157,11 @@ describe('Database Connection', () => {
 
       await queryWithRLS(mockUserContext, 'SELECT 1', []);
 
-      // Check that roles are joined
-      const setRolesCall = mockClient.query.mock.calls.find(
-        (call: [string]) => call[0].includes('current_user_roles')
+      // Check that roles are joined in set_config call
+      expect(mockClient.query).toHaveBeenCalledWith(
+        expect.stringContaining('set_config'),
+        expect.arrayContaining(['hr-read,hr-write'])
       );
-      expect(setRolesCall[0]).toContain('hr-read,hr-write');
     });
   });
 

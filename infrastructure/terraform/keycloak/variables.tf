@@ -39,7 +39,7 @@ variable "mcp_gateway_client_secret" {
   description = "Client secret for MCP Gateway"
   type        = string
   sensitive   = true
-  default     = "test-client-secret"
+  default     = "mcp-gateway-secret"
 }
 
 variable "mcp_hr_service_client_secret" {
@@ -47,6 +47,13 @@ variable "mcp_hr_service_client_secret" {
   type        = string
   sensitive   = true
   default     = "hr-service-secret"
+}
+
+variable "mcp_integration_runner_secret" {
+  description = "Client secret for MCP Integration Runner (test-only service account for token exchange). Only used in dev/CI environments."
+  type        = string
+  sensitive   = true
+  default     = "integration-runner-secret-change-in-prod"
 }
 
 variable "tls_insecure_skip_verify" {
@@ -65,7 +72,17 @@ variable "environment" {
 }
 
 variable "valid_redirect_uris" {
-  description = "Valid redirect URIs for MCP Gateway client"
+  description = "Valid redirect URIs for MCP Gateway client. Must be passed via -var flag (no default - ports come from GitHub Variables)."
   type        = list(string)
-  default     = ["http://localhost:3100/*"]
+}
+
+variable "web_origins" {
+  description = "Allowed CORS origins for Keycloak clients (explicit, no wildcards). Must be passed via -var flag (no default - ports come from GitHub Variables)."
+  type        = list(string)
+}
+
+variable "direct_access_grants_enabled" {
+  description = "Enable Resource Owner Password Credentials (ROPC) flow for mcp-gateway client. SECURITY: Only enable in dev/CI for integration testing. Disable in stage/prod per OAuth 2.0 Security BCP (RFC 8252)."
+  type        = bool
+  default     = false  # Secure default: disabled
 }

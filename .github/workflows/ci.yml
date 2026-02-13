@@ -56,6 +56,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/mcp-gateway/package-lock.json
 
+      - name: Build shared package
+        working-directory: services/shared
+        run: |
+          npm ci
+          npm run build
+
       - name: Install dependencies
         run: npm ci
 
@@ -141,6 +147,12 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: services/mcp-hr/package-lock.json
+
+      - name: Build shared package
+        working-directory: services/shared
+        run: |
+          npm ci
+          npm run build
 
       - name: Install dependencies
         run: npm ci
@@ -269,29 +281,12 @@ jobs:
         run: terraform fmt -check -recursive infrastructure/terraform
         continue-on-error: true  # Non-blocking: format issues don't fail CI
 
-      - name: Terraform Init (VPS)
-        working-directory: infrastructure/terraform/vps
+      - name: Terraform Init (Dev)
+        working-directory: infrastructure/terraform/dev
         run: terraform init -backend=false
 
-      - name: Terraform Validate (VPS)
-        working-directory: infrastructure/terraform/vps
-        run: terraform validate
-
-      - name: Terraform Init (Keycloak)
-        working-directory: infrastructure/terraform/keycloak
-        run: terraform init -backend=false
-
-      - name: Terraform Validate (Keycloak)
-        working-directory: infrastructure/terraform/keycloak
-        run: terraform validate
-
-      - name: Terraform Init (Main)
-        working-directory: infrastructure/terraform
-        run: terraform init -backend=false
-        continue-on-error: true
-
-      - name: Terraform Validate (Main)
-        working-directory: infrastructure/terraform
+      - name: Terraform Validate (Dev)
+        working-directory: infrastructure/terraform/dev
         run: terraform validate
         continue-on-error: true
 
@@ -313,7 +308,8 @@ jobs:
       - name: Build MCP Gateway
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v5
         with:
-          context: services/mcp-gateway
+          context: .
+          file: services/mcp-gateway/Dockerfile
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -339,12 +335,10 @@ jobs:
       - name: Audit MCP Gateway
         working-directory: services/mcp-gateway
         run: npm audit --audit-level=high
-        continue-on-error: true  # Non-blocking: vulnerabilities tracked via Dependabot
 
       - name: Audit Integration Tests
         working-directory: tests/integration
         run: npm audit --audit-level=high
-        continue-on-error: true  # Non-blocking: vulnerabilities tracked via Dependabot
 
   # =============================================================================
   # Terraform Security (tfsec)
@@ -417,7 +411,7 @@ jobs:
       postgres-mcp:
         image: postgres:16-alpine
         ports:
-          - 5433:5432
+          - ${{ vars.DEV_POSTGRES }}:5432
         env:
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: tamshai_password
@@ -431,7 +425,7 @@ jobs:
       mongodb:
         image: mongo:7
         ports:
-          - 27018:27017
+          - ${{ vars.DEV_MONGODB }}:27017
         env:
           MONGO_INITDB_ROOT_USERNAME: root
           MONGO_INITDB_ROOT_PASSWORD: tamshai_password
@@ -468,7 +462,7 @@ jobs:
 
           docker run -d \
             --name elasticsearch \
-            -p 9201:9200 \
+            -p ${{ vars.DEV_ELASTICSEARCH }}:9200 \
             -e discovery.type=single-node \
             -e xpack.security.enabled=false \
             -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
@@ -482,39 +476,63 @@ jobs:
       - name: Create additional PostgreSQL databases
         run: |
           # Wait for postgres-mcp service to be ready (tamshai database is created by default)
-          timeout 30 bash -c 'until pg_isready -h localhost -p 5433 -U tamshai -d tamshai; do sleep 1; done'
+          timeout 30 bash -c 'until pg_isready -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai; do sleep 1; done'
 
           # Create tamshai_hr database (for HR sample data)
-          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_hr OWNER tamshai;"
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai -c "CREATE DATABASE tamshai_hr OWNER tamshai;"
           echo "✅ Created tamshai_hr database"
 
           # Create tamshai_finance database
-          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai -c "CREATE DATABASE tamshai_finance;"
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai -c "CREATE DATABASE tamshai_finance;"
           echo "✅ Created tamshai_finance database"
+
+          # Create tamshai_payroll database
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai -c "CREATE DATABASE tamshai_payroll;"
+          echo "✅ Created tamshai_payroll database"
+
+          # Create tamshai_tax database
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai -c "CREATE DATABASE tamshai_tax;"
+          echo "✅ Created tamshai_tax database"
 
       - name: Load sample data
         run: |
           # Load HR sample data (23 employees)
-          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai_hr < sample-data/hr-data.sql
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai_hr < sample-data/hr-data.sql
           echo "✅ Loaded HR sample data"
 
           # Load Finance sample data
-          PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5433 -U tamshai -d tamshai_finance < sample-data/finance-data.sql
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai_finance < sample-data/finance-data.sql
           echo "✅ Loaded Finance sample data"
+
+          # Load Payroll schema and sample data
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai_payroll < infrastructure/database/payroll/schema.sql
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai_payroll < infrastructure/database/payroll/sample-data.sql
+          echo "✅ Loaded Payroll sample data"
+
+          # Load Tax schema and sample data
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai_tax < infrastructure/database/tax/schema.sql
+          PGPASSWORD=$DB_PASSWORD psql -h localhost -p ${{ vars.DEV_POSTGRES }} -U tamshai -d tamshai_tax < infrastructure/database/tax/sample-data.sql
+          echo "✅ Loaded Tax sample data"
 
           # Load Sales sample data (MongoDB) using Docker
           docker run --rm --network host \
             -v "$(pwd)/sample-data:/data" \
             mongo:7 \
-            mongosh "mongodb://root:$MONGODB_PASSWORD@localhost:27018/tamshai_sales?authSource=admin" /data/sales-data.js
+            mongosh "mongodb://root:$MONGODB_PASSWORD@localhost:${{ vars.DEV_MONGODB }}/tamshai_sales?authSource=admin" /data/sales-data.js
           echo "✅ Loaded Sales sample data"
 
-          # Load Support sample data (Elasticsearch - already started in earlier step)
-          # Bulk load support tickets and knowledge base
-          curl -X POST "http://localhost:9201/_bulk" \
+          # Load Support sample data (MongoDB) for employee-facing ticket tools
+          docker run --rm --network host \
+            -v "$(pwd)/sample-data:/data" \
+            mongo:7 \
+            mongosh "mongodb://root:$MONGODB_PASSWORD@localhost:${{ vars.DEV_MONGODB }}/tamshai_support?authSource=admin" /data/support-data.js
+          echo "✅ Loaded Support sample data (MongoDB)"
+
+          # Load Support Knowledge Base (Elasticsearch) for customer-facing search
+          curl -X POST "http://localhost:${{ vars.DEV_ELASTICSEARCH }}/_bulk" \
             -H 'Content-Type: application/x-ndjson' \
             --data-binary @sample-data/support-data.ndjson
-          echo "✅ Loaded Support sample data"
+          echo "✅ Loaded Support Knowledge Base (Elasticsearch)"
 
           echo "✅ All sample data loaded successfully"
 
@@ -536,13 +554,14 @@ jobs:
 
       - name: Start Keycloak
         env:
-          KEYCLOAK_DEV_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
+          DEV_KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
         run: |
+          # Start Keycloak WITHOUT realm import - Terraform will create everything
           docker run -d \
             --name keycloak \
             --network keycloak-network \
             -e KEYCLOAK_ADMIN=admin \
-            -e KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_DEV_ADMIN_PASSWORD}" \
+            -e KEYCLOAK_ADMIN_PASSWORD="${DEV_KEYCLOAK_ADMIN_PASSWORD}" \
             -e KC_DB=postgres \
             -e KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak \
             -e KC_DB_USERNAME=keycloak \
@@ -550,14 +569,14 @@ jobs:
             -e KC_HOSTNAME_STRICT=false \
             -e KC_HOSTNAME_STRICT_HTTPS=false \
             -e KC_HTTP_ENABLED=true \
-            -p 8180:8080 \
-            quay.io/keycloak/keycloak:24.0 start-dev
+            -p ${{ vars.DEV_KEYCLOAK }}:8080 \
+            quay.io/keycloak/keycloak:24.0 start-dev --features=token-exchange,admin-fine-grained-authz
 
           # Wait for Keycloak to be ready (can take 60-90 seconds)
           echo "Waiting for Keycloak to start..."
           for i in {1..60}; do
             # Check if Keycloak master realm is accessible (more reliable than /health in dev mode)
-            if curl -sf http://localhost:8180/realms/master > /dev/null 2>&1; then
+            if curl -sf http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/master > /dev/null 2>&1; then
               echo "Keycloak is ready!"
               # Give it a few more seconds to fully initialize
               sleep 5
@@ -572,46 +591,63 @@ jobs:
             sleep 3
           done
 
-      - name: Setup HashiCorp Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: "1.10.3"
 
-      - name: Setup Keycloak Realm with Terraform
-        working-directory: infrastructure/terraform/keycloak
+      - name: Configure Keycloak with Terraform
         env:
-          KEYCLOAK_DEV_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
-          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
+          # Use TF_VAR_ prefix for secrets to avoid bash interpolation issues
+          # with special characters (TF_VAR_ has lower precedence than -var-file,
+          # so only use it for values NOT in ci.tfvars)
+          TF_VAR_keycloak_admin_password: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          TF_VAR_test_user_password: ${{ secrets.DEV_USER_PASSWORD }}
+          TF_VAR_mcp_gateway_client_secret: ${{ secrets.DEV_MCP_GATEWAY_CLIENT_SECRET }}
+          TF_VAR_mcp_integration_runner_secret: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
+        working-directory: infrastructure/terraform/keycloak
         run: |
-          # Initialize Terraform (download providers) with retry logic for network issues
-          echo "Initializing Terraform..."
-          for i in {1..3}; do
-            terraform init && break || {
-              echo "⚠️ Terraform init attempt $i failed, retrying in 10s..."
-              sleep 10
-            }
-          done
-          if [ ! -d .terraform ]; then
-            echo "❌ Terraform init failed after 3 attempts"
-            exit 1
-          fi
+          echo "=== Configuring Keycloak with Terraform ==="
+
+          # Initialize Terraform
+          terraform init
 
           # Apply Terraform configuration
-          # Override ci.tfvars passwords with GitHub secrets for security
-          echo "Creating Keycloak realm, roles, users, and client with Terraform..."
+          # Non-secret values use -var (highest precedence, overrides ci.tfvars)
+          # Secret values use TF_VAR_ env vars (not in ci.tfvars, no precedence conflict)
+          echo "Creating Keycloak realm, roles, users, and clients with Terraform..."
           terraform apply -auto-approve \
             -var-file=environments/ci.tfvars \
-            -var="keycloak_admin_password=${KEYCLOAK_DEV_ADMIN_PASSWORD}" \
-            -var="test_user_password=${DEV_USER_PASSWORD}"
+            -var='keycloak_url=http://localhost:${{ vars.DEV_KEYCLOAK }}' \
+            -var='valid_redirect_uris=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}/*"]' \
+            -var='web_origins=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}"]'
 
           # Export client secret for integration tests
-          echo "KEYCLOAK_CLIENT_SECRET=$(terraform output -raw mcp_gateway_client_secret)" >> $GITHUB_ENV
+          echo "MCP_GATEWAY_CLIENT_SECRET=$(terraform output -raw mcp_gateway_client_secret)" >> $GITHUB_ENV
 
           # Display summary
           echo "✅ Terraform deployment complete"
           terraform output realm_name
           terraform output -json roles_created | jq -r '.[]' | sed 's/^/  - /'
-          echo "Test users: 8 created (alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson)"
+          echo "Test users: 9 created (alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson, test-user.journey)"
+
+      - name: Verify Keycloak Configuration
+        run: |
+          # Verify tamshai-corp realm was created by Terraform
+          if curl -sf http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp > /dev/null 2>&1; then
+            echo "✅ tamshai-corp realm is accessible"
+          else
+            echo "❌ tamshai-corp realm not found"
+            exit 1
+          fi
+
+          # Client secret was already exported by Terraform step
+          if [ -n "$MCP_GATEWAY_CLIENT_SECRET" ]; then
+            echo "✅ Client secret available from Terraform output"
+          else
+            echo "❌ Client secret not set"
+            exit 1
+          fi
 
       - name: Setup Node.js for Gateway
         uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v4
@@ -619,6 +655,12 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: services/mcp-gateway/package-lock.json
+
+      - name: Build Shared Package
+        working-directory: services/shared
+        run: |
+          npm ci
+          npm run build
 
       - name: Install Gateway Dependencies
         working-directory: services/mcp-gateway
@@ -632,23 +674,32 @@ jobs:
         working-directory: services/mcp-gateway
         run: npm start &
         env:
-          PORT: 3100
+          PORT: ${{ vars.DEV_MCP_GATEWAY }}
           # CRITICAL: Use 127.0.0.1 to match test runner (jest.setup.js)
           # This ensures JWT issuer claim matches Gateway's expected issuer
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_CLIENT_ID: mcp-gateway
-          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
           NODE_ENV: test
+          # MCP server URLs for AI query routing
+          MCP_HR_URL: http://127.0.0.1:${{ vars.DEV_MCP_HR }}
+          MCP_FINANCE_URL: http://127.0.0.1:${{ vars.DEV_MCP_FINANCE }}
+          MCP_SALES_URL: http://127.0.0.1:${{ vars.DEV_MCP_SALES }}
+          MCP_SUPPORT_URL: http://127.0.0.1:${{ vars.DEV_MCP_SUPPORT }}
+          MCP_PAYROLL_URL: http://127.0.0.1:${{ vars.DEV_MCP_PAYROLL }}
+          MCP_TAX_URL: http://127.0.0.1:${{ vars.DEV_MCP_TAX }}
+          # Internal token secret for MCP server authentication
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Wait for MCP Gateway
         run: |
           echo "Waiting for MCP Gateway to be ready..."
           for i in {1..30}; do
-            if curl -sf http://localhost:3100/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:${{ vars.DEV_MCP_GATEWAY }}/health > /dev/null 2>&1; then
               echo "MCP Gateway is ready!"
               sleep 2  # Grace period for full initialization
               break
@@ -668,6 +719,10 @@ jobs:
         working-directory: tests/integration
         run: npm ci
 
+      - name: Install shared test dependencies
+        working-directory: tests/shared
+        run: npm ci
+
       # ============================================================
       # START MCP SERVERS (HR, Finance, Sales, Support)
       # Required for integration tests that call MCP endpoints directly
@@ -685,17 +740,18 @@ jobs:
         working-directory: services/mcp-hr
         run: npm start &
         env:
-          PORT: 3101
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          PORT: ${{ vars.DEV_MCP_HR }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5433
+          POSTGRES_PORT: ${{ vars.DEV_POSTGRES }}
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
           POSTGRES_DB: tamshai_hr
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           NODE_ENV: test
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Install MCP Finance dependencies
         working-directory: services/mcp-finance
@@ -709,17 +765,18 @@ jobs:
         working-directory: services/mcp-finance
         run: npm start &
         env:
-          PORT: 3102
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          PORT: ${{ vars.DEV_MCP_FINANCE }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5433
+          POSTGRES_PORT: ${{ vars.DEV_POSTGRES }}
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
           POSTGRES_DB: tamshai_finance
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           NODE_ENV: test
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Install MCP Sales dependencies
         working-directory: services/mcp-sales
@@ -733,13 +790,14 @@ jobs:
         working-directory: services/mcp-sales
         run: npm start &
         env:
-          PORT: 3103
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          PORT: ${{ vars.DEV_MCP_SALES }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
-          MONGODB_URL: mongodb://root:${{ env.MONGODB_PASSWORD }}@localhost:27018/tamshai_sales?authSource=admin
+          MONGODB_URL: mongodb://root:${{ env.MONGODB_PASSWORD }}@localhost:${{ vars.DEV_MONGODB }}/tamshai_sales?authSource=admin
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           NODE_ENV: test
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Install MCP Support dependencies
         working-directory: services/mcp-support
@@ -753,13 +811,84 @@ jobs:
         working-directory: services/mcp-support
         run: npm start &
         env:
-          PORT: 3104
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          PORT: ${{ vars.DEV_MCP_SUPPORT }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
-          ELASTICSEARCH_URL: http://localhost:9201
+          ELASTICSEARCH_URL: http://localhost:${{ vars.DEV_ELASTICSEARCH }}
+          MONGODB_URL: mongodb://root:${{ env.MONGODB_PASSWORD }}@localhost:${{ vars.DEV_MONGODB }}/tamshai_support?authSource=admin
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           NODE_ENV: test
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
+
+      - name: Install MCP UI dependencies
+        working-directory: services/mcp-ui
+        run: npm ci
+
+      - name: Build MCP UI Server
+        working-directory: services/mcp-ui
+        run: npm run build
+
+      - name: Start MCP UI Server
+        working-directory: services/mcp-ui
+        run: npm start &
+        env:
+          PORT: ${{ vars.DEV_MCP_UI }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
+          KEYCLOAK_REALM: tamshai-corp
+          # MCP Gateway URL for calling tools
+          MCP_GATEWAY_URL: http://127.0.0.1:${{ vars.DEV_MCP_GATEWAY }}
+          NODE_ENV: test
+
+      - name: Install MCP Payroll dependencies
+        working-directory: services/mcp-payroll
+        run: npm ci
+
+      - name: Build MCP Payroll Server
+        working-directory: services/mcp-payroll
+        run: npm run build
+
+      - name: Start MCP Payroll Server
+        working-directory: services/mcp-payroll
+        run: npm start &
+        env:
+          PORT: ${{ vars.DEV_MCP_PAYROLL }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
+          KEYCLOAK_REALM: tamshai-corp
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: ${{ vars.DEV_POSTGRES }}
+          POSTGRES_USER: tamshai
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
+          POSTGRES_DB: tamshai_payroll
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          NODE_ENV: test
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
+
+      - name: Install MCP Tax dependencies
+        working-directory: services/mcp-tax
+        run: npm ci
+
+      - name: Build MCP Tax Server
+        working-directory: services/mcp-tax
+        run: npm run build
+
+      - name: Start MCP Tax Server
+        working-directory: services/mcp-tax
+        run: npm start &
+        env:
+          PORT: ${{ vars.DEV_MCP_TAX }}
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
+          KEYCLOAK_REALM: tamshai-corp
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: ${{ vars.DEV_POSTGRES }}
+          POSTGRES_USER: tamshai
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
+          POSTGRES_DB: tamshai_tax
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          NODE_ENV: test
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Wait for MCP Servers
         run: |
@@ -782,68 +911,98 @@ jobs:
           }
 
           # Check each MCP server
-          check_health "MCP HR" 3101 || exit 1
-          check_health "MCP Finance" 3102 || exit 1
-          check_health "MCP Sales" 3103 || exit 1
-          check_health "MCP Support" 3104 || exit 1
+          check_health "MCP HR" ${{ vars.DEV_MCP_HR }} || exit 1
+          check_health "MCP Finance" ${{ vars.DEV_MCP_FINANCE }} || exit 1
+          check_health "MCP Sales" ${{ vars.DEV_MCP_SALES }} || exit 1
+          check_health "MCP Support" ${{ vars.DEV_MCP_SUPPORT }} || exit 1
+          check_health "MCP Payroll" ${{ vars.DEV_MCP_PAYROLL }} || exit 1
+          check_health "MCP Tax" ${{ vars.DEV_MCP_TAX }} || exit 1
+          check_health "MCP UI" ${{ vars.DEV_MCP_UI }} || exit 1
 
           echo "✅ All MCP servers are ready!"
           sleep 2  # Grace period for full initialization
 
       - name: Debug Keycloak and Authentication
         env:
-          DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
-          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
+          MCP_INTEGRATION_RUNNER_SECRET: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
         run: |
           echo "=== Environment Variables ==="
-          echo "KEYCLOAK_CLIENT_SECRET is set: ${KEYCLOAK_CLIENT_SECRET:+YES}"
-          echo "KEYCLOAK_CLIENT_SECRET length: $(echo -n "${KEYCLOAK_CLIENT_SECRET}" | wc -c)"
-          echo "DEV_USER_PASSWORD is set: ${DEV_USER_PASSWORD:+YES}"
+          echo "MCP_GATEWAY_CLIENT_SECRET is set: ${MCP_GATEWAY_CLIENT_SECRET:+YES}"
+          echo "MCP_GATEWAY_CLIENT_SECRET length: $(echo -n "${MCP_GATEWAY_CLIENT_SECRET}" | wc -c)"
+          echo "MCP_INTEGRATION_RUNNER_SECRET is set: ${MCP_INTEGRATION_RUNNER_SECRET:+YES}"
+          echo "MCP_INTEGRATION_RUNNER_SECRET length: $(echo -n "${MCP_INTEGRATION_RUNNER_SECRET}" | wc -c)"
           echo ""
 
           echo "=== Keycloak Health Check ==="
-          curl -sf http://127.0.0.1:8180/ | grep -q "Keycloak" && echo "✅ Keycloak is responding" || echo "❌ Keycloak not responding"
+          curl -sf http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}/realms/master > /dev/null 2>&1 && echo "✅ Keycloak is responding" || echo "⚠️ Keycloak master realm not responding"
           echo ""
 
           echo "=== MCP Gateway Health Check ==="
-          curl -sf http://localhost:3100/health && echo "✅ Gateway is healthy" || echo "❌ Gateway not healthy"
+          curl -sf http://localhost:${{ vars.DEV_MCP_GATEWAY }}/health && echo "✅ Gateway is healthy" || echo "❌ Gateway not healthy"
           echo ""
 
-          echo "=== Test Token Acquisition ==="
-          TOKEN_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://127.0.0.1:8180/realms/tamshai-corp/protocol/openid-connect/token \
-            -d "grant_type=password" \
-            -d "client_id=mcp-gateway" \
-            -d "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
-            -d "username=alice.chen" \
-            -d "password=${DEV_USER_PASSWORD}" \
-            -d "scope=openid profile email")
+          echo "=== Test Token Acquisition (Token Exchange) ==="
+          # Retry loop - Keycloak may need time after Terraform creates clients
+          TOKEN_ACQUIRED=false
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt/3: Acquiring mcp-integration-runner service token..."
+            SVC_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp/protocol/openid-connect/token \
+              -d "grant_type=client_credentials" \
+              -d "client_id=mcp-integration-runner" \
+              -d "client_secret=${MCP_INTEGRATION_RUNNER_SECRET}")
 
-          HTTP_CODE=$(echo "$TOKEN_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
-          RESPONSE_BODY=$(echo "$TOKEN_RESPONSE" | grep -v "HTTP_CODE:")
+            SVC_HTTP_CODE=$(echo "$SVC_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
+            SVC_BODY=$(echo "$SVC_RESPONSE" | grep -v "HTTP_CODE:")
 
-          echo "HTTP Status: $HTTP_CODE"
+            if [ "$SVC_HTTP_CODE" = "200" ]; then
+              SVC_TOKEN=$(echo "$SVC_BODY" | jq -r '.access_token')
+              echo "✅ Service token acquired"
 
-          if [ "$HTTP_CODE" = "200" ]; then
-            if echo "$RESPONSE_BODY" | jq -e '.access_token' > /dev/null 2>&1; then
-              echo "✅ Token acquisition successful"
-              TOKEN=$(echo "$RESPONSE_BODY" | jq -r '.access_token')
-              echo "Token preview (first 50 chars): ${TOKEN:0:50}..."
-              echo ""
-              echo "=== Decoded Token Claims ==="
-              echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, sub, aud, azp, preferred_username, resource_access}' || echo "Token decode failed"
+              # Step 2: Exchange service token for user token (alice.chen)
+              echo "Exchanging for alice.chen user token..."
+              TOKEN_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp/protocol/openid-connect/token \
+                -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+                -d "client_id=mcp-integration-runner" \
+                -d "client_secret=${MCP_INTEGRATION_RUNNER_SECRET}" \
+                -d "subject_token=${SVC_TOKEN}" \
+                -d "requested_subject=alice.chen" \
+                -d "scope=openid profile roles")
+
+              HTTP_CODE=$(echo "$TOKEN_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
+              RESPONSE_BODY=$(echo "$TOKEN_RESPONSE" | grep -v "HTTP_CODE:")
+
+              if [ "$HTTP_CODE" = "200" ] && echo "$RESPONSE_BODY" | jq -e '.access_token' > /dev/null 2>&1; then
+                echo "✅ Token exchange successful"
+                TOKEN=$(echo "$RESPONSE_BODY" | jq -r '.access_token')
+                echo "Token preview (first 50 chars): ${TOKEN:0:50}..."
+                echo ""
+                echo "=== Decoded Token Claims ==="
+                echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, sub, aud, azp, preferred_username, resource_access}' || echo "Token decode failed"
+                TOKEN_ACQUIRED=true
+                break
+              else
+                echo "⚠️ Token exchange failed with HTTP $HTTP_CODE"
+                echo "Response: $RESPONSE_BODY"
+              fi
             else
-              echo "❌ Response doesn't contain access_token"
-              echo "Response: $RESPONSE_BODY"
-              exit 1
+              echo "⚠️ Service token failed with HTTP $SVC_HTTP_CODE: $SVC_BODY"
             fi
-          else
-            echo "❌ Token acquisition failed with HTTP $HTTP_CODE"
-            echo "Response: $RESPONSE_BODY"
-            exit 1
-          fi
 
-          echo ""
-          echo "=== All pre-test checks passed ==="
+            if [ $attempt -lt 3 ]; then
+              echo "Retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+
+          if [ "$TOKEN_ACQUIRED" = "true" ]; then
+            echo ""
+            echo "=== All pre-test checks passed ==="
+          else
+            echo ""
+            echo "⚠️ Token exchange diagnostic failed - integration tests will attempt their own auth"
+            echo "This debug step is non-blocking; integration tests have independent auth setup."
+          fi
 
       - name: Run integration tests
         working-directory: tests/integration
@@ -852,29 +1011,39 @@ jobs:
           CI: true
           # CRITICAL: Use 127.0.0.1 to match Gateway configuration (line 444)
           # This ensures tokens issued by Keycloak match Gateway's expected issuer
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
-          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
-          GATEWAY_URL: http://localhost:3100
+          MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
+          # MCP server URLs - must match ports started above
+          MCP_HR_URL: http://127.0.0.1:${{ vars.DEV_MCP_HR }}
+          MCP_FINANCE_URL: http://127.0.0.1:${{ vars.DEV_MCP_FINANCE }}
+          MCP_SALES_URL: http://127.0.0.1:${{ vars.DEV_MCP_SALES }}
+          MCP_SUPPORT_URL: http://127.0.0.1:${{ vars.DEV_MCP_SUPPORT }}
+          MCP_UI_URL: http://127.0.0.1:${{ vars.DEV_MCP_UI }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          # Shared secret for MCP server authentication
+          MCP_INTERNAL_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
+          # Token exchange authentication (service account impersonation)
+          MCP_INTEGRATION_RUNNER_SECRET: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
 
       - name: Run MCP HR integration tests
         working-directory: services/mcp-hr
         run: npm run test:integration
         env:
           CI: true
-          KEYCLOAK_URL: http://127.0.0.1:8180
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_PATH_PREFIX: ''  # CI Keycloak has no path prefix (local uses /auth)
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
-          KEYCLOAK_CLIENT_SECRET: ${{ env.KEYCLOAK_CLIENT_SECRET }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
           POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5433
+          POSTGRES_PORT: ${{ vars.DEV_POSTGRES }}
           POSTGRES_DB: tamshai_hr
           POSTGRES_USER: tamshai
           POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
@@ -930,10 +1099,18 @@ jobs:
       - name: Setup Keycloak
         id: keycloak
         uses: ./.github/actions/setup-keycloak
+        with:
+          keycloak-port: ${{ vars.DEV_KEYCLOAK }}
 
       # =========================================================================
       # Build and Start MCP Gateway
       # =========================================================================
+      - name: Build Shared Package
+        working-directory: services/shared
+        run: |
+          npm ci
+          npm run build
+
       - name: Build MCP Gateway
         working-directory: services/mcp-gateway
         run: |
@@ -946,14 +1123,22 @@ jobs:
           npm start &
           sleep 5
         env:
-          PORT: 3100
+          PORT: ${{ vars.DEV_MCP_GATEWAY }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          KEYCLOAK_URL: http://localhost:8180
-          KEYCLOAK_ISSUER: http://localhost:8180/auth/realms/tamshai-corp
-          JWKS_URI: http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/certs
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
+          KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_CLIENT_ID: mcp-gateway
+          KEYCLOAK_ISSUER: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp
+          JWKS_URI: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp/protocol/openid-connect/certs
           TOKEN_REVOCATION_FAIL_OPEN: 'true'
           LOG_LEVEL: warn
+          MCP_HR_URL: http://localhost:${{ vars.DEV_MCP_HR }}
+          MCP_FINANCE_URL: http://localhost:${{ vars.DEV_MCP_FINANCE }}
+          MCP_SALES_URL: http://localhost:${{ vars.DEV_MCP_SALES }}
+          MCP_SUPPORT_URL: http://localhost:${{ vars.DEV_MCP_SUPPORT }}
+          MCP_PAYROLL_URL: http://localhost:${{ vars.DEV_MCP_PAYROLL }}
+          MCP_TAX_URL: http://localhost:${{ vars.DEV_MCP_TAX }}
 
       - name: Install Playwright
         working-directory: tests/e2e
@@ -965,8 +1150,12 @@ jobs:
         working-directory: tests/e2e
         run: npm test -- --project=api
         env:
-          GATEWAY_URL: http://localhost:3100
+          MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
           CI: true
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
@@ -1016,10 +1205,18 @@ jobs:
       - name: Setup Keycloak
         id: keycloak
         uses: ./.github/actions/setup-keycloak
+        with:
+          keycloak-port: ${{ vars.DEV_KEYCLOAK }}
 
       # =========================================================================
       # MCP Gateway Setup
       # =========================================================================
+      - name: Build Shared Package
+        working-directory: services/shared
+        run: |
+          npm ci
+          npm run build
+
       - name: Build MCP Gateway
         working-directory: services/mcp-gateway
         run: |
@@ -1032,18 +1229,26 @@ jobs:
           npm start &
           sleep 5
         env:
-          PORT: 3100
+          PORT: ${{ vars.DEV_MCP_GATEWAY }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           # Use localhost for Keycloak (running in Docker with port mapping)
-          KEYCLOAK_URL: http://localhost:8180
-          KEYCLOAK_ISSUER: http://localhost:8180/auth/realms/tamshai-corp
-          JWKS_URI: http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/certs
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
+          KEYCLOAK_REALM: tamshai-corp
+          KEYCLOAK_CLIENT_ID: mcp-gateway
+          KEYCLOAK_ISSUER: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp
+          JWKS_URI: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp/protocol/openid-connect/certs
           LOG_LEVEL: warn
+          MCP_HR_URL: http://localhost:${{ vars.DEV_MCP_HR }}
+          MCP_FINANCE_URL: http://localhost:${{ vars.DEV_MCP_FINANCE }}
+          MCP_SALES_URL: http://localhost:${{ vars.DEV_MCP_SALES }}
+          MCP_SUPPORT_URL: http://localhost:${{ vars.DEV_MCP_SUPPORT }}
+          MCP_PAYROLL_URL: http://localhost:${{ vars.DEV_MCP_PAYROLL }}
+          MCP_TAX_URL: http://localhost:${{ vars.DEV_MCP_TAX }}
 
       - name: Verify Gateway Health
         run: |
-          curl -sf http://localhost:3100/health || {
+          curl -sf http://localhost:${{ vars.DEV_MCP_GATEWAY }}/health || {
             echo "Gateway health check failed"
             exit 1
           }
@@ -1058,8 +1263,8 @@ jobs:
           filename: tests/performance/scenarios/gateway-load.js
           flags: --vus 3 --duration 15s
         env:
-          GATEWAY_URL: http://localhost:3100
-          KEYCLOAK_URL: http://localhost:8180/auth
+          MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
           KEYCLOAK_REALM: tamshai-corp
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
         continue-on-error: true
@@ -1091,25 +1296,24 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a # v0
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad # v0
         with:
           path: .
           format: spdx-json
           output-file: sbom.spdx.json
 
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a # v0
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad # v0
         with:
           path: .
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
       - name: Scan SBOM for vulnerabilities
-        uses: anchore/scan-action@62b74fb7bb810d2c45b1865f47a77655621862a5 # v4
+        uses: anchore/scan-action@7037fa011853d5a11690026fb85feee79f4c946c # v4
         id: scan
         with:
           sbom: sbom.spdx.json
-          fail-build: false
           severity-cutoff: critical
 
       - name: Upload SBOM artifacts
@@ -1122,7 +1326,7 @@ jobs:
           retention-days: 90
 
       - name: Upload scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4
+        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4
         if: always()
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
@@ -1154,7 +1358,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t tamshai/${{ matrix.image.name }}:${{ github.sha }} \
-            ${{ matrix.image.path }}
+            -f ${{ matrix.image.path }}/Dockerfile .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.24.0
@@ -1166,7 +1370,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4
+        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -1181,6 +1385,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      pull-requests: read  # Required for gitleaks PR scanning
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4

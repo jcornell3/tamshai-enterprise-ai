@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth, canModifySupport, apiConfig } from '@tamshai/auth';
-import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
+import { ApprovalCard, TruncationWarning, DataTable, ConfirmDialog } from '@tamshai/ui';
+import type { ColumnDef, BulkAction } from '@tamshai/ui';
 import type { Ticket, APIResponse } from '../types';
 
 /**
@@ -9,6 +11,7 @@ import type { Ticket, APIResponse } from '../types';
  *
  * Features:
  * - Support tickets table with status and priority filtering
+ * - Bulk actions: Close, Export (Enterprise UX)
  * - Close ticket with v1.4 confirmation flow
  * - Truncation warnings for 50+ records
  * - Cursor-based pagination
@@ -18,6 +21,7 @@ export default function TicketsPage() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [organizationFilter, setOrganizationFilter] = useState('');
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     confirmationId: string;
     message: string;
@@ -25,11 +29,25 @@ export default function TicketsPage() {
   } | null>(null);
   const [resolutionInput, setResolutionInput] = useState('');
 
+  // Selection state for DataTable
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+
+  // Bulk action confirmation dialog
+  const [bulkActionDialog, setBulkActionDialog] = useState<{
+    isOpen: boolean;
+    actionId: string;
+    selectedTickets: Ticket[];
+    title: string;
+    message: string;
+    showReasonInput?: boolean;
+  }>({ isOpen: false, actionId: '', selectedTickets: [], title: '', message: '' });
+  const [bulkResolution, setBulkResolution] = useState('');
+
   const canWrite = canModifySupport(userContext);
 
   // Fetch all tickets (auto-paginate to get complete results)
   const { data: ticketsResponse, isLoading, error } = useQuery({
-    queryKey: ['tickets', statusFilter, priorityFilter],
+    queryKey: ['tickets', statusFilter, priorityFilter, organizationFilter],
     queryFn: async () => {
       const token = getAccessToken();
       if (!token) throw new Error('Not authenticated');
@@ -39,6 +57,7 @@ export default function TicketsPage() {
         const params = new URLSearchParams();
         if (statusFilter) params.append('status', statusFilter);
         if (priorityFilter) params.append('priority', priorityFilter);
+        if (organizationFilter) params.append('organization_id', organizationFilter);
         if (cursor) params.append('cursor', cursor);
 
         const queryString = params.toString();
@@ -131,6 +150,39 @@ export default function TicketsPage() {
     },
   });
 
+  // Bulk close tickets mutation
+  const bulkCloseTicketsMutation = useMutation({
+    mutationFn: async ({ ticketIds, resolution }: { ticketIds: string[]; resolution: string }) => {
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      // Execute sequentially
+      for (const ticketId of ticketIds) {
+        const response = await fetch(
+          `${apiConfig.mcpGatewayUrl}/api/mcp/support/close_ticket`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ ticketId, resolution }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to close ticket ${ticketId}`);
+        }
+      }
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      setSelectedRows([]);
+      setBulkResolution('');
+    },
+  });
+
   const handleCloseTicket = (ticket: Ticket) => {
     const resolution = prompt(`Enter resolution for ticket "${ticket.title}":`);
     if (resolution) {
@@ -185,6 +237,189 @@ export default function TicketsPage() {
   // Calculate stats
   const openTickets = tickets.filter(t => t.status === 'open').length;
   const criticalTickets = tickets.filter(t => t.priority === 'critical' && t.status !== 'closed').length;
+
+  // Get unique organizations for filter dropdown
+  const uniqueOrganizations = Array.from(
+    new Map(
+      tickets
+        .filter(t => t.organization_id && t.organization_name)
+        .map(t => [t.organization_id, { id: t.organization_id!, name: t.organization_name! }])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  // DataTable columns
+  const columns: ColumnDef<Ticket>[] = [
+    {
+      id: 'title',
+      header: 'Title',
+      accessor: 'title',
+      sortable: true,
+      cell: (value, row) => (
+        <Link to={`/tickets/${row.id}`} className="block hover:text-primary-600">
+          <div className="font-medium">{String(value)}</div>
+          <div className="text-xs text-secondary-500 truncate max-w-xs">
+            {row.description}
+          </div>
+        </Link>
+      ),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      accessor: 'status',
+      sortable: true,
+      cell: (value) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(String(value))}`}>
+          {String(value).replace('_', ' ')}
+        </span>
+      ),
+    },
+    {
+      id: 'priority',
+      header: 'Priority',
+      accessor: 'priority',
+      sortable: true,
+      cell: (value) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(String(value))}`}>
+          {String(value)}
+        </span>
+      ),
+    },
+    {
+      id: 'organization',
+      header: 'Organization',
+      accessor: 'organization_name',
+      sortable: true,
+      cell: (_value, row) => (
+        <div>
+          <div className="font-medium text-secondary-900">{String(row.organization_name || 'N/A')}</div>
+          {row.contact_email && (
+            <div className="text-xs text-secondary-500">{row.contact_email}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'created_at',
+      header: 'Created',
+      accessor: 'created_at',
+      sortable: true,
+      cell: (value) => (
+        <span className="text-secondary-600">
+          {new Date(String(value)).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      id: 'tags',
+      header: 'Tags',
+      accessor: 'tags',
+      cell: (value, row) => (
+        <div className="flex flex-wrap gap-1">
+          {row.tags?.slice(0, 2).map((tag) => (
+            <span key={tag} className="px-2 py-0.5 bg-secondary-100 text-secondary-700 rounded text-xs">
+              {tag}
+            </span>
+          ))}
+          {(row.tags?.length || 0) > 2 && (
+            <span className="text-xs text-secondary-500">
+              +{(row.tags?.length || 0) - 2}
+            </span>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  // Bulk actions
+  const bulkActions: BulkAction[] = [
+    {
+      id: 'bulk_close',
+      label: 'Close Tickets',
+      variant: 'primary',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'export',
+      label: 'Export CSV',
+      variant: 'neutral',
+    },
+  ];
+
+  // Handle bulk actions
+  const handleBulkAction = (actionId: string, selectedTickets: Ticket[]) => {
+    if (actionId === 'bulk_close') {
+      // Filter out already closed/resolved tickets
+      const closableTickets = selectedTickets.filter(
+        (t) => !['closed', 'resolved'].includes(t.status)
+      );
+      if (closableTickets.length === 0) {
+        alert('All selected tickets are already closed or resolved.');
+        return;
+      }
+      setBulkActionDialog({
+        isOpen: true,
+        actionId,
+        selectedTickets: closableTickets,
+        title: 'Close Tickets',
+        message: `Are you sure you want to close ${closableTickets.length} ticket(s)? Please provide a resolution note.`,
+        showReasonInput: true,
+      });
+    } else if (actionId === 'export') {
+      // Export to CSV
+      const headers = ['ID', 'Title', 'Status', 'Priority', 'Created', 'Tags'];
+      const rows = selectedTickets.map((ticket) => [
+        ticket.id,
+        ticket.title,
+        ticket.status,
+        ticket.priority,
+        new Date(ticket.created_at).toLocaleDateString(),
+        (ticket.tags || []).join('; '),
+      ]);
+      const csvContent = [headers, ...rows].map((row) => row.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tickets-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setSelectedRows([]);
+    }
+  };
+
+  // Confirm bulk action
+  const confirmBulkAction = () => {
+    const { actionId, selectedTickets } = bulkActionDialog;
+    if (actionId === 'bulk_close') {
+      if (!bulkResolution.trim()) {
+        alert('Please provide a resolution note.');
+        return;
+      }
+      bulkCloseTicketsMutation.mutate({
+        ticketIds: selectedTickets.map((t) => t.id),
+        resolution: bulkResolution,
+      });
+    }
+    setBulkActionDialog({ isOpen: false, actionId: '', selectedTickets: [], title: '', message: '' });
+  };
+
+  // Row actions renderer
+  const renderRowActions = (ticket: Ticket) => {
+    if (['closed', 'resolved'].includes(ticket.status)) {
+      return null;
+    }
+    return (
+      <button
+        onClick={() => handleCloseTicket(ticket)}
+        disabled={closeTicketMutation.isPending}
+        className="text-purple-600 hover:text-purple-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Close ticket"
+      >
+        Close
+      </button>
+    );
+  };
 
   return (
     <div className="page-container">
@@ -275,6 +510,23 @@ export default function TicketsPage() {
               <option value="low">Low</option>
             </select>
           </div>
+          <div className="flex-1 min-w-[150px]">
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              Filter by Organization
+            </label>
+            <select
+              value={organizationFilter}
+              onChange={(e) => setOrganizationFilter(e.target.value)}
+              className="input"
+            >
+              <option value="">All Organizations</option>
+              {uniqueOrganizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['tickets'] })}
             className="btn-secondary"
@@ -301,79 +553,47 @@ export default function TicketsPage() {
             <p>No tickets found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="table-header">Title</th>
-                  <th className="table-header">Status</th>
-                  <th className="table-header">Priority</th>
-                  <th className="table-header">Created</th>
-                  <th className="table-header">Tags</th>
-                  {canWrite && <th className="table-header">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-secondary-200">
-                {tickets.map((ticket) => (
-                  <tr key={ticket.id} className="table-row">
-                    <td className="table-cell">
-                      <div className="font-medium">{ticket.title}</div>
-                      <div className="text-xs text-secondary-500 truncate max-w-xs">
-                        {ticket.description}
-                      </div>
-                    </td>
-                    <td className="table-cell">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
-                        {ticket.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="table-cell">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
-                        {ticket.priority}
-                      </span>
-                    </td>
-                    <td className="table-cell text-secondary-600">
-                      {new Date(ticket.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {ticket.tags?.slice(0, 2).map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 bg-secondary-100 text-secondary-700 rounded text-xs">
-                            {tag}
-                          </span>
-                        ))}
-                        {(ticket.tags?.length || 0) > 2 && (
-                          <span className="text-xs text-secondary-500">
-                            +{(ticket.tags?.length || 0) - 2}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {canWrite && (
-                      <td className="table-cell">
-                        <button
-                          onClick={() => handleCloseTicket(ticket)}
-                          disabled={closeTicketMutation.isPending || ['closed', 'resolved'].includes(ticket.status)}
-                          className="text-purple-600 hover:text-purple-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={['closed', 'resolved'].includes(ticket.status) ? 'Ticket already closed' : 'Close ticket'}
-                        >
-                          Close
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<Ticket>
+            data={tickets}
+            columns={columns}
+            keyField="id"
+            selectable={canWrite}
+            selectedRows={selectedRows}
+            onSelectionChange={setSelectedRows}
+            bulkActions={canWrite ? bulkActions : []}
+            onBulkAction={handleBulkAction}
+            sortable
+            stickyHeader
+            rowActions={canWrite ? renderRowActions : undefined}
+          />
         )}
       </div>
 
       {/* Stats */}
       <div className="mt-6 text-sm text-secondary-600 text-center">
         Showing {tickets.length} ticket{tickets.length !== 1 ? 's' : ''}
-        {(statusFilter || priorityFilter) && ` (filtered)`}
+        {(statusFilter || priorityFilter || organizationFilter) && ` (filtered)`}
       </div>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={bulkActionDialog.isOpen}
+        title={bulkActionDialog.title}
+        message={bulkActionDialog.message}
+        confirmLabel="Close Tickets"
+        cancelLabel="Cancel"
+        isLoading={bulkCloseTicketsMutation.isPending}
+        showReasonInput={bulkActionDialog.showReasonInput}
+        onConfirm={confirmBulkAction}
+        onCancel={() => {
+          setBulkActionDialog({ isOpen: false, actionId: '', selectedTickets: [], title: '', message: '' });
+          setBulkResolution('');
+        }}
+        details={{
+          'Selected Tickets': bulkActionDialog.selectedTickets.length,
+          'Action': 'Close with resolution',
+        }}
+      />
     </div>
   );
 }

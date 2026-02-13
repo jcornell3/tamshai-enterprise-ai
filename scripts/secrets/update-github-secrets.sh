@@ -199,13 +199,14 @@ update_all_secrets() {
 # =============================================================================
 
 # GitHub to GCP secret name mapping
+# Uses DEV_/STAGE_/PROD_ prefix convention for environment-specific secrets
 declare -A GITHUB_TO_GCP_MAP=(
-    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-claude-api-key"
-    ["PROD_DB_PASSWORD"]="tamshai-prod-db-password"
-    ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="tamshai-prod-keycloak-admin-password"
-    ["KEYCLOAK_DB_PASSWORD_PROD"]="tamshai-prod-keycloak-db-password"
-    ["MONGODB_URI_PROD"]="tamshai-prod-mongodb-uri"
-    ["MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
+    ["PROD_CLAUDE_API_KEY"]="tamshai-prod-claude-api-key"
+    ["PROD_TAMSHAI_DB_PASSWORD"]="tamshai-prod-db-password"
+    ["PROD_KEYCLOAK_ADMIN_PASSWORD"]="tamshai-prod-keycloak-admin-password"
+    ["PROD_KEYCLOAK_DB_PASSWORD"]="tamshai-prod-keycloak-db-password"
+    ["PROD_MONGODB_ATLAS_URI"]="tamshai-prod-mongodb-uri"
+    ["PROD_MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
 )
 
 # Sanitize secret value (removes trailing whitespace, \r\n - Issue #25 fix)

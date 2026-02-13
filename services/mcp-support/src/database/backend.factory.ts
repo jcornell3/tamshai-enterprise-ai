@@ -21,8 +21,8 @@ export function createSupportBackend(): ISupportBackend {
 
   switch (backendType.toLowerCase()) {
     case 'elasticsearch':
-      const esUrl = process.env.ELASTICSEARCH_URL || 'http://localhost:9201';
-      return new ElasticsearchBackend(esUrl);
+      const esUrl = process.env.ELASTICSEARCH_URL;
+      return new ElasticsearchBackend(esUrl!);
 
     case 'mongodb':
       // MongoDB connection configured via MONGODB_URL/MONGODB_URI env vars

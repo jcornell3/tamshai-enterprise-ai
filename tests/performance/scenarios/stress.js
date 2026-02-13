@@ -13,6 +13,7 @@
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
+import { getAccessToken } from '../lib/auth.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
@@ -22,9 +23,7 @@ const requestCounter = new Counter('total_requests');
 const currentVUs = new Gauge('current_vus');
 
 // Configuration
-const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:3100';
-const KEYCLOAK_URL = __ENV.KEYCLOAK_URL || 'http://localhost:8180';
-const KEYCLOAK_REALM = __ENV.KEYCLOAK_REALM || 'tamshai-corp';
+const GATEWAY_URL = __ENV.MCP_GATEWAY_URL;
 
 // =============================================================================
 // TDD: THRESHOLDS DEFINED FIRST
@@ -70,47 +69,6 @@ export const options = {
     environment: __ENV.ENVIRONMENT || 'local',
   },
 };
-
-// Token cache
-let cachedToken = null;
-let tokenExpiry = 0;
-
-function getAccessToken() {
-  const now = Date.now();
-  if (cachedToken && tokenExpiry > now + 30000) {
-    return cachedToken;
-  }
-
-  const tokenUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
-
-  const response = http.post(
-    tokenUrl,
-    {
-      grant_type: 'password',
-      client_id: 'mcp-gateway',
-      username: 'alice.chen',
-      password: __ENV.DEV_USER_PASSWORD || 'dev-password-not-set',
-      scope: 'openid',
-    },
-    {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      tags: { name: 'keycloak-token' },
-      timeout: '10s',  // Longer timeout under stress
-    }
-  );
-
-  if (response.status === 200) {
-    try {
-      const data = JSON.parse(response.body);
-      cachedToken = data.access_token;
-      tokenExpiry = now + (data.expires_in * 1000);
-      return cachedToken;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
 
 // Setup
 export function setup() {

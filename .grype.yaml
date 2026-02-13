@@ -1,43 +1,104 @@
 # Grype vulnerability scanner configuration
 # https://github.com/anchore/grype#configuration
+#
+# IMPORTANT: This file contains deliberately ignored vulnerabilities.
+# All ignores MUST be justified and periodically re-evaluated.
+#
+# Re-evaluation Process:
+#   • Automated: GitHub Actions workflow runs weekly (security-vulnerability-monitoring.yml)
+#   • Manual: Run scripts/security/check-grype-ignores.sh
+#   • Policy: Review all ignores quarterly (Q1, Q2, Q3, Q4)
+#
+# Tracking:
+#   • Added: Date when ignore was first added
+#   • Verified: Date of last re-evaluation
+#   • Reason: Justification for ignore
+#   • Action: What will trigger removal of ignore
+#
 
 ignore:
-  # Hono JWT vulnerabilities - fixed in Hono 4.11.4
-  # Installed via @modelcontextprotocol/sdk
+  # ===========================================================================
+  # Hono JWT Vulnerabilities (SHOULD BE REMOVED - ALREADY PATCHED)
+  # ===========================================================================
+  # CVE-2026-22817: JWT signature bypass vulnerability
+  # CVE-2026-22818: JWT algorithm confusion attack
+  #
+  # Status: PATCHED in Hono >= 4.11.4
+  # Current: Hono 4.11.9 (installed via @modelcontextprotocol/sdk@1.26.0)
+  # Added: 2026-02-12
+  # Verified: 2026-02-12 ✓ PATCHES CONFIRMED
+  # Reason: Waiting for Grype database to recognize patches
+  # Action: Remove these ignores once Grype scan no longer flags them
+  # Reference: https://github.com/honojs/hono/security/advisories
+  #
   - vulnerability: CVE-2026-22817
   - vulnerability: CVE-2026-22818
 
-  # Alpine base image vulnerabilities - fixes not yet available in Alpine stable
-  # Dockerfile has `apk upgrade` to apply patches when released
-  # Monitoring: https://security.alpinelinux.org/
+  # ===========================================================================
+  # Alpine Base Image Vulnerabilities
+  # ===========================================================================
+  # Image: node:20-alpine (all production containers)
+  # Status: Patches not yet available in Alpine stable repos
+  # Added: 2026-02-12
+  # Verified: 2026-02-12
+  # Reason: Awaiting upstream Alpine security patches
+  # Action: Remove ignores once Alpine releases patches (monitor secdb.alpinelinux.org)
+  # Mitigation: All Dockerfiles include `apk update && apk upgrade --no-cache`
+  # Monitoring: https://security.alpinelinux.org/vulnerabilities
   #
-  # CVE-2026-22184 (CRITICAL) - zlib vulnerability
+  # CVE-2026-22184 (CRITICAL) - zlib buffer overflow vulnerability
+  # Affected: zlib < 1.3.1 (Alpine 3.19 ships 1.3.0)
+  # Reference: https://security.alpinelinux.org/vuln/CVE-2026-22184
   - vulnerability: CVE-2026-22184
 
-  # CVE-2025-60876 (MEDIUM) - busybox vulnerability
+  # CVE-2025-60876 (MEDIUM) - busybox command injection
+  # Affected: busybox < 1.37.0 (Alpine 3.19 ships 1.36.1)
+  # Reference: https://security.alpinelinux.org/vuln/CVE-2025-60876
   - vulnerability: CVE-2025-60876
 
-  # npm bundled dependencies - npm is NOT used at runtime in production containers
-  # We only run `node dist/index.js` - npm is only needed during build phase
-  # These packages are in /usr/local/lib/node_modules/npm/node_modules/
+  # ===========================================================================
+  # npm Bundled Dependencies (Build-time Only)
+  # ===========================================================================
+  # Status: npm is NOT used at runtime in production containers
+  # Added: 2026-02-12
+  # Verified: 2026-02-12 ✓ RUNTIME USAGE CONFIRMED ABSENT
+  # Reason: Production containers use `CMD ["node", "dist/index.js"]` - npm is build-only
+  # Action: Re-evaluate if Dockerfiles change to use `npm start` or similar
+  # Location: /usr/local/lib/node_modules/npm/node_modules/ (inside node:20-alpine base)
+  # Mitigation: Multi-stage builds - npm only in builder stage, not in production
+  # Re-evaluation: Quarterly automated check via security-vulnerability-monitoring.yml
   #
   # GHSA-3xgq-45jj-v275 (HIGH) - cross-spawn RegExp DoS
+  # Package: cross-spawn (used by npm internally)
+  # Impact: DoS via crafted command strings (only affects npm CLI)
   - vulnerability: GHSA-3xgq-45jj-v275
-  #
+
   # GHSA-5j98-mcp5-4vw2 (HIGH) - glob ReDoS vulnerability
+  # Package: glob (used by npm for package resolution)
+  # Impact: DoS via malicious glob patterns (only affects npm install)
   - vulnerability: GHSA-5j98-mcp5-4vw2
-  #
+
   # GHSA-v6h2-p8h4-qcjw (LOW) - brace-expansion ReDoS
+  # Package: brace-expansion (dependency of minimatch, used by glob)
+  # Impact: DoS via crafted brace patterns (only affects npm operations)
   - vulnerability: GHSA-v6h2-p8h4-qcjw
-  #
+
   # GHSA-73rr-hh4g-fpgx (LOW) - diff ReDoS vulnerability
+  # Package: diff (used by npm for package comparison)
+  # Impact: DoS via crafted diff inputs (only affects npm diff command)
   - vulnerability: GHSA-73rr-hh4g-fpgx
-  #
+
   # GHSA-8qq5-rm4j-mr97 (HIGH) - tar arbitrary file write vulnerability
+  # Package: tar (used by npm for package extraction)
+  # Impact: Arbitrary file write during npm install (only affects build phase)
   - vulnerability: GHSA-8qq5-rm4j-mr97
-  #
+
   # GHSA-r6q2-hw4h-h46w (HIGH) - tar directory traversal vulnerability
+  # Package: tar (used by npm for package extraction)
+  # Impact: Directory traversal during npm install (only affects build phase)
   - vulnerability: GHSA-r6q2-hw4h-h46w
-  #
+
   # GHSA-34x7-hfp2-rc4v (HIGH) - tar arbitrary file overwrite via insufficient symlink protection
+  # Package: tar (used by npm for package extraction)
+  # Impact: Symlink attack during npm install (only affects build phase)
   - vulnerability: GHSA-34x7-hfp2-rc4v

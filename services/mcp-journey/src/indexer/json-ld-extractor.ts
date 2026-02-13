@@ -105,6 +105,7 @@ export class JsonLdExtractor {
     const blocks: string[] = [];
 
     // Match <script type="application/ld+json">...</script>
+    // lgtm[js/polynomial-redos] - bounded pattern on trusted local files
     const regex = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
     let match;
 

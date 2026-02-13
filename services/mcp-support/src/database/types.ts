@@ -71,7 +71,7 @@ export interface SearchTicketsParams {
  * Parameters for searching knowledge base
  */
 export interface SearchKnowledgeBaseParams {
-  query: string;
+  query?: string;
   category?: string;
   limit: number;
   cursor?: string;

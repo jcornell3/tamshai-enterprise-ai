@@ -2,33 +2,49 @@
 
 This document describes the end-to-end testing approach for user login flows in Tamshai Enterprise AI, including handling TOTP (Time-based One-Time Password) authentication.
 
-**Last Updated**: January 16, 2026
+**Last Updated**: February 9, 2026
 
 ## Overview
 
-The E2E login tests verify the complete SSO authentication flow:
+The E2E tests verify the complete SSO authentication flows for both employees and customers:
+
+**Employee Login** (tamshai-corp realm, TOTP required):
 1. User navigates to employee login page
-2. Clicks "Sign in with SSO" button
-3. Redirected to Keycloak for authentication
-4. Enters username and password
-5. Completes TOTP verification (or TOTP setup if not configured)
-6. Redirected back to the portal
-7. Portal displays user information and available applications
+2. Auto-redirected to Keycloak for authentication
+3. Enters username and password
+4. Completes TOTP verification
+5. Redirected back to the portal
+6. Portal displays user information and available applications
+
+**Customer Login** (tamshai-customers realm, no TOTP):
+1. User navigates to customer portal
+2. Auto-redirected to Keycloak customer realm
+3. Enters email and password
+4. Redirected back to customer portal
+5. Customer sees organization name and support tools
 
 ## TOTP Handling Strategy
 
-### Current Approach: Auto-Capture (January 2026)
+### Current Approach: globalSetup Provisioning + Auto-Capture (February 2026)
 
-The E2E test framework automatically handles TOTP authentication:
+The E2E test framework uses a two-layer strategy:
 
-1. **If TOTP is configured**: Uses secret from environment variable or cached file
-2. **If TOTP setup page appears**: Auto-captures secret and completes setup
+**Layer 1 — globalSetup** (`tests/e2e/global-setup.ts`, runs before all tests):
+- When `TEST_USER_TOTP_SECRET` + `TEST_USER_PASSWORD` are set, deletes and recreates `test-user.journey` via Keycloak Partial Import API
+- Stores the raw secret in Keycloak's `secretData.value`
+- Computes a **Base32 bridge value** and writes it to the `.totp-secrets/` cache file
+- This bridge ensures otplib's `Base32.decode()` produces the same UTF-8 bytes Keycloak uses as the HMAC key
+
+**Layer 2 — Auto-Capture** (fallback if globalSetup skipped):
+- If TOTP setup page appears, clicks "Unable to scan?", extracts secret, completes setup
+- Saves captured secret to cache for subsequent runs
 
 **Benefits**:
 - No manual intervention required
 - Works across all environments (dev, stage, prod)
 - Secrets cached for subsequent test runs
 - Phoenix-compliant (works after infrastructure rebuild)
+- Handles the Keycloak/otplib encoding mismatch transparently
 
 ### How Auto-Capture Works
 
@@ -68,9 +84,11 @@ async function handleTotpSetupIfRequired(page: Page): Promise<string | null> {
 
 The test framework looks for TOTP secrets in this order:
 
-1. **Cached file**: `.totp-secrets/test-user.journey-{env}.secret`
-2. **Environment variable**: `TEST_USER_TOTP_SECRET`
-3. **Auto-capture**: If setup page appears, extract and save
+1. **Cached file**: `.totp-secrets/test-user.journey-{env}.secret` (written by globalSetup or auto-capture)
+2. **Environment variable**: `TEST_USER_TOTP_SECRET` (only if no cached file)
+3. **Auto-capture**: If TOTP setup page appears, extract and save
+
+**Note**: When globalSetup runs, it always writes the cache file with the Base32 bridge value. The test spec reads the cache file, NOT the raw env var. This is intentional — the cache file contains the Base32-encoded form that otplib needs.
 
 **⚠️ IMPORTANT (January 2026)**: After a fresh deployment that clears TOTP credentials (like `deploy-vps.yml` on stage), do NOT pass `TEST_USER_TOTP_SECRET` as an environment variable. The cached file will be stale, and the env var will have the old secret. Instead:
 
@@ -81,17 +99,9 @@ The test framework looks for TOTP secrets in this order:
 
 ### Important: Single Worker Mode
 
-**Always run login tests with `--workers=1`** to avoid session conflicts:
+The Playwright config (`playwright.config.ts`) enforces `workers: 1` and `fullyParallel: false`, so you do **not** need to pass `--workers=1` manually. All tests run sequentially by default.
 
-```bash
-# CORRECT - single worker
-npx playwright test login-journey.ui.spec.ts --workers=1
-
-# WRONG - parallel workers cause authentication conflicts
-npx playwright test login-journey.ui.spec.ts  # Uses default workers
-```
-
-**Why**: Multiple tests authenticating as the same user simultaneously causes:
+**Why single worker**: Multiple tests authenticating as the same user simultaneously causes:
 - Session conflicts in Keycloak
 - TOTP code reuse (30-second window)
 - "Invalid authenticator code" errors
@@ -135,58 +145,90 @@ cd tests/e2e
 npm install
 npx playwright install chromium
 
-# Run login tests on dev
-TEST_ENV=dev npm run test:login:dev
+# Load all credentials
+eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
+export DEV_USER_PASSWORD=$(grep '^DEV_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
+export CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
 
-# Run login tests on prod (single worker required)
-TEST_ENV=prod npx playwright test login-journey.ui.spec.ts --workers=1
+# Run employee login tests (6 tests, ~13s)
+npx playwright test specs/login-journey.ui.spec.ts --reporter=list
+
+# Run customer login tests (13 tests, ~16s)
+npx playwright test specs/customer-login-journey.ui.spec.ts --reporter=list
+
+# Run API gateway tests (21 tests)
+npx playwright test specs/gateway.api.spec.ts --reporter=list
+
+# Run all core tests together
+npx playwright test specs/login-journey.ui.spec.ts specs/customer-login-journey.ui.spec.ts specs/gateway.api.spec.ts --reporter=list
 ```
 
-### Windows-Specific: Use .env file or cross-env
+**Note**: The Playwright config enforces `workers: 1` and `fullyParallel: false`, so you do NOT need `--workers=1` manually.
 
-On Windows, environment variables set with `set` don't properly propagate to child processes. Two solutions:
+### Windows Git Bash
 
-**Option 1: Use .env file (Recommended)**
+On Windows with Git Bash, `export VAR=value` works correctly (unlike `set` in cmd.exe). The commands above work as-is in Git Bash.
 
-Create a `tests/e2e/.env` file with your credentials:
+**Alternative: Use .env file** — Create `tests/e2e/.env` with credentials. The Playwright config loads it via `dotenv`:
+
 ```bash
-TEST_ENV=dev
-TEST_USER_PASSWORD=your-password-here
-```
-
-The playwright config loads this automatically via `dotenv`.
-
-**Option 2: Use cross-env**
-```bash
-# Install cross-env first
-npm install -D cross-env
-
-# Then use it to run tests
-npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+TEST_USER_PASSWORD=<from-github-secrets>
+TEST_USER_TOTP_SECRET=<from-github-secrets>
+DEV_USER_PASSWORD=<from-infrastructure-docker-env>
+CUSTOMER_USER_PASSWORD=<from-infrastructure-docker-env>
 ```
 
 **Note**: The `.env` file is gitignored - never commit credentials to version control.
 
+### Windows Insight: oathtool Fallback
+
+On Windows Git Bash, `oathtool` is not available (it's a Linux/macOS tool). The test framework automatically falls back to **otplib** (JavaScript) for TOTP code generation. You'll see this in the test output:
+
+```text
+oathtool failed, falling back to otplib: spawnSync /bin/bash ENOENT
+Generated TOTP code using otplib (SHA1 fallback)
+```
+
+This is normal and expected on Windows.
+
 ### Environment Variables
 
-| Variable | Required | GitHub Secret | Description |
-|----------|----------|---------------|-------------|
-| `TEST_ENV` | Yes | N/A | Environment: `dev`, `stage`, or `prod` |
-| `TEST_USER_PASSWORD` | Yes* | `TEST_USER_PASSWORD` | Password for test-user.journey |
-| `TEST_USER_TOTP_SECRET` | No | `TEST_USER_TOTP_SECRET` | BASE32 TOTP secret (auto-captured if not set) |
+| Variable | Required | Source | Description |
+|----------|----------|--------|-------------|
+| `TEST_ENV` | No | N/A | Environment: `dev` (default), `stage`, or `prod` |
+| `TEST_USER_PASSWORD` | Yes* | GitHub Secret: `TEST_USER_PASSWORD` | Password for test-user.journey |
+| `TEST_USER_TOTP_SECRET` | Yes* | GitHub Secret: `TEST_USER_TOTP_SECRET` | TOTP secret for globalSetup provisioning |
+| `MCP_INTEGRATION_RUNNER_SECRET` | For integration tests | GitHub Secret: `MCP_INTEGRATION_RUNNER_SECRET` | Service account secret (token exchange, integration tests only) |
+| `DEV_USER_PASSWORD` | For API tests | `.env` file | Password for corporate users (eve.thompson, etc.) |
+| `CUSTOMER_USER_PASSWORD` | For customer tests | `.env` file / GitHub Secret | Password for customer realm users |
 | `TEST_USERNAME` | No | N/A | Override username (default: `test-user.journey`) |
 
-*Required for full login journey test. Without it, the test is skipped.
+<!-- Note: TEST_USER_PASSWORD and TEST_USER_TOTP_SECRET are GitHub Secrets - pragma: allowlist secret -->
+
+*Required for full employee login journey test. Without `TEST_USER_PASSWORD`, the TOTP login test is skipped. Without `TEST_USER_TOTP_SECRET`, globalSetup is skipped (tests fall back to auto-capture).
+
+**Note on MCP_INTEGRATION_RUNNER_SECRET**: This secret is used by **integration tests** (tests/integration/), not E2E tests. E2E tests authenticate as real users (test-user.journey) using ROPC for browser-based login flows. Integration tests use token exchange to impersonate users when calling MCP server APIs directly. See [Integration Test README](../../tests/integration/README.md) for details.
+
+**Loading secrets from .env** (Terraform-generated, contains all passwords):
+
+```bash
+export DEV_USER_PASSWORD=$(grep '^DEV_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
+export CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
+```
 
 ### npm Scripts
 
 ```bash
-# Login tests by environment
-npm run test:login:dev    # https://www.tamshai.local
+# Employee login tests by environment
+npm run test:login:dev    # https://www.tamshai-playground.local
 npm run test:login:stage  # https://www.tamshai.com
 npm run test:login:prod   # https://app.tamshai.com
 
-# All E2E tests
+# Customer login tests by environment
+npm run test:customer-login:dev    # Customer portal (dev)
+npm run test:customer-login:stage  # Customer portal (stage)
+
+# All E2E tests by environment
 npm run test:dev
 npm run test:stage
 npm run test:prod
@@ -196,6 +238,9 @@ npm run test:debug
 
 # UI mode (interactive)
 npm run test:ui
+
+# Install Playwright browsers (first time)
+npm run install:browsers
 ```
 
 ## TOTP Code Generation
@@ -252,14 +297,19 @@ Tamshai uses browser authentication with OTP:
 **Cause**: Usually timing, parallel worker issues, or **TOTP secret mismatch after deployment**
 
 **Solutions**:
-1. Run with `--workers=1`
+1. Config enforces `workers: 1` — verify you haven't overridden it
 2. Verify system clock is synchronized
 3. Wait for new 30-second window before retrying
 4. **After fresh deployment**: Delete cached secrets and run WITHOUT `TEST_USER_TOTP_SECRET` env var:
+
    ```bash
    rm -rf tests/e2e/.totp-secrets/
-   cd tests/e2e && npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+   cd tests/e2e
+   export TEST_ENV=stage
+   export TEST_USER_PASSWORD="<from-github-secrets>"
+   npx playwright test specs/login-journey.ui.spec.ts --reporter=list
    ```
+
    The test will auto-capture the new secret.
 
 **Common Cause (Stage)**: The `deploy-vps.yml` workflow clears TOTP credentials on each deployment. If you pass an old `TEST_USER_TOTP_SECRET` from GitHub Secrets, it won't match the newly captured TOTP in Keycloak.
@@ -275,6 +325,7 @@ Tamshai uses browser authentication with OTP:
 **Cause**: Cached secret file doesn't exist or doesn't match
 
 **Solution**: Delete `.totp-secrets/` directory and let test re-capture:
+
 ```bash
 rm -rf tests/e2e/.totp-secrets/
 ```
@@ -320,6 +371,7 @@ The exclamation mark (`!`) character causes issues across multiple layers:
 - `\` - Escape character
 
 **Example:**
+
 ```bash
 # BAD - ! will cause issues
 TEST_USER_PASSWORD="MyPass!123"
@@ -369,21 +421,29 @@ jobs:
       - name: Run E2E login tests
         run: |
           cd tests/e2e
-          npx playwright test login-journey.ui.spec.ts --workers=1
+          npx playwright test specs/login-journey.ui.spec.ts --reporter=list
         env:
           TEST_ENV: prod
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
 ```
 
 ## File Structure
 
-```
+```text
 tests/e2e/
 ├── specs/
-│   └── login-journey.ui.spec.ts    # Login journey tests
-├── playwright.config.ts             # Playwright configuration
+│   ├── login-journey.ui.spec.ts           # Employee login journey (6 tests)
+│   ├── customer-login-journey.ui.spec.ts  # Customer login journey (13 tests)
+│   ├── gateway.api.spec.ts                # API gateway tests (21 tests)
+│   ├── sample-apps.ui.spec.ts             # Sample app UI tests
+│   ├── payroll-app.ui.spec.ts             # Payroll app UI tests
+│   └── ...                                # Other UI/wizard specs
+├── global-setup.ts                  # TOTP provisioning (runs before all tests)
+├── playwright.config.ts             # Playwright configuration (workers: 1)
 ├── package.json                     # Dependencies and scripts
-├── .gitignore                       # Ignore .totp-secrets/
+├── .env                             # Local credentials (gitignored)
+├── .gitignore                       # Ignore .totp-secrets/, .env
 └── .totp-secrets/                   # Cached TOTP secrets (gitignored)
     ├── test-user.journey-dev.secret
     ├── test-user.journey-stage.secret
@@ -398,7 +458,7 @@ tests/e2e/
 
 ### Stage Environment: TOTP Cleared on Each Deployment
 
-**Status**: ✅ **Verified** (January 16, 2026)
+**Status**: ✅ **Verified** (January 2026)
 
 The `deploy-vps.yml` workflow clears TOTP credentials for test-user.journey on each deployment:
 
@@ -416,11 +476,14 @@ done
 4. Subsequent tests use cached secret
 
 **Verified Working Command** (January 16, 2026):
+
 ```bash
 # After fresh deployment - let test auto-capture TOTP
 cd tests/e2e
 rm -rf .totp-secrets/test-user.journey-stage.secret
-npx cross-env TEST_ENV=stage TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+export TEST_ENV=stage
+export TEST_USER_PASSWORD="<from-github-secrets>"
+npx playwright test specs/login-journey.ui.spec.ts --reporter=list
 ```
 
 ### Prod Environment: E2E Verified
@@ -436,12 +499,41 @@ E2E tests verified working on prod with all 6 tests passing:
 - No 404 errors for assets
 
 **Verified Working Command** (January 16, 2026):
+
 ```bash
 cd tests/e2e
-npx cross-env TEST_ENV=prod TEST_USER_PASSWORD="..." playwright test login-journey.ui.spec.ts --workers=1 --project=chromium
+export TEST_ENV=prod
+export TEST_USER_PASSWORD="<from-github-secrets>"
+export TEST_USER_TOTP_SECRET="<from-github-secrets>"
+npx playwright test specs/login-journey.ui.spec.ts --reporter=list
+```
+
+### Dev Environment: Full E2E Verified (Phoenix Rebuild)
+
+**Status**: ✅ **Verified** (February 9, 2026) — After Phoenix Rebuild (terraform destroy + apply)
+
+All tests verified working after full infrastructure rebuild:
+- Employee login: 6/6 passed (~13s)
+- Customer login: 13/13 passed (~16s)
+
+**Verified Working Commands** (February 9, 2026):
+
+```bash
+cd tests/e2e
+
+# Load all credentials
+eval $(../../scripts/secrets/read-github-secrets.sh --e2e --env)
+export DEV_USER_PASSWORD=$(grep '^DEV_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
+export CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' ../../infrastructure/docker/.env | cut -d= -f2)
+
+# Employee login (6 tests)
+npx playwright test specs/login-journey.ui.spec.ts --reporter=list
+
+# Customer login (13 tests)
+npx playwright test specs/customer-login-journey.ui.spec.ts --reporter=list
 ```
 
 ---
 
-*Last Updated: January 16, 2026*
-*Status: ✅ Active - Verified on stage and prod*
+*Last Updated: February 9, 2026*
+*Status: ✅ Active - Verified on dev (Phoenix rebuild), stage, and prod*

@@ -356,11 +356,19 @@ cmd_reimport() {
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}"
 
     local token_response
-    token_response=$(curl $insecure -sf -X POST "$keycloak_url/auth/realms/master/protocol/openid-connect/token" \
-        -d "client_id=admin-cli" \
-        -d "username=$admin_user" \
-        -d "password=$admin_pass" \
-        -d "grant_type=password" 2>&1)
+    if [ -n "${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" ]; then
+        log_info "Using client credentials for admin auth"
+        token_response=$(curl $insecure -sf -X POST "$keycloak_url/auth/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "client_secret=$KEYCLOAK_ADMIN_CLIENT_SECRET" \
+            -d "grant_type=client_credentials" 2>&1)
+    else
+        token_response=$(curl $insecure -sf -X POST "$keycloak_url/auth/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "username=$admin_user" \
+            -d "password=$admin_pass" \
+            -d "grant_type=password" 2>&1)
+    fi
 
     local token
     token=$(echo "$token_response" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)

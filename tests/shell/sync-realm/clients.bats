@@ -164,7 +164,7 @@ setup() {
     source keycloak/scripts/lib/clients.sh
     ENV="dev"
     run get_tamshai_website_client_json
-    [[ "$output" == *"localhost"* ]] || [[ "$output" == *"tamshai.local"* ]]
+    [[ "$output" == *"localhost"* ]] || [[ "$output" == *"tamshai-playground.local"* ]]
 }
 
 @test "get_tamshai_website_client_json includes stage redirect URIs for stage env" {

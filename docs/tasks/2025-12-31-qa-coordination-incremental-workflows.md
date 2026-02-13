@@ -154,7 +154,7 @@ After incremental deployment, verify services can still communicate via public A
 TOKEN=$(curl -X POST https://<domain>/auth/realms/tamshai-corp/protocol/openid-connect/token \
   -d "client_id=mcp-gateway" \
   -d "client_secret=<secret>" \
-  -d "username=alice.chen@tamshai.local" \
+  -d "username=alice.chen@tamshai-playground.local" \
   -d "password=<password>" \
   -d "grant_type=password" | jq -r '.access_token')
 
@@ -176,7 +176,7 @@ Verify Keycloak integration after incremental Keycloak deployment:
 TOKEN=$(curl -X POST https://<domain>/auth/realms/tamshai-corp/protocol/openid-connect/token \
   -d "client_id=mcp-gateway" \
   -d "client_secret=<secret>" \
-  -d "username=alice.chen@tamshai.local" \
+  -d "username=alice.chen@tamshai-playground.local" \
   -d "password=<password>" \
   -d "grant_type=password" | jq -r '.access_token')
 
@@ -498,7 +498,7 @@ Use the public API endpoint to verify services work:
 TOKEN=$(curl -X POST https://<domain>/auth/realms/tamshai-corp/protocol/openid-connect/token \
   -d "client_id=mcp-gateway" \
   -d "client_secret=<secret>" \
-  -d "username=alice.chen@tamshai.local" \
+  -d "username=alice.chen@tamshai-playground.local" \
   -d "password=<password>" \
   -d "grant_type=password" | jq -r '.access_token')
 

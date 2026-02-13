@@ -52,6 +52,9 @@ export function BudgetsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState<Budget | null>(null);
 
+  // Department detail modal
+  const [selectedDepartment, setSelectedDepartment] = useState<{ code: string; year: number } | null>(null);
+
   // Fetch budgets
   const {
     data: budgetsResponse,
@@ -108,7 +111,9 @@ export function BudgetsPage() {
     },
     onSuccess: (data, budgetId) => {
       if (data.status === 'pending_confirmation') {
-        const budget = budgets.find((b) => `${b.department_code}-${b.fiscal_year}-${b.category_name}` === budgetId);
+        // budgetId format is "DEPT-YEAR-CATEGORY-INDEX", need to match without the index
+        const budgetIdWithoutIndex = budgetId.replace(/-\d+$/, '');
+        const budget = budgets.find((b) => `${b.department_code}-${b.fiscal_year}-${b.category_name}` === budgetIdWithoutIndex);
         if (budget) {
           setPendingConfirmation({
             confirmationId: data.confirmationId!,
@@ -179,6 +184,32 @@ export function BudgetsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
+  });
+
+  // Fetch department budget details when selected
+  const { data: departmentDetail, isLoading: loadingDepartment } = useQuery({
+    queryKey: ['department-budget', selectedDepartment?.code, selectedDepartment?.year],
+    queryFn: async () => {
+      if (!selectedDepartment) return null;
+      const token = getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const params = new URLSearchParams({
+        department: selectedDepartment.code,
+        year: selectedDepartment.year.toString(),
+      });
+
+      const baseUrl = apiConfig.mcpGatewayUrl
+        ? `${apiConfig.mcpGatewayUrl}/api/mcp/finance/get_budget`
+        : '/api/mcp/finance/get_budget';
+
+      const response = await fetch(`${baseUrl}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch department budget');
+      return response.json();
+    },
+    enabled: !!selectedDepartment,
   });
 
   const budgets = budgetsResponse?.data || [];
@@ -381,6 +412,88 @@ export function BudgetsPage() {
         </div>
       )}
 
+      {/* Department Detail Modal */}
+      {selectedDepartment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-testid="department-detail-modal">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-semibold">
+                {selectedDepartment.code} Budget - FY{selectedDepartment.year}
+              </h3>
+              <button
+                onClick={() => setSelectedDepartment(null)}
+                className="text-secondary-500 hover:text-secondary-700"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {loadingDepartment ? (
+              <div className="py-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <p className="mt-2 text-secondary-600">Loading department budget...</p>
+              </div>
+            ) : departmentDetail?.data ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="card bg-primary-50">
+                    <h4 className="text-sm font-medium text-secondary-600">Total Budgeted</h4>
+                    <p className="text-xl font-bold text-primary-700">
+                      {formatCurrency(departmentDetail.data.total_budgeted || 0)}
+                    </p>
+                  </div>
+                  <div className="card bg-success-50">
+                    <h4 className="text-sm font-medium text-secondary-600">Total Spent</h4>
+                    <p className="text-xl font-bold text-success-700">
+                      {formatCurrency(departmentDetail.data.total_actual || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                {departmentDetail.data.budgets && departmentDetail.data.budgets.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th className="table-header">Category</th>
+                          <th className="table-header text-right">Budgeted</th>
+                          <th className="table-header text-right">Actual</th>
+                          <th className="table-header text-right">Remaining</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-secondary-200">
+                        {departmentDetail.data.budgets.map((b: any, idx: number) => (
+                          <tr key={idx} className="table-row">
+                            <td className="table-cell">{b.category_id || 'General'}</td>
+                            <td className="table-cell text-right">{formatCurrency(Number(b.budgeted_amount) || 0)}</td>
+                            <td className="table-cell text-right">{formatCurrency(Number(b.actual_amount) || 0)}</td>
+                            <td className="table-cell text-right">
+                              {formatCurrency((Number(b.budgeted_amount) || 0) - (Number(b.actual_amount) || 0))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-secondary-600 text-center py-4">No budget categories found</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-secondary-600 text-center py-4">No budget data available</p>
+            )}
+
+            <div className="mt-6 flex justify-end">
+              <button onClick={() => setSelectedDepartment(null)} className="btn-secondary">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="card" data-testid="budget-count">
@@ -497,7 +610,11 @@ export function BudgetsPage() {
                   return (
                     <tr key={budgetKey} className="table-row" data-testid="budget-row">
                       <td className="table-cell">
-                        <button className="text-primary-600 hover:underline font-medium" data-testid="department-link">
+                        <button
+                          onClick={() => setSelectedDepartment({ code: budget.department_code, year: budget.fiscal_year })}
+                          className="text-primary-600 hover:underline font-medium"
+                          data-testid="department-link"
+                        >
                           {budget.department_code}
                         </button>
                       </td>

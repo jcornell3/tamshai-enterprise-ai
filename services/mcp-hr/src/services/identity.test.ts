@@ -529,17 +529,17 @@ describe('transformEmailForDatabaseLookup', () => {
       process.env.ENVIRONMENT = 'dev';
     });
 
-    it('transforms @tamshai.local to @tamshai.com', () => {
-      const result = transformEmailForDatabaseLookup('alice@tamshai.local');
+    it('transforms @tamshai-playground.local to @tamshai.com', () => {
+      const result = transformEmailForDatabaseLookup('alice@tamshai-playground.local');
       expect(result).toBe('alice@tamshai.com');
     });
 
     it('transforms email with subdomain correctly', () => {
-      const result = transformEmailForDatabaseLookup('bob.smith@tamshai.local');
+      const result = transformEmailForDatabaseLookup('bob.smith@tamshai-playground.local');
       expect(result).toBe('bob.smith@tamshai.com');
     });
 
-    it('leaves non-tamshai.local emails unchanged', () => {
+    it('leaves non-tamshai-playground.local emails unchanged', () => {
       const result = transformEmailForDatabaseLookup('user@example.com');
       expect(result).toBe('user@example.com');
     });
@@ -556,8 +556,8 @@ describe('transformEmailForDatabaseLookup', () => {
     });
 
     it('leaves emails unchanged', () => {
-      const result = transformEmailForDatabaseLookup('alice@tamshai.local');
-      expect(result).toBe('alice@tamshai.local');
+      const result = transformEmailForDatabaseLookup('alice@tamshai-playground.local');
+      expect(result).toBe('alice@tamshai-playground.local');
     });
 
     it('leaves @tamshai.com emails unchanged', () => {
@@ -582,8 +582,8 @@ describe('transformEmailForDatabaseLookup', () => {
       delete process.env.ENVIRONMENT;
     });
 
-    it('transforms @tamshai.local to @tamshai.com', () => {
-      const result = transformEmailForDatabaseLookup('eve@tamshai.local');
+    it('transforms @tamshai-playground.local to @tamshai.com', () => {
+      const result = transformEmailForDatabaseLookup('eve@tamshai-playground.local');
       expect(result).toBe('eve@tamshai.com');
     });
   });

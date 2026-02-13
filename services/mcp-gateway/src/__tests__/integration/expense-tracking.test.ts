@@ -156,71 +156,45 @@ describe('Finance Expense Tracking - TDD RED Phase', () => {
     });
 
     /**
-     * Test: Foreign key constraint to hr.employees exists
+     * Test: employee_id column exists and is NOT NULL (application-level integrity)
      *
-     * RED PHASE: Will fail because table and constraint don't exist.
-     *
-     * The employee_id column should reference hr.employees.id to ensure
-     * referential integrity for expense submitters.
+     * NOTE: Cross-database FK constraints not possible in PostgreSQL.
+     * hr.employees is in tamshai_hr database, finance.expenses is in tamshai_finance.
+     * Referential integrity is enforced at the application level.
      */
-    test('should have foreign key to hr.employees', async () => {
-      // TDD: Check for FK constraint
+    test('should have employee_id column as NOT NULL UUID', async () => {
       const result = await adminPool.query(`
-        SELECT
-          tc.constraint_name,
-          kcu.column_name,
-          ccu.table_schema AS foreign_table_schema,
-          ccu.table_name AS foreign_table_name,
-          ccu.column_name AS foreign_column_name
-        FROM information_schema.table_constraints AS tc
-        JOIN information_schema.key_column_usage AS kcu
-          ON tc.constraint_name = kcu.constraint_name
-          AND tc.table_schema = kcu.table_schema
-        JOIN information_schema.constraint_column_usage AS ccu
-          ON ccu.constraint_name = tc.constraint_name
-          AND ccu.table_schema = tc.table_schema
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'finance'
-          AND tc.table_name = 'expenses'
-          AND kcu.column_name = 'employee_id'
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'finance'
+          AND table_name = 'expenses'
+          AND column_name = 'employee_id'
       `);
 
-      // RED PHASE: No FK constraint exists yet
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0].foreign_table_name).toBe('employees');
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0].data_type).toBe('uuid');
+      expect(result.rows[0].is_nullable).toBe('NO');
     });
 
     /**
-     * Test: Foreign key constraint to hr.departments exists
+     * Test: department_id column exists and is NOT NULL (application-level integrity)
      *
-     * RED PHASE: Will fail because table and constraint don't exist.
-     *
-     * The department_id column should reference hr.departments.id to
-     * enable department-level expense reporting.
+     * NOTE: Cross-database FK constraints not possible in PostgreSQL.
+     * hr.departments is in tamshai_hr database, finance.expenses is in tamshai_finance.
+     * Referential integrity is enforced at the application level.
      */
-    test('should have foreign key to hr.departments', async () => {
-      // TDD: Check for FK constraint
+    test('should have department_id column as NOT NULL UUID', async () => {
       const result = await adminPool.query(`
-        SELECT
-          tc.constraint_name,
-          kcu.column_name,
-          ccu.table_name AS foreign_table_name
-        FROM information_schema.table_constraints AS tc
-        JOIN information_schema.key_column_usage AS kcu
-          ON tc.constraint_name = kcu.constraint_name
-          AND tc.table_schema = kcu.table_schema
-        JOIN information_schema.constraint_column_usage AS ccu
-          ON ccu.constraint_name = tc.constraint_name
-          AND ccu.table_schema = tc.table_schema
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'finance'
-          AND tc.table_name = 'expenses'
-          AND kcu.column_name = 'department_id'
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'finance'
+          AND table_name = 'expenses'
+          AND column_name = 'department_id'
       `);
 
-      // RED PHASE: No FK constraint exists yet
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0].foreign_table_name).toBe('departments');
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0].data_type).toBe('uuid');
+      expect(result.rows[0].is_nullable).toBe('NO');
     });
 
     /**
@@ -867,7 +841,7 @@ describe('Finance Expense Tracking - TDD RED Phase', () => {
           ) VALUES (
             uuid_generate_v4(),
             $1,
-            (SELECT id FROM hr.departments LIMIT 1),
+            (SELECT id FROM finance.departments LIMIT 1),
             CURRENT_DATE,
             'OTHER',
             'Test expense for TDD',
@@ -925,7 +899,7 @@ describe('Finance Expense Tracking - TDD RED Phase', () => {
             ) VALUES (
               uuid_generate_v4(),
               $1,
-              (SELECT id FROM hr.departments LIMIT 1),
+              (SELECT id FROM finance.departments LIMIT 1),
               CURRENT_DATE,
               'TRAVEL',
               'Fraudulent expense attempt',

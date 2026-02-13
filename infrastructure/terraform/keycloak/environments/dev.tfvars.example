@@ -1,0 +1,80 @@
+# ============================================================
+# Dev Environment Configuration (Local Terraform)
+# ============================================================
+#
+# USAGE:
+#   1. Copy this file to dev.tfvars: cp dev.tfvars.example dev.tfvars
+#   2. Update secret values (never commit dev.tfvars to git)
+#   3. Run: terraform apply -var-file=environments/dev.tfvars
+#
+# SECRETS: Set these values locally (not in version control)
+#   - keycloak_admin_password
+#   - test_user_password
+#   - mcp_gateway_client_secret
+#   - mcp_hr_service_client_secret
+#   - mcp_integration_runner_secret
+#
+# ============================================================
+
+# Keycloak connection settings
+keycloak_url        = "https://www.tamshai-playground.local/auth"
+keycloak_admin_user = "admin"
+keycloak_admin_password = "SET_THIS_VALUE" # pragma: allowlist secret
+
+# Realm settings
+realm_name         = "tamshai-corp"
+realm_display_name = "Tamshai Corporation - Dev"
+
+# Client secrets
+mcp_gateway_client_secret       = "SET_THIS_VALUE" # pragma: allowlist secret
+mcp_hr_service_client_secret    = "SET_THIS_VALUE" # pragma: allowlist secret
+mcp_integration_runner_secret   = "SET_THIS_VALUE" # pragma: allowlist secret
+test_user_password              = "SET_THIS_VALUE" # pragma: allowlist secret
+
+# Environment
+environment = "dev"
+
+# TLS settings (skip verification for local self-signed certs)
+tls_insecure_skip_verify = true
+
+# Valid redirect URIs (includes wildcard paths for OAuth callbacks)
+valid_redirect_uris = [
+  "https://www.tamshai-playground.local/*",
+  "https://portal.tamshai-playground.local/*",
+  "https://finance.tamshai-playground.local/*",
+  "https://sales.tamshai-playground.local/*",
+  "https://support.tamshai-playground.local/*",
+  "https://hr.tamshai-playground.local/*",
+  "https://payroll.tamshai-playground.local/*",
+  "https://tax.tamshai-playground.local/*",
+  "https://customer-support.tamshai-playground.local/*",
+  "http://localhost:3100/*",
+  "http://localhost:4010/*",
+  "http://localhost:4011/*",
+  "http://localhost:4012/*",
+]
+
+# Explicit CORS origins (no wildcard paths - defense-in-depth)
+web_origins = [
+  # HTTPS (via Caddy/Terraform)
+  "https://www.tamshai-playground.local",
+  "https://portal.tamshai-playground.local",
+  "https://finance.tamshai-playground.local",
+  "https://sales.tamshai-playground.local",
+  "https://support.tamshai-playground.local",
+  "https://hr.tamshai-playground.local",
+  "https://payroll.tamshai-playground.local",
+  "https://tax.tamshai-playground.local",
+  "https://customer-support.tamshai-playground.local",
+  # HTTP (local dev without Caddy)
+  "http://localhost:3100",
+  "http://localhost:4010",
+  "http://localhost:4011",
+  "http://localhost:4012",
+]
+
+# OAuth Flows
+# ROPC (Resource Owner Password Credentials) DISABLED - migration complete (2026-02-13)
+# Tests use token exchange (mcp-integration-runner) and client credentials (admin-cli)
+# See docs/security/ROPC_ASSESSMENT.md for security rationale
+direct_access_grants_enabled = false

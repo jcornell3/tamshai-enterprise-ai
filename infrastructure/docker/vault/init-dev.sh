@@ -22,13 +22,13 @@ vault secrets enable -path=tamshai kv-v2 2>/dev/null || echo "KV engine already 
 # Store development secrets
 echo "Storing development secrets..."
 vault kv put tamshai/mcp-gateway \
-    claude_api_key="${CLAUDE_API_KEY:-sk-ant-test-key}" \
-    keycloak_client_secret="${KEYCLOAK_CLIENT_SECRET:-mcp-gateway-secret}"
+    claude_api_key="${CLAUDE_API_KEY:?CLAUDE_API_KEY required}" \
+    mcp_gateway_client_secret="${MCP_GATEWAY_CLIENT_SECRET:?MCP_GATEWAY_CLIENT_SECRET required}"
 
 vault kv put tamshai/databases \
-    postgres_password="${POSTGRES_PASSWORD:-postgres_password}" \
-    mongodb_password="${MONGODB_PASSWORD:-tamshai_password}" \
-    keycloak_db_password="${KEYCLOAK_DB_PASSWORD:-keycloak_password}"
+    postgres_password="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}" \
+    mongodb_password="${MONGODB_PASSWORD:?MONGODB_PASSWORD required}" \
+    keycloak_db_password="${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD required}"
 
 vault kv put tamshai/keycloak \
     admin_password="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}"

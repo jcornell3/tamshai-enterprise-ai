@@ -6,7 +6,7 @@ import { WebStorageStateStore } from 'oidc-client-ts';
  */
 function getAppBasePath(): string {
   const pathname = window.location.pathname;
-  const appPaths = ['/app', '/hr', '/finance', '/sales', '/support'];
+  const appPaths = ['/app', '/hr', '/finance', '/sales', '/support', '/payroll', '/tax'];
 
   for (const appPath of appPaths) {
     if (pathname.startsWith(appPath)) {
@@ -24,8 +24,8 @@ function getAppBasePath(): string {
 function isDeployedEnvironment(hostname: string): boolean {
   // Known deployed hostnames
   const deployedHosts = [
-    'tamshai.local',
-    'www.tamshai.local',
+    'tamshai-playground.local',
+    'www.tamshai-playground.local',
     'tamshai.com',
     'www.tamshai.com',
     'vps.tamshai.com',
@@ -113,7 +113,52 @@ function getKeycloakConfig() {
   };
 }
 
-const envConfig = getKeycloakConfig();
+// Lazy config cache
+let _envConfig: ReturnType<typeof getKeycloakConfig> | null = null;
+let _oidcConfig: ReturnType<typeof getOidcConfig> | null = null;
+
+/**
+ * Get environment config lazily (only when accessed in browser)
+ */
+function getEnvConfig() {
+  if (!_envConfig) {
+    _envConfig = getKeycloakConfig();
+  }
+  return _envConfig;
+}
+
+/**
+ * Build OIDC config lazily to avoid window access at module load time
+ */
+function getOidcConfig() {
+  const envConfig = getEnvConfig();
+  return {
+    // Environment-aware Keycloak endpoints
+    authority: envConfig.authority,
+    client_id: envConfig.client_id,
+    redirect_uri: envConfig.redirect_uri,
+    post_logout_redirect_uri: envConfig.post_logout_redirect_uri,
+
+    // PKCE flow (Article V: OIDC with PKCE, no implicit flow)
+    response_type: 'code',
+    scope: 'openid profile email',
+
+    // Silent refresh configuration - DISABLED for debugging
+    automaticSilentRenew: false,
+    // silent_redirect_uri: `${window.location.origin}/silent-renew.html`,
+
+    // Storage: sessionStorage for refresh token only
+    userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+
+    // Token validation
+    loadUserInfo: true,
+    monitorSession: false, // Disabled - can cause iframe issues
+
+    // Timeout settings
+    silentRequestTimeoutInSeconds: 10,
+    accessTokenExpiringNotificationTimeInSeconds: 60, // Refresh 1 min before expiry
+  };
+}
 
 /**
  * Keycloak OIDC Configuration
@@ -122,33 +167,29 @@ const envConfig = getKeycloakConfig();
  * - Access tokens stored in memory only (not localStorage/sessionStorage)
  * - Only refresh tokens stored in sessionStorage via WebStorageStateStore
  * - Tokens have 5-minute lifetime with automatic refresh
+ *
+ * NOTE: This is a getter to lazily evaluate config (supports testing with jsdom)
  */
-export const oidcConfig = {
-  // Environment-aware Keycloak endpoints
-  authority: envConfig.authority,
-  client_id: envConfig.client_id,
-  redirect_uri: envConfig.redirect_uri,
-  post_logout_redirect_uri: envConfig.post_logout_redirect_uri,
-
-  // PKCE flow (Article V: OIDC with PKCE, no implicit flow)
-  response_type: 'code',
-  scope: 'openid profile email',
-
-  // Silent refresh configuration - DISABLED for debugging
-  automaticSilentRenew: false,
-  // silent_redirect_uri: `${window.location.origin}/silent-renew.html`,
-
-  // Storage: sessionStorage for refresh token only
-  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
-
-  // Token validation
-  loadUserInfo: true,
-  monitorSession: false, // Disabled - can cause iframe issues
-
-  // Timeout settings
-  silentRequestTimeoutInSeconds: 10,
-  accessTokenExpiringNotificationTimeInSeconds: 60, // Refresh 1 min before expiry
-};
+export const oidcConfig = new Proxy({} as ReturnType<typeof getOidcConfig>, {
+  get(_, prop) {
+    if (!_oidcConfig) {
+      _oidcConfig = getOidcConfig();
+    }
+    return (_oidcConfig as any)[prop];
+  },
+  ownKeys() {
+    if (!_oidcConfig) {
+      _oidcConfig = getOidcConfig();
+    }
+    return Reflect.ownKeys(_oidcConfig!);
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    if (!_oidcConfig) {
+      _oidcConfig = getOidcConfig();
+    }
+    return Object.getOwnPropertyDescriptor(_oidcConfig!, prop);
+  },
+});
 
 /**
  * API Gateway configuration
@@ -161,4 +202,5 @@ export const oidcConfig = {
 export const apiConfig = {
   gatewayUrl: import.meta.env.VITE_API_GATEWAY_URL || '',  // Same origin (proxied by Nginx)
   mcpGatewayUrl: import.meta.env.VITE_MCP_GATEWAY_URL || '',  // Same origin (proxied by Nginx)
+  mcpUiUrl: import.meta.env.VITE_MCP_UI_URL || '',  // MCP UI Service (Generative UI)
 };

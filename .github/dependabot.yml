@@ -56,7 +56,7 @@ updates:
   #   commit-message:
   #     prefix: "deps(desktop)"
 
-  # NPM - Web Client
+  # NPM - Web Client (Turborepo monorepo: 8 apps + 3 packages)
   - package-ecosystem: "npm"
     directory: "/clients/web"
     schedule:
@@ -68,6 +68,38 @@ updates:
       - "web"
     commit-message:
       prefix: "deps(web)"
+    groups:
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-router-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      testing:
+        patterns:
+          - "@testing-library/*"
+          - "vitest"
+          - "@vitest/*"
+      build-tools:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "turbo"
+          - "typescript"
+          - "postcss"
+          - "autoprefixer"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+      dev-dependencies:
+        patterns:
+          - "@types/*"
+          - "eslint*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Pub (Flutter/Dart) - Unified Flutter Client
   - package-ecosystem: "pub"
@@ -93,18 +125,6 @@ updates:
       - "infrastructure"
     commit-message:
       prefix: "deps(terraform)"
-
-  # Terraform - VPS
-  - package-ecosystem: "terraform"
-    directory: "/infrastructure/terraform/vps"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "infrastructure"
-    commit-message:
-      prefix: "deps(terraform-vps)"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

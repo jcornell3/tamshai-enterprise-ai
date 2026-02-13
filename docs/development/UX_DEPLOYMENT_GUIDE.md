@@ -9,7 +9,7 @@
 
 | Environment | URL | Deployment Method |
 |-------------|-----|-------------------|
-| **Dev (Local)** | https://www.tamshai.local | `npm run dev` or `docker compose up` |
+| **Dev (Local)** | https://www.tamshai-playground.local | `npm run dev` or `docker compose up` |
 | **Stage (VPS)** | https://www.tamshai.com | GitHub Actions (push to main) |
 
 ---
@@ -168,7 +168,7 @@ Keycloak provides Single Sign-On (SSO) for all applications. Users authenticate 
 | Environment | Keycloak URL | Realm |
 |-------------|--------------|-------|
 | Dev (localhost) | http://localhost:8180/auth | tamshai-corp |
-| Dev (Caddy) | https://www.tamshai.local/auth | tamshai-corp |
+| Dev (Caddy) | https://www.tamshai-playground.local/auth | tamshai-corp |
 | Stage (VPS) | https://www.tamshai.com/auth | tamshai-corp |
 
 ### Test Users for Development
@@ -200,7 +200,7 @@ The auth configuration is in `clients/web/packages/auth/src/config.ts`:
 
 ```typescript
 // Environment detection - automatically uses correct Keycloak URL
-if (hostname === 'tamshai.local' || hostname === 'www.tamshai.local') {
+if (hostname === 'tamshai-playground.local' || hostname === 'www.tamshai-playground.local') {
   // Dev with Caddy
   authority: `${origin}/auth/realms/tamshai-corp`
 } else if (hostname.includes('tamshai.com')) {
@@ -273,12 +273,12 @@ cd infrastructure/terraform/dev
 terraform init
 terraform apply -var-file=dev.tfvars
 
-# Access at: https://www.tamshai.local
+# Access at: https://www.tamshai-playground.local
 ```
 
 **Prerequisite**: Add to hosts file:
 ```
-127.0.0.1 tamshai.local www.tamshai.local
+127.0.0.1 tamshai-playground.local www.tamshai-playground.local
 ```
 
 ---

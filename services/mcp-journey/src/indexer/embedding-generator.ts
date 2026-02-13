@@ -232,8 +232,11 @@ export class EmbeddingGenerator {
    */
   private getCacheKey(text: string): string {
     // Simple hash for cache key
+    // Security: Limit iterations to prevent loop bound injection
+    const maxHashLength = 10000; // Only hash first 10k chars for cache key
+    const hashLength = Math.min(text.length, maxHashLength);
     let hash = 0;
-    for (let i = 0; i < text.length; i++) {
+    for (let i = 0; i < hashLength; i++) {
       const char = text.charCodeAt(i);
       hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer

@@ -37,10 +37,18 @@ export {
   canModifyHR,
   canAccessFinance,
   canModifyFinance,
+  // Tiered Finance Access (v1.5)
+  canAccessFinanceExpenses,
+  canAccessFinanceBudgets,
+  canAccessFinanceDashboard,
   canAccessSales,
   canModifySales,
   canAccessSupport,
   canModifySupport,
+  canAccessPayroll,
+  canModifyPayroll,
+  canAccessTax,
+  canModifyTax,
   getUserDisplayName,
   getRoleBadges,
 } from './utils';

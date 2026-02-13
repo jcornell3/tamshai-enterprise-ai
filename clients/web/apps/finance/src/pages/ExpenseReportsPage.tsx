@@ -275,7 +275,7 @@ export function ExpenseReportsPage() {
     // Category breakdown
     const categoryTotals: Record<string, number> = {};
     filteredReports.forEach((report) => {
-      report.expenses.forEach((expense) => {
+      (report.expenses || []).forEach((expense) => {
         categoryTotals[expense.category] = (categoryTotals[expense.category] || 0) + expense.amount;
       });
     });
@@ -454,7 +454,7 @@ export function ExpenseReportsPage() {
               reportNumber: pendingConfirmation.report.report_number,
               employeeName: pendingConfirmation.report.employee_name,
               amount: formatCurrency(pendingConfirmation.report.total_amount),
-              expenseCount: pendingConfirmation.report.expenses.length,
+              expenseCount: (pendingConfirmation.report.expenses || []).length,
             }}
             onComplete={handleConfirmationComplete}
           />
@@ -700,7 +700,7 @@ export function ExpenseReportsPage() {
                           {formatCurrency(report.total_amount)}
                         </td>
                         <td className="table-cell" data-testid="expense-count">
-                          {report.expenses.length} expenses
+                          {(report.expenses || []).length} expenses
                         </td>
                         <td className="table-cell" data-testid="submission-date">
                           {formatDate(report.submission_date)}
@@ -774,7 +774,7 @@ export function ExpenseReportsPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {report.expenses.map((expense) => (
+                                  {(report.expenses || []).map((expense) => (
                                     <tr key={expense._id} className="border-b" data-testid="expense-row">
                                       <td className="py-2" data-testid="expense-description">
                                         {expense.description}

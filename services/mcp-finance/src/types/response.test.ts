@@ -43,6 +43,7 @@ describe('Response Types', () => {
           message: 'Confirm action',
           action: 'delete',
           data: {},
+          confirmationData: {},
         };
         expect(isSuccessResponse(response)).toBe(false);
       });
@@ -70,6 +71,7 @@ describe('Response Types', () => {
           message: 'Confirm action',
           action: 'delete',
           data: {},
+          confirmationData: {},
         };
         expect(isErrorResponse(response)).toBe(false);
       });
@@ -83,6 +85,7 @@ describe('Response Types', () => {
           message: 'Confirm action',
           action: 'delete',
           data: {},
+          confirmationData: {},
         };
         expect(isPendingConfirmationResponse(response)).toBe(true);
       });
@@ -185,6 +188,7 @@ describe('Response Types', () => {
         expect(result.message).toBe('Are you sure you want to delete this invoice?');
         expect(result.action).toBe('delete');
         expect(result.data).toEqual(data);
+        expect(result.confirmationData).toEqual(data); // Alias for data
       });
     });
   });

@@ -6,6 +6,9 @@ node_modules/
 dist/
 build/
 *.js.map
+.turbo/
+*.tsbuildinfo
+**/*.tsbuildinfo
 
 # Environment files (contain secrets)
 .env
@@ -33,6 +36,11 @@ npm-debug.log*
 coverage/
 .nyc_output/
 
+# Performance test results and tokens (contain secrets/test data)
+tests/performance/*-results.json
+tests/performance/summary.json
+tests/performance/tokens.json
+
 # Terraform
 .terraform/
 *.tfstate
@@ -40,6 +48,8 @@ coverage/
 *.tfplan
 .terraform.lock.hcl
 terraform.tfvars
+*.tfvars
+!*.tfvars.example
 infrastructure/terraform/vps/.keys/
 
 # Docker
@@ -94,9 +104,11 @@ mongodb_data/
 # Elasticsearch data (local)
 elasticsearch_data/
 
-# Claude Code / GitHub Spec Kit
-.claude/
+# Claude Code - ignore local settings but track shared commands
 .claude/settings.local.json
+.claude/projects/
+.claude/todos/
+.claude/.totp-secrets/
 
 # Temporary specification notes
 *.spec.txt
@@ -128,3 +140,4 @@ nul
 *.tfplan
 tfplan
 services/mcp-journey/data/
+tests/e2e/certs/

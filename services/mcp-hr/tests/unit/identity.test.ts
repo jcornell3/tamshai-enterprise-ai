@@ -82,8 +82,8 @@ describe('IdentityService', () => {
       expect(mockKcAdmin.users.create).toHaveBeenCalledWith(
         expect.objectContaining({
           username: 'alice.chen', // firstName.lastName format
-          // In dev environment (default), email is transformed from @tamshai.com to @tamshai.local
-          email: 'alice@tamshai.local',
+          // In dev environment (default), email is transformed from @tamshai.com to @tamshai-playground.local
+          email: 'alice@tamshai-playground.local',
           firstName: 'Alice',
           lastName: 'Chen',
           enabled: true,
@@ -148,10 +148,10 @@ describe('IdentityService', () => {
       );
 
       // Production uses hr.access_audit_log with columns: user_email, action, resource, target_id, access_decision, access_justification
-      // In dev environment (default), email is transformed from @tamshai.com to @tamshai.local
+      // In dev environment (default), email is transformed from @tamshai.com to @tamshai-playground.local
       expect(mockClient.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO hr.access_audit_log'),
-        expect.arrayContaining(['alice@tamshai.local', 'USER_CREATED', 'employee', 'emp-123'])
+        expect.arrayContaining(['alice@tamshai-playground.local', 'USER_CREATED', 'employee', 'emp-123'])
       );
     });
 

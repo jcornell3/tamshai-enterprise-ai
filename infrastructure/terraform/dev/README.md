@@ -29,21 +29,21 @@ Full-stack Terraform configuration for local Docker Compose development. Mimics 
 
 ### Hosts File Setup (Required for HTTPS)
 
-Add the following entry to your hosts file to enable `https://www.tamshai.local`:
+Add the following entry to your hosts file to enable `https://www.tamshai-playground.local`:
 
 **Windows (Admin PowerShell):**
 ```powershell
-Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1  tamshai.local www.tamshai.local"
+Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1  tamshai-playground.local www.tamshai-playground.local"
 ```
 
 **Linux/macOS:**
 ```bash
-echo "127.0.0.1  tamshai.local www.tamshai.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1  tamshai-playground.local www.tamshai-playground.local" | sudo tee -a /etc/hosts
 ```
 
 **Verify:**
 ```bash
-ping tamshai.local
+ping tamshai-playground.local
 # Should resolve to 127.0.0.1
 ```
 
@@ -143,7 +143,7 @@ terraform apply -var-file=dev.tfvars
 ### Expected Outcome
 
 - All containers running (`docker ps` shows 13+ containers)
-- Services accessible at `https://www.tamshai.local`
+- Services accessible at `https://www.tamshai-playground.local`
 - MCP Gateway health check passing: `curl http://localhost:3100/health`
 - Keycloak admin console accessible: `http://localhost:8180/auth`
 
@@ -154,14 +154,14 @@ If the rebuild fails:
 1. **Check Docker Desktop** - Ensure it's running with sufficient resources (8GB+ RAM)
 2. **Check logs** - `docker compose -f infrastructure/docker/docker-compose.yml logs`
 3. **Port conflicts** - Ensure no other services are using ports 3100, 8180, 8100
-4. **Hosts file** - Verify `127.0.0.1 www.tamshai.local` entry exists
+4. **Hosts file** - Verify `127.0.0.1 www.tamshai-playground.local` entry exists
 
 ### 6. Verify Deployment
 
 ```bash
 # Primary access URL (HTTPS)
 terraform output tamshai_local_url
-# Open in browser: https://www.tamshai.local
+# Open in browser: https://www.tamshai-playground.local
 # Accept the self-signed certificate warning
 
 # Check all service URLs
@@ -262,10 +262,13 @@ Main configuration file with defaults. **All sensitive values come from TF_VAR_*
 Set via `scripts/setup-terraform-dev-env.ps1`:
 
 **Required**:
-- `TF_VAR_claude_api_key` - Claude API key (personal, for local dev)
 - `TF_VAR_keycloak_admin_password` - Keycloak admin password
 - `TF_VAR_test_user_password` - Test user passwords
 - `TF_VAR_mcp_gateway_client_secret` - OAuth client secret
+
+**Auto-fetched from GitHub Secrets**:
+- `CLAUDE_API_KEY` - Claude API key (fetched during terraform apply)
+- Override with `TF_VAR_claude_api_key` if needed
 
 **Optional** (have defaults):
 - `TF_VAR_postgres_password` - PostgreSQL password (default: `changeme`)

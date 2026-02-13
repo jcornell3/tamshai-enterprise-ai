@@ -25,8 +25,8 @@
                             <a href="blog.html">Blog</a>
                         </div>
                     </li>
-                    <li><a href="client-login.html" class="btn btn-login">Client Login</a></li>
-                    <li><a href="employee-login.html" class="btn btn-login">Employee Login</a></li>
+                    <li><a href="#" id="client-login-btn" class="btn btn-login">Client Login</a></li>
+                    <li><a href="/app/" class="btn btn-login">Employee Login</a></li>
                 </ul>
             </nav>
         </div>
@@ -75,5 +75,23 @@
         </div>
     </footer>
 
+    <script>
+        // Build customer portal URL preserving the current port (e.g. :8443 for dev)
+        (function() {
+            var btn = document.getElementById('client-login-btn');
+            var loc = window.location;
+            var hosts = {
+                'www.tamshai-playground.local': 'https://customers.tamshai-playground.local',
+                'tamshai-playground.local': 'https://customers.tamshai-playground.local',
+                'www.tamshai.com': 'https://customers.tamshai.com',
+                'tamshai.com': 'https://customers.tamshai.com'
+            };
+            var base = hosts[loc.hostname] || 'http://localhost:4017';
+            if (loc.port && loc.port !== '443' && loc.port !== '80') {
+                try { var u = new URL(base); u.port = loc.port; base = u.toString().replace(/\/$/, ''); } catch(e) {}
+            }
+            btn.href = base;
+        })();
+    </script>
 </body>
 </html>

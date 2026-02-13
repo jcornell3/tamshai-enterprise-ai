@@ -410,11 +410,13 @@ describe('RLS Policies - Integration Tests', () => {
       );
 
       try {
+        // NOTE: TEST_USERS.employeeId maps to hr.employees.id (UUID primary key),
+        // not the employee_id varchar column which is empty in sample data
         const result = await client.query(`
           UPDATE hr.employees
           SET notes = 'Updated by HR'
-          WHERE employee_id = $1
-          RETURNING employee_id
+          WHERE id = $1
+          RETURNING id
         `, [TEST_USERS.employee.employeeId]);
 
         expect(result.rowCount).toBe(1);

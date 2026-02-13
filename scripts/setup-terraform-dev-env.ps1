@@ -186,7 +186,7 @@ if ($claudeKeyPlain -and $claudeKeyPlain.Length -gt 0) {
 } else {
     Write-Host "Skipped: TF_VAR_claude_api_key" -ForegroundColor Yellow
     Write-Host "  You can set this later with:" -ForegroundColor Gray
-    Write-Host '  setx TF_VAR_claude_api_key "sk-ant-api03-your-key-here"' -ForegroundColor Gray
+    Write-Host '  setx TF_VAR_claude_api_key "sk-ant-api03-..."' -ForegroundColor Gray
     Write-Host ""
 }
 

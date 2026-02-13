@@ -25,6 +25,9 @@ describe('AI Query Routes', () => {
   let mockGetDeniedServers: jest.Mock;
   let mockQueryMCPServer: jest.Mock;
   let mockSendToClaudeWithContext: jest.Mock;
+  let mockQueryWithContext: jest.Mock;
+  let mockGetMCPContext: jest.Mock;
+  let mockStoreMCPContext: jest.Mock;
   let deps: AIQueryRoutesDependencies;
 
   // Mock MCP server configs
@@ -48,6 +51,9 @@ describe('AI Query Routes', () => {
     mockGetDeniedServers = jest.fn();
     mockQueryMCPServer = jest.fn();
     mockSendToClaudeWithContext = jest.fn();
+    mockQueryWithContext = jest.fn();
+    mockGetMCPContext = jest.fn().mockResolvedValue(null); // Default: cache miss
+    mockStoreMCPContext = jest.fn().mockResolvedValue(undefined);
 
     deps = {
       logger: mockLogger,
@@ -55,6 +61,9 @@ describe('AI Query Routes', () => {
       getDeniedServers: mockGetDeniedServers,
       queryMCPServer: mockQueryMCPServer,
       sendToClaudeWithContext: mockSendToClaudeWithContext,
+      queryWithContext: mockQueryWithContext,
+      getMCPContext: mockGetMCPContext,
+      storeMCPContext: mockStoreMCPContext,
       rateLimiter: (req: Request, res: Response, next: NextFunction) => next(),
     };
   });
@@ -139,7 +148,7 @@ describe('AI Query Routes', () => {
         data: { employees: [{ name: 'John' }] },
         status: 'success',
       });
-      mockSendToClaudeWithContext.mockResolvedValue('Here is the employee information...');
+      mockQueryWithContext.mockResolvedValue('Here is the employee information...');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -158,11 +167,10 @@ describe('AI Query Routes', () => {
         expect.objectContaining({ userId: TEST_USERS.hrManager.userId })
       );
 
-      expect(mockSendToClaudeWithContext).toHaveBeenCalledWith(
+      // queryWithContext should be called with the serialized data context string
+      expect(mockQueryWithContext).toHaveBeenCalledWith(
         'Who are the employees?',
-        expect.arrayContaining([
-          expect.objectContaining({ server: 'hr' }),
-        ]),
+        expect.stringContaining('[Data from hr]'),
         expect.objectContaining({ userId: TEST_USERS.hrManager.userId })
       );
     });
@@ -170,7 +178,7 @@ describe('AI Query Routes', () => {
     it('should generate conversationId if not provided', async () => {
       mockGetAccessibleServers.mockReturnValue([]);
       mockGetDeniedServers.mockReturnValue([]);
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -185,7 +193,7 @@ describe('AI Query Routes', () => {
     it('should use provided conversationId', async () => {
       mockGetAccessibleServers.mockReturnValue([]);
       mockGetDeniedServers.mockReturnValue([]);
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -209,7 +217,7 @@ describe('AI Query Routes', () => {
           data: { budgets: [] },
           status: 'success',
         });
-      mockSendToClaudeWithContext.mockResolvedValue('Combined response');
+      mockQueryWithContext.mockResolvedValue('Combined response');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -251,7 +259,7 @@ describe('AI Query Routes', () => {
           status: 'timeout',
           error: 'Service did not respond',
         });
-      mockSendToClaudeWithContext.mockResolvedValue('Partial data response');
+      mockQueryWithContext.mockResolvedValue('Partial data response');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -285,7 +293,7 @@ describe('AI Query Routes', () => {
         status: 'error',
         error: 'Database connection failed',
       });
-      mockSendToClaudeWithContext.mockResolvedValue('No data available');
+      mockQueryWithContext.mockResolvedValue('No data available');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -312,17 +320,17 @@ describe('AI Query Routes', () => {
           status: 'error',
           error: 'Failed',
         });
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       await request(app)
         .post('/api/ai/query')
         .send({ query: 'Show data' })
         .expect(200);
 
-      // Verify only successful results passed to Claude
-      expect(mockSendToClaudeWithContext).toHaveBeenCalledWith(
+      // Verify only successful results passed to Claude via queryWithContext
+      expect(mockQueryWithContext).toHaveBeenCalledWith(
         'Show data',
-        [{ server: 'hr', data: { employees: ['John'] }, status: 'success' }],
+        expect.stringContaining('[Data from hr]'),
         expect.any(Object)
       );
     });
@@ -350,7 +358,7 @@ describe('AI Query Routes', () => {
         data: {},
         status: 'success',
       });
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       await request(app)
         .post('/api/ai/query')
@@ -375,7 +383,7 @@ describe('AI Query Routes', () => {
     it('should scrub SSN from query in audit log', async () => {
       mockGetAccessibleServers.mockReturnValue([]);
       mockGetDeniedServers.mockReturnValue([]);
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       await request(app)
         .post('/api/ai/query')
@@ -413,7 +421,7 @@ describe('AI Query Routes', () => {
         data: {},
         status: 'success',
       });
-      mockSendToClaudeWithContext.mockRejectedValue(new Error('Claude API rate limit'));
+      mockQueryWithContext.mockRejectedValue(new Error('Claude API rate limit'));
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -429,17 +437,33 @@ describe('AI Query Routes', () => {
       );
     });
 
-    it('should return 500 when MCP query throws', async () => {
+    it('should handle MCP query errors gracefully and return partial response', async () => {
+      // v1.5: MCP query errors are now handled gracefully with timeout wrapper
       mockGetAccessibleServers.mockReturnValue([mockHRServer]);
       mockGetDeniedServers.mockReturnValue([]);
       mockQueryMCPServer.mockRejectedValue(new Error('Network error'));
+      mockQueryWithContext.mockResolvedValue('Error response');
 
       const response = await request(app)
         .post('/api/ai/query')
         .send({ query: 'test' })
-        .expect(500);
+        .expect(200);
 
-      expect(response.body.error).toBe('Failed to process AI query');
+      // Should return partial status with warnings about failed MCP server
+      expect(response.body.status).toBe('partial');
+      expect(response.body.warnings).toBeDefined();
+      expect(response.body.warnings).toHaveLength(1);
+      expect(response.body.warnings[0].message).toBe('Network error');
+      expect(response.body.metadata.dataSourcesFailed).toHaveLength(1);
+
+      // Logger should have warned about the failure
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'MCP server query failed',
+        expect.objectContaining({
+          error: 'Network error',
+          timeout: false,
+        })
+      );
     });
   });
 
@@ -461,7 +485,7 @@ describe('AI Query Routes', () => {
         data: {},
         status: 'success',
       });
-      mockSendToClaudeWithContext.mockResolvedValue('Executive response');
+      mockQueryWithContext.mockResolvedValue('Executive response');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -486,7 +510,7 @@ describe('AI Query Routes', () => {
 
       mockGetAccessibleServers.mockReturnValue([]);
       mockGetDeniedServers.mockReturnValue([mockHRServer, mockFinanceServer]);
-      mockSendToClaudeWithContext.mockResolvedValue('No data available');
+      mockQueryWithContext.mockResolvedValue('No data available');
 
       const response = await request(app)
         .post('/api/ai/query')
@@ -515,7 +539,7 @@ describe('AI Query Routes', () => {
     it('should log query receipt with sanitized info', async () => {
       mockGetAccessibleServers.mockReturnValue([]);
       mockGetDeniedServers.mockReturnValue([]);
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       await request(app)
         .post('/api/ai/query')
@@ -534,7 +558,7 @@ describe('AI Query Routes', () => {
     it('should scrub PII from logged query', async () => {
       mockGetAccessibleServers.mockReturnValue([]);
       mockGetDeniedServers.mockReturnValue([]);
-      mockSendToClaudeWithContext.mockResolvedValue('Response');
+      mockQueryWithContext.mockResolvedValue('Response');
 
       await request(app)
         .post('/api/ai/query')
@@ -546,6 +570,188 @@ describe('AI Query Routes', () => {
       const queryReceivedLog = logCalls.find((call) => call[0] === 'AI Query received');
       expect(queryReceivedLog).toBeDefined();
       expect(queryReceivedLog?.[1]?.query).toContain('[SSN-REDACTED]');
+    });
+  });
+
+  describe('MCP Context Caching', () => {
+    let app: Express;
+
+    beforeEach(() => {
+      app = express();
+      app.use(express.json());
+      app.use((req: Request, _res: Response, next: NextFunction) => {
+        (req as Request & { userContext: UserContext }).userContext = TEST_USERS.hrManager;
+        req.headers['x-request-id'] = 'cache-test-request';
+        next();
+      });
+      app.use('/api', createAIQueryRoutes(deps));
+    });
+
+    it('should query MCP servers on cache miss', async () => {
+      mockGetMCPContext.mockResolvedValue(null); // cache miss
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryMCPServer.mockResolvedValue({
+        server: 'hr',
+        data: { employees: [{ name: 'John' }] },
+        status: 'success',
+      });
+      mockQueryWithContext.mockResolvedValue('Fresh data response');
+
+      await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'Show employees' })
+        .expect(200);
+
+      // MCP server should have been queried
+      expect(mockQueryMCPServer).toHaveBeenCalledTimes(1);
+      // Context should have been stored in cache
+      expect(mockStoreMCPContext).toHaveBeenCalledWith(
+        TEST_USERS.hrManager.userId,
+        expect.stringContaining('[Data from hr]')
+      );
+    });
+
+    it('should use cached context on cache hit (does not query MCP servers)', async () => {
+      const cachedContext = '[Data from hr]:\n{"employees": [{"name": "Alice"}]}';
+      mockGetMCPContext.mockResolvedValue(cachedContext); // cache hit
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryWithContext.mockResolvedValue('Cached data response');
+
+      const response = await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'Show employees' })
+        .expect(200);
+
+      // MCP servers should NOT have been queried
+      expect(mockQueryMCPServer).not.toHaveBeenCalled();
+      // queryWithContext should receive the exact cached string
+      expect(mockQueryWithContext).toHaveBeenCalledWith(
+        'Show employees',
+        cachedContext,
+        expect.objectContaining({ userId: TEST_USERS.hrManager.userId })
+      );
+      expect(response.body.response).toBe('Cached data response');
+
+      // Should log cache hit
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'MCP context cache hit',
+        expect.objectContaining({ userId: TEST_USERS.hrManager.userId })
+      );
+    });
+
+    it('should bypass cache when forceRefresh is true', async () => {
+      const cachedContext = '[Data from hr]:\n{"employees": []}';
+      mockGetMCPContext.mockResolvedValue(cachedContext);
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryMCPServer.mockResolvedValue({
+        server: 'hr',
+        data: { employees: [{ name: 'Updated' }] },
+        status: 'success',
+      });
+      mockQueryWithContext.mockResolvedValue('Fresh response');
+
+      await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'Show employees', forceRefresh: true })
+        .expect(200);
+
+      // getMCPContext should NOT have been called (skipped due to forceRefresh)
+      expect(mockGetMCPContext).not.toHaveBeenCalled();
+      // MCP server should have been queried
+      expect(mockQueryMCPServer).toHaveBeenCalledTimes(1);
+      // New context should be stored
+      expect(mockStoreMCPContext).toHaveBeenCalled();
+    });
+
+    it('should store context in Redis after fresh MCP query', async () => {
+      mockGetMCPContext.mockResolvedValue(null);
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryMCPServer.mockResolvedValue({
+        server: 'hr',
+        data: { employees: [{ name: 'John' }] },
+        status: 'success',
+      });
+      mockQueryWithContext.mockResolvedValue('Response');
+
+      await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'test' })
+        .expect(200);
+
+      expect(mockStoreMCPContext).toHaveBeenCalledWith(
+        TEST_USERS.hrManager.userId,
+        expect.any(String)
+      );
+    });
+
+    it('should handle Redis read failure gracefully (falls back to fresh query)', async () => {
+      mockGetMCPContext.mockRejectedValue(new Error('Redis connection lost'));
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryMCPServer.mockResolvedValue({
+        server: 'hr',
+        data: { employees: [] },
+        status: 'success',
+      });
+      mockQueryWithContext.mockResolvedValue('Fallback response');
+
+      const response = await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'Show employees' })
+        .expect(200);
+
+      // Should fall back to querying MCP servers
+      expect(mockQueryMCPServer).toHaveBeenCalledTimes(1);
+      expect(response.body.response).toBe('Fallback response');
+
+      // Should log the Redis failure warning
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to read MCP context cache',
+        expect.objectContaining({ error: 'Redis connection lost' })
+      );
+    });
+
+    it('should handle Redis write failure gracefully (fire-and-forget)', async () => {
+      mockGetMCPContext.mockResolvedValue(null);
+      mockStoreMCPContext.mockRejectedValue(new Error('Redis write failed'));
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryMCPServer.mockResolvedValue({
+        server: 'hr',
+        data: { employees: [] },
+        status: 'success',
+      });
+      mockQueryWithContext.mockResolvedValue('Response');
+
+      // Should not throw even though Redis write fails
+      const response = await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'test' })
+        .expect(200);
+
+      expect(response.body.response).toBe('Response');
+    });
+
+    it('should pass byte-identical context string on cache hit', async () => {
+      const exactCachedString = '[Data from hr]:\n{\n  "employees": [\n    {\n      "name": "Alice Chen"\n    }\n  ]\n}';
+      mockGetMCPContext.mockResolvedValue(exactCachedString);
+      mockGetAccessibleServers.mockReturnValue([mockHRServer]);
+      mockGetDeniedServers.mockReturnValue([]);
+      mockQueryWithContext.mockResolvedValue('Response');
+
+      await request(app)
+        .post('/api/ai/query')
+        .send({ query: 'Show data' })
+        .expect(200);
+
+      // Verify the EXACT cached string is passed (byte-identical for Anthropic cache)
+      const passedContext = mockQueryWithContext.mock.calls[0][1];
+      expect(passedContext).toBe(exactCachedString);
+      expect(passedContext.length).toBe(exactCachedString.length);
     });
   });
 });

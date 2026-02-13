@@ -28,6 +28,28 @@ urlencode() {
     python3 -c "import urllib.parse; print(urllib.parse.quote('$string', safe=''))"
 }
 
+# Get Keycloak admin token (prefer client credentials over ROPC)
+get_kc_admin_token() {
+    local token=""
+    if [ -n "${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" ]; then
+        token=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=admin-cli" \
+            -d "client_secret=${KEYCLOAK_ADMIN_CLIENT_SECRET}" \
+            -d "grant_type=client_credentials" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    else
+        local kc_pass_encoded
+        kc_pass_encoded=$(urlencode "$KC_ADMIN_PASSWORD")
+        token=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=admin" \
+            -d "password=${kc_pass_encoded}" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    fi
+    echo "$token"
+}
+
 echo "=============================================="
 echo "User Provisioning Job"
 echo "=============================================="
@@ -99,13 +121,7 @@ verify_state() {
     # Check Keycloak
     echo ""
     echo "[INFO] Checking Keycloak..."
-    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
-    KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=admin" \
-        -d "password=${KC_PASS_ENCODED}" \
-        -d "grant_type=password" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    KC_TOKEN=$(get_kc_admin_token)
 
     if [ -z "$KC_TOKEN" ]; then
         echo "[WARN] Could not get Keycloak admin token"
@@ -198,14 +214,8 @@ ensure_service_account_permissions() {
     echo ""
     echo "=== Ensuring Service Account Permissions ==="
 
-    # Get admin token (URL-encode password for special chars)
-    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
-    KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=admin" \
-        -d "password=${KC_PASS_ENCODED}" \
-        -d "grant_type=password" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    # Get admin token
+    KC_TOKEN=$(get_kc_admin_token)
 
     if [ -z "$KC_TOKEN" ]; then
         echo "[WARN] Could not get admin token - skipping permission check"
@@ -338,13 +348,7 @@ sync_users() {
     echo "[INFO] PostgreSQL claims $PG_SYNCED_COUNT employees have keycloak_user_id"
 
     # Count actual users in Keycloak (realm-export.json typically has 1 user: test-user.journey)
-    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
-    KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=admin" \
-        --data-urlencode "password=${KC_ADMIN_PASSWORD}" \
-        -d "grant_type=password" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    KC_TOKEN=$(get_kc_admin_token)
 
     KC_USER_COUNT="0"
     if [ -n "$KC_TOKEN" ]; then
@@ -413,13 +417,7 @@ final_verify() {
     SYNCED_COUNT=$(psql -h localhost -p 5432 -U tamshai -d tamshai_hr -t -c \
         "SELECT COUNT(*) FROM hr.employees WHERE keycloak_user_id IS NOT NULL;" 2>/dev/null | tr -d ' \n' || echo "0")
 
-    KC_PASS_ENCODED=$(urlencode "$KC_ADMIN_PASSWORD")
-    KC_TOKEN=$(curl -sf -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=admin" \
-        -d "password=${KC_PASS_ENCODED}" \
-        -d "grant_type=password" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    KC_TOKEN=$(get_kc_admin_token)
 
     if [ -n "$KC_TOKEN" ]; then
         KC_USER_COUNT=$(curl -sf "${KEYCLOAK_URL}/admin/realms/${KEYCLOAK_REALM}/users?max=1000" \

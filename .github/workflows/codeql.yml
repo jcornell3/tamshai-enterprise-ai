@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4
+        uses: github/codeql-action/init@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4
         with:
           # Use custom config to exclude node_modules, Android/iOS platform code
           config-file: ./.github/codeql/codeql-config.yml
@@ -33,6 +33,6 @@ jobs:
           build-mode: none
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4
+        uses: github/codeql-action/analyze@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4
         with:
           category: "/language:javascript-typescript"

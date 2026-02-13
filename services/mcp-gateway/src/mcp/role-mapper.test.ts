@@ -84,7 +84,8 @@ describe('Role Mapper Module', () => {
       const servers = createDefaultMCPServers(urls);
       const salesServer = servers.find(s => s.name === 'sales');
 
-      expect(salesServer?.requiredRoles).toEqual(['employee', 'sales-read', 'sales-write', 'executive']);
+      // Sales data requires explicit sales roles (no employee self-access to CRM data)
+      expect(salesServer?.requiredRoles).toEqual(['sales-read', 'sales-write', 'executive']);
       expect(salesServer?.description).toContain('CRM data');
     });
 
@@ -121,7 +122,8 @@ describe('Role Mapper Module', () => {
       {
         name: 'sales',
         url: 'http://localhost:3003',
-        requiredRoles: ['employee', 'sales-read', 'sales-write', 'executive'],
+        // Sales data requires explicit sales roles (no employee self-access)
+        requiredRoles: ['sales-read', 'sales-write', 'executive'],
         description: 'Sales server',
       },
     ];
@@ -199,7 +201,8 @@ describe('Role Mapper Module', () => {
       {
         name: 'sales',
         url: 'http://localhost:3003',
-        requiredRoles: ['employee', 'sales-read', 'sales-write', 'executive'],
+        // Sales data requires explicit sales roles (no employee self-access)
+        requiredRoles: ['sales-read', 'sales-write', 'executive'],
         description: 'Sales server',
       },
     ];
@@ -283,23 +286,26 @@ describe('Role Mapper Module', () => {
       expect(accessible).toHaveLength(0);
     });
 
-    it('should grant employee role access to all servers (self-access via RLS)', () => {
+    it('should grant employee role access to HR, Finance, Support (self-access via RLS)', () => {
+      // Employee role grants self-access to personal data, but NOT sales CRM data
       const employeeRoles = ['employee'];
       const accessible = getAccessibleMCPServers(employeeRoles, servers);
 
-      expect(accessible).toHaveLength(4);
-      expect(accessible.map(s => s.name)).toEqual(['hr', 'finance', 'sales', 'support']);
+      expect(accessible).toHaveLength(3);
+      expect(accessible.map(s => s.name)).toEqual(['hr', 'finance', 'support']);
     });
 
-    it('should grant engineer (employee only) access to all servers for self-access', () => {
+    it('should grant engineer (employee only) access to HR, Finance, Support for self-access', () => {
       // Marcus Johnson scenario - engineer with only employee role
+      // Gets self-access to HR (profile), Finance (expenses), Support (tickets)
+      // Does NOT get sales access (requires explicit sales-read/write roles)
       const engineerRoles = ['employee'];
       const accessible = getAccessibleMCPServers(engineerRoles, servers);
 
-      expect(accessible).toHaveLength(4);
+      expect(accessible).toHaveLength(3);
       expect(accessible.map(s => s.name)).toContain('hr');
       expect(accessible.map(s => s.name)).toContain('finance');
-      expect(accessible.map(s => s.name)).toContain('sales');
+      expect(accessible.map(s => s.name)).not.toContain('sales');
       expect(accessible.map(s => s.name)).toContain('support');
     });
 

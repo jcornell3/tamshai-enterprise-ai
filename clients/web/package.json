@@ -14,7 +14,8 @@
     "test": "turbo run test"
   },
   "devDependencies": {
-    "turbo": "latest",
+    "@vitest/coverage-v8": "^4.0.18",
+    "turbo": "^2.7.2",
     "typescript": "^5.3.3"
   },
   "engines": {

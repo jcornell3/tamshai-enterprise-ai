@@ -46,13 +46,14 @@ REQUIRED_GCP_SECRETS=(
 )
 
 # GitHub to GCP secret name mapping
+# Uses DEV_/STAGE_/PROD_ prefix convention for environment-specific secrets
 declare -A GITHUB_TO_GCP_MAP=(
-    ["CLAUDE_API_KEY_PROD"]="${RESOURCE_PREFIX}-claude-api-key"
-    ["PROD_DB_PASSWORD"]="${RESOURCE_PREFIX}-db-password"
-    ["KEYCLOAK_ADMIN_PASSWORD_PROD"]="${RESOURCE_PREFIX}-keycloak-admin-password"
-    ["KEYCLOAK_DB_PASSWORD_PROD"]="${RESOURCE_PREFIX}-keycloak-db-password"
-    ["MONGODB_ATLAS_URI_PROD"]="${RESOURCE_PREFIX}-mongodb-uri"
-    ["MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
+    ["PROD_CLAUDE_API_KEY"]="${RESOURCE_PREFIX}-claude-api-key"
+    ["PROD_TAMSHAI_DB_PASSWORD"]="${RESOURCE_PREFIX}-db-password"
+    ["PROD_KEYCLOAK_ADMIN_PASSWORD"]="${RESOURCE_PREFIX}-keycloak-admin-password"
+    ["PROD_KEYCLOAK_DB_PASSWORD"]="${RESOURCE_PREFIX}-keycloak-db-password"
+    ["PROD_MONGODB_ATLAS_URI"]="${RESOURCE_PREFIX}-mongodb-uri"
+    ["PROD_MCP_HR_SERVICE_CLIENT_SECRET"]="mcp-hr-service-client-secret"
     ["PROD_USER_PASSWORD"]="prod-user-password"
 )
 

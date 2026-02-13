@@ -24,7 +24,7 @@ For E2E (End-to-End) testing of the Tamshai Enterprise AI portal, we need a test
 1. Username/password authentication
 2. TOTP (2FA) verification
 
-The E2E test framework uses `oathtool` to generate TOTP codes from a known secret (`JBSWY3DPEHPK3PXP`). For tests to pass, the Keycloak user must have this exact TOTP secret configured.
+The E2E test framework uses `oathtool` to generate TOTP codes from a known secret (`***REDACTED_TOTP***`). For tests to pass, the Keycloak user must have this exact TOTP secret configured.
 
 ### 1.2 Script Purpose
 
@@ -40,7 +40,7 @@ The `keycloak/scripts/set-user-totp.sh` script was created to:
 
 | Environment | Keycloak URL | Use Case |
 |-------------|--------------|----------|
-| dev | https://www.tamshai.local/auth | Local development |
+| dev | https://www.tamshai-playground.local/auth | Local development |
 | stage | https://www.tamshai.com/auth | VPS staging |
 | prod | https://keycloak-fn44nd7wba-uc.a.run.app/auth | GCP Cloud Run |
 
@@ -58,7 +58,7 @@ Usage: ./set-user-totp.sh <environment> <username> [totp_secret]
 Arguments:
   environment   - dev, stage, or prod
   username      - Keycloak username (e.g., test-user.journey)
-  totp_secret   - Base32-encoded TOTP secret (default: JBSWY3DPEHPK3PXP)
+  totp_secret   - Base32-encoded TOTP secret (default: ***REDACTED_TOTP***)
 ```
 
 ### 2.2 API Endpoints Attempted
@@ -79,7 +79,7 @@ The OTP credential format matches Keycloak's realm export structure:
 {
   "type": "otp",
   "userLabel": "E2E Test Authenticator",
-  "secretData": "{\"value\":\"JBSWY3DPEHPK3PXP\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}",
+  "secretData": "{\"value\":\"***REDACTED_TOTP***\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}",
   "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
 }
 ```
@@ -113,7 +113,7 @@ There is no `POST` method to create new credentials via this endpoint.
   "credentials": [
     {
       "type": "otp",
-      "secretData": "{\"value\":\"JBSWY3DPEHPK3PXP\",...}",
+      "secretData": "{\"value\":\"***REDACTED_TOTP***\",...}",
       "credentialData": "{\"subType\":\"totp\",...}"
     }
   ]
@@ -330,7 +330,7 @@ The key discovery is that the Partial Import API **DOES** accept TOTP credential
       },
       {
         "type": "totp",
-        "secretData": "JBSWY3DPEHPK3PXP",
+        "secretData": "***REDACTED_TOTP***",
         "userLabel": "E2E Test Authenticator",
         "digits": "6",
         "period": "30",
@@ -346,7 +346,7 @@ The key discovery is that the Partial Import API **DOES** accept TOTP credential
 ```json
 {
   "type": "otp",
-  "secretData": "{\"value\":\"JBSWY3DPEHPK3PXP\",\"period\":30}",
+  "secretData": "{\"value\":\"***REDACTED_TOTP***\",\"period\":30}",
   "credentialData": "{\"subType\":\"totp\",\"period\":30}"
 }
 ```

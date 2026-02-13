@@ -5,135 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Login | Tamshai AI Corp</title>
     <link rel="icon" type="image/png" href="tamshai-favicon.png">
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
-    <style>
-        .login-container {
-            max-width: 500px;
-            margin: 0 auto;
-            padding: 40px;
-            background: linear-gradient(135deg, rgba(0,42,56,0.95) 0%, rgba(0,26,36,0.95) 100%);
-            border: 2px solid var(--primary-gold);
-            border-radius: 12px;
-            text-align: center;
-        }
-        .login-container h2 {
-            margin-bottom: 20px;
-            font-size: 1.8rem;
-        }
-        .login-container p {
-            margin-bottom: 30px;
-            color: var(--text-light);
-        }
-        .sso-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 16px 40px;
-            font-size: 1.1rem;
-            background: linear-gradient(135deg, var(--primary-gold) 0%, #c4a030 100%);
-            color: var(--dark-blue);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            font-family: var(--font-heading);
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .sso-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.4);
-            color: var(--dark-blue);
-        }
-        .sso-btn svg {
-            width: 24px;
-            height: 24px;
-        }
-        .login-info {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(212, 175, 55, 0.3);
-            font-size: 0.9rem;
-            color: var(--secondary-gold);
-        }
-        .back-link {
-            display: inline-block;
-            margin-top: 20px;
-            color: var(--secondary-gold);
-            font-size: 0.9rem;
-        }
-    </style>
 </head>
 <body>
-    <header>
-        <div class="container header-content">
-            <div class="logo">
-                <a href="index.html">Tamshai AI Corp</a>
-            </div>
-            <nav>
-                <ul class="nav-links">
-                    <li class="dropdown">
-                        <a href="#" class="dropbtn">Company ▾</a>
-                        <div class="dropdown-content">
-                            <a href="mission.html">Mission Statement</a>
-                            <a href="leadership.html">Leadership Team</a>
-                            <a href="blog.html">Blog</a>
-                        </div>
-                    </li>
-                    <li><a href="client-login.html" class="btn btn-login">Client Login</a></li>
-                    <li><a href="employee-login.html" class="btn btn-login">Employee Login</a></li>
-                </ul>
-            </nav>
-        </div>
-    </header>
-
-    <section class="hero" style="min-height: 70vh; display: flex; align-items: center;">
-        <div class="container">
-            <div class="login-container">
-                <img src="assets/emblem.png" alt="Tamshai AI Corp" style="width: 100px; margin-bottom: 20px; filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.5));">
-                <h2>Employee Portal</h2>
-                <p>Access internal services, AI tools, and company resources using your Tamshai credentials.</p>
-
-                <a href="/app/" id="sso-login-btn" class="sso-btn">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                    </svg>
-                    Sign in with SSO
-                </a>
-
-                <div class="login-info">
-                    <p>Use your company email and password to sign in securely via Single Sign-On (SSO).</p>
-                    <p style="margin-top: 10px;">Multi-factor authentication (TOTP) required.</p>
-                </div>
-
-                <a href="index.html" class="back-link">← Back to Home</a>
-            </div>
-        </div>
-    </section>
-
-    <footer>
-        <div class="container footer-content">
-            <p>&copy; 2025 Tamshai Corp. All rights reserved.</p>
-        </div>
-    </footer>
-
+    <p>Redirecting to Employee Portal...</p>
     <script>
-        // Environment-aware SSO redirect
-        // Production domains use separate portal domains:
-        //   prod.tamshai.com → app.tamshai.com
-        //   prod-dr.tamshai.com → app-dr.tamshai.com
-        // All other environments use same-origin /app/ path
+        // Redirect to the employee portal SPA which auto-initiates Keycloak SSO.
+        // Production domains use separate portal domains; all others use /app/.
         (function() {
-            var ssoBtn = document.getElementById('sso-login-btn');
             var hostname = window.location.hostname;
             if (hostname === 'prod.tamshai.com') {
-                ssoBtn.href = 'https://app.tamshai.com';
+                window.location.replace('https://app.tamshai.com');
             } else if (hostname === 'prod-dr.tamshai.com') {
-                ssoBtn.href = 'https://app-dr.tamshai.com';
+                window.location.replace('https://app-dr.tamshai.com');
+            } else {
+                window.location.replace('/app/');
             }
         })();
     </script>

@@ -4,8 +4,13 @@
  * Global setup and teardown for integration tests.
  * Verifies all services are healthy before running tests.
  *
+ * Authentication:
+ * - User tokens acquired via token exchange (no ROPC on mcp-gateway client)
+ * - Admin tokens use admin-cli client credentials (KEYCLOAK_ADMIN_CLIENT_SECRET)
+ *   with ROPC fallback (KEYCLOAK_ADMIN_PASSWORD) for environments not yet configured
+ *
  * TOTP Handling:
- * - Uses direct access grants which bypass OTP requirement
+ * - Token exchange bypasses OTP requirement (service account impersonation)
  * - Does NOT delete any user credentials
  * - Temporarily removes CONFIGURE_TOTP required action (if present)
  * - Restores required actions after tests
@@ -14,15 +19,14 @@
 const axios = require('axios');
 
 const CONFIG = {
-  // Use 127.0.0.1 instead of localhost for Windows compatibility
-  // (localhost can have DNS resolution issues on Windows with Docker)
-  keycloakUrl: process.env.KEYCLOAK_URL || 'http://127.0.0.1:8180',
-  keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-  gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:3100',
-  mcpHrUrl: process.env.MCP_HR_URL || 'http://127.0.0.1:3101',
-  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
-  mcpSalesUrl: process.env.MCP_SALES_URL || 'http://127.0.0.1:3103',
-  mcpSupportUrl: process.env.MCP_SUPPORT_URL || 'http://127.0.0.1:3104',
+  // All URLs from environment variables - set via GitHub Variables
+  keycloakUrl: process.env.KEYCLOAK_URL,
+  keycloakRealm: process.env.KEYCLOAK_REALM,
+  gatewayUrl: process.env.MCP_GATEWAY_URL,
+  mcpHrUrl: process.env.MCP_HR_URL,
+  mcpFinanceUrl: process.env.MCP_FINANCE_URL,
+  mcpSalesUrl: process.env.MCP_SALES_URL,
+  mcpSupportUrl: process.env.MCP_SUPPORT_URL,
 };
 
 // All test users - TOTP should be required for all of them
@@ -53,20 +57,41 @@ async function getUserCredentials(userId) {
 }
 
 /**
- * Get admin token from Keycloak master realm
+ * Get admin token from Keycloak master realm.
+ * Prefers client credentials (KEYCLOAK_ADMIN_CLIENT_SECRET) over ROPC.
  */
 async function getAdminToken() {
-  const response = await axios.post(
-    `${CONFIG.keycloakUrl}/realms/master/protocol/openid-connect/token`,
-    new URLSearchParams({
-      client_id: 'admin-cli',
-      username: 'admin',
-      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
-      grant_type: 'password',
-    }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-  );
-  return response.data.access_token;
+  const tokenUrl = `${CONFIG.keycloakUrl}/realms/master/protocol/openid-connect/token`;
+  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD;
+
+  console.log(`\n=== Admin Token Acquisition ===`);
+  console.log(`Token URL: ${tokenUrl}`);
+  console.log(`Client credentials: ${clientSecret ? 'YES' : 'NO'}`);
+  console.log(`ROPC fallback: ${adminPassword ? 'YES' : 'NO'}`);
+
+  try {
+    const params = clientSecret
+      ? { client_id: 'admin-cli', client_secret: clientSecret, grant_type: 'client_credentials' }
+      : { client_id: 'admin-cli', username: 'admin', password: adminPassword, grant_type: 'password' };
+
+    const response = await axios.post(
+      tokenUrl,
+      new URLSearchParams(params),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+    console.log(`✅ Admin token acquired via ${clientSecret ? 'client credentials' : 'ROPC (fallback)'}`);
+    return response.data.access_token;
+  } catch (error) {
+    console.error(`❌ Admin token acquisition failed`);
+    if (error.response) {
+      console.error(`HTTP Status: ${error.response.status}`);
+      console.error(`Response: ${JSON.stringify(error.response.data)}`);
+    } else {
+      console.error(`Error: ${error.message}`);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -115,7 +140,7 @@ async function updateUserRequiredActions(userId, requiredActions) {
  *
  * IMPORTANT: We do NOT delete OTP credentials!
  * We only temporarily remove CONFIGURE_TOTP from required actions.
- * The mcp-gateway client uses direct access grants which bypass OTP.
+ * Token exchange (via mcp-integration-runner) bypasses OTP requirements.
  */
 async function prepareTestUsers() {
   console.log('\n🔐 Preparing test users for automated testing...');
@@ -268,6 +293,15 @@ async function checkKeycloakHealth() {
 beforeAll(async () => {
   console.log('🔍 Verifying all services are healthy...\n');
 
+  // Debug: Log test configuration
+  console.log('=== Jest Setup Configuration ===');
+  console.log(`KEYCLOAK_URL: ${CONFIG.keycloakUrl}`);
+  console.log(`KEYCLOAK_REALM: ${CONFIG.keycloakRealm}`);
+  console.log(`GATEWAY_URL: ${CONFIG.gatewayUrl}`);
+  console.log(`CI mode: ${process.env.CI === 'true' ? 'YES' : 'NO'}`);
+  console.log(`KEYCLOAK_ADMIN_PASSWORD set: ${process.env.KEYCLOAK_ADMIN_PASSWORD ? 'YES' : 'NO'}`);
+  console.log('================================\n');
+
   // In CI, only check Keycloak (MCP services are mocked)
   const isCI = process.env.CI === 'true';
 
@@ -306,10 +340,18 @@ beforeAll(async () => {
 
 /**
  * Global teardown - runs once after all tests
+ *
+ * NOTE: We skip restoration in ALL environments because:
+ * 1. afterAll runs after EACH test file, not after all tests
+ * 2. Restoring TOTP mid-run breaks subsequent test files (401 errors)
+ * 3. Users with CONFIGURE_TOTP required action cannot authenticate via direct grants
+ *
+ * To restore TOTP requirements after testing, manually run:
+ *   cd keycloak/scripts && ./docker-sync-realm.sh dev
  */
 afterAll(async () => {
-  // Restore test users to their original state
-  await restoreTestUsers();
-
-  console.log('\n✅ All integration tests complete');
-}, 30000); // 30 second timeout for user restoration
+  // Skip restoration to prevent breaking subsequent test files
+  // Each test file's beforeAll removes CONFIGURE_TOTP,
+  // but afterAll runs before the next file's beforeAll
+  console.log('\n✅ All integration tests complete (skipping TOTP restoration to prevent mid-run breakage)');
+}, 30000); // 30 second timeout

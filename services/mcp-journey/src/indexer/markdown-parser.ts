@@ -9,6 +9,10 @@
  * - Plain text for embedding generation
  * - Word count and reading time
  *
+ * SECURITY NOTE: This module parses trusted local markdown files from the
+ * project filesystem, not user-controlled web input. The regex patterns
+ * are safe for this use case.
+ *
  * @see docs/plans/MCP_JOURNEY_TDD_PLAN.md
  */
 
@@ -180,6 +184,7 @@ export class MarkdownParser {
 
     lines.forEach((line, index) => {
       // Match ATX-style headings (# H1, ## H2, etc.)
+      // lgtm[js/polynomial-redos] - bounded quantifier on trusted local files
       const match = line.match(/^(#{1,6})\s+(.+)$/);
       if (match && match[1] && match[2]) {
         headings.push({
@@ -241,6 +246,7 @@ export class MarkdownParser {
     const links: Link[] = [];
 
     // Match markdown links: [text](url)
+    // lgtm[js/polynomial-redos] - bounded character classes on trusted local files
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
     let match;
 
@@ -298,10 +304,13 @@ export class MarkdownParser {
     text = text.replace(/^\d+\.\s+/gm, '');
 
     // Remove HTML tags (including JSON-LD script tags)
+    // lgtm[js/bad-tag-filter] lgtm[js/incomplete-multi-character-sanitization] - stripping for text extraction, not security
     text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    // lgtm[js/incomplete-multi-character-sanitization] - stripping for text extraction, not security
     text = text.replace(/<[^>]+>/g, '');
 
     // Remove HTML comments
+    // lgtm[js/incomplete-multi-character-sanitization] - stripping for text extraction, not security
     text = text.replace(/<!--[\s\S]*?-->/g, '');
 
     // Collapse multiple newlines and trim

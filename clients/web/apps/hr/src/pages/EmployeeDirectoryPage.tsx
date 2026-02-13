@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { useAuth, canModifyHR, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
 import type { Employee, APIResponse } from '../types';
@@ -245,9 +246,14 @@ export default function EmployeeDirectoryPage() {
               </thead>
               <tbody className="bg-white divide-y divide-secondary-200">
                 {employees.map((employee) => (
-                  <tr key={employee.id} className="table-row">
+                  <tr key={employee.id} className="table-row hover:bg-secondary-50 cursor-pointer">
                     <td className="table-cell font-medium">
-                      {employee.first_name} {employee.last_name}
+                      <Link
+                        to={`/employees/${employee.employee_id}`}
+                        className="text-primary-600 hover:text-primary-700 hover:underline"
+                      >
+                        {employee.first_name} {employee.last_name}
+                      </Link>
                     </td>
                     <td className="table-cell text-secondary-600">
                       {employee.work_email}

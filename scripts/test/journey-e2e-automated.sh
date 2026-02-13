@@ -10,7 +10,7 @@
 #   ./journey-e2e-automated.sh [environment]
 #
 # Environments:
-#   dev    - Local development (https://www.tamshai.local)
+#   dev    - Local development (https://www.tamshai-playground.local)
 #   stage  - VPS staging (https://vps.tamshai.com)
 #   prod   - GCP production (https://prod.tamshai.com)
 #
@@ -73,8 +73,8 @@ TOTP_SECRET="${TEST_TOTP_SECRET:-}"
 configure_environment() {
     case "$ENV" in
         dev)
-            BASE_URL="https://www.tamshai.local"
-            KEYCLOAK_URL="https://www.tamshai.local/auth"
+            BASE_URL="https://www.tamshai-playground.local"
+            KEYCLOAK_URL="https://www.tamshai-playground.local/auth"
             CLIENT_ID="tamshai-website"
             # Skip SSL verification for local self-signed certs
             INSECURE="-k"

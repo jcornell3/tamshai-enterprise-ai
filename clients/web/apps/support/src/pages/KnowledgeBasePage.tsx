@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth, apiConfig } from '@tamshai/auth';
 import { TruncationWarning } from '@tamshai/ui';
@@ -78,7 +79,7 @@ export default function KnowledgeBasePage() {
         }
       } as APIResponse<KBArticle[]>;
     },
-    enabled: !!activeSearch, // Only search when there's a query
+    enabled: true, // Load all articles on mount; search narrows results
   });
 
   const handleSearch = (e: React.FormEvent) => {
@@ -143,7 +144,7 @@ export default function KnowledgeBasePage() {
             Popular topics:
           </p>
           <div className="flex flex-wrap gap-2">
-            {['password reset', 'VPN setup', 'email configuration', 'printer setup', 'software installation'].map((topic) => (
+            {['authentication', 'RBAC permissions', 'AI queries', 'budget reports', 'sales pipeline'].map((topic) => (
               <button
                 key={topic}
                 onClick={() => {
@@ -202,29 +203,7 @@ export default function KnowledgeBasePage() {
       )}
 
       {/* Results */}
-      {!activeSearch ? (
-        <div className="card text-center py-12">
-          <svg
-            className="w-16 h-16 mx-auto text-secondary-400 mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-            />
-          </svg>
-          <h3 className="text-lg font-medium text-secondary-900 mb-2">
-            Search the Knowledge Base
-          </h3>
-          <p className="text-secondary-600">
-            Enter a search term above to find relevant help articles and documentation.
-          </p>
-        </div>
-      ) : isLoading ? (
+      {isLoading ? (
         <div className="card py-12 text-center">
           <div className="spinner mb-4"></div>
           <p className="text-secondary-600">Searching articles...</p>
@@ -242,7 +221,11 @@ export default function KnowledgeBasePage() {
       ) : (
         <div className="space-y-4">
           {articles.map((article) => (
-            <div key={article.id} className="card hover:shadow-md transition-shadow">
+            <Link
+              key={article.kb_id || article.id}
+              to={`/knowledge-base/${article.kb_id || article.id}`}
+              className="card hover:shadow-md transition-shadow block"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-secondary-900 mb-1">
@@ -270,7 +253,7 @@ export default function KnowledgeBasePage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

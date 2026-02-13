@@ -31,9 +31,9 @@ export function safeParseInt(val: string | undefined, defaultVal: number): numbe
 export interface GatewayConfig {
   port: number;
   keycloak: {
-    url: string;
-    realm: string;
-    clientId: string;
+    url: string | undefined;
+    realm: string | undefined;
+    clientId: string | undefined;
     jwksUri?: string;
     issuer?: string;
   };
@@ -42,10 +42,12 @@ export interface GatewayConfig {
     model: string;
   };
   mcpServers: {
-    hr: string;
-    finance: string;
-    sales: string;
-    support: string;
+    hr: string | undefined;
+    finance: string | undefined;
+    sales: string | undefined;
+    support: string | undefined;
+    payroll?: string | undefined;
+    tax?: string | undefined;
   };
   timeouts: {
     mcpRead: number;
@@ -65,9 +67,9 @@ export function loadConfig(): GatewayConfig {
   return {
     port: safeParseInt(process.env.PORT, 3000),
     keycloak: {
-      url: process.env.KEYCLOAK_URL || 'http://localhost:8180',
-      realm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-      clientId: process.env.KEYCLOAK_CLIENT_ID || 'mcp-gateway',
+      url: process.env.KEYCLOAK_URL,
+      realm: process.env.KEYCLOAK_REALM,
+      clientId: process.env.KEYCLOAK_CLIENT_ID,
       jwksUri: process.env.JWKS_URI || undefined,
       issuer: process.env.KEYCLOAK_ISSUER || undefined,
     },
@@ -76,10 +78,12 @@ export function loadConfig(): GatewayConfig {
       model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514',
     },
     mcpServers: {
-      hr: process.env.MCP_HR_URL || 'http://localhost:3001',
-      finance: process.env.MCP_FINANCE_URL || 'http://localhost:3002',
-      sales: process.env.MCP_SALES_URL || 'http://localhost:3003',
-      support: process.env.MCP_SUPPORT_URL || 'http://localhost:3004',
+      hr: process.env.MCP_HR_URL,
+      finance: process.env.MCP_FINANCE_URL,
+      sales: process.env.MCP_SALES_URL,
+      support: process.env.MCP_SUPPORT_URL,
+      payroll: process.env.MCP_PAYROLL_URL,
+      tax: process.env.MCP_TAX_URL,
     },
     timeouts: {
       mcpRead: safeParseInt(process.env.MCP_READ_TIMEOUT_MS, 5000),
@@ -116,9 +120,9 @@ export async function loadConfigAsync(): Promise<GatewayConfig> {
   return {
     port: safeParseInt(process.env.PORT, 3000),
     keycloak: {
-      url: process.env.KEYCLOAK_URL || 'http://localhost:8180',
-      realm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-      clientId: process.env.KEYCLOAK_CLIENT_ID || 'mcp-gateway',
+      url: process.env.KEYCLOAK_URL,
+      realm: process.env.KEYCLOAK_REALM,
+      clientId: process.env.KEYCLOAK_CLIENT_ID,
       jwksUri: process.env.JWKS_URI || undefined,
       issuer: process.env.KEYCLOAK_ISSUER || undefined,
     },
@@ -127,10 +131,12 @@ export async function loadConfigAsync(): Promise<GatewayConfig> {
       model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514',
     },
     mcpServers: {
-      hr: process.env.MCP_HR_URL || 'http://localhost:3001',
-      finance: process.env.MCP_FINANCE_URL || 'http://localhost:3002',
-      sales: process.env.MCP_SALES_URL || 'http://localhost:3003',
-      support: process.env.MCP_SUPPORT_URL || 'http://localhost:3004',
+      hr: process.env.MCP_HR_URL,
+      finance: process.env.MCP_FINANCE_URL,
+      sales: process.env.MCP_SALES_URL,
+      support: process.env.MCP_SUPPORT_URL,
+      payroll: process.env.MCP_PAYROLL_URL,
+      tax: process.env.MCP_TAX_URL,
     },
     timeouts: {
       mcpRead: safeParseInt(process.env.MCP_READ_TIMEOUT_MS, 5000),

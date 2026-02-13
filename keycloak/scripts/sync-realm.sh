@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC1091
 # =============================================================================
 # Keycloak Realm Synchronization Script
 # =============================================================================
@@ -36,7 +37,7 @@ set +H  # Disable history expansion to handle passwords with special characters 
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REALM="tamshai-corp"
+export REALM="tamshai-corp"
 ENV="${1:-dev}"
 
 # =============================================================================
@@ -50,6 +51,7 @@ source "$SCRIPT_DIR/lib/clients.sh"
 source "$SCRIPT_DIR/lib/mappers.sh"
 source "$SCRIPT_DIR/lib/groups.sh"
 source "$SCRIPT_DIR/lib/users.sh"
+source "$SCRIPT_DIR/lib/authz.sh"
 
 # =============================================================================
 # Main Execution
@@ -75,6 +77,7 @@ main() {
     sync_flutter_client
     sync_web_portal_client
     sync_mcp_gateway_client
+    sync_integration_runner_client
     sync_mcp_hr_service_client
     sync_sample_app_clients
 
@@ -90,12 +93,17 @@ main() {
     # This ensures mcp-gateway roles are included in tokens for authorization
     sync_client_role_mappers
 
+    # Sync token exchange permissions (dev/ci only)
+    # Configures Authorization Services to allow mcp-integration-runner to impersonate users
+    sync_token_exchange_permissions
+
     # Provision test user (for E2E testing)
     provision_test_user
 
-    # Set test user password from environment variable
-    # This updates password for users imported from realm export
+    # Set user passwords from environment variables
+    # This updates passwords for users imported from realm export
     set_test_user_password
+    set_corporate_user_passwords
 
     # Sync C-Suite group (ensures executive and manager roles are assigned)
     sync_c_suite_group

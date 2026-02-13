@@ -8,8 +8,7 @@ inputs:
     default: 'keycloak/realm-export-dev.json'
   keycloak-port:
     description: 'Host port for Keycloak'
-    required: false
-    default: '8180'
+    required: true
   keycloak-version:
     description: 'Keycloak version to use'
     required: false
@@ -37,6 +36,23 @@ runs:
       id: start
       shell: bash
       run: |
+        # Pull Keycloak image with retry logic (handles intermittent CDN/TLS issues)
+        echo "Pulling Keycloak image with retry logic..."
+        for i in {1..5}; do
+          echo "Attempt $i: Pulling quay.io/keycloak/keycloak:${{ inputs.keycloak-version }}..."
+          if docker pull quay.io/keycloak/keycloak:${{ inputs.keycloak-version }}; then
+            echo "✅ Image pulled successfully"
+            break
+          fi
+          if [ $i -eq 5 ]; then
+            echo "❌ Failed to pull image after 5 attempts"
+            exit 1
+          fi
+          echo "Pull failed, waiting $((i * 10)) seconds before retry..."
+          sleep $((i * 10))
+        done
+
+        # pragma: allowlist secret (KC_BOOTSTRAP_ADMIN_PASSWORD is dev/CI only)
         docker run -d --name keycloak \
           -p ${{ inputs.keycloak-port }}:8080 \
           -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \

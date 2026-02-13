@@ -87,7 +87,7 @@
 * [x] **Terraform Dev Environment:**
     * Create `infrastructure/terraform/dev/` for local development deployment
     * Configure null_resource + local-exec for docker compose operations
-    * Add hosts file validation (pre-flight check for tamshai.local)
+    * Add hosts file validation (pre-flight check for tamshai-playground.local)
     * Add Caddy health check integration
     * Generate `.env` from template with TF_VAR_* substitution
 * [x] **Legacy Setup Script (Deprecated):**

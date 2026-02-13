@@ -554,25 +554,10 @@ cleanup_recovery_resources() {
 
     # Step 5: Delete VPC connector with wait
     log_step "Deleting recovery VPC connectors..."
-    # Compute connector name for orphan detection (same logic as delete_vpc_connector)
-    local vpc_connector_name
-    if [[ "$ENV_ID" == "primary" ]] || [[ -z "$ENV_ID" ]]; then
-        vpc_connector_name="${RESOURCE_PREFIX}-connector"
-    else
-        local suffix_hash
-        suffix_hash=$(echo -n "-${ENV_ID}" | md5sum | cut -c1-8)
-        vpc_connector_name="tamshai-${suffix_hash}"
-    fi
     delete_vpc_connector_and_wait || {
         log_error "VPC connector deletion failed - cannot proceed"
         return 1
     }
-
-    # Step 5.5: Issue #104 - Delete orphaned Cloud Run services referencing deleted VPC connector
-    # Cloud Run services in DR have same names as prod but reference the now-deleted
-    # VPC connector. These stale references block VPC deletion.
-    log_step "Checking for orphaned Cloud Run services..."
-    delete_orphaned_dr_cloudrun_services "$vpc_connector_name" || true
 
     # Step 6: Delete GCE instances
     log_step "Deleting recovery GCE instances..."
@@ -677,88 +662,6 @@ delete_cloudrun_services() {
             gcloud run services delete "$svc" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || log_warn "Failed to delete $svc"
         fi
     done
-}
-
-# Issue #104: Delete orphaned Cloud Run services in DR region
-# Cloud Run services in DR have same names as prod but are in a different region.
-# After VPC connector deletion, these services hold stale references that block VPC deletion.
-# This function detects and deletes Cloud Run services that reference a deleted VPC connector.
-#
-# Usage: delete_orphaned_dr_cloudrun_services <vpc_connector_name>
-#   vpc_connector_name: The name of the deleted VPC connector (e.g., tamshai-6b847f95)
-#
-# Returns: 0 on success, 1 on failure
-delete_orphaned_dr_cloudrun_services() {
-    local vpc_connector_name="${1:-}"
-    local services=(keycloak mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support web-portal)
-    local jobs=(provision-users)
-    local deleted_count=0
-
-    log_step "Checking for orphaned Cloud Run services in DR region ($REGION)..."
-
-    # Check if VPC connector still exists - if so, services aren't orphaned
-    if [[ -n "$vpc_connector_name" ]]; then
-        if gcloud compute networks vpc-access connectors describe "$vpc_connector_name" \
-            --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
-            log_info "VPC connector $vpc_connector_name still exists - no orphaned services"
-            return 0
-        fi
-    fi
-
-    # Delete Cloud Run services that reference the deleted VPC connector
-    for svc in "${services[@]}"; do
-        local svc_connector
-        svc_connector=$(gcloud run services describe "$svc" --region="$REGION" --project="$PROJECT" \
-            --format="value(spec.template.metadata.annotations['run.googleapis.com/vpc-access-connector'])" 2>/dev/null || echo "")
-
-        if [[ -n "$svc_connector" ]]; then
-            # Check if the referenced connector exists
-            local connector_name
-            connector_name=$(basename "$svc_connector")
-            if ! gcloud compute networks vpc-access connectors describe "$connector_name" \
-                --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
-                log_warn "Orphaned service: $svc (references deleted connector: $connector_name)"
-                log_info "  Deleting orphaned service: $svc"
-                if gcloud run services delete "$svc" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null; then
-                    deleted_count=$((deleted_count + 1))
-                else
-                    log_warn "  Failed to delete $svc"
-                fi
-            fi
-        fi
-    done
-
-    # Delete Cloud Run jobs that may reference the deleted VPC connector
-    for job in "${jobs[@]}"; do
-        if gcloud run jobs describe "$job" --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
-            local job_connector
-            job_connector=$(gcloud run jobs describe "$job" --region="$REGION" --project="$PROJECT" \
-                --format="value(spec.template.spec.template.metadata.annotations['run.googleapis.com/vpc-access-connector'])" 2>/dev/null || echo "")
-
-            if [[ -n "$job_connector" ]]; then
-                local connector_name
-                connector_name=$(basename "$job_connector")
-                if ! gcloud compute networks vpc-access connectors describe "$connector_name" \
-                    --region="$REGION" --project="$PROJECT" &>/dev/null 2>&1; then
-                    log_warn "Orphaned job: $job (references deleted connector: $connector_name)"
-                    log_info "  Deleting orphaned job: $job"
-                    if gcloud run jobs delete "$job" --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null; then
-                        deleted_count=$((deleted_count + 1))
-                    else
-                        log_warn "  Failed to delete $job"
-                    fi
-                fi
-            fi
-        fi
-    done
-
-    if [[ $deleted_count -gt 0 ]]; then
-        log_success "Deleted $deleted_count orphaned Cloud Run resources"
-    else
-        log_info "No orphaned Cloud Run resources found"
-    fi
-
-    return 0
 }
 
 # =============================================================================
@@ -1261,41 +1164,6 @@ delete_persisted_secrets_prod() {
     for secret in "${secrets[@]}"; do
         delete_secret "$secret"
     done
-}
-
-# Issue #108: Delete stale DR-suffixed secrets
-# DR evacuations create secrets with recovery-YYYYMMDD-HHMM suffixes.
-# These persist after DR cleanup and accumulate over time.
-#
-# Usage: delete_stale_dr_secrets
-# Returns: 0 always (best-effort cleanup)
-delete_stale_dr_secrets() {
-    log_step "Cleaning stale DR-suffixed secrets (Issue #108)..."
-
-    # Find secrets with recovery suffix pattern
-    local stale_secrets
-    stale_secrets=$(gcloud secrets list --project="$PROJECT" \
-        --filter="name~recovery-[0-9]{8}-[0-9]{4}" \
-        --format="value(name)" 2>/dev/null || echo "")
-
-    if [[ -z "$stale_secrets" ]]; then
-        log_info "No stale DR secrets found"
-        return 0
-    fi
-
-    local count=0
-    while read -r secret; do
-        [[ -z "$secret" ]] && continue
-        if gcloud secrets delete "$secret" --project="$PROJECT" --quiet 2>/dev/null; then
-            log_info "  Deleted: $secret"
-            count=$((count + 1))
-        else
-            log_warn "  Failed to delete: $secret"
-        fi
-    done <<< "$stale_secrets"
-
-    log_success "Deleted $count stale DR secrets"
-    return 0
 }
 
 # =============================================================================

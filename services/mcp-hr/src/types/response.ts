@@ -124,3 +124,30 @@ export function createPendingConfirmationResponse(
     confirmationData,
   };
 }
+
+/**
+ * Type guard to check if response is a success response
+ */
+export function isSuccessResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPSuccessResponse<T> {
+  return response.status === 'success';
+}
+
+/**
+ * Type guard to check if response is an error response
+ */
+export function isErrorResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPErrorResponse {
+  return response.status === 'error';
+}
+
+/**
+ * Type guard to check if response is a pending confirmation response
+ */
+export function isPendingConfirmationResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPPendingConfirmationResponse {
+  return response.status === 'pending_confirmation';
+}

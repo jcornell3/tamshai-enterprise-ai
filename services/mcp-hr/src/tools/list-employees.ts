@@ -135,13 +135,14 @@ export async function listEmployees(
       const queryLimit = limit + 1;
 
       const sqlQuery = `SELECT
-  e.id as employee_id,
+  e.id,
+  e.employee_id,
   e.first_name,
   e.last_name,
-  e.email,
+  COALESCE(e.work_email, e.email) as work_email,
   e.phone,
   e.hire_date::text as hire_date,
-  e.title,
+  e.title as job_title,
   d.name as department,
   e.department_id,
   e.manager_id,
@@ -153,7 +154,7 @@ export async function listEmployees(
     ELSE NULL
   END as salary,
   e.location,
-  e.status
+  e.status as employment_status
 FROM hr.employees e
 LEFT JOIN hr.employees m ON e.manager_id = m.id
 LEFT JOIN hr.departments d ON e.department_id = d.id
@@ -187,7 +188,7 @@ LIMIT $${paramIndex}`;
             nextCursor: encodeCursor({
               lastName: lastEmployee.last_name,
               firstName: lastEmployee.first_name,
-              id: lastEmployee.employee_id,
+              id: lastEmployee.id,
             }),
             totalEstimate: `${limit}+`,
             hint: `To see more employees, say "show next page" or "get more employees". You can also use filters like department, job title, or location to narrow results.`,

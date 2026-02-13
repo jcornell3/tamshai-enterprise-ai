@@ -32,9 +32,9 @@ WORKDIR /app
 
 # Copy mcp-hr service (for identity-sync)
 COPY services/mcp-hr/package*.json ./services/mcp-hr/
-RUN cd services/mcp-hr && npm ci --production=false --silent \
-    && chmod +x node_modules/.bin/*
-
+WORKDIR /app/services/mcp-hr
+RUN npm ci --production=false --silent && chmod +x node_modules/.bin/*
+WORKDIR /app
 COPY services/mcp-hr/ ./services/mcp-hr/
 
 # Copy sample data (all SQL files)
@@ -43,6 +43,10 @@ COPY sample-data/*.sql ./sample-data/
 # Copy provisioning script
 COPY scripts/gcp/provision-job/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Security: Set ownership and run as non-root user
+RUN chown -R node:node /app
+USER node
 
 # Set entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

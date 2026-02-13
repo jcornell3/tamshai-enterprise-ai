@@ -94,7 +94,7 @@ export function canModifyHR(userContext: UserContext | null): boolean {
 }
 
 /**
- * Check if user can access Finance data
+ * Check if user can access Finance data (full dashboard/ARR - TIER 3)
  */
 export function canAccessFinance(userContext: UserContext | null): boolean {
   return hasAnyRole(userContext, ['finance-read', 'finance-write', 'executive']);
@@ -105,6 +105,36 @@ export function canAccessFinance(userContext: UserContext | null): boolean {
  */
 export function canModifyFinance(userContext: UserContext | null): boolean {
   return hasAnyRole(userContext, ['finance-write', 'executive']);
+}
+
+// =============================================================================
+// TIERED FINANCE ACCESS (v1.5 - Role-Based Access Control Enhancement)
+// =============================================================================
+
+/**
+ * TIER 1: Expense Reports - accessible by all employees
+ * All employees can view their own expense reports (RLS filtering).
+ */
+export function canAccessFinanceExpenses(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['employee', 'manager', 'finance-read', 'finance-write', 'executive']);
+}
+
+/**
+ * TIER 2: Budgets - accessible by managers and above
+ * Managers can view their department's budget (RLS filtering).
+ * Finance users can view all budgets.
+ */
+export function canAccessFinanceBudgets(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['manager', 'finance-read', 'finance-write', 'executive']);
+}
+
+/**
+ * TIER 3: Dashboard/ARR/Invoices - finance personnel only
+ * Company-wide financial data restricted to Finance team and executives.
+ * Same as canAccessFinance() - provided for explicit tier naming.
+ */
+export function canAccessFinanceDashboard(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['finance-read', 'finance-write', 'executive']);
 }
 
 /**
@@ -133,6 +163,34 @@ export function canAccessSupport(userContext: UserContext | null): boolean {
  */
 export function canModifySupport(userContext: UserContext | null): boolean {
   return hasAnyRole(userContext, ['support-write', 'executive']);
+}
+
+/**
+ * Check if user can access Payroll data
+ */
+export function canAccessPayroll(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['payroll-read', 'payroll-write', 'hr-read', 'hr-write', 'executive']);
+}
+
+/**
+ * Check if user can modify Payroll data
+ */
+export function canModifyPayroll(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['payroll-write', 'hr-write', 'executive']);
+}
+
+/**
+ * Check if user can access Tax data
+ */
+export function canAccessTax(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['tax-read', 'tax-write', 'finance-read', 'finance-write', 'executive']);
+}
+
+/**
+ * Check if user can modify Tax data
+ */
+export function canModifyTax(userContext: UserContext | null): boolean {
+  return hasAnyRole(userContext, ['tax-write', 'finance-write', 'executive']);
 }
 
 /**

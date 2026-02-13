@@ -1,5 +1,8 @@
 # Tamshai Corp MCP Gateway
 # Multi-stage build for minimal production image
+#
+# Build context: Repository root (for access to services/shared)
+# Usage: docker build -f services/mcp-gateway/Dockerfile .
 
 # =============================================================================
 # BUILD STAGE
@@ -8,15 +11,26 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy shared package first (dependency)
+COPY services/shared ./shared
 
-# Install dependencies
-RUN npm ci
+# Copy mcp-gateway package files
+COPY services/mcp-gateway/package*.json ./
+
+# Update shared dependency to use local path in container
+# Must update both package.json AND package-lock.json for npm ci to work
+# Use npm install instead of npm ci to regenerate lock file with correct paths
+RUN sed -i 's|"file:../shared"|"file:./shared"|' package.json
+
+# Build shared package first (required dependency)
+RUN cd shared && npm ci && npm run build
+
+# Install dependencies (regenerates lock file with correct shared path)
+RUN npm install --package-lock-only && npm ci
 
 # Copy source code
-COPY tsconfig.json ./
-COPY src ./src
+COPY services/mcp-gateway/tsconfig.json ./
+COPY services/mcp-gateway/src ./src
 
 # Build TypeScript
 RUN npm run build
@@ -42,6 +56,8 @@ WORKDIR /app
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+# Copy shared package (referenced via file: link in node_modules)
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
 # Set environment
 ENV NODE_ENV=production

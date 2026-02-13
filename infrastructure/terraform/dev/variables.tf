@@ -11,7 +11,7 @@ variable "environment" {
 variable "project_root" {
   description = "Absolute path to project root"
   type        = string
-  default     = "C:/Users/jcorn/tamshai-enterprise-ai"
+  default     = "C:/Users/jcorn/Tamshai-AI-Playground"
 }
 
 variable "docker_compose_dir" {
@@ -77,6 +77,13 @@ variable "test_user_password" {
   default     = "" # Optional - E2E tests will warn if not set
 }
 
+variable "customer_user_password" {
+  description = "Password for customer test users - GitHub secret CUSTOMER_USER_PASSWORD"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "mcp_gateway_client_secret" {
   description = "OAuth client secret for MCP Gateway"
   type        = string
@@ -117,9 +124,10 @@ variable "redis_password" {
 # =============================================================================
 
 variable "claude_api_key" {
-  description = "Claude API key for MCP Gateway"
+  description = "Claude API key for MCP Gateway (fallback if CLAUDE_API_KEY not in GitHub Secrets)"
   type        = string
   sensitive   = true
+  default     = "" # Fetched from GitHub Secrets (CLAUDE_API_KEY) - this is a fallback
 }
 
 # =============================================================================
@@ -140,7 +148,7 @@ variable "gemini_api_key" {
 variable "docker_compose_project" {
   description = "Docker Compose project name"
   type        = string
-  default     = "tamshai-dev"
+  default     = "tamshai-playground"
 }
 
 variable "auto_start_services" {

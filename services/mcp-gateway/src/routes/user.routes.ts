@@ -10,30 +10,30 @@ import { getAccessibleMCPServers, MCPServerConfig } from '../utils/gateway-utils
 const router = Router();
 
 // MCP Server configurations (should match index.ts)
-// TODO: Move to shared config file
+// URLs from environment variables (required)
 const mcpServerConfigs: MCPServerConfig[] = [
   {
     name: 'mcp-hr',
-    url: 'http://localhost:3101',
-    requiredRoles: ['hr-read', 'hr-write', 'executive'],
+    url: process.env.MCP_HR_URL,
+    requiredRoles: ['employee', 'hr-read', 'hr-write', 'executive'],
     description: 'HR data including employees, departments, org structure',
   },
   {
     name: 'mcp-finance',
-    url: 'http://localhost:3102',
-    requiredRoles: ['finance-read', 'finance-write', 'executive'],
+    url: process.env.MCP_FINANCE_URL,
+    requiredRoles: ['employee', 'finance-read', 'finance-write', 'executive'],
     description: 'Financial data including budgets, reports, invoices',
   },
   {
     name: 'mcp-sales',
-    url: 'http://localhost:3103',
+    url: process.env.MCP_SALES_URL,
     requiredRoles: ['sales-read', 'sales-write', 'executive'],
     description: 'CRM data including customers, deals, pipeline',
   },
   {
     name: 'mcp-support',
-    url: 'http://localhost:3104',
-    requiredRoles: ['support-read', 'support-write', 'executive'],
+    url: process.env.MCP_SUPPORT_URL,
+    requiredRoles: ['employee', 'support-read', 'support-write', 'executive'],
     description: 'Support data including tickets, knowledge base',
   },
 ];

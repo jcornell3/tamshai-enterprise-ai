@@ -2,7 +2,7 @@
  * Tamshai Corp - SSE Streaming Integration Tests
  *
  * These tests simulate the TamshaiAI Windows app behavior by:
- * 1. Authenticating via Keycloak (like the PKCE flow)
+ * 1. Authenticating via token exchange (service account impersonation)
  * 2. Calling POST /api/query with JWT token
  * 3. Processing SSE streaming responses
  * 4. Verifying error handling for connection failures
@@ -14,36 +14,24 @@
 import axios from 'axios';
 import http from 'http';
 import { fail } from 'assert';
+import { getTestAuthProvider } from '../shared/auth/token-exchange';
 
-// Test configuration
-// Uses mcp-gateway client which has directAccessGrantsEnabled=true
-// Use 127.0.0.1 instead of localhost for Windows compatibility
+// Test configuration - all values from environment variables
 const CONFIG = {
-  keycloakUrl: process.env.KEYCLOAK_URL || 'http://127.0.0.1:8180',
-  keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-  gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:3100',
-  clientId: 'mcp-gateway',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
+  keycloakUrl: process.env.KEYCLOAK_URL,
+  keycloakRealm: process.env.KEYCLOAK_REALM,
+  gatewayUrl: process.env.MCP_GATEWAY_URL,
 };
-
-// Test user password from environment variable
-const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
-if (!TEST_PASSWORD) {
-  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
-}
 
 // Test users
 const TEST_USERS = {
-  executive: { username: 'eve.thompson', password: TEST_PASSWORD },
-  hrUser: { username: 'alice.chen', password: TEST_PASSWORD },
-  intern: { username: 'frank.davis', password: TEST_PASSWORD },
+  executive: { username: 'eve.thompson' },
+  hrUser: { username: 'alice.chen' },
+  intern: { username: 'frank.davis' },
 };
 
-interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
+// Auth provider (singleton, token exchange)
+const authProvider = getTestAuthProvider();
 
 interface SSEEvent {
   type: 'text' | 'error' | 'pagination';
@@ -52,29 +40,6 @@ interface SSEEvent {
   hasMore?: boolean;
   cursors?: Array<{ server: string; cursor: string }>;
   hint?: string;
-}
-
-/**
- * Get access token from Keycloak using Resource Owner Password Grant
- * Note: This is only for testing - real apps use Authorization Code + PKCE
- */
-async function getAccessToken(username: string, password: string): Promise<string> {
-  const tokenUrl = `${CONFIG.keycloakUrl}/realms/${CONFIG.keycloakRealm}/protocol/openid-connect/token`;
-
-  const params = new URLSearchParams({
-    grant_type: 'password',
-    client_id: CONFIG.clientId,
-    client_secret: CONFIG.clientSecret,
-    username,
-    password,
-    scope: 'openid profile email',  // Removed "roles" - Keycloak includes roles in resource_access by default
-  });
-
-  const response = await axios.post<TokenResponse>(tokenUrl, params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-
-  return response.data.access_token;
 }
 
 /**
@@ -180,22 +145,21 @@ function streamSSEQuery(
   });
 }
 
-// Check if we have a real Claude API key (not a dummy/test key)
-const hasRealClaudeApiKey = (): boolean => {
+// Check if using mock Claude API (test key triggers mock mode in Gateway)
+// Mock mode is triggered when CLAUDE_API_KEY starts with 'sk-ant-test-'
+// CI sets: CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
+const isUsingMockClaude = (): boolean => {
   const key = process.env.CLAUDE_API_KEY || '';
-  return key.startsWith('sk-ant-api') && !key.includes('dummy') && !key.includes('test');
+  return key.startsWith('sk-ant-test-');
 };
 
 describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
-  // Skip tests that require Claude to generate responses
-  const testOrSkip = hasRealClaudeApiKey() ? test : test.skip;
+  // Tests now run in both real and mock modes
+  // Gateway returns mock responses when using sk-ant-test-* keys
 
   describe('POST /api/query Endpoint', () => {
-    testOrSkip('Executive user can stream AI query about reports', async () => {
-      const token = await getAccessToken(
-        TEST_USERS.executive.username,
-        TEST_USERS.executive.password
-      );
+    test('Executive user can stream AI query about reports', async () => {
+      const token = await authProvider.getUserToken(TEST_USERS.executive.username);
 
       const result = await streamSSEQuery(
         'How many people report to me?',
@@ -209,13 +173,16 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       // Verify we received text chunks
       const textEvents = result.events.filter((e) => e.type === 'text');
       expect(textEvents.length).toBeGreaterThan(0);
+
+      // In mock mode, content contains "[Mock Response]"
+      if (isUsingMockClaude()) {
+        expect(result.fullContent).toContain('[Mock Response]');
+        expect(result.fullContent).toContain('eve.thompson');
+      }
     }, 90000); // 90 second timeout for Claude response
 
-    testOrSkip('HR user can query employee data via SSE', async () => {
-      const token = await getAccessToken(
-        TEST_USERS.hrUser.username,
-        TEST_USERS.hrUser.password
-      );
+    test('HR user can query employee data via SSE', async () => {
+      const token = await authProvider.getUserToken(TEST_USERS.hrUser.username);
 
       const result = await streamSSEQuery(
         'List the departments in the company',
@@ -224,13 +191,16 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.fullContent.length).toBeGreaterThan(0);
+
+      // In mock mode, content contains "[Mock Response]"
+      if (isUsingMockClaude()) {
+        expect(result.fullContent).toContain('[Mock Response]');
+        expect(result.fullContent).toContain('alice.chen');
+      }
     }, 90000);
 
-    testOrSkip('Intern receives response but with limited data access', async () => {
-      const token = await getAccessToken(
-        TEST_USERS.intern.username,
-        TEST_USERS.intern.password
-      );
+    test('Intern receives response but with limited data access', async () => {
+      const token = await authProvider.getUserToken(TEST_USERS.intern.username);
 
       const result = await streamSSEQuery(
         'What data can I access?',
@@ -240,6 +210,12 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       expect(result.error).toBeUndefined();
       // Intern should still get a response, but with no data access
       expect(result.fullContent.length).toBeGreaterThan(0);
+
+      // In mock mode, content contains "[Mock Response]"
+      if (isUsingMockClaude()) {
+        expect(result.fullContent).toContain('[Mock Response]');
+        expect(result.fullContent).toContain('frank.davis');
+      }
     }, 90000);
 
     test('Invalid token returns 401 error', async () => {
@@ -269,11 +245,8 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       }
     });
 
-    testOrSkip('Chunks are received progressively during streaming', async () => {
-      const token = await getAccessToken(
-        TEST_USERS.executive.username,
-        TEST_USERS.executive.password
-      );
+    test('Chunks are received progressively during streaming', async () => {
+      const token = await authProvider.getUserToken(TEST_USERS.executive.username);
 
       const result = await streamSSEQuery(
         'Write a short paragraph about enterprise AI.',
@@ -281,12 +254,17 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
       );
 
       expect(result.error).toBeUndefined();
-      // Should receive multiple text chunks
+      // Should receive multiple text chunks (mock mode splits by words)
       expect(result.chunks.length).toBeGreaterThan(1);
 
       // Full content should be the concatenation of all chunks
       const reconstructed = result.chunks.join('');
       expect(reconstructed).toBe(result.fullContent);
+
+      // In mock mode, content contains "[Mock Response]"
+      if (isUsingMockClaude()) {
+        expect(result.fullContent).toContain('[Mock Response]');
+      }
     }, 90000);
   });
 
@@ -333,10 +311,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
     });
 
     test('Request with missing query returns 400', async () => {
-      const token = await getAccessToken(
-        TEST_USERS.executive.username,
-        TEST_USERS.executive.password
-      );
+      const token = await authProvider.getUserToken(TEST_USERS.executive.username);
 
       try {
         await axios.post(
@@ -363,11 +338,8 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
   });
 
   describe('GET /api/query Endpoint (EventSource compatible)', () => {
-    testOrSkip('GET endpoint works with query parameter', async () => {
-      const token = await getAccessToken(
-        TEST_USERS.executive.username,
-        TEST_USERS.executive.password
-      );
+    test('GET endpoint works with query parameter', async () => {
+      const token = await authProvider.getUserToken(TEST_USERS.executive.username);
 
       const result = await new Promise<{ fullContent: string; error?: string }>(
         (resolve) => {
@@ -458,6 +430,11 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.fullContent.length).toBeGreaterThan(0);
+
+      // In mock mode, content contains "[Mock Response]"
+      if (isUsingMockClaude()) {
+        expect(result.fullContent).toContain('[Mock Response]');
+      }
     }, 90000);
   });
 });

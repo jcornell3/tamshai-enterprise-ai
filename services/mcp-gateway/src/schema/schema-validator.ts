@@ -598,12 +598,12 @@ export class SchemaValidator {
 
         // Get actual policies
         const actualResult = await client.query(`
-          SELECT polname
+          SELECT policyname
           FROM pg_policies
           WHERE schemaname = $1 AND tablename = $2
         `, [schema, tableName]);
 
-        const actualPolicies = actualResult.rows.map(r => r.polname);
+        const actualPolicies = actualResult.rows.map(r => r.policyname);
 
         // Missing policies (in spec but not in actual)
         const missing = expectedPolicies.filter(p => !actualPolicies.includes(p));
@@ -758,7 +758,8 @@ export class SchemaValidator {
       port: this.config.postgres.port,
       database,
       user: this.config.postgres.user || 'tamshai',
-      password: this.config.postgres.password || 'changeme',
+      password: this.config.postgres.password,
+      connectionTimeoutMillis: 10000, // 10 second timeout
     });
 
     await client.connect();
@@ -768,12 +769,20 @@ export class SchemaValidator {
 
   private async getMongoDb(database: string): Promise<Db> {
     if (!this.mongoClient) {
-      const uri = `mongodb://${this.config.mongodb.host}:${this.config.mongodb.port}`;
+      // Build connection URI with or without authentication
+      let uri: string;
+      if (this.config.mongodb.user && this.config.mongodb.password) {
+        // Include credentials in URI for proper authentication
+        const user = encodeURIComponent(this.config.mongodb.user);
+        const pass = encodeURIComponent(this.config.mongodb.password);
+        uri = `mongodb://${user}:${pass}@${this.config.mongodb.host}:${this.config.mongodb.port}/?authSource=admin`;
+      } else {
+        uri = `mongodb://${this.config.mongodb.host}:${this.config.mongodb.port}`;
+      }
+
       this.mongoClient = new MongoClient(uri, {
-        auth: this.config.mongodb.user ? {
-          username: this.config.mongodb.user,
-          password: this.config.mongodb.password,
-        } : undefined,
+        serverSelectionTimeoutMS: 10000, // 10 second timeout
+        connectTimeoutMS: 10000,
       });
       await this.mongoClient.connect();
     }

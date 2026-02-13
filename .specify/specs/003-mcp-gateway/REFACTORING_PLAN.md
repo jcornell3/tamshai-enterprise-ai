@@ -3623,7 +3623,7 @@ const mockEmployee = {
   employee_id: '550e8400-e29b-41d4-a716-446655440001',  // UUID format
   first_name: 'Alice',
   last_name: 'Chen',
-  email: 'alice.chen@tamshai.local',
+  email: 'alice.chen@tamshai-playground.local',
   department: 'Human Resources',
   job_title: 'VP of Human Resources',
   hire_date: '2020-01-15',
@@ -3642,7 +3642,7 @@ export const MOCK_EMPLOYEES = {
     employee_id: '550e8400-e29b-41d4-a716-446655440001',
     first_name: 'Alice',
     last_name: 'Chen',
-    email: 'alice.chen@tamshai.local',
+    email: 'alice.chen@tamshai-playground.local',
     department: 'Human Resources',
     job_title: 'VP of Human Resources',
     hire_date: '2020-01-15',

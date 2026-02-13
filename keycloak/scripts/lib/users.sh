@@ -174,13 +174,19 @@ assign_critical_prod_users() {
 }
 
 # =============================================================================
-# Test User Password Management
+# User Password Management
 # =============================================================================
 
 # Get test-user.journey password from TEST_USER_PASSWORD GitHub secret
 # This is the dedicated E2E test account password, separate from corporate user passwords
 get_test_user_password() {
     echo "${TEST_USER_PASSWORD:-}"
+}
+
+# Get corporate user password from DEV_USER_PASSWORD GitHub secret
+# This is the password for all corporate users (alice.chen, bob.martinez, etc.)
+get_dev_user_password() {
+    echo "${DEV_USER_PASSWORD:-}"
 }
 
 # Set test-user.journey password from TEST_USER_PASSWORD GitHub secret
@@ -212,4 +218,41 @@ set_test_user_password() {
     else
         log_warn "  Failed to update test-user.journey password"
     fi
+}
+
+# Set passwords for corporate users from DEV_USER_PASSWORD GitHub secret
+# This is called to update passwords for users imported from realm-export-dev.json
+# Corporate users: alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson
+set_corporate_user_passwords() {
+    local dev_password
+    dev_password=$(get_dev_user_password)
+
+    if [ -z "$dev_password" ]; then
+        log_warn "DEV_USER_PASSWORD not set - cannot set corporate user passwords"
+        log_warn "Integration tests requiring corporate user authentication will fail"
+        return 0
+    fi
+
+    log_info "Setting corporate user passwords from DEV_USER_PASSWORD..."
+
+    # List of corporate users to set passwords for
+    local users=("alice.chen" "bob.martinez" "carol.johnson" "dan.williams" "eve.thompson" "frank.davis" "nina.patel" "marcus.johnson")
+
+    for username in "${users[@]}"; do
+        # Get user ID
+        local user_id=$(_kcadm get users -r "$REALM" -q username="$username" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+
+        if [ -z "$user_id" ]; then
+            log_warn "  $username not found in Keycloak - skipping password update"
+            continue
+        fi
+
+        # Set password (non-temporary to avoid requiredActions)
+        local password_json="{\"type\":\"password\",\"value\":\"$dev_password\",\"temporary\":false}"
+        if echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f - 2>/dev/null; then
+            log_info "  $username password updated successfully"
+        else
+            log_warn "  Failed to update $username password"
+        fi
+    done
 }

@@ -161,7 +161,7 @@ Error: read tcp [::1]:64267->[::1]:8180: wsarecv: An existing connection was for
 
 **Date**: 2026-01-11
 **Test User**: alice.chen (Terraform-provisioned)
-**Environment**: dev (https://www.tamshai.local)
+**Environment**: dev (https://www.tamshai-playground.local)
 
 ### Test Command
 

@@ -62,10 +62,10 @@ if ! docker info &> /dev/null; then
 fi
 echo -e "  ${GREEN}✓${NC} Docker is running"
 
-# Check/setup hosts file for tamshai.local
-echo -e "\n${YELLOW}Checking hosts file for tamshai.local...${NC}"
+# Check/setup hosts file for tamshai-playground.local
+echo -e "\n${YELLOW}Checking hosts file for tamshai-playground.local...${NC}"
 
-HOSTS_ENTRY="127.0.0.1  tamshai.local www.tamshai.local"
+HOSTS_ENTRY="127.0.0.1  tamshai-playground.local www.tamshai-playground.local"
 
 # Detect OS and hosts file location
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -f /c/Windows/System32/drivers/etc/hosts ]]; then
@@ -82,17 +82,17 @@ else
     IS_WINDOWS=false
 fi
 
-if grep -q "tamshai.local" "$HOSTS_FILE" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} tamshai.local already in hosts file"
+if grep -q "tamshai-playground.local" "$HOSTS_FILE" 2>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} tamshai-playground.local already in hosts file"
 else
-    echo -e "  ${YELLOW}!${NC} tamshai.local not found in hosts file"
+    echo -e "  ${YELLOW}!${NC} tamshai-playground.local not found in hosts file"
     if [ "$IS_WINDOWS" = true ]; then
         echo -e "  ${YELLOW}!${NC} Run this PowerShell command as Administrator:"
         echo -e "  ${BLUE}Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value '${HOSTS_ENTRY}'${NC}"
     else
         echo -e "  ${YELLOW}!${NC} Run: sudo bash -c 'echo \"${HOSTS_ENTRY}\" >> /etc/hosts'"
     fi
-    echo -e "  ${YELLOW}!${NC} This enables https://www.tamshai.local access"
+    echo -e "  ${YELLOW}!${NC} This enables https://www.tamshai-playground.local access"
 fi
 
 # Get script directory
@@ -157,14 +157,14 @@ echo -e "${GREEN}========================================${NC}"
 
 echo -e "\n${BLUE}Services are starting up. Please wait a few minutes for all services to be ready.${NC}"
 echo -e "\n${YELLOW}Access Points:${NC}"
-echo -e "  ${GREEN}Tamshai Local:${NC}      https://www.tamshai.local (requires hosts file entry)"
+echo -e "  ${GREEN}Tamshai Local:${NC}      https://www.tamshai-playground.local (requires hosts file entry)"
 echo -e "                      Accept the self-signed certificate warning"
 echo -e ""
-echo -e "  Keycloak Admin:     http://localhost:8180 or https://tamshai.local/auth"
+echo -e "  Keycloak Admin:     http://localhost:8180 or https://tamshai-playground.local/auth"
 echo -e "                      Username: admin"
 echo -e "                      Password: admin"
 echo -e ""
-echo -e "  API Gateway:        http://localhost:8100 or https://tamshai.local/api"
+echo -e "  API Gateway:        http://localhost:8100 or https://tamshai-playground.local/api"
 echo -e "  MCP Gateway:        http://localhost:3100"
 echo -e "  MinIO Console:      http://localhost:9102"
 echo -e "                      Username: minioadmin"

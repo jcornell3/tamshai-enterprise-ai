@@ -4,18 +4,18 @@
 
 const http = require('http');
 const querystring = require('querystring');
+const keycloakUrl = new URL(process.env.KEYCLOAK_URL);
 
 async function getAdminToken() {
   return new Promise((resolve) => {
-    const postData = querystring.stringify({
-      client_id: 'admin-cli',
-      username: 'admin',
-      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
-      grant_type: 'password',
-    });
+    const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+    const postData = querystring.stringify(clientSecret
+      ? { client_id: 'admin-cli', client_secret: clientSecret, grant_type: 'client_credentials' }
+      : { client_id: 'admin-cli', username: 'admin', password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin', grant_type: 'password' }
+    );
     const req = http.request({
-      hostname: '127.0.0.1',
-      port: 8180,
+      hostname: keycloakUrl.hostname,
+      port: keycloakUrl.port,
       path: '/realms/master/protocol/openid-connect/token',
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -32,8 +32,8 @@ async function getAdminToken() {
 async function getClient(token) {
   return new Promise((resolve) => {
     const req = http.request({
-      hostname: '127.0.0.1',
-      port: 8180,
+      hostname: keycloakUrl.hostname,
+      port: keycloakUrl.port,
       path: '/admin/realms/tamshai-corp/clients?clientId=tamshai-flutter-client',
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + token }
@@ -49,8 +49,8 @@ async function getClient(token) {
 async function getClientScopes(token) {
   return new Promise((resolve) => {
     const req = http.request({
-      hostname: '127.0.0.1',
-      port: 8180,
+      hostname: keycloakUrl.hostname,
+      port: keycloakUrl.port,
       path: '/admin/realms/tamshai-corp/client-scopes',
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + token }
@@ -66,8 +66,8 @@ async function getClientScopes(token) {
 async function removeDefaultScope(token, clientId, scopeId) {
   return new Promise((resolve) => {
     const req = http.request({
-      hostname: '127.0.0.1',
-      port: 8180,
+      hostname: keycloakUrl.hostname,
+      port: keycloakUrl.port,
       path: `/admin/realms/tamshai-corp/clients/${clientId}/default-client-scopes/${scopeId}`,
       method: 'DELETE',
       headers: { 'Authorization': 'Bearer ' + token }

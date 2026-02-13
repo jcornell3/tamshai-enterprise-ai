@@ -878,7 +878,7 @@ cd infrastructure/terraform/vps
 
 # Set other secrets manually
 gh secret set TEST_USER_PASSWORD -b "YourSecurePassword123!"
-gh secret set TEST_USER_TOTP_SECRET_RAW -b "JBSWY3DPEHPK3PXP"
+gh secret set TEST_USER_TOTP_SECRET_RAW -b "***REDACTED_TOTP***"
 gh secret set STAGE_USER_PASSWORD -b "TamshaiTemp123!"
 gh secret set CLAUDE_API_KEY -b "sk-ant-api03-..."
 ```

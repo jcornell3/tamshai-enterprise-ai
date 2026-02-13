@@ -4,6 +4,7 @@
  * Provides Redis client for:
  * - Token revocation cache (v1.5: with local caching to eliminate SPOF)
  * - Pending confirmation storage (v1.4 - Section 5.6)
+ * - MCP context cache for Anthropic prompt caching (v1.5 - Section 012)
  *
  * v1.5 Performance Optimization:
  * Token revocation now uses a local in-memory cache with background sync
@@ -24,8 +25,8 @@ const logger = winston.createLogger({
 });
 
 const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  host: process.env.REDIS_HOST,
+  port: parseInt(process.env.REDIS_PORT!, 10),
   password: process.env.REDIS_PASSWORD,
   db: parseInt(process.env.REDIS_DB || '0'),
   retryStrategy(times: number) {
@@ -316,6 +317,57 @@ export async function revokeToken(
   const key = `revoked:${jti}`;
   await redis.setex(key, ttlSeconds, '1');
   logger.info('Revoked token', { jti, ttl: ttlSeconds });
+}
+
+// =============================================================================
+// MCP CONTEXT CACHE (v1.5 Prompt Caching - Section 012)
+// =============================================================================
+
+/**
+ * Get cached MCP context for a user.
+ *
+ * Used to avoid re-querying MCP servers when the same user makes
+ * follow-up queries within the cache TTL (5 minutes).
+ *
+ * @param userId - User ID from JWT claims
+ * @returns Serialized MCP context string, or null if not cached
+ */
+export async function getMCPContext(userId: string): Promise<string | null> {
+  const key = `mcp_context:${userId}`;
+  return redis.get(key);
+}
+
+/**
+ * Store MCP context for a user with TTL.
+ *
+ * The serialized string is cached as-is to guarantee byte-identical
+ * prompts for Anthropic's prompt caching feature.
+ *
+ * @param userId - User ID from JWT claims
+ * @param serializedContext - Pre-serialized MCP data context string
+ * @param ttlSeconds - Time to live in seconds (default: 300 = 5 minutes)
+ */
+export async function storeMCPContext(
+  userId: string,
+  serializedContext: string,
+  ttlSeconds: number = 300
+): Promise<void> {
+  const key = `mcp_context:${userId}`;
+  await redis.setex(key, ttlSeconds, serializedContext);
+  logger.debug('Stored MCP context cache', { userId, size: serializedContext.length, ttl: ttlSeconds });
+}
+
+/**
+ * Invalidate cached MCP context for a user.
+ *
+ * Call this when data is known to have changed (e.g., after a write operation).
+ *
+ * @param userId - User ID from JWT claims
+ */
+export async function invalidateMCPContext(userId: string): Promise<void> {
+  const key = `mcp_context:${userId}`;
+  await redis.del(key);
+  logger.debug('Invalidated MCP context cache', { userId });
 }
 
 export default redis;

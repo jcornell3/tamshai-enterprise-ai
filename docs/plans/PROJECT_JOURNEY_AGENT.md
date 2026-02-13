@@ -581,15 +581,15 @@ if (window.location.protocol === 'mcp:') {
   const params = new URLSearchParams(window.location.search);
   const configUrl = params.get('url');
 
-  // Allow both www.tamshai.com (stage) and tamshai.local (dev)
-  const validDomains = ['https://www.tamshai.com/', 'https://www.tamshai.local/'];
+  // Allow both www.tamshai.com (stage) and tamshai-playground.local (dev)
+  const validDomains = ['https://www.tamshai.com/', 'https://www.tamshai-playground.local/'];
   const isValid = validDomains.some(domain => configUrl?.startsWith(domain));
 
   if (configUrl && isValid) {
     // Fetch and display config for user approval
     fetchAndDisplayConfig(configUrl);
   } else {
-    showError('Invalid configuration URL - must be from www.tamshai.com or www.tamshai.local');
+    showError('Invalid configuration URL - must be from www.tamshai.com or www.tamshai-playground.local');
   }
 }
 ```
@@ -693,8 +693,8 @@ const TRUSTED_DOMAINS = [
   // Stage environment
   'www.tamshai.com',
   // Dev environment
-  'www.tamshai.local',
-  'tamshai.local'
+  'www.tamshai-playground.local',
+  'tamshai-playground.local'
 ];
 
 export function validateConfigOrigin(url: string): boolean {

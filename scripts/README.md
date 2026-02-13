@@ -8,7 +8,7 @@ For the complete inventory of all 58+ scripts with metadata (purpose, environmen
 
 ## Directory Structure
 
-```
+```bash
 scripts/
 ├── db/              # Database backup and restore
 ├── infra/           # Infrastructure management (deploy, status, teardown, rebuild)
@@ -18,7 +18,7 @@ scripts/
 ├── vault/           # HashiCorp Vault operations
 ├── windows/         # Windows-specific firewall scripts
 └── *.sh / *.ps1     # Root-level utility scripts
-```
+```bash
 
 ## Quick Reference
 
@@ -41,9 +41,10 @@ scripts/
 ⚠️ **DEV ENVIRONMENT ONLY** - Sets up Windows environment variables for local development.
 
 **Usage**:
+
 ```powershell
 .\scripts\setup-terraform-dev-env.ps1
-```
+```bash
 
 **What it does**:
 - Sets `TF_VAR_*` environment variables for Terraform DEV environment
@@ -79,9 +80,10 @@ scripts/
 Removes all Terraform DEV environment variables.
 
 **Usage**:
+
 ```powershell
 .\scripts\cleanup-terraform-dev-env.ps1
-```
+```bash
 
 **What it does**:
 - Lists all current `TF_VAR_*` variables
@@ -103,28 +105,32 @@ Removes all Terraform DEV environment variables.
 **Production/Stage**:
 - Do NOT use these scripts for production
 - Use GCP Secret Manager or similar:
+
   ```powershell
   $env:TF_VAR_keycloak_admin_password = (gcloud secrets versions access latest --secret=keycloak-admin-password)
   ```
 
 **API Keys**:
 - Claude API key is prompted securely (not echoed to screen)
-- Get your key from: https://console.anthropic.com/settings/keys
+- Get your key from: <https://console.anthropic.com/settings/keys>
 - Format: `sk-ant-api03-...`
 
 ## Troubleshooting
 
 ### Variables not taking effect
+
 **Problem**: Variables set but Terraform doesn't see them
 
 **Solution**: Restart your terminal completely (close and reopen)
 
 ### Permission denied
+
 **Problem**: Script fails to set variables
 
 **Solution**: Run PowerShell as regular user (not Administrator needed)
 
 ### Wrong variable values
+
 **Problem**: Variables have incorrect values
 
 **Solution**:
@@ -133,6 +139,7 @@ Removes all Terraform DEV environment variables.
 3. Run setup script again: `.\scripts\setup-terraform-dev-env.ps1`
 
 ### Verify variables are set
+
 ```powershell
 # List all Terraform variables
 Get-ChildItem Env:TF_VAR_*
@@ -144,7 +151,7 @@ echo $env:TF_VAR_keycloak_admin_password
 cd infrastructure/terraform/keycloak
 terraform plan -var-file=environments/dev.tfvars
 # Should NOT prompt for passwords if variables are set correctly
-```
+```bash
 
 ## Related Documentation
 
@@ -156,6 +163,7 @@ terraform plan -var-file=environments/dev.tfvars
 ## Examples
 
 ### First-time setup
+
 ```powershell
 # 1. Run setup script
 .\scripts\setup-terraform-dev-env.ps1
@@ -173,17 +181,19 @@ Get-ChildItem Env:TF_VAR_*
 cd infrastructure\terraform\keycloak
 terraform init
 terraform plan -var-file=environments\dev.tfvars
-```
+```bash
 
 ### Update single variable
+
 ```powershell
 # Set/update a specific variable
-setx TF_VAR_claude_api_key "sk-ant-api03-new-key-here"
+setx TF_VAR_claude_api_key "sk-ant-api03-..."
 
 # Restart terminal for change to take effect
-```
+```bash
 
 ### Start fresh
+
 ```powershell
 # 1. Remove all variables
 .\scripts\cleanup-terraform-dev-env.ps1
@@ -197,7 +207,7 @@ Get-ChildItem Env:TF_VAR_*
 
 # 4. Set up again
 .\scripts\setup-terraform-dev-env.ps1
-```
+```bash
 
 ## Script Maintenance
 

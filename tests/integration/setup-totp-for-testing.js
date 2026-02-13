@@ -11,7 +11,7 @@
 const axios = require('axios');
 
 const CONFIG = {
-  keycloakUrl: 'http://127.0.0.1:8180',
+  keycloakUrl: process.env.KEYCLOAK_URL,
   realm: 'tamshai-corp',
 };
 
@@ -22,14 +22,14 @@ const TOTP_USER = 'eve.thompson';
 const NO_TOTP_USERS = ['alice.chen', 'bob.martinez', 'carol.johnson', 'dan.williams', 'frank.davis', 'nina.patel', 'marcus.johnson'];
 
 async function getAdminToken() {
+  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  const params = clientSecret
+    ? { client_id: 'admin-cli', client_secret: clientSecret, grant_type: 'client_credentials' }
+    : { client_id: 'admin-cli', username: 'admin', password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin', grant_type: 'password' };
+
   const response = await axios.post(
     `${CONFIG.keycloakUrl}/realms/master/protocol/openid-connect/token`,
-    new URLSearchParams({
-      client_id: 'admin-cli',
-      username: 'admin',
-      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
-      grant_type: 'password',
-    }),
+    new URLSearchParams(params),
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   return response.data.access_token;

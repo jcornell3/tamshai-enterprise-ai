@@ -19,14 +19,15 @@ const logger = winston.createLogger({
 });
 
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5433'),
-  database: process.env.POSTGRES_DB || 'tamshai_hr',
-  user: process.env.POSTGRES_USER || 'tamshai',
-  password: process.env.POSTGRES_PASSWORD || '[REDACTED-DEV-PASSWORD]',
-  max: 20,
+  host: process.env.POSTGRES_HOST,
+  port: parseInt(process.env.POSTGRES_PORT!, 10),
+  database: process.env.POSTGRES_DB,
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+  min: 2,                           // Keep 2 warm connections
+  max: 10,                          // Optimized: Reduced from 20
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 5000,    // Fail faster
 });
 
 pool.on('error', (err) => {
@@ -67,39 +68,35 @@ export async function queryWithRLS<T extends Record<string, any> = any>(
   values?: any[]
 ): Promise<QueryResult<T>> {
   const client = await pool.connect();
+  const startTime = Date.now();
 
   try {
-    // Set RLS session variables
-    // Using pg-format for proper SQL escaping (security fix: avoid manual string escaping)
-    await client.query('BEGIN');
-    logger.info('Transaction BEGIN successful');
-
-    // Use pg-format's %L (literal) specifier for safe SQL escaping
-    // This handles all edge cases including encoding attacks
+    // Prepare RLS context values
     const rolesString = userContext.roles.join(',');
     const emailString = userContext.email || '';
 
-    await client.query(format('SET LOCAL app.current_user_id = %L', userContext.userId));
-    logger.info('SET user_id successful', { userId: userContext.userId });
+    await client.query('BEGIN');
 
-    await client.query(format('SET LOCAL app.current_user_email = %L', emailString));
-    logger.info('SET user_email successful');
-
-    await client.query(format('SET LOCAL app.current_user_roles = %L', rolesString));
-    logger.info('SET user_roles successful', { roles: userContext.roles });
-
-    logger.info('About to execute main query', {
-      queryStart: queryText.substring(0, 50),
-      valueCount: values?.length || 0,
-      values,
-    });
+    // OPTIMIZED: Combine 3 SET commands into single set_config query
+    // This reduces database round trips from 3 to 1
+    await client.query(
+      `SELECT set_config('app.current_user_id', $1, true),
+              set_config('app.current_user_email', $2, true),
+              set_config('app.current_user_roles', $3, true)`,
+      [userContext.userId, emailString, rolesString]
+    );
 
     // Execute the actual query
     const result = await client.query<T>(queryText, values);
 
-    logger.info('Main query successful', { rowCount: result.rowCount });
-
     await client.query('COMMIT');
+
+    // OPTIMIZED: Single INFO log per query (reduced from 6)
+    logger.info('Query executed with RLS', {
+      userId: userContext.userId,
+      rowCount: result.rowCount,
+      durationMs: Date.now() - startTime,
+    });
 
     return result;
   } catch (error) {

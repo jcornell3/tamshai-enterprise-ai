@@ -5,6 +5,7 @@
  * - Pending confirmation storage/retrieval
  * - Token revocation caching
  * - Health monitoring
+ * - MCP context caching (prompt caching)
  */
 
 // Mock ioredis before importing redis module
@@ -20,6 +21,9 @@ import {
   getTokenRevocationStats,
   revokeToken,
   stopTokenRevocationSync,
+  getMCPContext,
+  storeMCPContext,
+  invalidateMCPContext,
 } from './redis';
 import redis from './redis';
 
@@ -565,4 +569,138 @@ describe('Sync Failure Handling', () => {
     const stats = getTokenRevocationStats();
     expect(stats.cacheSize).toBeGreaterThanOrEqual(0);
   }, 10000);
+});
+
+describe('MCP Context Cache', () => {
+  beforeEach(async () => {
+    await (redis as unknown as Redis).flushall();
+  });
+
+  afterAll(async () => {
+    stopTokenRevocationSync();
+    await redis.quit();
+  });
+
+  describe('storeMCPContext and getMCPContext', () => {
+    test('stores and retrieves MCP context', async () => {
+      const userId = 'user-123';
+      const context = '[Data from mcp-hr]:\n{"employees": [{"name": "Alice"}]}';
+
+      await storeMCPContext(userId, context);
+
+      const retrieved = await getMCPContext(userId);
+      expect(retrieved).toBe(context);
+    });
+
+    test('returns null for missing context', async () => {
+      const result = await getMCPContext('non-existent-user');
+      expect(result).toBeNull();
+    });
+
+    test('expires after TTL', async () => {
+      const userId = 'user-ttl-test';
+      const context = 'test context data';
+
+      await storeMCPContext(userId, context, 1); // 1 second TTL
+
+      // Wait for expiration
+      await new Promise(resolve => setTimeout(resolve, 1100));
+
+      const result = await getMCPContext(userId);
+      expect(result).toBeNull();
+    });
+
+    test('uses default TTL of 300 seconds', async () => {
+      const userId = 'user-default-ttl';
+      const context = 'test context';
+
+      await storeMCPContext(userId, context);
+
+      const ttl = await redis.ttl(`mcp_context:${userId}`);
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(300);
+    });
+
+    test('handles custom TTL', async () => {
+      const userId = 'user-custom-ttl';
+      const context = 'test context';
+      const customTTL = 60;
+
+      await storeMCPContext(userId, context, customTTL);
+
+      const ttl = await redis.ttl(`mcp_context:${userId}`);
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(customTTL);
+    });
+
+    test('overwrites existing context for same user', async () => {
+      const userId = 'user-overwrite';
+      const context1 = 'first context';
+      const context2 = 'second context';
+
+      await storeMCPContext(userId, context1);
+      await storeMCPContext(userId, context2);
+
+      const retrieved = await getMCPContext(userId);
+      expect(retrieved).toBe(context2);
+    });
+
+    test('stores large context strings', async () => {
+      const userId = 'user-large-context';
+      const largeContext = 'A'.repeat(100000); // 100KB
+
+      await storeMCPContext(userId, largeContext);
+
+      const retrieved = await getMCPContext(userId);
+      expect(retrieved).toBe(largeContext);
+    });
+
+    test('preserves byte-identical content', async () => {
+      const userId = 'user-byte-identical';
+      const context = '[Data from mcp-hr]:\n{\n  "employees": [\n    {\n      "name": "Alice Chen",\n      "email": "alice@tamshai.com"\n    }\n  ]\n}';
+
+      await storeMCPContext(userId, context);
+      const retrieved = await getMCPContext(userId);
+
+      // Verify byte-identical (critical for Anthropic cache hits)
+      expect(retrieved).toBe(context);
+      expect(retrieved!.length).toBe(context.length);
+    });
+  });
+
+  describe('invalidateMCPContext', () => {
+    test('invalidates context on demand', async () => {
+      const userId = 'user-invalidate';
+      const context = 'test context';
+
+      await storeMCPContext(userId, context);
+
+      // Verify it exists
+      const stored = await getMCPContext(userId);
+      expect(stored).toBe(context);
+
+      // Invalidate
+      await invalidateMCPContext(userId);
+
+      // Verify it's gone
+      const result = await getMCPContext(userId);
+      expect(result).toBeNull();
+    });
+
+    test('handles invalidation of non-existent context gracefully', async () => {
+      await expect(
+        invalidateMCPContext('non-existent-user')
+      ).resolves.not.toThrow();
+    });
+
+    test('only invalidates the targeted user context', async () => {
+      await storeMCPContext('user-a', 'context A');
+      await storeMCPContext('user-b', 'context B');
+
+      await invalidateMCPContext('user-a');
+
+      expect(await getMCPContext('user-a')).toBeNull();
+      expect(await getMCPContext('user-b')).toBe('context B');
+    });
+  });
 });

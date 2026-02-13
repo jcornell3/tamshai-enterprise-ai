@@ -5,6 +5,8 @@ import {
   canAccessFinance,
   canAccessSales,
   canAccessSupport,
+  canAccessPayroll,
+  canAccessTax,
   getUserDisplayName,
   getRoleBadges,
 } from '@tamshai/auth';
@@ -37,8 +39,8 @@ interface AppCard {
 function isDeployedEnvironment(hostname: string): boolean {
   // Known deployed hostnames
   const deployedHosts = [
-    'tamshai.local',
-    'www.tamshai.local',
+    'tamshai-playground.local',
+    'www.tamshai-playground.local',
     'tamshai.com',
     'www.tamshai.com',
     'vps.tamshai.com',
@@ -74,6 +76,8 @@ function getAppUrls() {
       finance: '/finance/',
       sales: '/sales/',
       support: '/support/',
+      payroll: '/payroll/',
+      tax: '/tax/',
     };
   }
 
@@ -83,6 +87,8 @@ function getAppUrls() {
     finance: 'http://localhost:4002',
     sales: 'http://localhost:4003',
     support: 'http://localhost:4004',
+    payroll: 'http://localhost:4005',
+    tax: 'http://localhost:4006',
   };
 }
 
@@ -159,6 +165,40 @@ export default function LandingPage() {
       canAccess: canAccessSupport(userContext),
       color: 'secondary',
     },
+    {
+      name: 'Payroll Application',
+      description: 'Pay runs, pay stubs, and contractor management',
+      icon: (
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+          />
+        </svg>
+      ),
+      url: appUrls.payroll,
+      canAccess: canAccessPayroll(userContext),
+      color: 'primary',
+    },
+    {
+      name: 'Tax Application',
+      description: 'Tax compliance, filings, and quarterly estimates',
+      icon: (
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"
+          />
+        </svg>
+      ),
+      url: appUrls.tax,
+      canAccess: canAccessTax(userContext),
+      color: 'success',
+    },
   ];
 
   const accessibleApps = apps.filter((app) => app.canAccess);
@@ -217,6 +257,72 @@ export default function LandingPage() {
             Select an application to access enterprise data and AI-powered insights
           </p>
         </div>
+
+        {/* AI Assistant - Always visible, uses internal routing */}
+        <div className="mb-8">
+          <Link
+            to="/ai-query"
+            className="card-hover group block"
+          >
+            <div className="flex items-center gap-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl flex items-center justify-center text-white shadow-lg shrink-0">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xl font-bold text-secondary-900 mb-1 flex items-center gap-2">
+                  Universal AI Assistant
+                  <span className="badge-primary text-xs">New</span>
+                </h3>
+                <p className="text-sm text-secondary-600 mb-2">
+                  Ask questions across all domains with generative UI components - HR, Finance, Sales, Support, Payroll, Tax, and Approvals
+                </p>
+                <div className="flex items-center gap-4 text-xs text-secondary-500">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    SSE Streaming
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    Voice I/O
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Generative UI
+                  </span>
+                </div>
+              </div>
+              <svg
+                className="w-6 h-6 text-purple-600 group-hover:translate-x-1 transition-transform shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </div>
+          </Link>
+        </div>
+
+        {/* Domain Applications */}
+        <h2 className="text-xl font-bold text-secondary-900 mb-4">Domain Applications</h2>
 
         {accessibleApps.length === 0 ? (
           // No Access
@@ -332,14 +438,6 @@ export default function LandingPage() {
           </Link>
         </div>
 
-        {/* Info Banner */}
-        <div className="mt-8 alert-info">
-          <h4 className="font-semibold mb-1">Architecture v1.4 Features</h4>
-          <p className="text-sm">
-            All applications support Server-Sent Events (SSE) streaming,
-            human-in-the-loop confirmations, and truncation warnings.
-          </p>
-        </div>
       </main>
     </div>
   );

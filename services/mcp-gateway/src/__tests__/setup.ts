@@ -6,7 +6,7 @@
 
 // Set test environment variables
 process.env.NODE_ENV = 'test';
-process.env.REDIS_URL = 'redis://localhost:6379';
+process.env.REDIS_URL = `redis://localhost:${process.env.DEV_REDIS}`;
 
 // Silence console output during tests (optional - comment out for debugging)
 // global.console = {

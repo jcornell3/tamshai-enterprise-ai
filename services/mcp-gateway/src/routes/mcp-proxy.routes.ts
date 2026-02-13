@@ -20,6 +20,8 @@ import {
 } from '../types/mcp-response';
 import { UserContext } from '../test-utils/mock-user-context';
 import { getIdentityToken } from '../utils/gcp-auth';
+import { buildSafeQueryParams, sanitizeForLogging } from '../utils/sanitize';
+import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
 
 // Extended Request type with userContext property
 interface AuthenticatedRequest extends Request {
@@ -31,6 +33,7 @@ export interface MCPProxyRoutesDependencies {
   mcpServers: MCPServerConfig[];
   getAccessibleServers: (roles: string[]) => MCPServerConfig[];
   timeout?: number;
+  internalSecret?: string; // Shared secret for MCP server authentication (MCP_INTERNAL_SECRET)
 }
 
 /**
@@ -38,7 +41,12 @@ export interface MCPProxyRoutesDependencies {
  */
 export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
   const router = Router();
-  const { logger, mcpServers, getAccessibleServers, timeout = 30000 } = deps;
+  const { logger, mcpServers, getAccessibleServers, timeout = 30000, internalSecret } = deps;
+
+  // Warn if internal secret is not configured (security risk)
+  if (!internalSecret) {
+    logger.warn('MCP_INTERNAL_SECRET not configured - MCP servers may be vulnerable to direct access');
+  }
 
   /**
    * GET /mcp/:serverName/:toolName
@@ -65,29 +73,19 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
       return;
     }
 
-    // Convert query params to proper types (Express parses everything as strings)
-    // Security: Use Object.create(null) to prevent prototype pollution
-    const queryParams: Record<string, string | number | string[]> = Object.create(null);
-    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
-    for (const [key, value] of Object.entries(req.query)) {
-      if (value === undefined) continue;
-      // Security: Reject dangerous property names to prevent prototype pollution
-      if (dangerousKeys.includes(key)) continue;
-      // Try to parse as number if it looks numeric
-      if (typeof value === 'string' && /^\d+$/.test(value)) {
-        queryParams[key] = parseInt(value, 10);
-      } else if (typeof value === 'string') {
-        queryParams[key] = value;
-      } else if (Array.isArray(value)) {
-        queryParams[key] = value.filter((v): v is string => typeof v === 'string');
-      }
-      // Skip ParsedQs objects (nested query params)
-    }
+    // Convert query params to proper types with security validation
+    // Uses buildSafeQueryParams which:
+    // - Validates keys against safe pattern (alphanumeric, underscore, hyphen, dot)
+    // - Prevents prototype pollution by rejecting dangerous keys
+    // - Uses Object.create(null) for the result object
+    const queryParams = buildSafeQueryParams(req.query as Record<string, unknown>);
 
+    // Sanitize for logging to prevent log injection attacks
+    // lgtm[js/log-injection] - queryParams sanitized via sanitizeForLogging
     logger.info(`MCP tool call: ${serverName}/${toolName}`, {
       requestId,
       userId: userContext.userId,
-      queryParams,
+      queryParams: sanitizeForLogging(queryParams),
     });
 
     try {
@@ -132,6 +130,11 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
       // Returns null in dev/stage (non-GCP environments)
       const identityToken = await getIdentityToken(server.url);
 
+      // Generate internal authentication token for MCP server
+      const mcpInternalToken = internalSecret
+        ? generateInternalToken(internalSecret, userContext.userId, userContext.roles)
+        : undefined;
+
       const mcpResponse = await axios.post(
         targetUrl,
         {
@@ -148,6 +151,8 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
           headers: {
             'Content-Type': 'application/json',
             'X-Request-ID': requestId,
+            // Add internal token for MCP server authentication (prevents direct access bypass)
+            ...(mcpInternalToken && { [INTERNAL_TOKEN_HEADER]: mcpInternalToken }),
             // Include GCP identity token if available (Cloud Run service-to-service)
             ...(identityToken && { Authorization: `Bearer ${identityToken}` }),
           },
@@ -197,10 +202,12 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
       return;
     }
 
+    // Sanitize body for logging to prevent log injection attacks
+    // lgtm[js/log-injection] - body sanitized via sanitizeForLogging
     logger.info(`MCP tool call (POST): ${serverName}/${toolName}`, {
       requestId,
       userId: userContext.userId,
-      body,
+      body: sanitizeForLogging(body),
     });
 
     try {
@@ -243,9 +250,26 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
       // Returns null in dev/stage (non-GCP environments)
       const identityToken = await getIdentityToken(server.url);
 
+      // Generate internal authentication token for MCP server
+      const mcpInternalToken = internalSecret
+        ? generateInternalToken(internalSecret, userContext.userId, userContext.roles)
+        : undefined;
+
+      // Inject userContext into body so MCP servers can authorize requests
+      // MCP servers read userContext from req.body (same pattern as GET handler)
+      const enrichedBody = {
+        ...body,
+        userContext: {
+          userId: userContext.userId,
+          username: userContext.username,
+          email: userContext.email,
+          roles: userContext.roles,
+        },
+      };
+
       const mcpResponse = await axios.post(
         targetUrl,
-        body,
+        enrichedBody,
         {
           timeout,
           headers: {
@@ -253,6 +277,8 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
             'X-User-ID': userContext.userId,
             'X-User-Roles': userContext.roles.join(','),
             'X-Request-ID': requestId,
+            // Add internal token for MCP server authentication (prevents direct access bypass)
+            ...(mcpInternalToken && { [INTERNAL_TOKEN_HEADER]: mcpInternalToken }),
             // Include GCP identity token if available (Cloud Run service-to-service)
             ...(identityToken && { Authorization: `Bearer ${identityToken}` }),
           },

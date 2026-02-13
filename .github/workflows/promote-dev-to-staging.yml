@@ -124,7 +124,7 @@ jobs:
           echo "🧪 Running smoke tests..."
 
           # MCP Gateway health check
-          if curl -sf http://$VPS_HOST:3100/health | jq -e '.status == "healthy"'; then
+          if curl -sf http://$VPS_HOST:${{ vars.DEV_MCP_GATEWAY }}/health | jq -e '.status == "healthy"'; then
             echo "✅ MCP Gateway healthy"
           else
             echo "❌ MCP Gateway health check failed"
@@ -132,7 +132,7 @@ jobs:
           fi
 
           # Keycloak health check
-          if curl -sf http://$VPS_HOST:8180/health/ready; then
+          if curl -sf http://$VPS_HOST:${{ vars.DEV_KEYCLOAK }}/health/ready; then
             echo "✅ Keycloak healthy"
           else
             echo "❌ Keycloak health check failed"
@@ -140,7 +140,7 @@ jobs:
           fi
 
           # Kong health check
-          if curl -sf http://$VPS_HOST:8100/api/health; then
+          if curl -sf http://$VPS_HOST:${{ vars.DEV_KONG_PROXY }}/api/health; then
             echo "✅ Kong healthy"
           else
             echo "❌ Kong health check failed"

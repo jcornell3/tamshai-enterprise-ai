@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth, apiConfig } from '@tamshai/auth';
-import { TruncationWarning, ApprovalCard } from '@tamshai/ui';
+import { TruncationWarning, ApprovalCard, ComponentRenderer, useVoiceInput, useVoiceOutput } from '@tamshai/ui';
 import type { AIQueryMessage, AIQueryResponse } from '../types';
+import type { ComponentResponse } from '@tamshai/ui/dist/components/generative/types';
 
 /**
  * AI Query Page for Finance
  *
- * Natural language queries to finance data using SSE streaming (Architecture v1.4)
+ * Natural language queries to finance data using SSE streaming (Architecture v1.5)
  *
  * Features:
  * - Server-Sent Events (SSE) for streaming responses
+ * - Display directive detection (display:finance:budget:..., display:finance:quarterly_report:...)
+ * - Generative UI rendering via ComponentRenderer
+ * - Voice input (Speech-to-Text) and output (Text-to-Speech)
  * - Real-time chunk-by-chunk rendering
  * - Prevents 30-60 second timeout during Claude reasoning
  * - Truncation warnings for large datasets
@@ -34,12 +38,40 @@ export function AIQueryPage() {
   const [error, setError] = useState<string | null>(null);
   const [truncationWarning, setTruncationWarning] = useState<{ message: string; count: string } | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
-  const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const [componentResponse, setComponentResponse] = useState<ComponentResponse | null>(null);
+  const [directiveError, setDirectiveError] = useState<string | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  // Use crypto.randomUUID() for secure session ID generation
+  const [sessionId] = useState(() => `session-${crypto.randomUUID()}`);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
+  const currentMessageContentRef = useRef<string>('');
+
+  // Voice input hook - captures speech and updates query
+  const { isListening, transcript, error: voiceInputError, startListening, stopListening } = useVoiceInput({
+    language: 'en-US',
+    interimResults: false,
+    onResult: (recognizedText) => {
+      setQuery(recognizedText);
+    },
+  });
+
+  // Voice output hook - speaks component narration
+  const { speak, stop: stopSpeaking, isSpeaking } = useVoiceOutput({
+    language: 'en-US',
+    rate: 1.0,
+    pitch: 1.0,
+  });
+
+  // Update query input when transcript changes
+  useEffect(() => {
+    if (transcript) {
+      setQuery(transcript);
+    }
+  }, [transcript]);
 
   // Suggested queries for finance
   const suggestedQueries = [
@@ -50,6 +82,68 @@ export function AIQueryPage() {
     'Compare spending vs budget for Engineering',
     'List all overdue invoices',
   ];
+
+  /**
+   * Detect display directives in AI response
+   * Format: display:<domain>:<component>:<params>
+   * Example: display:finance:budget:department=engineering,year=2025
+   */
+  const detectDirective = (text: string): string | null => {
+    const directiveRegex = /display:finance:(\w+):([^\s]*)/;
+    const match = text.match(directiveRegex);
+    return match ? match[0] : null;
+  };
+
+  /**
+   * Call MCP UI Service to render directive
+   */
+  const fetchComponentResponse = async (directive: string): Promise<void> => {
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      // Construct MCP UI Service URL
+      let mcpUiUrl: string;
+      if (apiConfig.mcpUiUrl) {
+        // Use configured MCP UI URL (from VITE_MCP_UI_URL)
+        mcpUiUrl = `${apiConfig.mcpUiUrl}/api/display`;
+      } else {
+        // Fallback to relative URL (proxied through Caddy)
+        mcpUiUrl = '/mcp-ui/api/display';
+      }
+
+      const response = await fetch(mcpUiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ directive }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`MCP UI Service error: ${response.status}`);
+      }
+
+      const componentData: ComponentResponse = await response.json();
+      setComponentResponse(componentData);
+      setDirectiveError(null);
+    } catch (error) {
+      console.error('Failed to fetch component response:', error);
+      setDirectiveError(error instanceof Error ? error.message : 'Unknown error');
+      setComponentResponse(null);
+    }
+  };
+
+  /**
+   * Handle component actions (navigate, drilldown, etc.)
+   */
+  const handleComponentAction = (action: any) => {
+    console.log('Component action:', action);
+    // TODO: Implement action handling (navigation, drilldowns)
+  };
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -126,6 +220,7 @@ export function AIQueryPage() {
     // Add placeholder for assistant message
     const assistantMessageId = `assistant-${Date.now()}`;
     currentMessageIdRef.current = assistantMessageId;
+    currentMessageContentRef.current = ''; // Reset content tracker
     const assistantMessage: AIQueryMessage = {
       id: assistantMessageId,
       role: 'assistant',
@@ -135,6 +230,10 @@ export function AIQueryPage() {
     };
     setMessages((prev) => [...prev, assistantMessage]);
     setIsStreaming(true);
+
+    // Reset component state for new query
+    setComponentResponse(null);
+    setDirectiveError(null);
 
     // Create EventSource for SSE
     try {
@@ -175,7 +274,17 @@ export function AIQueryPage() {
               msg.id === assistantMessageId ? { ...msg, isStreaming: false } : msg
             )
           );
+
+          // Check for directives in the complete message
+          const completeMessage = currentMessageContentRef.current;
+          const directive = detectDirective(completeMessage);
+          if (directive) {
+            console.log('Detected directive:', directive);
+            fetchComponentResponse(directive);
+          }
+
           currentMessageIdRef.current = null;
+          currentMessageContentRef.current = '';
           return;
         }
 
@@ -185,6 +294,7 @@ export function AIQueryPage() {
           // Handle different chunk types from gateway
           if (chunk.type === 'text' && chunk.text) {
             // Standard text chunk from streaming.routes.ts line 347
+            currentMessageContentRef.current += chunk.text; // Track complete content
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMessageId
@@ -327,9 +437,25 @@ export function AIQueryPage() {
     });
   };
 
+  // Escape HTML entities to prevent XSS attacks
+  const escapeHtml = (text: string): string => {
+    const htmlEntities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#x27;',
+    };
+    return text.replace(/[&<>"']/g, (char) => htmlEntities[char]);
+  };
+
   // Simple markdown renderer (for basic formatting)
+  // Security: HTML is escaped first to prevent XSS, then safe markdown is applied
   const renderMarkdown = (content: string): string => {
-    return content
+    // First escape HTML to prevent XSS injection
+    const escaped = escapeHtml(content);
+
+    return escaped
       // Bold
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       // Italic
@@ -354,6 +480,43 @@ export function AIQueryPage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Voice Output Toggle */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="voice-toggle" className="text-sm font-medium text-secondary-700">
+              Voice
+            </label>
+            <button
+              id="voice-toggle"
+              type="button"
+              onClick={() => {
+                const newVoiceEnabled = !voiceEnabled;
+                setVoiceEnabled(newVoiceEnabled);
+                if (!newVoiceEnabled) {
+                  stopSpeaking();
+                }
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                voiceEnabled ? 'bg-primary-600' : 'bg-secondary-300'
+              }`}
+              data-testid="voice-toggle"
+              aria-label="Toggle voice output"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  voiceEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            {isSpeaking && (
+              <svg
+                className="w-5 h-5 text-primary-600 animate-pulse"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+              </svg>
+            )}
+          </div>
           <span className="text-xs text-secondary-500" data-testid="session-id">
             Session: {sessionId.slice(-8)}
           </span>
@@ -369,11 +532,15 @@ export function AIQueryPage() {
 
       {/* Info Banner */}
       <div className="alert-info mb-4">
-        <h4 className="font-semibold mb-1">Architecture v1.4: SSE Streaming</h4>
-        <p className="text-sm">
+        <h4 className="font-semibold mb-1">Architecture v1.5: Generative UI + Voice</h4>
+        <p className="text-sm mb-2">
           This page uses Server-Sent Events (SSE) to stream AI responses in
           real-time, preventing timeouts during Claude's 30-60 second reasoning
           process.
+        </p>
+        <p className="text-sm">
+          <strong>New:</strong> Voice input (microphone button) and voice output (toggle in header).
+          Try: "Show budget summary" for interactive visualizations.
         </p>
       </div>
 
@@ -418,6 +585,29 @@ export function AIQueryPage() {
             aria-label="Enter your finance query"
             data-testid="query-input"
           />
+          {/* Voice Input Button */}
+          <button
+            type="button"
+            onClick={isListening ? stopListening : startListening}
+            className={`btn-secondary ${isListening ? 'bg-red-100 border-red-300 text-red-700' : ''}`}
+            title={isListening ? 'Stop listening' : 'Start voice input'}
+            data-testid="voice-input"
+            disabled={isStreaming}
+          >
+            <svg
+              className={`w-5 h-5 ${isListening ? 'animate-pulse' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+              />
+            </svg>
+          </button>
           {isStreaming ? (
             <button
               type="button"
@@ -444,11 +634,64 @@ export function AIQueryPage() {
             </button>
           )}
         </form>
+        {/* Voice Status */}
+        {isListening && (
+          <div className="mt-2 text-sm text-primary-600 flex items-center gap-2" data-testid="listening-indicator">
+            <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+            Listening... Speak your query
+          </div>
+        )}
+        {voiceInputError && (
+          <div className="mt-2 text-sm text-red-600">
+            Voice input error: {voiceInputError}
+          </div>
+        )}
         <p className="text-xs text-secondary-500 mt-2">
           Press Enter to send, Shift+Enter for new line. Results based on your{' '}
           {userContext?.roles?.includes('finance-write') ? 'finance-write' : 'finance-read'} role.
         </p>
       </div>
+
+      {/* Component Renderer - Display generative UI components */}
+      {componentResponse && (
+        <div className="mb-4" data-testid="generative-ui-container">
+          <div className="bg-white rounded-lg border border-primary-200 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <svg
+                className="w-5 h-5 text-primary-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+              <h3 className="text-lg font-semibold text-primary-900">
+                Generative UI Component
+              </h3>
+            </div>
+            <ComponentRenderer
+              component={componentResponse.component}
+              onAction={handleComponentAction}
+              voiceEnabled={voiceEnabled}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Directive Error */}
+      {directiveError && (
+        <div className="mb-4" data-testid="directive-error">
+          <div className="bg-danger-50 border border-danger-200 rounded-lg p-4">
+            <p className="font-medium text-danger-700">Failed to render component</p>
+            <p className="text-sm text-danger-600 mt-1">{directiveError}</p>
+          </div>
+        </div>
+      )}
 
       {/* Messages Area - MOVED BELOW INPUT */}
       <div

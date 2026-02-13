@@ -17,6 +17,7 @@
 
 # Source common utilities (always source to ensure _kcadm is defined)
 SCRIPT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
 source "$SCRIPT_LIB_DIR/common.sh"
 
 # =============================================================================
@@ -52,7 +53,8 @@ create_or_update_client() {
 
     if client_exists "$client_id"; then
         log_info "Client '$client_id' exists, updating..."
-        local uuid=$(get_client_uuid "$client_id")
+        local uuid
+        uuid=$(get_client_uuid "$client_id")
         # Some client types (service accounts) have immutable properties after creation
         # Catch update failures gracefully - the important config is already there from creation
         if echo "$client_json" | _kcadm update "clients/$uuid" -r "$REALM" -f - 2>/dev/null; then
@@ -71,7 +73,6 @@ create_or_update_client() {
         assign_client_scopes "$client_id"
     fi
 }
-
 # =============================================================================
 # Client JSON Generators
 # =============================================================================
@@ -93,8 +94,10 @@ get_tamshai_website_client_json() {
     "protocol": "openid-connect",
     "redirectUris": [
         "http://localhost:8080/*",
-        "https://tamshai.local/*",
-        "https://www.tamshai.local/*",
+        "https://tamshai-playground.local/*",
+        "https://www.tamshai-playground.local/*",
+        "https://tamshai-playground.local:8443/*",
+        "https://www.tamshai-playground.local:8443/*",
         "https://$vps_domain/*",
         "https://tamshai.com/*",
         "https://www.tamshai.com/*",
@@ -102,8 +105,10 @@ get_tamshai_website_client_json() {
     ],
     "webOrigins": [
         "http://localhost:8080",
-        "https://tamshai.local",
-        "https://www.tamshai.local",
+        "https://tamshai-playground.local",
+        "https://www.tamshai-playground.local",
+        "https://tamshai-playground.local:8443",
+        "https://www.tamshai-playground.local:8443",
         "https://$vps_domain",
         "https://tamshai.com",
         "https://www.tamshai.com",
@@ -111,7 +116,7 @@ get_tamshai_website_client_json() {
     ],
     "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://$vps_domain/*##https://tamshai.com/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
+        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai-playground.local/*##https://www.tamshai-playground.local/*##https://tamshai-playground.local:8443/*##https://www.tamshai-playground.local:8443/*##https://$vps_domain/*##https://tamshai.com/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
     },
     "defaultClientScopes": ["openid", "profile", "email", "roles"]
 }
@@ -119,12 +124,16 @@ EOF
 }
 
 # Generate JSON for mcp-gateway client (confidential, service account)
+# P1: directAccessGrantsEnabled is only true in dev (for integration tests).
+# In stage/prod, password grant is disabled — use PKCE or service account flows.
 get_mcp_gateway_client_json() {
     # Determine domain based on environment
     local domain
+    local direct_access="false"
     case "${ENV:-dev}" in
         dev)
-            domain="tamshai.local"
+            domain="tamshai-playground.local"
+            direct_access="false"
             ;;
         stage)
             domain="www.tamshai.com"
@@ -145,7 +154,7 @@ get_mcp_gateway_client_json() {
     "enabled": true,
     "publicClient": false,
     "standardFlowEnabled": true,
-    "directAccessGrantsEnabled": true,
+    "directAccessGrantsEnabled": $direct_access,
     "serviceAccountsEnabled": true,
     "protocol": "openid-connect",
     "redirectUris": [
@@ -162,6 +171,7 @@ EOF
 
 # Generate JSON for Flutter client (public, PKCE, custom scheme)
 # Note: Desktop OAuth uses fixed ports 18765-18769 for reliable redirect matching
+# P2: directAccessGrantsEnabled disabled globally — public clients must use PKCE (OAuth 2.1)
 get_flutter_client_json() {
     cat <<EOF
 {
@@ -171,7 +181,7 @@ get_flutter_client_json() {
     "enabled": true,
     "publicClient": true,
     "standardFlowEnabled": true,
-    "directAccessGrantsEnabled": true,
+    "directAccessGrantsEnabled": false,
     "serviceAccountsEnabled": false,
     "protocol": "openid-connect",
     "redirectUris": [
@@ -211,9 +221,9 @@ get_web_portal_client_json() {
 
     case "${ENV:-dev}" in
         dev)
-            redirect_uris='"http://localhost:4000/*", "https://www.tamshai.local/*", "https://www.tamshai.local/app/*"'
-            web_origins='"http://localhost:4000", "https://www.tamshai.local"'
-            logout_uris="http://localhost:4000/*##https://www.tamshai.local/*"
+            redirect_uris='"http://localhost:4000/*", "https://www.tamshai-playground.local/*", "https://www.tamshai-playground.local/app/*", "https://www.tamshai-playground.local:8443/*", "https://www.tamshai-playground.local:8443/app/*"'
+            web_origins='"http://localhost:4000", "https://www.tamshai-playground.local", "https://www.tamshai-playground.local:8443"'
+            logout_uris="http://localhost:4000/*##https://www.tamshai-playground.local/*##https://www.tamshai-playground.local:8443/*"
             ;;
         stage)
             redirect_uris='"http://localhost:4000/*", "https://www.tamshai.com/*", "https://www.tamshai.com/app/*"'
@@ -281,21 +291,24 @@ EOF
 # Sync tamshai-website client
 sync_website_client() {
     log_info "Syncing tamshai-website client..."
-    local client_json=$(get_tamshai_website_client_json)
+    local client_json
+    client_json=$(get_tamshai_website_client_json)
    create_or_update_client "tamshai-website" "$client_json"
 }
 
 # Sync Flutter client
 sync_flutter_client() {
     log_info "Syncing tamshai-flutter-client..."
-    local client_json=$(get_flutter_client_json)
+    local client_json
+    client_json=$(get_flutter_client_json)
    create_or_update_client "tamshai-flutter-client" "$client_json"
 }
 
 # Sync web-portal client
 sync_web_portal_client() {
     log_info "Syncing web-portal client..."
-    local client_json=$(get_web_portal_client_json)
+    local client_json
+    client_json=$(get_web_portal_client_json)
    create_or_update_client "web-portal" "$client_json"
 }
 
@@ -303,14 +316,16 @@ sync_web_portal_client() {
 sync_mcp_gateway_client() {
     log_info "Syncing mcp-gateway client..."
 
-    # Get client secret from environment or use default
-    local client_secret="${MCP_GATEWAY_CLIENT_SECRET:-mcp-gateway-secret}"
+    # Get client secret from environment (fail if not set)
+    local client_secret="${MCP_GATEWAY_CLIENT_SECRET:?MCP_GATEWAY_CLIENT_SECRET must be set}"
 
-    local client_json=$(get_mcp_gateway_client_json)
+    local client_json
+    client_json=$(get_mcp_gateway_client_json)
    create_or_update_client "mcp-gateway" "$client_json"
 
     # Set client secret
-    local uuid=$(get_client_uuid "mcp-gateway")
+    local uuid
+    uuid=$(get_client_uuid "mcp-gateway")
     if [ -n "$uuid" ]; then
         log_info "  Setting client secret..."
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
@@ -320,17 +335,26 @@ sync_mcp_gateway_client() {
 }
 
 # Sync mcp-hr-service client with service account roles
+# P3: Blocked in production — service account with manage-users/manage-realm
+# roles must not be auto-provisioned in prod (security policy).
 sync_mcp_hr_service_client() {
+    if [ "${ENV:-dev}" = "prod" ]; then
+        log_warn "Skipping mcp-hr-service client in production (security policy)"
+        return 0
+    fi
+
     log_info "Syncing mcp-hr-service client (identity sync)..."
 
-    # Get client secret from environment or use default
-    local client_secret="${MCP_HR_SERVICE_CLIENT_SECRET:-hr-service-secret}"
+    # Get client secret from environment (fail if not set)
+    local client_secret="${MCP_HR_SERVICE_CLIENT_SECRET:?MCP_HR_SERVICE_CLIENT_SECRET must be set}"
 
-    local client_json=$(get_mcp_hr_service_client_json)
+    local client_json
+    client_json=$(get_mcp_hr_service_client_json)
    create_or_update_client "mcp-hr-service" "$client_json"
 
     # Set client secret and fullScopeAllowed explicitly
-    local uuid=$(get_client_uuid "mcp-hr-service")
+    local uuid
+    uuid=$(get_client_uuid "mcp-hr-service")
     if [ -n "$uuid" ]; then
         log_info "  Setting client secret..."
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
@@ -364,10 +388,12 @@ sync_mcp_hr_service_client() {
 
     # Assign service account roles for user management
     log_info "  Assigning realm-management roles to service account..."
-    local service_account_id=$(_kcadm get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+    local service_account_id
+    service_account_id=$(_kcadm get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
     if [ -n "$service_account_id" ]; then
         # Get realm-management client UUID
-        local realm_mgmt_uuid=$(get_client_uuid "realm-management")
+        local realm_mgmt_uuid
+        realm_mgmt_uuid=$(get_client_uuid "realm-management")
         if [ -n "$realm_mgmt_uuid" ]; then
             # Assign manage-users role
             log_info "  Assigning manage-users role..."
@@ -439,7 +465,7 @@ sync_sample_app_clients() {
     local domain
     case "${ENV:-dev}" in
         dev)
-            domain="tamshai.local"
+            domain="tamshai-playground.local"
             ;;
         stage)
             domain="www.tamshai.com"
@@ -480,4 +506,157 @@ sync_sample_app_clients() {
 
        create_or_update_client "$app" "$client_json"
     done
+}
+
+# =============================================================================
+# Integration Test Client (T1/T3 — Security Audit Remediation)
+# =============================================================================
+
+# Generate JSON for mcp-integration-runner client (confidential, dev-only)
+# T1: Dedicated test client for integration tests — replaces mcp-gateway usage in tests.
+# T3: Network-gated to localhost only (never internet-accessible).
+get_integration_runner_client_json() {
+    cat <<EOF
+{
+    "clientId": "mcp-integration-runner",
+    "name": "MCP Integration Test Runner",
+    "description": "Confidential client for automated integration tests (dev only)",
+    "enabled": true,
+    "publicClient": false,
+    "standardFlowEnabled": false,
+    "directAccessGrantsEnabled": false,
+    "serviceAccountsEnabled": true,
+    "protocol": "openid-connect",
+    "redirectUris": ["http://localhost/*", "http://127.0.0.1/*"],
+    "webOrigins": ["http://localhost", "http://127.0.0.1"],
+    "fullScopeAllowed": true,
+    "defaultClientScopes": ["openid", "profile", "email", "roles"]
+}
+EOF
+}
+
+# Sync mcp-integration-runner client (dev-only)
+# T1: Creates/updates a dedicated test client so integration tests don't use mcp-gateway.
+# T3: Guarded to dev only — returns early in prod/stage.
+sync_integration_runner_client() {
+    # Only create in dev and CI environments (test-only client)
+    # Production environments (stage, prod) should NOT have this client
+    if [ "${ENV:-dev}" != "dev" ] && [ "${ENV:-dev}" != "ci" ]; then
+        log_info "Skipping mcp-integration-runner client (test environments only)"
+        return 0
+    fi
+
+    log_info "Syncing mcp-integration-runner client (integration tests, ENV=${ENV:-dev})..."
+
+    local client_json
+    client_json=$(get_integration_runner_client_json)
+    create_or_update_client "mcp-integration-runner" "$client_json"
+
+    # Set client secret from environment or generate one
+    local client_secret="${MCP_INTEGRATION_RUNNER_SECRET:-}"
+    local uuid
+    uuid=$(get_client_uuid "mcp-integration-runner")
+
+    if [ -n "$uuid" ]; then
+        if [ -n "$client_secret" ]; then
+            log_info "  Setting client secret from MCP_INTEGRATION_RUNNER_SECRET..."
+            _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
+                log_warn "  Failed to set client secret via update"
+            }
+        else
+            log_info "  No MCP_INTEGRATION_RUNNER_SECRET set — using Keycloak-generated secret"
+            log_info "  To set a specific secret: export MCP_INTEGRATION_RUNNER_SECRET=<secret>"
+        fi
+
+        # Grant the 'impersonate' role to the service account for token exchange
+        log_info "  Assigning 'impersonate' role to service account..."
+        local service_account_id
+        service_account_id=$(_kcadm get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+        if [ -n "$service_account_id" ]; then
+            local realm_mgmt_uuid
+            realm_mgmt_uuid=$(get_client_uuid "realm-management")
+            if [ -n "$realm_mgmt_uuid" ]; then
+                if _kcadm add-roles -r "$REALM" --uusername "service-account-mcp-integration-runner" --cclientid realm-management --rolename impersonate; then
+                    log_info "    'impersonate' role assigned successfully."
+                else
+                    log_warn "    Could not assign 'impersonate' role (may already be assigned)."
+                fi
+            fi
+        fi
+
+        # Assign default client scopes for token exchange claims
+        # Without these scopes, exchanged tokens will be missing:
+        # - preferred_username (from 'profile' scope via 'roles' scope mappers)
+        # - realm_access.roles (from 'roles' scope)
+        # - groups (from 'roles' scope)
+        log_info "  Assigning default client scopes for token exchange..."
+
+        # Default scopes (always included in token)
+        local default_scopes=("openid" "roles" "profile" "web-origins")
+        for scope_name in "${default_scopes[@]}"; do
+            # Get scope ID by name (kcadm endpoint requires ID)
+            local scope_id
+            scope_id=$(_kcadm get "client-scopes" -r "$REALM" --fields id,name 2>/dev/null | \
+                grep -B1 "\"$scope_name\"" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+            if [ -n "$scope_id" ]; then
+                if _kcadm update "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null; then
+                    log_info "    Assigned default scope '$scope_name'"
+                else
+                    log_info "    Default scope '$scope_name' already assigned"
+                fi
+            else
+                log_warn "    Default scope '$scope_name' not found in realm"
+            fi
+        done
+
+        # Optional scopes (included when explicitly requested)
+        local optional_scopes=("email")
+        for scope_name in "${optional_scopes[@]}"; do
+            local scope_id
+            scope_id=$(_kcadm get "client-scopes" -r "$REALM" --fields id,name 2>/dev/null | \
+                grep -B1 "\"$scope_name\"" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+            if [ -n "$scope_id" ]; then
+                if _kcadm update "clients/$uuid/optional-client-scopes/$scope_id" -r "$REALM" 2>/dev/null; then
+                    log_info "    Assigned optional scope '$scope_name'"
+                else
+                    log_info "    Optional scope '$scope_name' already assigned"
+                fi
+            else
+                log_warn "    Optional scope '$scope_name' not found in realm"
+            fi
+        done
+
+        # Add mcp-gateway audience mapper so exchanged tokens are accepted by the gateway
+        # Without this, the gateway rejects tokens with "jwt audience invalid"
+        log_info "  Adding mcp-gateway audience mapper..."
+        _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+            -s name="mcp-gateway-audience" \
+            -s protocol="openid-connect" \
+            -s protocolMapper="oidc-audience-mapper" \
+            -s consentRequired=false \
+            -s 'config."included.client.audience"="mcp-gateway"' \
+            -s 'config."id.token.claim"="false"' \
+            -s 'config."access.token.claim"="true"' 2>/dev/null || {
+            log_info "    Audience mapper already exists"
+        }
+
+        # Add explicit username mapper to ensure preferred_username is included
+        # This guarantees the claim exists even if profile scope doesn't handle it for service accounts
+        log_info "  Adding username mapper for token exchange..."
+        _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+            -s name="username-mapper" \
+            -s protocol="openid-connect" \
+            -s protocolMapper="oidc-usermodel-property-mapper" \
+            -s consentRequired=false \
+            -s 'config."user.attribute"="username"' \
+            -s 'config."claim.name"="preferred_username"' \
+            -s 'config."jsonType.label"="String"' \
+            -s 'config."id.token.claim"="true"' \
+            -s 'config."access.token.claim"="true"' \
+            -s 'config."userinfo.token.claim"="true"' 2>/dev/null || {
+            log_info "    Username mapper already exists"
+        }
+    fi
+
+    log_info "  mcp-integration-runner client configured with token exchange scopes"
 }

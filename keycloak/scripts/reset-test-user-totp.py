@@ -12,7 +12,7 @@ Usage:
 Arguments:
     environment   - dev, stage, or prod
     username      - Keycloak username (default: test-user.journey)
-    totp_secret   - Base32-encoded TOTP secret (default: JBSWY3DPEHPK3PXP)
+    totp_secret   - Base32-encoded TOTP secret (default: ***REDACTED_TOTP***)
     password      - User password (default: from TEST_USER_PASSWORD env var)
 
 Examples:
@@ -21,7 +21,7 @@ Examples:
     python reset-test-user-totp.py prod
 
     # Passing password as argument:
-    python reset-test-user-totp.py prod test-user.journey JBSWY3DPEHPK3PXP "your-password"
+    python reset-test-user-totp.py prod test-user.journey ***REDACTED_TOTP*** "your-password"
 
 Requirements:
     - KEYCLOAK_ADMIN_PASSWORD environment variable
@@ -40,14 +40,14 @@ import requests
 
 # Environment configuration
 ENVIRONMENTS = {
-    "dev": "https://www.tamshai.local/auth",
+    "dev": "https://www.tamshai-playground.local/auth",
     "stage": "https://www.tamshai.com/auth",
     "prod": "https://keycloak-fn44nd7wba-uc.a.run.app/auth",
 }
 
 REALM = "tamshai-corp"
 DEFAULT_USERNAME = "test-user.journey"
-DEFAULT_TOTP_SECRET = "JBSWY3DPEHPK3PXP"
+DEFAULT_TOTP_SECRET = "***REDACTED_TOTP***"
 DEFAULT_PASSWORD = os.environ.get("TEST_USER_PASSWORD", "")
 
 

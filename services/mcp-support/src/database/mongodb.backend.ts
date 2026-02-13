@@ -20,6 +20,15 @@ import {
 import { getCollection, buildRoleFilter, checkConnection as checkMongoConnection } from './connection';
 
 /**
+ * Escape special regex characters to prevent NoSQL injection
+ * When user input is used in $regex, unescaped characters like .* can be exploited
+ */
+function escapeRegex(str: string): string {
+  // Escape all regex special characters: . * + ? ^ $ { } ( ) | [ ] \
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Cursor structure for MongoDB keyset pagination
  */
 interface MongoDBCursor {
@@ -80,11 +89,13 @@ export class MongoDBBackend implements ISupportBackend {
 
     // Add text search filter if query provided
     // Note: This is basic regex search, not full-text search like Elasticsearch
+    // Security: Escape regex special characters to prevent NoSQL injection
     if (query) {
+      const escapedQuery = escapeRegex(query);
       mongoFilter.$or = [
-        { title: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { tags: { $regex: query, $options: 'i' } },
+        { title: { $regex: escapedQuery, $options: 'i' } },
+        { description: { $regex: escapedQuery, $options: 'i' } },
+        { tags: { $regex: escapedQuery, $options: 'i' } },
       ];
     }
 
@@ -146,10 +157,23 @@ export class MongoDBBackend implements ISupportBackend {
   async updateTicket(ticketId: string, updates: Partial<SupportTicket>): Promise<boolean> {
     const ticketsCollection = await getCollection('tickets');
 
-    // Remove _id from updates if present (can't update _id field)
-    const { _id, ...cleanUpdates } = updates as any;
+    // Security: Whitelist allowed update fields to prevent NoSQL injection
+    const allowedFields = [
+      'title', 'description', 'status', 'priority',
+      'assigned_to', 'tags', 'resolution', 'closed_at', 'closed_by', 'updated_at'
+    ] as const;
 
-    const result = await ticketsCollection.updateOne({ ticket_id: ticketId }, { $set: cleanUpdates });
+    const safeUpdates: Record<string, unknown> = {};
+    for (const field of allowedFields) {
+      if (field in updates && updates[field] !== undefined) {
+        safeUpdates[field] = updates[field];
+      }
+    }
+
+    // Ensure updated_at is set
+    safeUpdates['updated_at'] = new Date().toISOString();
+
+    const result = await ticketsCollection.updateOne({ ticket_id: ticketId }, { $set: safeUpdates });
 
     return result.matchedCount > 0;
   }

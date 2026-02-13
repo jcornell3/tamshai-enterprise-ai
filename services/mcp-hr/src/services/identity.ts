@@ -109,17 +109,17 @@ export const DEPARTMENT_ROLE_MAP: Record<string, string> = {
  * Email Domain Transformation
  *
  * HR database uses @tamshai.com as the canonical email domain (source of truth).
- * In development, emails are transformed to @tamshai.local to match the dev realm.
+ * In development, emails are transformed to @tamshai-playground.local to match the dev realm.
  *
  * Environment detection:
- * - ENVIRONMENT=dev or unset: Transform @tamshai.com → @tamshai.local
+ * - ENVIRONMENT=dev or unset: Transform @tamshai.com → @tamshai-playground.local
  * - ENVIRONMENT=stage or prod: No transformation (uses @tamshai.com)
  *
  * This allows a single source of truth for employee data while supporting
  * local development without DNS/email conflicts.
  */
 export const EMAIL_DOMAIN_CONFIG = {
-  DEV_DOMAIN: 'tamshai.local',
+  DEV_DOMAIN: 'tamshai-playground.local',
   PROD_DOMAIN: 'tamshai.com',
 } as const;
 
@@ -127,7 +127,7 @@ export const EMAIL_DOMAIN_CONFIG = {
  * Transform email domain based on environment.
  *
  * @param email - Original email from HR database (e.g., alice@tamshai.com)
- * @returns Transformed email for target environment (e.g., alice@tamshai.local in dev)
+ * @returns Transformed email for target environment (e.g., alice@tamshai-playground.local in dev)
  */
 export function transformEmailForEnvironment(email: string): string {
   const environment = process.env.ENVIRONMENT || 'dev';
@@ -137,7 +137,7 @@ export function transformEmailForEnvironment(email: string): string {
     return email;
   }
 
-  // In dev, transform @tamshai.com to @tamshai.local
+  // In dev, transform @tamshai.com to @tamshai-playground.local
   if (email.endsWith(`@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`)) {
     return email.replace(
       `@${EMAIL_DOMAIN_CONFIG.PROD_DOMAIN}`,
@@ -153,10 +153,10 @@ export function transformEmailForEnvironment(email: string): string {
  * Transform email domain from Keycloak format to HR database format for lookups.
  *
  * This is the reverse of transformEmailForEnvironment(). When Keycloak users
- * have @tamshai.local emails (dev environment), we need to transform them
+ * have @tamshai-playground.local emails (dev environment), we need to transform them
  * to @tamshai.com to look up records in the HR database.
  *
- * @param email - Email from Keycloak/user context (e.g., alice@tamshai.local in dev)
+ * @param email - Email from Keycloak/user context (e.g., alice@tamshai-playground.local in dev)
  * @returns Email for HR database lookup (e.g., alice@tamshai.com)
  */
 export function transformEmailForDatabaseLookup(email: string): string {
@@ -167,7 +167,7 @@ export function transformEmailForDatabaseLookup(email: string): string {
     return email;
   }
 
-  // In dev, transform @tamshai.local back to @tamshai.com for DB lookup
+  // In dev, transform @tamshai-playground.local back to @tamshai.com for DB lookup
   if (email.endsWith(`@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`)) {
     return email.replace(
       `@${EMAIL_DOMAIN_CONFIG.DEV_DOMAIN}`,
@@ -447,7 +447,7 @@ export class IdentityService {
       const username = `${employeeData.firstName.toLowerCase()}.${employeeData.lastName.toLowerCase()}`;
 
       // Transform email domain based on environment
-      // Dev: @tamshai.local (from HR data as-is)
+      // Dev: @tamshai-playground.local (from HR data as-is)
       // Stage/Prod: @tamshai.com (transformed)
       const email = transformEmailForEnvironment(employeeData.email);
 

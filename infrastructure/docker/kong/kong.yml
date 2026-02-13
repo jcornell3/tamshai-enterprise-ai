@@ -87,6 +87,19 @@ routes:
     strip_path: false
     preserve_host: true
 
+  # Admin API for E2E test database management (snapshot/rollback)
+  - name: admin-route
+    service: mcp-gateway-service
+    paths:
+      - ~/api/admin/.*
+    methods:
+      - GET
+      - POST
+      - DELETE
+      - OPTIONS
+    strip_path: false
+    preserve_host: true
+
   # User Info (protected)
   - name: user-info-route
     service: mcp-gateway-service
@@ -104,10 +117,22 @@ plugins:
   - name: cors
     config:
       origins:
+        # Local development (HTTP)
         - http://localhost:3100
         - http://localhost:4000
         - http://localhost:4001
         - http://localhost:4002
+        # Local development (HTTPS via Caddy/Terraform)
+        - https://www.tamshai-playground.local
+        - https://portal.tamshai-playground.local
+        - https://finance.tamshai-playground.local
+        - https://sales.tamshai-playground.local
+        - https://support.tamshai-playground.local
+        - https://hr.tamshai-playground.local
+        - https://payroll.tamshai-playground.local
+        - https://tax.tamshai-playground.local
+        - https://customer-support.tamshai-playground.local
+        # Desktop/mobile app schemes
         - tamshai-ai://*
         - com.tamshai.ai://*
       methods:

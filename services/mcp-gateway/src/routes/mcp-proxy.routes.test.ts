@@ -485,7 +485,13 @@ describe('MCP Proxy Routes', () => {
 
         expect(mockedAxios.post).toHaveBeenCalledWith(
           'http://localhost:3001/tools/create_employee',
-          requestBody,
+          expect.objectContaining({
+            ...requestBody,
+            userContext: expect.objectContaining({
+              userId: TEST_USERS.hrManager.userId,
+              roles: TEST_USERS.hrManager.roles,
+            }),
+          }),
           expect.objectContaining({
             headers: expect.objectContaining({
               'X-User-ID': TEST_USERS.hrManager.userId,

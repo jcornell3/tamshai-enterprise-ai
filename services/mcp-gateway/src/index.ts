@@ -16,9 +16,10 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 // jwt import removed - now handled by JWTValidator class
 import winston from 'winston';
@@ -41,10 +42,12 @@ import {
 import gdprRoutes from './routes/gdpr';
 import healthRoutes from './routes/health.routes';
 import userRoutes from './routes/user.routes';
+import adminRoutes from './routes/admin.routes';
+import approvalActionsRouter from './routes/approval-actions';
 import { JWTValidator } from './auth/jwt-validator';
 import { createAuthMiddleware } from './middleware/auth.middleware';
 import { createStreamingRoutes, drainConnections, getActiveConnectionCount } from './routes/streaming.routes';
-import { MCPClient, MCPQueryResult } from './mcp/mcp-client';
+import { MCPClient } from './mcp/mcp-client';
 import { createAIQueryRoutes } from './routes/ai-query.routes';
 import { createConfirmationRoutes } from './routes/confirmation.routes';
 import { createMCPProxyRoutes } from './routes/mcp-proxy.routes';
@@ -59,9 +62,9 @@ dotenv.config();
 const config = {
   port: parseInt(process.env.PORT || '3000'),
   keycloak: {
-    url: process.env.KEYCLOAK_URL || 'http://localhost:8180',
-    realm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-    clientId: process.env.KEYCLOAK_CLIENT_ID || 'mcp-gateway',
+    url: process.env.KEYCLOAK_URL,
+    realm: process.env.KEYCLOAK_REALM,
+    clientId: process.env.KEYCLOAK_CLIENT_ID,
     jwksUri: process.env.JWKS_URI || undefined,
     issuer: process.env.KEYCLOAK_ISSUER || undefined,
   },
@@ -71,10 +74,12 @@ const config = {
     maxTokens: parseInt(process.env.CLAUDE_MAX_TOKENS || '4096'),
   },
   mcpServers: {
-    hr: process.env.MCP_HR_URL || 'http://localhost:3001',
-    finance: process.env.MCP_FINANCE_URL || 'http://localhost:3002',
-    sales: process.env.MCP_SALES_URL || 'http://localhost:3003',
-    support: process.env.MCP_SUPPORT_URL || 'http://localhost:3004',
+    hr: process.env.MCP_HR_URL,
+    finance: process.env.MCP_FINANCE_URL,
+    sales: process.env.MCP_SALES_URL,
+    support: process.env.MCP_SUPPORT_URL,
+    payroll: process.env.MCP_PAYROLL_URL,
+    tax: process.env.MCP_TAX_URL,
   },
   // v1.5 Performance: Service timeout configuration
   timeouts: {
@@ -85,6 +90,26 @@ const config = {
   },
   logLevel: process.env.LOG_LEVEL || 'info',
 };
+
+// =============================================================================
+// STARTUP VALIDATION - Fail fast if required environment variables are missing
+// =============================================================================
+
+const requiredEnvVars = {
+  'KEYCLOAK_URL': config.keycloak.url,
+  'KEYCLOAK_REALM': config.keycloak.realm,
+  'KEYCLOAK_CLIENT_ID': config.keycloak.clientId,
+};
+
+const missingVars = Object.entries(requiredEnvVars)
+  .filter(([, value]) => !value)
+  .map(([name]) => name);
+
+if (missingVars.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missingVars.join(', ')}`);
+  console.error('The MCP Gateway cannot start without these configuration values.');
+  process.exit(1);
+}
 
 // =============================================================================
 // LOGGER SETUP
@@ -112,9 +137,10 @@ const logger = winston.createLogger({
 
 const jwtValidator = new JWTValidator(
   {
-    jwksUri: config.keycloak.jwksUri || `${config.keycloak.url}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`,
-    issuer: config.keycloak.issuer || `${config.keycloak.url}/realms/${config.keycloak.realm}`,
-    clientId: config.keycloak.clientId,
+    // Non-null assertions are safe here because startup validation ensures these values exist
+    jwksUri: config.keycloak.jwksUri || `${config.keycloak.url!}/realms/${config.keycloak.realm!}/protocol/openid-connect/certs`,
+    issuer: config.keycloak.issuer || `${config.keycloak.url!}/realms/${config.keycloak.realm!}`,
+    clientId: config.keycloak.clientId!,
   },
   logger
 );
@@ -154,26 +180,45 @@ const mcpServerConfigs: MCPServerConfig[] = [
   {
     name: 'hr',
     url: config.mcpServers.hr,
-    requiredRoles: ['hr-read', 'hr-write', 'executive'],
+    // 'employee' role grants self-access (own profile); department roles grant full access
+    requiredRoles: ['employee', 'hr-read', 'hr-write', 'executive'],
     description: 'HR data including employees, departments, org structure',
   },
   {
     name: 'finance',
     url: config.mcpServers.finance,
-    requiredRoles: ['finance-read', 'finance-write', 'executive'],
+    // v1.5 Tiered access: employee (expenses), manager (budgets), finance (all)
+    // Actual data access controlled by MCP Finance server's tiered authorization
+    requiredRoles: ['employee', 'manager', 'finance-read', 'finance-write', 'executive'],
     description: 'Financial data including budgets, reports, invoices',
   },
   {
     name: 'sales',
     url: config.mcpServers.sales,
+    // Sales data requires explicit sales roles (no employee self-access)
     requiredRoles: ['sales-read', 'sales-write', 'executive'],
     description: 'CRM data including customers, deals, pipeline',
   },
   {
     name: 'support',
     url: config.mcpServers.support,
-    requiredRoles: ['support-read', 'support-write', 'executive'],
+    // 'employee' role grants self-access (own tickets); department roles grant full access
+    requiredRoles: ['employee', 'support-read', 'support-write', 'executive'],
     description: 'Support data including tickets, knowledge base',
+  },
+  {
+    name: 'payroll',
+    url: config.mcpServers.payroll,
+    // 'employee' role grants self-access (own pay stubs); department roles grant full access
+    requiredRoles: ['employee', 'payroll-read', 'payroll-write', 'hr-read', 'hr-write', 'executive'],
+    description: 'Payroll data including pay stubs, deductions, tax withholdings',
+  },
+  {
+    name: 'tax',
+    url: config.mcpServers.tax,
+    // Tax data requires explicit tax/finance roles (no employee self-access)
+    requiredRoles: ['tax-read', 'tax-write', 'finance-read', 'finance-write', 'executive'],
+    description: 'Tax data including sales tax, quarterly estimates, annual filings',
   },
 ];
 
@@ -201,6 +246,7 @@ const mcpClient = new MCPClient(
     readTimeout: config.timeouts.mcpRead,
     writeTimeout: config.timeouts.mcpWrite,
     maxPages: 10,
+    internalSecret: process.env.MCP_INTERNAL_SECRET,
   },
   logger
 );
@@ -267,14 +313,16 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: (origin, callback) => {
+    const caddyHttpsPort = process.env.CADDY_HTTPS_PORT;
     const allowedOrigins = [
       // Local development
       'http://localhost:3100',     // MCP Gateway itself
       'http://localhost:4000',     // Portal app
       'http://localhost:4001',     // HR app
       'http://localhost:4002',     // Finance app
-      // Dev environment
-      'https://www.tamshai.local',
+      // Dev environment (port from DEV_CADDY_HTTPS GitHub variable)
+      'https://www.tamshai-playground.local',
+      ...(caddyHttpsPort ? [`https://www.tamshai-playground.local:${caddyHttpsPort}`] : []),
       // Stage environment
       'https://www.tamshai.com',
       // Production environment
@@ -312,8 +360,24 @@ app.use(cors({
   credentials: true,
   // Required for cross-origin requests with Authorization header
   // Without this, browser strips Authorization header from preflight requests
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'Accept-Encoding'],
 }));
+
+// v1.5 Performance: Response compression (60-70% size reduction)
+// Excludes SSE streams which need real-time delivery
+app.use(compression({
+  filter: (req: Request, res: Response) => {
+    // Don't compress SSE streams - they need real-time delivery
+    if (req.headers.accept === 'text/event-stream') {
+      return false;
+    }
+    // Use default compression filter for other requests
+    return compression.filter(req, res);
+  },
+  level: 6,       // Balance between speed and compression ratio
+  threshold: 1024, // Only compress responses > 1KB
+}));
+
 app.use(express.json({ limit: '10mb' }));
 
 // Request ID middleware
@@ -336,9 +400,9 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
-    // Use user ID if authenticated, otherwise use IP
+    // Use user ID if authenticated, otherwise use IP with IPv6 normalization
     const userContext = (req as AuthenticatedRequest).userContext;
-    return userContext?.userId || req.ip || 'unknown';
+    return userContext?.userId || ipKeyGenerator(req.ip || '');
   },
 });
 
@@ -351,7 +415,7 @@ const aiQueryLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     const userContext = (req as AuthenticatedRequest).userContext;
-    return userContext?.userId || req.ip || 'unknown';
+    return userContext?.userId || ipKeyGenerator(req.ip || '');
   },
 });
 
@@ -404,6 +468,14 @@ app.use(healthRoutes);
 // HR-only endpoints for GDPR data subject rights
 app.use('/api/admin/gdpr', authMiddleware, gdprRoutes);
 
+// =============================================================================
+// E2E TEST ADMIN ROUTES (v1.5 - Enterprise UX Hardening)
+// =============================================================================
+// Database snapshot/rollback for E2E test state isolation
+// Protected by X-Admin-Key header (no JWT required)
+// Only available in development/test environments
+app.use('/api/admin', adminRoutes);
+
 // User info and MCP tools routes - extracted to routes/user.routes.ts
 app.use(authMiddleware, userRoutes);
 
@@ -451,6 +523,7 @@ const streamingRouter = createStreamingRoutes({
   config: {
     claudeModel: config.claude.model,
     heartbeatIntervalMs: 15000,
+    claudeApiKey: config.claude.apiKey, // Enables mock mode when using sk-ant-test-* keys
   },
   getAccessibleServers: getAccessibleMCPServersForUser,
   queryMCPServer: mcpClient.queryServer.bind(mcpClient),
@@ -467,10 +540,19 @@ app.use('/api', authMiddleware, streamingRouter);
 const confirmationRouter = createConfirmationRoutes({
   logger,
   mcpServerUrls: config.mcpServers,
+  internalSecret: process.env.MCP_INTERNAL_SECRET,
 });
 
 // Mount confirmation routes at /api with auth
 app.use('/api', authMiddleware, confirmationRouter);
+
+// =============================================================================
+// APPROVAL WORKFLOW ROUTES (v1.5 - Generative UI)
+// =============================================================================
+// Gateway endpoints for approval workflows with auto-confirmation
+// Wraps MCP server approval tools for simplified approve/reject actions
+
+app.use('/api/mcp', authMiddleware, approvalActionsRouter);
 
 // =============================================================================
 // MCP PROXY ROUTES (Extracted for testability - Phase 7 Refactoring)
@@ -480,6 +562,7 @@ const mcpProxyRouter = createMCPProxyRoutes({
   logger,
   mcpServers: mcpServerConfigs,
   getAccessibleServers: getAccessibleMCPServersForUser,
+  internalSecret: process.env.MCP_INTERNAL_SECRET,
 });
 
 // Mount MCP proxy routes at /api with auth

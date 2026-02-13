@@ -3,7 +3,7 @@
 # Generate environment-specific Keycloak realm export
 #
 # This script generates realm exports with proper environment-specific values:
-# - Email domains (tamshai.local for dev, tamshai.com for stage/prod)
+# - Email domains (tamshai-playground.local for dev, tamshai.com for stage/prod)
 # - Redirect URIs
 # - Secret placeholders
 #
@@ -23,19 +23,19 @@ KEYCLOAK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Environment-specific configuration
 declare -A EMAIL_DOMAINS=(
-    ["dev"]="tamshai.local"
+    ["dev"]="tamshai-playground.local"
     ["stage"]="tamshai.com"
     ["prod"]="tamshai.com"
 )
 
 declare -A BASE_URLS=(
-    ["dev"]="https://www.tamshai.local"
+    ["dev"]="https://www.tamshai-playground.local"
     ["stage"]="https://www.tamshai.com"
     ["prod"]="https://app.tamshai.com"
 )
 
 declare -A AUTH_URLS=(
-    ["dev"]="https://www.tamshai.local/auth"
+    ["dev"]="https://www.tamshai-playground.local/auth"
     ["stage"]="https://www.tamshai.com/auth"
     ["prod"]="https://auth.tamshai.com/auth"
 )
@@ -80,7 +80,7 @@ Examples:
 Environment Configuration:
     Environment | Email Domain    | Base URL               | Auth URL
     ------------|-----------------|------------------------|-------------------------
-    dev         | tamshai.local   | https://www.tamshai.local  | https://www.tamshai.local/auth
+    dev         | tamshai-playground.local   | https://www.tamshai-playground.local  | https://www.tamshai-playground.local/auth
     stage       | tamshai.com     | https://www.tamshai.com    | https://www.tamshai.com/auth
     prod        | tamshai.com     | https://app.tamshai.com    | https://auth.tamshai.com/auth
 
@@ -171,7 +171,7 @@ generate_test_user() {
         },
         {
             "type": "otp",
-            "secretData": "{\"value\":\"JBSWY3DPEHPK3PXP\"}",
+            "secretData": "{\"value\":\"***REDACTED_TOTP***\"}",
             "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
         }
     ]
@@ -217,7 +217,7 @@ generate_client_redirects() {
 
     case $env in
         dev)
-            echo '["http://localhost:*", "https://www.tamshai.local/*", "https://localhost:*"]'
+            echo '["http://localhost:*", "https://www.tamshai-playground.local/*", "https://localhost:*"]'
             ;;
         stage)
             echo '["https://www.tamshai.com/*", "https://vps.tamshai.com/*"]'
@@ -234,7 +234,7 @@ generate_web_origins() {
 
     case $env in
         dev)
-            echo '["http://localhost:3000", "http://localhost:5173", "https://www.tamshai.local"]'
+            echo '["http://localhost:3000", "http://localhost:5173", "https://www.tamshai-playground.local"]'
             ;;
         stage)
             echo '["https://www.tamshai.com", "https://vps.tamshai.com"]'
@@ -312,23 +312,31 @@ if [ -n "$TEMPLATE_FILE" ]; then
 
     # Update email domain for users
     if [ "$ENV" = "dev" ]; then
-        # Replace @tamshai.com with @tamshai.local for dev
-        REALM_JSON=$(echo "$REALM_JSON" | sed 's/@tamshai\.com/@tamshai.local/g')
+        # Replace @tamshai.com with @tamshai-playground.local for dev
+        REALM_JSON=$(echo "$REALM_JSON" | sed 's/@tamshai\.com/@tamshai-playground.local/g')
     else
-        # Replace @tamshai.local with @tamshai.com for stage/prod
+        # Replace @tamshai-playground.local with @tamshai.com for stage/prod
         REALM_JSON=$(echo "$REALM_JSON" | sed 's/@tamshai\.local/@tamshai.com/g')
     fi
 
     # Update test user credentials based on environment
     if [ "$ENV" = "dev" ]; then
-        # For dev, replace placeholders with actual dev values
-        REALM_JSON=$(echo "$REALM_JSON" | sed 's/__TEST_USER_PASSWORD__/Test123!Journey/g')
-        REALM_JSON=$(echo "$REALM_JSON" | sed 's/__TEST_USER_TOTP_SECRET__/JBSWY3DPEHPK3PXP/g')
+        # For dev, replace placeholders with values from environment (GitHub secrets)
+        local test_password="${TEST_USER_PASSWORD:-}"
+        local test_totp="${TEST_USER_TOTP_SECRET:-***REDACTED_TOTP***}"
+
+        if [ -n "$test_password" ]; then
+            REALM_JSON=$(echo "$REALM_JSON" | sed "s/__TEST_USER_PASSWORD__/$test_password/g")
+        else
+            log_warn "TEST_USER_PASSWORD not set - test-user.journey will use placeholder password"
+            REALM_JSON=$(echo "$REALM_JSON" | sed 's/__TEST_USER_PASSWORD__/__PLACEHOLDER_PASSWORD__/g')
+        fi
+        REALM_JSON=$(echo "$REALM_JSON" | sed "s/__TEST_USER_TOTP_SECRET__/$test_totp/g")
     else
         # For stage/prod, ensure placeholders are used (they may already be)
         # Only transform if hardcoded values exist
         REALM_JSON=$(echo "$REALM_JSON" | sed 's/"value": "Test123!Journey"/"value": "__TEST_USER_PASSWORD__"/g')
-        REALM_JSON=$(echo "$REALM_JSON" | sed 's/JBSWY3DPEHPK3PXP/__TEST_USER_TOTP_SECRET__/g')
+        REALM_JSON=$(echo "$REALM_JSON" | sed 's/***REDACTED_TOTP***/__TEST_USER_TOTP_SECRET__/g')
     fi
 else
     log_warn "No template found, generating minimal realm structure"
@@ -376,7 +384,7 @@ else
         dev)
             echo ""
             log_info "Dev Notes:"
-            log_info "  - Email domain: tamshai.local"
+            log_info "  - Email domain: tamshai-playground.local"
             log_info "  - Test credentials: hardcoded (safe for dev)"
             log_info "  - Use with: terraform apply -var-file=dev.tfvars"
             ;;

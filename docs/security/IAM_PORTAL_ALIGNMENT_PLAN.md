@@ -68,7 +68,7 @@ sync_web_portal_client() {
 
     local domain
     case "$ENV" in
-        dev)   domain="tamshai.local" ;;
+        dev)   domain="tamshai-playground.local" ;;
         stage) domain="www.tamshai.com" ;;
         prod)  domain="prod.tamshai.com" ;;
         *)     domain="localhost" ;;

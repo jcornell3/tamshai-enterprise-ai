@@ -243,7 +243,21 @@ sync_keycloak_dev() {
     docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
     docker exec tamshai-keycloak /tmp/sync-realm.sh dev
 
-    log_info "Keycloak sync complete"
+    # Sync customer realm
+    log_info "Syncing customer realm..."
+    local customer_sync_script="$PROJECT_ROOT/keycloak/scripts/sync-customer-realm.sh"
+    local lib_dir="$PROJECT_ROOT/keycloak/scripts/lib"
+    docker cp "$customer_sync_script" tamshai-keycloak:/tmp/sync-customer-realm.sh
+    docker cp "$lib_dir" tamshai-keycloak:/tmp/lib
+    docker exec -u 0 tamshai-keycloak bash -c '
+        sed -i "s/\r$//" /tmp/sync-customer-realm.sh
+        find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \;
+        chmod 755 /tmp/sync-customer-realm.sh
+        find /tmp/lib -name "*.sh" -exec chmod +x {} \;
+    '
+    docker exec -e CUSTOMER_USER_PASSWORD="${CUSTOMER_USER_PASSWORD:-}" tamshai-keycloak /tmp/sync-customer-realm.sh dev
+
+    log_info "Keycloak sync complete (employee + customer realms)"
 }
 
 sync_keycloak_stage() {
@@ -278,6 +292,17 @@ echo "=== Syncing Keycloak realm (clients, roles) ==="
 docker cp keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
 docker exec -u 0 tamshai-keycloak bash -c 'sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh'
 docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" tamshai-keycloak /tmp/sync-realm.sh stage
+
+echo "=== Syncing customer realm ==="
+docker cp keycloak/scripts/sync-customer-realm.sh tamshai-keycloak:/tmp/sync-customer-realm.sh
+docker cp keycloak/scripts/lib tamshai-keycloak:/tmp/lib
+docker exec -u 0 tamshai-keycloak bash -c '
+    sed -i "s/\r$//" /tmp/sync-customer-realm.sh
+    find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \;
+    chmod 755 /tmp/sync-customer-realm.sh
+    find /tmp/lib -name "*.sh" -exec chmod +x {} \;
+'
+docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" -e CUSTOMER_USER_PASSWORD="${CUSTOMER_USER_PASSWORD:-}" tamshai-keycloak /tmp/sync-customer-realm.sh stage
 
 echo "=== Syncing HR users to Keycloak ==="
 # Use --build to ensure latest code is used (image may be cached)

@@ -160,6 +160,11 @@ sync_c_suite_group() {
 
 # Sync the All-Employees group with the employee role
 # This group grants access to all MCP servers, with data filtering via RLS
+#
+# IMPORTANT: This function explicitly removes incorrect roles (executive, manager)
+# from All-Employees. This is necessary because Keycloak's multi-realm import
+# can sometimes assign incorrect roles to groups. This defensive cleanup ensures
+# the All-Employees group only has the 'employee' role as intended.
 sync_all_employees_group() {
     log_info "Syncing All-Employees group..."
 
@@ -195,6 +200,18 @@ sync_all_employees_group() {
             --rolename employee 2>/dev/null || {
             log_info "    Role may already be assigned"
         }
+
+        # Defensive cleanup: Remove roles that should NOT be on All-Employees
+        # This addresses a Keycloak import issue where multi-realm imports can
+        # incorrectly assign roles from other groups to All-Employees
+        for incorrect_role in "executive" "manager"; do
+            log_info "  Checking for incorrect '$incorrect_role' role on All-Employees..."
+            if _kcadm remove-roles -r "$REALM" \
+                --gid "$group_id" \
+                --rolename "$incorrect_role" 2>/dev/null; then
+                log_info "    Removed incorrect '$incorrect_role' role from All-Employees"
+            fi
+        done
     fi
 
     log_info "  All-Employees group sync complete"
@@ -219,7 +236,7 @@ assign_user_groups() {
     # Format: username:group1,group2 (group names without leading /)
     local -a user_groups=(
         "eve.thompson:All-Employees,C-Suite"
-        "alice.chen:All-Employees,HR-Department,Managers"
+        "alice.chen:All-Employees,HR-Department,Payroll-Team,Managers"
         "bob.martinez:All-Employees,Finance-Team,Managers"
         "carol.johnson:All-Employees,Sales-Managers"
         "dan.williams:All-Employees,Support-Team,Managers"
@@ -290,6 +307,7 @@ assign_critical_prod_users() {
         "sarah.kim:C-Suite"
         "james.wilson:C-Suite"
         "test-user.journey:All-Employees"
+        "test-user.journey:C-Suite"
     )
 
     for mapping in "${critical_users[@]}"; do

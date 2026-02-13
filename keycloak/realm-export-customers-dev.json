@@ -1,0 +1,423 @@
+{
+  "id": "tamshai-customers",
+  "realm": "tamshai-customers",
+  "displayName": "Tamshai Customer Support",
+  "displayNameHtml": "<div class=\"kc-logo-text\"><span>Tamshai</span> Customer Portal</div>",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": true,
+  "verifyEmail": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "accessTokenLifespan": 14400,
+  "accessTokenLifespanForImplicitFlow": 14400,
+  "ssoSessionIdleTimeout": 28800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+    "roles": {
+    "realm": [
+      {
+        "name": "lead-customer",
+        "description": "Lead Customer Contact - can view all org tickets and manage contacts"
+      },
+      {
+        "name": "basic-customer",
+        "description": "Basic Customer - can only view/create own tickets"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "Lead-Contacts",
+      "path": "/Lead-Contacts",
+      "realmRoles": [
+        "lead-customer"
+      ]
+    },
+    {
+      "name": "Basic-Contacts",
+      "path": "/Basic-Contacts",
+      "realmRoles": [
+        "basic-customer"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "jane.smith@acme.com",
+      "email": "jane.smith@acme.com",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "***REDACTED_PASSWORD***",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Lead-Contacts"
+      ],
+      "attributes": {
+        "organization_id": ["org-acme-001"],
+        "organization_name": ["Acme Corporation"],
+        "title": ["IT Director"]
+      }
+    },
+    {
+      "username": "bob.developer@acme.com",
+      "email": "bob.developer@acme.com",
+      "firstName": "Bob",
+      "lastName": "Developer",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "***REDACTED_PASSWORD***",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Basic-Contacts"
+      ],
+      "attributes": {
+        "organization_id": ["org-acme-001"],
+        "organization_name": ["Acme Corporation"],
+        "title": ["Software Developer"]
+      }
+    },
+    {
+      "username": "mike.manager@globex.com",
+      "email": "mike.manager@globex.com",
+      "firstName": "Mike",
+      "lastName": "Manager",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "***REDACTED_PASSWORD***",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Lead-Contacts"
+      ],
+      "attributes": {
+        "organization_id": ["org-globex-002"],
+        "organization_name": ["Globex Industries"],
+        "title": ["Operations Manager"]
+      }
+    },
+    {
+      "username": "sara.support@globex.com",
+      "email": "sara.support@globex.com",
+      "firstName": "Sara",
+      "lastName": "Support",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "***REDACTED_PASSWORD***",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Basic-Contacts"
+      ],
+      "attributes": {
+        "organization_id": ["org-globex-002"],
+        "organization_name": ["Globex Industries"],
+        "title": ["Support Specialist"]
+      }
+    },
+    {
+      "username": "peter.principal@initech.com",
+      "email": "peter.principal@initech.com",
+      "firstName": "Peter",
+      "lastName": "Principal",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "***REDACTED_PASSWORD***",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Lead-Contacts"
+      ],
+      "attributes": {
+        "organization_id": ["org-initech-003"],
+        "organization_name": ["Initech Solutions"],
+        "title": ["IT Manager"]
+      }
+    },
+    {
+      "username": "tim.tech@initech.com",
+      "email": "tim.tech@initech.com",
+      "firstName": "Tim",
+      "lastName": "Tech",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "***REDACTED_PASSWORD***",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Basic-Contacts"
+      ],
+      "attributes": {
+        "organization_id": ["org-initech-003"],
+        "organization_name": ["Initech Solutions"],
+        "title": ["Developer"]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "customer-portal",
+      "name": "Customer Support Portal",
+      "description": "Customer-facing support portal web application",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "http://localhost:4006",
+      "baseUrl": "/",
+      "redirectUris": [
+        "http://localhost:4006/*",
+        "http://127.0.0.1:4017/*",
+        "http://localhost:4017/*",
+        "https://customers.tamshai-playground.local/*",
+        "https://customers.tamshai-playground.local:8443/*",
+        "https://customers.tamshai.com/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4006",
+        "http://127.0.0.1:4017",
+        "http://localhost:4017",
+        "https://customers.tamshai-playground.local",
+        "https://customers.tamshai-playground.local:8443",
+        "https://customers.tamshai.com"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4006/*##http://127.0.0.1:4017/*##https://customers.tamshai-playground.local/*##https://customers.tamshai-playground.local:8443/*"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "organization",
+        "roles"
+      ],
+      "optionalClientScopes": []
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "organization",
+      "description": "Organization membership scope for customer contacts",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Access your organization information"
+      },
+      "protocolMappers": [
+        {
+          "name": "organization_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "organization_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "organization_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "organization_name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "organization_name",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "organization_name",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "OpenID Connect built-in scope: profile",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${profileScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "given_name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "firstName",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "given_name",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "family_name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "lastName",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "family_name",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "full_name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "username",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "OpenID Connect built-in scope: email",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "${emailScopeConsentText}"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "OpenID Connect scope for roles",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "foo",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "openid",
+    "profile",
+    "email",
+    "organization",
+    "roles"
+  ],
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "rsa-generated",
+        "providerId": "rsa-generated",
+        "subComponents": {},
+        "config": {
+          "priority": ["100"]
+        }
+      }
+    ]
+  }
+}

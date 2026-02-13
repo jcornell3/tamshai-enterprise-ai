@@ -248,9 +248,10 @@ describe('Streaming Routes', () => {
       await handler(req, res, next);
 
       // Cursor should have been passed to MCP query
+      // Note: Query is wrapped in XML tags by prompt defense Layer 3
       expect(mockQueryMCPServer).toHaveBeenCalledWith(
         mockHRServer,
-        'list employees',
+        '<user_query>list employees</user_query>',
         expect.objectContaining({ userId: TEST_USERS.hrManager.userId }),
         'page-2-cursor'
       );
@@ -406,9 +407,9 @@ describe('Streaming Routes', () => {
         status: 'success',
       });
 
-      let capturedSystemPrompt = '';
+      let capturedSystemBlocks: unknown[] = [];
       mockAnthropic.messages.stream.mockImplementation(({ system }) => {
-        capturedSystemPrompt = system as string;
+        capturedSystemBlocks = system as unknown[];
         return createMockStream([
           { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Response' } },
         ]);
@@ -420,9 +421,11 @@ describe('Streaming Routes', () => {
 
       await handler(req, res, next);
 
-      expect(capturedSystemPrompt).toContain('TRUNCATION WARNING');
-      expect(capturedSystemPrompt).toContain('mcp-hr');
-      expect(capturedSystemPrompt).toContain('50');
+      // System prompt is now TextBlockParam[], instructions block contains truncation warnings
+      const instructionsText = (capturedSystemBlocks[0] as { text: string }).text;
+      expect(instructionsText).toContain('TRUNCATION WARNING');
+      expect(instructionsText).toContain('mcp-hr');
+      expect(instructionsText).toContain('50');
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Truncation detected in MCP response',
@@ -504,9 +507,9 @@ describe('Streaming Routes', () => {
         status: 'success',
       });
 
-      let capturedSystemPrompt = '';
+      let capturedSystemBlocks: unknown[] = [];
       mockAnthropic.messages.stream.mockImplementation(({ system }) => {
-        capturedSystemPrompt = system as string;
+        capturedSystemBlocks = system as unknown[];
         return createMockStream([
           { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Response' } },
         ]);
@@ -518,8 +521,9 @@ describe('Streaming Routes', () => {
 
       await handler(req, res, next);
 
-      expect(capturedSystemPrompt).toContain('PAGINATION INFO');
-      expect(capturedSystemPrompt).toContain('More data is available');
+      const instructionsText = (capturedSystemBlocks[0] as { text: string }).text;
+      expect(instructionsText).toContain('PAGINATION INFO');
+      expect(instructionsText).toContain('More data is available');
     });
   });
 
@@ -633,7 +637,7 @@ describe('Streaming Routes', () => {
       return handler;
     }
 
-    it('should include user context in system prompt', async () => {
+    it('should include user context in system prompt as TextBlockParam[]', async () => {
       mockGetAccessibleServers.mockReturnValue([mockHRServer]);
       mockQueryMCPServer.mockResolvedValue({
         server: 'mcp-hr',
@@ -641,9 +645,9 @@ describe('Streaming Routes', () => {
         status: 'success',
       });
 
-      let capturedSystemPrompt = '';
+      let capturedSystemBlocks: unknown[] = [];
       mockAnthropic.messages.stream.mockImplementation(({ system }) => {
-        capturedSystemPrompt = system as string;
+        capturedSystemBlocks = system as unknown[];
         return createMockStream([
           { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Response' } },
         ]);
@@ -655,21 +659,29 @@ describe('Streaming Routes', () => {
 
       await handler(req, res, next);
 
-      expect(capturedSystemPrompt).toContain(TEST_USERS.hrManager.username);
-      expect(capturedSystemPrompt).toContain(TEST_USERS.hrManager.email);
-      expect(capturedSystemPrompt).toContain('hr-read');
-      expect(capturedSystemPrompt).toContain('[Data from mcp-hr]');
-      expect(capturedSystemPrompt).toContain('Employee Data');
-      expect(capturedSystemPrompt).toContain('Tamshai Corp');
-      expect(capturedSystemPrompt).toContain('family investment management');
+      // System prompt is now TextBlockParam[]
+      expect(Array.isArray(capturedSystemBlocks)).toBe(true);
+      expect(capturedSystemBlocks).toHaveLength(2);
+
+      const instructionsText = (capturedSystemBlocks[0] as { type: string; text: string }).text;
+      expect(instructionsText).toContain(TEST_USERS.hrManager.username);
+      expect(instructionsText).toContain(TEST_USERS.hrManager.email);
+      expect(instructionsText).toContain('hr-read');
+      expect(instructionsText).toContain('Tamshai Corp');
+      expect(instructionsText).toContain('family investment management');
+
+      const dataBlock = capturedSystemBlocks[1] as { type: string; text: string; cache_control?: unknown };
+      expect(dataBlock.text).toContain('[Data from mcp-hr]');
+      expect(dataBlock.text).toContain('Employee Data');
+      expect(dataBlock.cache_control).toEqual({ type: 'ephemeral' });
     });
 
     it('should handle empty data context gracefully', async () => {
       mockGetAccessibleServers.mockReturnValue([]);
 
-      let capturedSystemPrompt = '';
+      let capturedSystemBlocks: unknown[] = [];
       mockAnthropic.messages.stream.mockImplementation(({ system }) => {
-        capturedSystemPrompt = system as string;
+        capturedSystemBlocks = system as unknown[];
         return createMockStream([
           { type: 'content_block_delta', delta: { type: 'text_delta', text: 'No data' } },
         ]);
@@ -680,7 +692,8 @@ describe('Streaming Routes', () => {
 
       await handler(req, res, next);
 
-      expect(capturedSystemPrompt).toContain('No relevant data available');
+      const dataBlock = capturedSystemBlocks[1] as { text: string };
+      expect(dataBlock.text).toContain('No relevant data available');
     });
   });
 
@@ -741,7 +754,11 @@ describe('Streaming Routes', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         'SSE query completed',
-        expect.objectContaining({ requestId: expect.any(String) })
+        expect.objectContaining({
+          requestId: expect.any(String),
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+        })
       );
     });
   });
@@ -868,7 +885,8 @@ describe('Streaming Routes', () => {
       await handler(req, res, next);
 
       const allData = res._writtenData.join('');
-      expect(allData).toContain('Finance data');
+      // Query "show budget" triggers directive pre-processing
+      expect(allData).toContain('display:finance:budget');
       expect(mockLogger.info).toHaveBeenCalledWith(
         'SSE Query received',
         expect.objectContaining({
@@ -891,9 +909,9 @@ describe('Streaming Routes', () => {
           status: 'success',
         });
 
-      let capturedSystemPrompt = '';
+      let capturedSystemBlocks: unknown[] = [];
       mockAnthropic.messages.stream.mockImplementation(({ system }) => {
-        capturedSystemPrompt = system as string;
+        capturedSystemBlocks = system as unknown[];
         return createMockStream([
           { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Executive view' } },
         ]);
@@ -911,9 +929,10 @@ describe('Streaming Routes', () => {
       // Both MCP servers should have been queried
       expect(mockQueryMCPServer).toHaveBeenCalledTimes(2);
 
-      // System prompt should contain data from both servers
-      expect(capturedSystemPrompt).toContain('[Data from mcp-hr]');
-      expect(capturedSystemPrompt).toContain('[Data from mcp-finance]');
+      // Data block should contain data from both servers
+      const dataBlock = capturedSystemBlocks[1] as { text: string };
+      expect(dataBlock.text).toContain('[Data from mcp-hr]');
+      expect(dataBlock.text).toContain('[Data from mcp-finance]');
     });
   });
 });

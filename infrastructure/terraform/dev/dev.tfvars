@@ -24,9 +24,9 @@
 # =============================================================================
 
 environment            = "dev"
-project_root           = "C:/Users/jcorn/tamshai-enterprise-ai"
+project_root           = "C:/Users/jcorn/Tamshai-AI-Playground"
 docker_compose_dir     = "infrastructure/docker"
-docker_compose_project = "tamshai-dev"
+docker_compose_project = "tamshai-playground"
 
 # =============================================================================
 # AUTOMATION SETTINGS
@@ -39,12 +39,15 @@ auto_remove_volumes = true # Remove volumes on destroy (full data reset for Phoe
 # =============================================================================
 # DATABASE CREDENTIALS
 # =============================================================================
-# Note: Set these via TF_VAR_* environment variables (see setup-terraform-dev-env.ps1)
+# All database passwords are fetched from GitHub Secrets (environment-specific):
 #
-# postgres_password     - Set via TF_VAR_postgres_password
-# tamshai_db_password   - Set via TF_VAR_tamshai_db_password
-# keycloak_db_password  - Set via TF_VAR_keycloak_db_password (REQUIRED NOW)
-# mongodb_root_password - Set via TF_VAR_mongodb_root_password
+# MONGODB_DEV_PASSWORD      - MongoDB root password
+# POSTGRES_DEV_PASSWORD     - PostgreSQL postgres user password
+# TAMSHAI_DB_DEV_PASSWORD   - PostgreSQL tamshai user password
+# KEYCLOAK_DB_DEV_PASSWORD  - Keycloak database password
+# REDIS_DEV_PASSWORD        - Redis password
+#
+# These are fetched via the export-test-secrets.yml workflow
 
 # =============================================================================
 # KEYCLOAK CONFIGURATION
@@ -75,11 +78,12 @@ redis_password = "" # No password for dev
 # =============================================================================
 # CLAUDE API CONFIGURATION
 # =============================================================================
-# Note: REQUIRED - Set via TF_VAR_claude_api_key
+# Note: Fetched from GitHub Secrets (CLAUDE_API_KEY)
 #
-# claude_api_key - Set via TF_VAR_claude_api_key (REQUIRED)
+# This is automatically fetched from GitHub Secrets during terraform apply.
+# Only set TF_VAR_claude_api_key if you need to override the GitHub Secret.
 #
-# Get your key from: https://console.anthropic.com/settings/keys
+# GitHub Secret: CLAUDE_API_KEY (this repo's secret, separate from tamshai-dev)
 # Format: sk-ant-api03-...
 
 # =============================================================================
@@ -97,14 +101,18 @@ redis_password = "" # No password for dev
 # DEFAULTS (Overridden by TF_VAR_* environment variables)
 # =============================================================================
 
-# Database defaults (dev-only credentials - match docker-compose.yml defaults)
-postgres_password     = "postgres_password"
-tamshai_db_password   = "tamshai_password"
-keycloak_db_password  = "keycloak_password"
-mongodb_root_password = "tamshai_password"
+# Database passwords - from GitHub Secrets (environment-specific)
+# These are fetched via fetch-github-secrets.ps1 workflow:
+#   - MONGODB_DEV_PASSWORD
+#   - POSTGRES_DEV_PASSWORD
+#   - TAMSHAI_DB_DEV_PASSWORD
+#   - KEYCLOAK_DB_DEV_PASSWORD
+#   - REDIS_DEV_PASSWORD
+# NOTE: No hardcoded values - passwords come from GitHub secrets
 
 # Keycloak defaults
-keycloak_admin_password = "admin"
+# NOTE: Remove default - must be set via TF_VAR_keycloak_admin_password
+# keycloak_admin_password = ""  # REQUIRED: Set via TF_VAR_keycloak_admin_password
 
 # User passwords - from GitHub Secrets via TF_VAR_* environment variables
 # DEV_USER_PASSWORD: Corporate users (eve.thompson, etc.)
@@ -112,8 +120,11 @@ keycloak_admin_password = "admin"
 # NOTE: Do NOT set values here - use TF_VAR_* environment variables
 #       Setting empty values here overrides env vars due to terraform precedence
 
-mcp_gateway_client_secret = "test-client-secret"
+# MCP Gateway client secret
+# NOTE: Remove default - must be set via TF_VAR_mcp_gateway_client_secret
+# mcp_gateway_client_secret = ""  # REQUIRED: Set via TF_VAR_mcp_gateway_client_secret
 
-# Storage defaults (match docker-compose.yml defaults)
-minio_root_user     = "minioadmin"
-minio_root_password = "minioadmin"
+# Storage credentials
+# NOTE: Remove defaults - must be set via TF_VAR_minio_root_user and TF_VAR_minio_root_password
+# minio_root_user     = ""  # REQUIRED: Set via TF_VAR_minio_root_user
+# minio_root_password = ""  # REQUIRED: Set via TF_VAR_minio_root_password

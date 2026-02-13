@@ -10,6 +10,7 @@
     "test:rbac": "jest rbac.test.ts",
     "test:sse": "jest sse-streaming.test.ts",
     "test:mcp": "jest mcp-tools.test.ts",
+    "test:genui": "jest generative-ui-verification.test.ts",
     "test:verbose": "jest --verbose",
     "test:debug": "DEBUG=* jest --verbose"
   },
@@ -22,11 +23,12 @@
   "author": "John Cornell",
   "license": "UNLICENSED",
   "dependencies": {
-    "axios": "^1.13.3"
+    "axios": "^1.13.5"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.10",
+    "dotenv": "^17.2.4",
     "jest": "^30.2.0",
     "ts-jest": "^29.1.1",
     "typescript": "^5.3.3"

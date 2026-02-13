@@ -14,6 +14,7 @@ import axios from 'axios';
 import { Logger } from 'winston';
 import { getPendingConfirmation } from '../utils/redis';
 import { UserContext } from '../test-utils/mock-user-context';
+import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
 
 // Extended Request type with userContext property
 interface AuthenticatedRequest extends Request {
@@ -21,16 +22,19 @@ interface AuthenticatedRequest extends Request {
 }
 
 export interface MCPServerUrlConfig {
-  hr: string;
-  finance: string;
-  sales: string;
-  support: string;
+  hr: string | undefined;
+  finance: string | undefined;
+  sales: string | undefined;
+  support: string | undefined;
+  payroll: string | undefined;
+  tax: string | undefined;
 }
 
 export interface ConfirmationRoutesDependencies {
   logger: Logger;
   mcpServerUrls: MCPServerUrlConfig;
   timeout?: number;
+  internalSecret?: string;
 }
 
 /**
@@ -38,7 +42,7 @@ export interface ConfirmationRoutesDependencies {
  */
 export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): Router {
   const router = Router();
-  const { logger, mcpServerUrls, timeout = 30000 } = deps;
+  const { logger, mcpServerUrls, timeout = 30000, internalSecret } = deps;
 
   /**
    * POST /confirm/:confirmationId
@@ -112,6 +116,11 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
       }
       const mcpServerUrl = mcpServerUrls[mcpServerName as keyof MCPServerUrlConfig];
 
+      // Generate internal authentication token for MCP server
+      const mcpInternalToken = internalSecret
+        ? generateInternalToken(internalSecret, userContext.userId, userContext.roles)
+        : undefined;
+
       const executeResponse = await axios.post(
         `${mcpServerUrl}/execute`,
         {
@@ -120,6 +129,7 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
           userContext: {
             userId: userContext.userId,
             username: userContext.username,
+            email: userContext.email,  // Required for RLS policies
             roles: userContext.roles,
           },
         },
@@ -130,6 +140,7 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
             'X-User-ID': userContext.userId,
             'X-User-Roles': userContext.roles.join(','),
             'X-Request-ID': requestId,
+            ...(mcpInternalToken && { [INTERNAL_TOKEN_HEADER]: mcpInternalToken }),
           },
         }
       );

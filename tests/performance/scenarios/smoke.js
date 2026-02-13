@@ -21,7 +21,7 @@ const apiDuration = new Trend('api_duration', true);
 const openApiDuration = new Trend('openapi_duration', true);
 
 // Configuration
-const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:3100';
+const GATEWAY_URL = __ENV.MCP_GATEWAY_URL;
 
 // =============================================================================
 // TDD: THRESHOLDS DEFINED FIRST

@@ -3,16 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Title | Tamshai AI Corp</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    <title>Client Login | Tamshai AI Corp</title>
+    <link rel="icon" type="image/png" href="tamshai-favicon.png">
 </head>
 <body>
-    <section class="hero" style="height: 50vh;">
-        <div class="container hero-content">
-            <h1>Client Login</h1> <p style="color: var(--secondary-gold);">Content coming soon.</p>
-        </div>
-    </section>
-
-    </body>
+    <p>Redirecting to Customer Portal...</p>
+    <script>
+        // Redirect to the customer support portal which auto-initiates Keycloak SSO.
+        (function() {
+            var loc = window.location;
+            var hosts = {
+                'www.tamshai-playground.local': 'https://customers.tamshai-playground.local',
+                'tamshai-playground.local': 'https://customers.tamshai-playground.local',
+                'www.tamshai.com': 'https://customers.tamshai.com',
+                'tamshai.com': 'https://customers.tamshai.com'
+            };
+            var base = hosts[loc.hostname] || 'http://localhost:4017';
+            if (loc.port && loc.port !== '443' && loc.port !== '80') {
+                try { var u = new URL(base); u.port = loc.port; base = u.toString().replace(/\/$/, ''); } catch(e) {}
+            }
+            window.location.replace(base);
+        })();
+    </script>
+</body>
 </html>

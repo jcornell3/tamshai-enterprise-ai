@@ -18,12 +18,20 @@ repos:
 
   # Detect AWS credentials, private keys, etc.
   - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
+    rev: v1.5.0
     hooks:
       - id: detect-secrets
         name: Detect secrets with detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: package-lock.json|pubspec.lock
+        # Exclude files with non-secret high-entropy strings (hashes, build artifacts)
+        exclude: |
+          (?x)^(
+            \.secrets\.baseline|
+            package-lock\.json|
+            pubspec\.lock|
+            .*\.turbo/cache/.*|
+            .*tsconfig\.tsbuildinfo
+          )$
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -58,12 +66,16 @@ repos:
     hooks:
       - id: shellcheck
         name: Lint shell scripts
+        args: ['--severity=error']
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.35.1
     hooks:
       - id: yamllint
+        # Use -X utf8 to fix Python 3.14+ cp1252 encoding crash on Windows
+        # when YAML files contain UTF-8 emoji characters (e.g., ✅ ❌)
+        entry: python -X utf8 -m yamllint
         args: ['-d', '{extends: relaxed, rules: {line-length: {max: 150}}}']
         exclude: 'keycloak/realm-export.*\.json'
 
@@ -72,7 +84,7 @@ repos:
     rev: v0.41.0
     hooks:
       - id: markdownlint
-        args: ['--fix', '--disable', 'MD013', 'MD032', 'MD033', 'MD036', 'MD041', '--']
+        args: ['--fix', '--disable', 'MD013', 'MD024', 'MD028', 'MD032', 'MD033', 'MD036', 'MD040', 'MD041', 'MD046', '--']
         exclude: 'CHANGELOG\.md|node_modules'
 
 # CI configuration

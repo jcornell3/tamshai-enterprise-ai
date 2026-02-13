@@ -192,21 +192,21 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
 
 const config = {
   postgres: {
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5433', 10),
+    host: process.env.POSTGRES_HOST,
+    port: parseInt(process.env.POSTGRES_PORT!, 10),
     database: process.env.POSTGRES_DB || 'tamshai_hr',
-    user: process.env.POSTGRES_USER || 'tamshai',
-    password: process.env.POSTGRES_PASSWORD || '',
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
   },
   keycloak: {
-    baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
+    baseUrl: process.env.KEYCLOAK_URL,
     realmName: process.env.KEYCLOAK_REALM || 'tamshai-corp',
     clientId: process.env.KEYCLOAK_CLIENT_ID || 'mcp-hr-service',
-    clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
+    clientSecret: process.env.KEYCLOAK_CLIENT_SECRET,
   },
   redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    host: process.env.REDIS_HOST,
+    port: parseInt(process.env.REDIS_PORT!, 10),
   },
 };
 

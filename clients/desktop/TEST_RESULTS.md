@@ -13,12 +13,12 @@
 
 | Service | Status | Endpoint | Result |
 |---------|--------|----------|--------|
-| Keycloak | ✅ Healthy | http://localhost:8180 | Ready |
-| MCP Gateway | ✅ Healthy | http://localhost:3100 | Ready |
-| MCP HR | ✅ Healthy | http://localhost:3101 | Ready |
-| MCP Finance | ✅ Healthy | http://localhost:3102 | Ready |
-| MCP Sales | ✅ Healthy | http://localhost:3103 | Ready |
-| MCP Support | ✅ Healthy | http://localhost:3104 | Ready |
+| Keycloak | ✅ Healthy | <http://localhost:8180> | Ready |
+| MCP Gateway | ✅ Healthy | <http://localhost:3100> | Ready |
+| MCP HR | ✅ Healthy | <http://localhost:3101> | Ready |
+| MCP Finance | ✅ Healthy | <http://localhost:3102> | Ready |
+| MCP Sales | ✅ Healthy | <http://localhost:3103> | Ready |
+| MCP Support | ✅ Healthy | <http://localhost:3104> | Ready |
 
 **Redis**: ✅ Running (port 6380)
 
@@ -36,6 +36,7 @@
 - **Status**: ✅ Successfully created and configured
 
 **Verification**:
+
 ```bash
 curl -s "http://localhost:8180/admin/realms/tamshai-corp/clients" | \
   jq '.[] | select(.clientId=="mcp-gateway-mobile")'
@@ -57,11 +58,13 @@ curl -s "http://localhost:8180/admin/realms/tamshai-corp/clients" | \
 | `dist/renderer/assets/*.css` | 1.6 KB | ✅ Present |
 
 **Build Command**:
+
 ```bash
 npm run build
 ```
 
 **Output**:
+
 ```
 ✓ Main process built in 91ms
 ✓ Preload built in 11ms
@@ -102,6 +105,7 @@ All required files verified:
 ## Manual Testing Status
 
 ### ⏳ Test 1: OAuth Login Flow
+
 **Status**: Ready for manual testing
 **Prerequisites**: ✅ All met
 **Instructions**: See [TESTING_GUIDE.md](./TESTING_GUIDE.md#test-1-oauth-login-flow)
@@ -120,6 +124,7 @@ All required files verified:
 6. Chat window displays user info
 
 **Command to Test**:
+
 ```bash
 cd clients/desktop
 npm run dev
@@ -128,41 +133,51 @@ npm run dev
 ---
 
 ### ⏳ Test 2: SSE Streaming
+
 **Status**: Ready for manual testing
 **Prerequisites**: ✅ Login completed, CLAUDE_API_KEY configured
 
 **Test Queries**:
 
 1. **Simple Query**:
+
    ```
    List all employees in Engineering department
    ```
+
    Expected: Real-time streaming, markdown formatting
 
 2. **Multi-Server Query**:
+
    ```
    Show me all high-priority support tickets
    ```
+
    Expected: MCP Support called, results streamed
 
 3. **Complex Analysis**:
+
    ```
    Who are the top 3 sales performers and their team sizes?
    ```
+
    Expected: Multiple MCP servers, AI analysis
 
 ---
 
 ### ⏳ Test 3: Confirmation Flow
+
 **Status**: Ready for manual testing
 **Prerequisites**: ✅ Redis running, Gateway configured
 
 **Test Cases**:
 
 **3.1 Approve Confirmation**:
+
 ```
 Delete employee frank.davis
 ```
+
 Expected:
 - ✅ Approval card appears
 - ✅ Click "Approve"
@@ -171,15 +186,18 @@ Expected:
 - ✅ Success notification
 
 **Verification**:
+
 ```bash
 docker compose exec postgres psql -U tamshai -d tamshai_hr -c \
-  "SELECT first_name, last_name, status FROM hr.employees WHERE email='frank.davis@tamshai.local';"
+  "SELECT first_name, last_name, status FROM hr.employees WHERE email='frank.davis@tamshai-playground.local';"
 ```
 
 **3.2 Reject Confirmation**:
+
 ```
 Delete employee nina.patel
 ```
+
 Expected:
 - ✅ Approval card appears
 - ✅ Click "Reject"
@@ -194,10 +212,12 @@ Expected:
 ---
 
 ### ⏳ Test 4: Truncation Warnings
+
 **Status**: Ready for manual testing
 **Prerequisites**: ✅ MCP servers with >50 records
 
 **Test Query**:
+
 ```
 List all employees with their salaries
 ```
@@ -214,8 +234,9 @@ List all employees with their salaries
 ## Environment Configuration
 
 ### Docker Services Status
+
 ```bash
-$ docker compose ps --format "table {{.Service}}\t{{.Status}}"
+docker compose ps --format "table {{.Service}}\t{{.Status}}"
 ```
 
 | Service | Status | Uptime |
@@ -232,12 +253,14 @@ $ docker compose ps --format "table {{.Service}}\t{{.Status}}"
 | redis | Up (healthy) | 47 hours |
 
 ### Network Ports
+
 - Keycloak: `0.0.0.0:8180 → 8080`
 - MCP Gateway: `0.0.0.0:3100 → 3100`
 - MCP HR: `0.0.0.0:3101 → 3101`
 - Redis: `0.0.0.0:6380 → 6379`
 
 ### Environment Variables
+
 ```bash
 KEYCLOAK_URL=http://localhost:8180
 MCP_GATEWAY_URL=http://localhost:3100
@@ -259,28 +282,33 @@ All automated checks passed. Environment is fully configured and ready for manua
 ## Next Steps for Manual Testing
 
 ### 1. Start Desktop App
+
 ```bash
 cd clients/desktop
 npm run dev
 ```
 
 ### 2. Test OAuth Login
+
 - Click "Sign in with SSO"
 - Login with `alice.chen` / `[REDACTED-DEV-PASSWORD]`
 - Enter TOTP code from `[REDACTED-DEV-TOTP]`
 - Verify redirect and token storage
 
 ### 3. Test Query Streaming
+
 - Submit query: "List all employees"
 - Verify real-time streaming
 - Check markdown formatting
 
 ### 4. Test Confirmations
+
 - Submit: "Delete employee frank.davis"
 - Click "Approve" or "Reject"
 - Verify database update
 
 ### 5. Test Truncation
+
 - Submit query with >50 results
 - Verify warning appears
 
@@ -301,6 +329,7 @@ npm run dev
 ## Verification Commands
 
 ### Quick Health Check
+
 ```bash
 # All services
 curl http://localhost:3100/health && \
@@ -309,10 +338,11 @@ echo "All services healthy"
 ```
 
 ### Check Mobile Client
+
 ```bash
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
-  -d "client_id=admin-cli" -d "username=admin" -d "password=admin" -d "grant_type=password" | \
-  jq -r '.access_token')
+  -d "client_id=admin-cli" -d "client_secret=$KEYCLOAK_ADMIN_CLIENT_SECRET" \
+  -d "grant_type=client_credentials" | jq -r '.access_token')
 
 curl -s "http://localhost:8180/admin/realms/tamshai-corp/clients" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | \
@@ -320,6 +350,7 @@ curl -s "http://localhost:8180/admin/realms/tamshai-corp/clients" \
 ```
 
 ### Test Desktop Build
+
 ```bash
 cd clients/desktop
 npm run typecheck && echo "✓ Type check passed"

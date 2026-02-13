@@ -533,9 +533,9 @@ test('AI query returns streamed response', async ({ request }) => {
 // tests/e2e/specs/login-journey.ui.spec.ts
 const BASE_URLS = {
   dev: {
-    site: 'https://www.tamshai.local',      // Marketing site
-    app: 'https://www.tamshai.local/app',   // Portal SPA
-    keycloak: 'https://www.tamshai.local/auth',
+    site: 'https://www.tamshai-playground.local',      // Marketing site
+    app: 'https://www.tamshai-playground.local/app',   // Portal SPA
+    keycloak: 'https://www.tamshai-playground.local/auth',
   },
   stage: {
     site: 'https://www.tamshai.com',        // Marketing site

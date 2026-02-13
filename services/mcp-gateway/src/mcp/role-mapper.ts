@@ -7,7 +7,7 @@
 
 export interface MCPServerConfig {
   name: string;
-  url: string;
+  url: string | undefined;
   requiredRoles: string[];
   description: string;
 }
@@ -17,10 +17,10 @@ export interface MCPServerConfig {
  * These will be populated with URLs from the config at runtime
  */
 export function createDefaultMCPServers(mcpServerUrls: {
-  hr: string;
-  finance: string;
-  sales: string;
-  support: string;
+  hr: string | undefined;
+  finance: string | undefined;
+  sales: string | undefined;
+  support: string | undefined;
 }): MCPServerConfig[] {
   return [
     {
@@ -40,8 +40,8 @@ export function createDefaultMCPServers(mcpServerUrls: {
     {
       name: 'sales',
       url: mcpServerUrls.sales,
-      // 'employee' grants self-access via RLS, department roles grant full access
-      requiredRoles: ['employee', 'sales-read', 'sales-write', 'executive'],
+      // Sales data requires explicit sales roles (no employee self-access)
+      requiredRoles: ['sales-read', 'sales-write', 'executive'],
       description: 'CRM data including customers, deals, pipeline',
     },
     {

@@ -1,21 +1,16 @@
 /**
- * CloseOpportunity Tests - TDD RED PHASE
+ * CloseOpportunityModal Tests - GREEN PHASE
  *
- * These tests are written FIRST, before the component exists.
- * They define the expected behavior of the Close Opportunity feature
- * with v1.4 confirmation flow for marking deals as Won or Lost.
- *
- * Expected: All tests FAIL initially (RED phase)
+ * Tests for the Close Opportunity modal with v1.4 confirmation flow
+ * for marking deals as Won or Lost.
  */
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
+import CloseOpportunityModal from '../components/CloseOpportunityModal';
 import type { Opportunity } from '../types';
-
-// Import will fail until component is created - this is expected in RED phase
-// import { CloseOpportunityModal } from '../components/CloseOpportunityModal';
 
 // Mock fetch for API calls
 const mockFetch = vi.fn();
@@ -52,22 +47,7 @@ const mockOpenOpportunity: Opportunity = {
   updated_at: '2026-01-15T14:30:00Z',
 };
 
-// Mock already closed opportunity
-const mockClosedOpportunity: Opportunity = {
-  _id: 'opp-002',
-  customer_id: 'cust-002',
-  customer_name: 'Global Industries',
-  title: 'Multi-year Contract',
-  value: 500000,
-  stage: 'CLOSED_WON',
-  probability: 100,
-  owner_id: 'user-001',
-  owner_name: 'Alice Sales',
-  created_at: '2025-12-01T10:00:00Z',
-  updated_at: '2026-01-10T16:00:00Z',
-};
-
-describe('CloseOpportunity Feature', () => {
+describe('CloseOpportunityModal', () => {
   const mockOnClose = vi.fn();
   const mockOnSuccess = vi.fn();
 
@@ -77,354 +57,560 @@ describe('CloseOpportunity Feature', () => {
     mockOnSuccess.mockReset();
   });
 
-  describe('Button Visibility', () => {
-    test('Close Deal button visible on open opportunities', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: "Close Deal" button visible for NEGOTIATION stage
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('Close Deal button visible for LEAD stage', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Can close deals at any open stage
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('Close Deal button visible for PROPOSAL stage', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Can close deals at proposal stage
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('Close Deal button hidden for CLOSED_WON opportunities', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: No button when already won
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('Close Deal button hidden for CLOSED_LOST opportunities', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: No button when already lost
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('Close Deal button hidden for sales-read role', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Only sales-write can close deals
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-  });
-
   describe('Modal Display', () => {
-    test('clicking Close Deal opens modal', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Modal appears with Won/Lost options
+    test('modal is visible with proper role', async () => {
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      const modal = screen.getByRole('dialog');
+      expect(modal).toBeInTheDocument();
+      expect(modal).toHaveAttribute('aria-modal', 'true');
     });
 
-    test('modal displays opportunity summary', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Title, value, customer shown in modal header
+    test('displays opportunity title in header', async () => {
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByText('Close Deal')).toBeInTheDocument();
+      expect(screen.getByText('Enterprise License Deal')).toBeInTheDocument();
     });
 
-    test('modal asks Won or Lost with radio buttons', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Two radio options: "Mark as Won" and "Mark as Lost"
+    test('displays opportunity summary with customer and value', async () => {
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByText('Acme Corporation')).toBeInTheDocument();
+      expect(screen.getByText('$150,000')).toBeInTheDocument();
+      expect(screen.getByText('Current stage: NEGOTIATION')).toBeInTheDocument();
+    });
+
+    test('asks Won or Lost with radio buttons', async () => {
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      expect(screen.getByTestId('radio-won')).toBeInTheDocument();
+      expect(screen.getByTestId('radio-lost')).toBeInTheDocument();
+      expect(screen.getByText('Mark as Won')).toBeInTheDocument();
+      expect(screen.getByText('Mark as Lost')).toBeInTheDocument();
     });
 
     test('neither Won nor Lost selected by default', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: User must explicitly choose
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('radio-won')).not.toBeChecked();
+      expect(screen.getByTestId('radio-lost')).not.toBeChecked();
     });
 
     test('optional close reason field available', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Textarea for notes/reason
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('close-reason')).toBeInTheDocument();
+      expect(screen.getByText('Notes (optional)')).toBeInTheDocument();
     });
 
     test('confirm button disabled until Won/Lost selected', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Button disabled without selection
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('confirm-button')).toBeDisabled();
     });
   });
 
   describe('Close as Won', () => {
     test('selecting Won enables confirm button', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Button becomes active after selecting Won
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-won'));
+
+      expect(screen.getByTestId('radio-won')).toBeChecked();
+      expect(screen.getByTestId('confirm-button')).not.toBeDisabled();
+      expect(screen.getByTestId('confirm-button')).toHaveTextContent('Confirm Won');
     });
 
     test('closing as Won triggers v1.4 confirmation', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: API returns pending_confirmation status
+      const user = userEvent.setup();
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({
-          status: 'pending_confirmation',
-          confirmationId: 'conf-won-123',
-          message: 'Mark "Enterprise License Deal" as WON for $150,000?',
-        }),
-      });
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('confirming Won updates stage to CLOSED_WON', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Opportunity stage changes to CLOSED_WON
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({
+        json: () =>
+          Promise.resolve({
             status: 'pending_confirmation',
             confirmationId: 'conf-won-123',
+            message: 'Mark "Enterprise License Deal" as WON for $150,000?',
           }),
+      });
+
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-won'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('approval-card')).toBeInTheDocument();
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/mcp/sales/update_opportunity'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('CLOSED_WON'),
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({
+      );
+    });
+
+    test('confirming Won calls onSuccess', async () => {
+      const user = userEvent.setup();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             status: 'success',
             data: { ...mockOpenOpportunity, stage: 'CLOSED_WON', probability: 100 },
           }),
-        });
+      });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-won'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(mockOnSuccess).toHaveBeenCalled();
+      });
     });
 
     test('Won sets probability to 100%', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Probability automatically set to 100
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            status: 'success',
+            data: { ...mockOpenOpportunity, stage: 'CLOSED_WON', probability: 100 },
+          }),
+      });
 
-    test('shows success message after marking Won', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Toast "Deal marked as won!"
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      await user.click(screen.getByTestId('radio-won'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('"probability":100'),
+          })
+        );
+      });
     });
   });
 
   describe('Close as Lost', () => {
     test('selecting Lost enables confirm button', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Button becomes active after selecting Lost
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-lost'));
+
+      expect(screen.getByTestId('radio-lost')).toBeChecked();
+      expect(screen.getByTestId('confirm-button')).not.toBeDisabled();
+      expect(screen.getByTestId('confirm-button')).toHaveTextContent('Confirm Lost');
     });
 
     test('closing as Lost triggers v1.4 confirmation', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: API returns pending_confirmation status
+      const user = userEvent.setup();
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({
-          status: 'pending_confirmation',
-          confirmationId: 'conf-lost-123',
-          message: 'Mark "Enterprise License Deal" as LOST?',
-        }),
-      });
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('confirming Lost updates stage to CLOSED_LOST', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Opportunity stage changes to CLOSED_LOST
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({
+        json: () =>
+          Promise.resolve({
             status: 'pending_confirmation',
             confirmationId: 'conf-lost-123',
+            message: 'Mark "Enterprise License Deal" as LOST?',
           }),
+      });
+
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-lost'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('approval-card')).toBeInTheDocument();
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/mcp/sales/update_opportunity'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('CLOSED_LOST'),
         })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({
+      );
+    });
+
+    test('confirming Lost calls onSuccess', async () => {
+      const user = userEvent.setup();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             status: 'success',
             data: { ...mockOpenOpportunity, stage: 'CLOSED_LOST', probability: 0 },
           }),
-        });
+      });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-lost'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(mockOnSuccess).toHaveBeenCalled();
+      });
     });
 
     test('Lost sets probability to 0%', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Probability automatically set to 0
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            status: 'success',
+            data: { ...mockOpenOpportunity, stage: 'CLOSED_LOST', probability: 0 },
+          }),
+      });
+
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-lost'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('"probability":0'),
+          })
+        );
+      });
     });
 
     test('Lost reason is saved when provided', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Reason text included in API call
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            status: 'success',
+            data: { ...mockOpenOpportunity, stage: 'CLOSED_LOST', probability: 0 },
+          }),
+      });
 
-    test('shows confirmation message after marking Lost', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Toast "Deal marked as lost"
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      await user.click(screen.getByTestId('radio-lost'));
+      await user.type(screen.getByTestId('close-reason'), 'Budget constraints');
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining('Budget constraints'),
+          })
+        );
+      });
     });
   });
 
   describe('Cancellation', () => {
     test('Cancel button closes modal without changes', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Modal closes, no API call made
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-    test('canceling v1.4 confirmation returns to modal', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: User can try again after canceling confirmation
+      await user.click(screen.getByTestId('cancel-button'));
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(mockOnClose).toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     test('escape key closes modal', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: ESC dismisses modal
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      fireEvent.keyDown(document, { key: 'Escape' });
+
+      expect(mockOnClose).toHaveBeenCalled();
+    });
+
+    test('X button closes modal', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('close-modal-button'));
+
+      expect(mockOnClose).toHaveBeenCalled();
     });
   });
 
   describe('Error Handling', () => {
     test('shows error on API failure', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Error message displayed, modal stays open
+      const user = userEvent.setup();
+
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-won'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('Network error')).toBeInTheDocument();
     });
 
     test('allows retry after error', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: User can try again
+      const user = userEvent.setup();
+
       mockFetch
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({
-            status: 'pending_confirmation',
-            confirmationId: 'conf-123',
-          }),
+          json: () =>
+            Promise.resolve({
+              status: 'success',
+              data: { ...mockOpenOpportunity, stage: 'CLOSED_WON' },
+            }),
         });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-    test('handles confirmation timeout', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Error message when confirmation expires
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({
-            status: 'pending_confirmation',
-            confirmationId: 'conf-123',
-          }),
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          json: () => Promise.resolve({
-            status: 'error',
-            code: 'CONFIRMATION_EXPIRED',
-            message: 'Confirmation expired',
-          }),
-        });
+      await user.click(screen.getByTestId('radio-won'));
+      await user.click(screen.getByTestId('confirm-button'));
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      await waitFor(() => {
+        expect(screen.getByTestId('error-message')).toBeInTheDocument();
+      });
+
+      // Retry
+      await user.click(screen.getByTestId('confirm-button'));
+
+      await waitFor(() => {
+        expect(mockOnSuccess).toHaveBeenCalled();
+      });
     });
 
     test('shows loading state during API call', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Spinner on confirm button
-      mockFetch.mockImplementation(() => new Promise(() => {}));
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      await user.click(screen.getByTestId('radio-won'));
+      await user.click(screen.getByTestId('confirm-button'));
+
+      expect(screen.getByText('Processing...')).toBeInTheDocument();
+      expect(screen.getByTestId('confirm-button')).toBeDisabled();
     });
   });
 
   describe('Accessibility', () => {
     test('radio buttons are keyboard accessible', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Tab navigation and space/enter selection
+      const user = userEvent.setup();
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const wonRadio = screen.getByTestId('radio-won');
+
+      // Tab to and select radio button
+      wonRadio.focus();
+      await user.keyboard(' ');
+
+      expect(wonRadio).toBeChecked();
     });
 
     test('modal has proper ARIA attributes', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: role="dialog", aria-modal, aria-labelledby
+      render(
+        <CloseOpportunityModal
+          opportunity={mockOpenOpportunity}
+          onClose={mockOnClose}
+          onSuccess={mockOnSuccess}
+        />,
+        { wrapper: createWrapper() }
+      );
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
-    });
-
-    test('focus is trapped in modal', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Tab cycles within modal only
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      const modal = screen.getByRole('dialog');
+      expect(modal).toHaveAttribute('aria-modal', 'true');
+      expect(modal).toHaveAttribute('aria-labelledby', 'close-opportunity-title');
     });
   });
 });

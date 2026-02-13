@@ -198,7 +198,10 @@ export class ElasticsearchBackend implements ISupportBackend {
     const cursorData = cursor ? decodeCursor(cursor) : null;
 
     // Build query
-    const must: any[] = [{ multi_match: { query, fields: ['title^2', 'content', 'tags'] } }];
+    const must: any[] = [];
+    if (query) {
+      must.push({ multi_match: { query, fields: ['title^2', 'content', 'tags'] } });
+    }
 
     if (category) {
       must.push({ term: { category } });
@@ -207,14 +210,19 @@ export class ElasticsearchBackend implements ISupportBackend {
     // v1.4: LIMIT+1 pattern
     const queryLimit = limit + 1;
 
+    // When no query is provided, sort by updated_at (relevance score is meaningless)
+    const sort = query
+      ? [{ _score: 'desc' }, { _id: 'desc' }]
+      : [{ updated_at: 'desc' }, { _id: 'desc' }];
+
     const searchBody: any = {
       query: {
         bool: {
-          must,
+          must: must.length > 0 ? must : [{ match_all: {} }],
         },
       },
       size: queryLimit,
-      sort: [{ _score: 'desc' }, { _id: 'desc' }], // Sort by relevance, then _id
+      sort,
     };
 
     // Add search_after if cursor provided

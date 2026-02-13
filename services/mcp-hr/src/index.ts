@@ -15,6 +15,7 @@ import dotenv from 'dotenv';
 import winston from 'winston';
 import { Queue } from 'bullmq';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
+import { requireGatewayAuth } from '@tamshai/shared';
 import pool, { UserContext, checkConnection, closePool, queryWithRLS } from './database/connection';
 import {
   IdentityService,
@@ -37,6 +38,21 @@ import {
   executeUpdateSalary,
   UpdateSalaryInputSchema,
 } from './tools/update-salary';
+import { getOrgChart, GetOrgChartInputSchema } from './tools/get-org-chart';
+import { getTimeOffBalances, GetTimeOffBalancesInputSchema } from './tools/get-time-off-balances';
+import { listTimeOffRequests, ListTimeOffRequestsInputSchema } from './tools/list-time-off-requests';
+import { listTeamTimeOffRequests, ListTeamTimeOffRequestsInputSchema } from './tools/list-team-time-off-requests';
+import {
+  createTimeOffRequest,
+  executeCreateTimeOffRequest,
+  CreateTimeOffRequestInputSchema,
+} from './tools/create-time-off-request';
+import {
+  approveTimeOffRequest,
+  executeApproveTimeOffRequest,
+  ApproveTimeOffRequestInputSchema,
+} from './tools/approve-time-off-request';
+import { getPendingTimeOff, GetPendingTimeOffInputSchema } from './tools/get-pending-time-off';
 import { MCPToolResponse } from './types/response';
 
 dotenv.config();
@@ -60,12 +76,17 @@ function hasHRAccess(roles: string[]): boolean {
     role === 'hr-write' ||
     role === 'executive' ||
     role === 'manager' ||
-    role === 'user'  // Users can see their own data via RLS
+    role === 'user' ||      // Legacy role for self-service
+    role === 'employee'     // Standard employee role (from All-Employees group)
   );
 }
 
 // Middleware
 app.use(express.json());
+
+// Gateway authentication middleware (prevents direct access bypass)
+// Health endpoints are automatically exempt
+app.use(requireGatewayAuth(process.env.MCP_INTERNAL_SECRET, { logger }));
 
 // Request logging
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -199,7 +220,7 @@ app.post('/query', async (req: Request, res: Response) => {
           suggestedAction: 'Ensure your authentication token includes your email address',
         };
       } else {
-        // Transform email from Keycloak format (@tamshai.local in dev) to DB format (@tamshai.com)
+        // Transform email from Keycloak format (@tamshai-playground.local in dev) to DB format (@tamshai.com)
         const dbEmail = transformEmailForDatabaseLookup(userContext.email);
         logger.info('Looking up user employee ID for team query', {
           email: userContext.email,
@@ -364,6 +385,240 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
 });
 
 /**
+ * Get Org Chart Tool
+ */
+app.post('/tools/get_org_chart', async (req: Request, res: Response) => {
+  try {
+    const { userContext, rootEmployeeId, maxDepth } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have HR access
+    if (!hasHRAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires HR access (hr-read, hr-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request HR access permissions.',
+      });
+      return;
+    }
+
+    const result = await getOrgChart({ rootEmployeeId, maxDepth }, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('get_org_chart error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to get org chart',
+    });
+  }
+});
+
+// =============================================================================
+// TIME-OFF MANAGEMENT TOOLS
+// =============================================================================
+
+/**
+ * Get Time-Off Balances Tool
+ */
+app.post('/tools/get_time_off_balances', async (req: Request, res: Response) => {
+  try {
+    const { userContext, employeeId, fiscalYear } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await getTimeOffBalances({ employeeId, fiscalYear }, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('get_time_off_balances error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to get time-off balances',
+    });
+  }
+});
+
+/**
+ * List Time-Off Requests Tool
+ */
+app.post('/tools/list_time_off_requests', async (req: Request, res: Response) => {
+  try {
+    const { userContext, status, startDateFrom, startDateTo, limit, cursor } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await listTimeOffRequests(
+      { status, startDateFrom, startDateTo, limit, cursor },
+      userContext
+    );
+    res.json(result);
+  } catch (error) {
+    logger.error('list_time_off_requests error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to list time-off requests',
+    });
+  }
+});
+
+/**
+ * List Team Time-Off Requests Tool (Managers)
+ */
+app.post('/tools/list_team_time_off_requests', async (req: Request, res: Response) => {
+  try {
+    const { userContext, status, limit, cursor } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await listTeamTimeOffRequests({ status, limit, cursor }, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('list_team_time_off_requests error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to list team time-off requests',
+    });
+  }
+});
+
+/**
+ * Get Pending Time-Off Requests Tool (for ApprovalsQueue)
+ *
+ * Returns time-off requests with status = 'pending' awaiting approval.
+ * Used by managers and HR staff to view requests needing action.
+ */
+app.post('/tools/get_pending_time_off', async (req: Request, res: Response) => {
+  try {
+    const { userContext, typeCode, limit, cursor } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    // Authorization check - must have HR access or be a manager
+    if (!hasHRAccess(userContext.roles)) {
+      res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires HR or manager access. You have: ${userContext.roles.join(', ')}`,
+        suggestedAction: 'Contact your administrator to request appropriate permissions.',
+      });
+      return;
+    }
+
+    const result = await getPendingTimeOff({ typeCode, limit, cursor }, userContext);
+    res.json(result);
+  } catch (error) {
+    logger.error('get_pending_time_off error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to get pending time-off requests',
+    });
+  }
+});
+
+/**
+ * Create Time-Off Request Tool (with confirmation)
+ */
+app.post('/tools/create_time_off_request', async (req: Request, res: Response) => {
+  try {
+    const { userContext, typeCode, startDate, endDate, notes } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await createTimeOffRequest(
+      { typeCode, startDate, endDate, notes },
+      userContext
+    );
+    res.json(result);
+  } catch (error) {
+    logger.error('create_time_off_request error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to create time-off request',
+    });
+  }
+});
+
+/**
+ * Approve/Reject Time-Off Request Tool (Managers, with confirmation)
+ */
+app.post('/tools/approve_time_off_request', async (req: Request, res: Response) => {
+  try {
+    const { userContext, requestId, approved, approverNotes } = req.body;
+
+    if (!userContext?.userId) {
+      res.status(400).json({
+        status: 'error',
+        code: 'MISSING_USER_CONTEXT',
+        message: 'User context is required',
+      });
+      return;
+    }
+
+    const result = await approveTimeOffRequest(
+      { requestId, approved, approverNotes },
+      userContext
+    );
+    res.json(result);
+  } catch (error) {
+    logger.error('approve_time_off_request error:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to approve/reject time-off request',
+    });
+  }
+});
+
+/**
  * Delete Employee Tool (v1.4 with confirmation)
  */
 app.post('/tools/delete_employee', async (req: Request, res: Response) => {
@@ -456,6 +711,14 @@ app.post('/execute', async (req: Request, res: Response) => {
 
       case 'update_salary':
         result = await executeUpdateSalary(data, userContext);
+        break;
+
+      case 'create_time_off_request':
+        result = await executeCreateTimeOffRequest(data, userContext);
+        break;
+
+      case 'approve_time_off_request':
+        result = await executeApproveTimeOffRequest(data, userContext);
         break;
 
       default:
@@ -607,10 +870,10 @@ function createKcAdminClientAdapter(kcAdmin: KeycloakAdminClient): KcAdminClient
  * The reconciliation is idempotent - it skips users that already exist in Keycloak.
  */
 async function reconcileIdentitiesOnStartup(): Promise<void> {
-  const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
+  const keycloakUrl = process.env.KEYCLOAK_URL;
   const keycloakRealm = process.env.KEYCLOAK_REALM || 'tamshai-corp';
   const clientId = process.env.KEYCLOAK_CLIENT_ID || 'mcp-hr-service';
-  const clientSecret = process.env.MCP_HR_SERVICE_CLIENT_SECRET || '';
+  const clientSecret = process.env.MCP_HR_SERVICE_CLIENT_SECRET;
 
   // Skip if no client secret configured (e.g., in unit tests)
   if (!clientSecret) {
@@ -626,11 +889,16 @@ async function reconcileIdentitiesOnStartup(): Promise<void> {
 
   try {
     // Create BullMQ queue for cleanup jobs (required by IdentityService)
-    const redisHost = process.env.REDIS_HOST || 'redis';
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisHost = process.env.REDIS_HOST;
+    const redisPort = parseInt(process.env.REDIS_PORT!, 10);
+    const redisPassword = process.env.REDIS_PASSWORD;
 
     const cleanupQueue = new Queue('identity-cleanup', {
-      connection: { host: redisHost, port: redisPort },
+      connection: {
+        host: redisHost,
+        port: redisPort,
+        password: redisPassword,
+      },
     }) as CleanupQueue;
 
     // Create Keycloak Admin Client

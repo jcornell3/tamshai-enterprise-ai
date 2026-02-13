@@ -17,6 +17,7 @@
 import { Router, Request, Response, RequestHandler } from 'express';
 import { Logger } from 'winston';
 import Anthropic from '@anthropic-ai/sdk';
+import type { TextBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import {
   MCPToolResponse,
   isSuccessResponse,
@@ -26,6 +27,7 @@ import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { UserContext } from '../test-utils/mock-user-context';
 import { scrubPII } from '../utils/pii-scrubber';
 import { sanitizeForLog, MCPServerConfig } from '../utils/gateway-utils';
+import { promptDefense } from '../ai/prompt-defense';
 
 // =============================================================================
 // CONNECTION TRACKING (Phase 4 - Graceful Shutdown)
@@ -83,6 +85,44 @@ export interface StreamingRoutesConfig {
   claudeModel: string;
   /** Heartbeat interval in milliseconds (default: 15000) */
   heartbeatIntervalMs?: number;
+  /** Claude API key (used to detect mock mode) */
+  claudeApiKey?: string;
+}
+
+/**
+ * Check if streaming should use mock mode (for CI integration tests)
+ * Mock mode is enabled when API key starts with 'sk-ant-test-'
+ *
+ * Note: We intentionally do NOT check NODE_ENV === 'test' because:
+ * - Unit tests mock the Anthropic SDK directly and expect those mocks to be called
+ * - Integration tests use CLAUDE_API_KEY=sk-ant-test-* to trigger mock mode
+ */
+function isMockMode(apiKey?: string): boolean {
+  return apiKey?.startsWith('sk-ant-test-') ?? false;
+}
+
+/**
+ * Generate mock SSE stream for testing
+ * Simulates Claude's streaming response format
+ */
+function writeMockStream(
+  res: Response,
+  query: string,
+  userContext: UserContext,
+  mcpServers: string[]
+): void {
+  const mockResponse = `[Mock Response] Query processed successfully for user ${userContext.username} ` +
+    `with roles: ${userContext.roles.join(', ')}. ` +
+    `Data sources consulted: ${mcpServers.join(', ') || 'none'}. ` +
+    `Query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`;
+
+  // Split into chunks to simulate streaming
+  const words = mockResponse.split(' ');
+  const chunkSize = 3;
+  for (let i = 0; i < words.length; i += chunkSize) {
+    const chunk = words.slice(i, i + chunkSize).join(' ') + (i + chunkSize < words.length ? ' ' : '');
+    res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+  }
 }
 
 /**
@@ -143,6 +183,20 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
     const requestId = req.headers['x-request-id'] as string;
     const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
 
+    let safeQuery: string;
+    try {
+      safeQuery = promptDefense.sanitize(query);
+    } catch (error) {
+      logger.warn('Blocked a suspicious query due to prompt injection defenses.', {
+        requestId,
+        username: sanitizeForLog(userContext.username),
+        originalQuery: scrubPII(query.substring(0, 200)),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(400).json({ error: 'Invalid query.' });
+      return;
+    }
+
     logger.info('SSE Query received', {
       requestId,
       username: sanitizeForLog(userContext.username),
@@ -150,6 +204,152 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
       roles: userContext.roles,
       hasCursor: !!cursor,
     });
+
+    // DISPLAY DIRECTIVE PRE-PROCESSING CHECK
+    // Check for display directive triggers BEFORE calling Claude (more reliable + saves API cost)
+    const queryLower = query.toLowerCase();
+    let displayDirective: string | null = null;
+
+    logger.info('🔍 Directive detection check', {
+      requestId,
+      query,
+      queryLower,
+      includesApproval: queryLower.includes('approval'),
+      includesAwaitingMyApproval: queryLower.includes('awaiting my approval'),
+    });
+
+    // Helper: Extract year from query (2020-2030), default to current year
+    const extractYear = (q: string, defaultYear = 2026): number => {
+      const match = q.match(/\b(202[0-9])\b/);
+      return match ? parseInt(match[1]) : defaultYear;
+    };
+
+    // Helper: Extract department from query
+    const extractDepartment = (q: string, defaultDept = 'Engineering'): string => {
+      const deptMatch = q.match(/\b(engineering|finance|hr|human resources|sales|it|marketing|executive|operations|legal)\b/i);
+      if (!deptMatch) return defaultDept;
+      const dept = deptMatch[1].toLowerCase();
+      // Normalize department names
+      if (dept === 'human resources') return 'HR';
+      return dept.charAt(0).toUpperCase() + dept.slice(1);
+    };
+
+    // Helper: Extract quarter from query (Q1-Q4)
+    const extractQuarter = (q: string, defaultQuarter = 'Q1'): string => {
+      const match = q.match(/\b(q[1-4])\b/i);
+      return match ? match[1].toUpperCase() : defaultQuarter;
+    };
+
+    // Helper: Extract lead status from query
+    // Maps natural language to valid lead statuses: NEW, CONTACTED, QUALIFIED, CONVERTED, DISQUALIFIED
+    const extractLeadStatus = (q: string, defaultStatus = 'NEW'): string => {
+      const statusMatch = q.match(/\b(hot|warm|cold|new|qualified|contacted|converted|disqualified|nurturing)\b/i);
+      if (!statusMatch) return defaultStatus;
+
+      const matched = statusMatch[1].toLowerCase();
+      // Map temperature terms to pipeline statuses
+      const statusMap: Record<string, string> = {
+        'hot': 'QUALIFIED',      // Hot leads are qualified and ready
+        'warm': 'CONTACTED',     // Warm leads have been contacted
+        'cold': 'NEW',           // Cold leads are new/uncontacted
+        'nurturing': 'CONTACTED', // Nurturing implies contacted
+      };
+
+      return statusMap[matched] || matched.toUpperCase();
+    };
+
+    // Helper: Extract limit from query
+    const extractLimit = (q: string, defaultLimit = 50): number => {
+      const match = q.match(/\b(\d+)\s+(leads|records|results)\b/i);
+      return match ? parseInt(match[1]) : defaultLimit;
+    };
+
+    // Check each directive's trigger keywords with parameter extraction
+    if (
+      queryLower.includes('org chart') ||
+      queryLower.includes('team structure') ||
+      queryLower.includes('show my team') ||
+      queryLower.includes('who reports') ||
+      queryLower.includes('direct reports') ||
+      queryLower.includes('organizational chart') ||
+      queryLower.includes('show me my org chart')
+    ) {
+      displayDirective = 'display:hr:org_chart:userId=me,depth=1';
+    } else if (
+      queryLower.includes('approval') || // Matches both singular and plural
+      queryLower.includes('things to approve') ||
+      queryLower.includes('items to approve') ||
+      queryLower.includes('awaiting my approval') ||
+      queryLower.includes('need my approval') ||
+      queryLower.includes('time off requests')
+    ) {
+      displayDirective = 'display:approvals:pending:userId=me';
+    } else if (
+      queryLower.includes('leads') ||
+      queryLower.includes('pipeline') ||
+      queryLower.includes('prospects') ||
+      queryLower.includes('show leads')
+    ) {
+      const status = extractLeadStatus(query);
+      const limit = extractLimit(query);
+      displayDirective = `display:sales:leads:status=${status},limit=${limit}`;
+    } else if (
+      queryLower.includes('forecast') ||
+      queryLower.includes('quota') ||
+      queryLower.includes('sales targets') ||
+      queryLower.includes('revenue forecast')
+    ) {
+      // Extract period (quarter or year)
+      const quarter = query.match(/\b(q[1-4])\b/i);
+      const year = query.match(/\b(202[0-9])\b/);
+      const period = quarter ? quarter[1].toUpperCase() : (year ? year[1] : 'current');
+      displayDirective = `display:sales:forecast:period=${period}`;
+    } else if (
+      queryLower.includes('budget') ||
+      queryLower.includes('spending') ||
+      queryLower.includes('department budget') ||
+      queryLower.includes('show budget')
+    ) {
+      const department = extractDepartment(query);
+      const year = extractYear(query);
+      displayDirective = `display:finance:budget:department=${department},year=${year}`;
+    } else if (
+      queryLower.includes('quarterly financials') ||
+      queryLower.includes('q1 report') ||
+      queryLower.includes('q2 report') ||
+      queryLower.includes('q3 report') ||
+      queryLower.includes('q4 report') ||
+      queryLower.includes('quarterly report')
+    ) {
+      const quarter = extractQuarter(query);
+      const year = extractYear(query, 2025);
+      displayDirective = `display:finance:quarterly_report:quarter=${quarter},year=${year}`;
+    }
+
+    // If directive matched, send it immediately and skip Claude API call
+    if (displayDirective) {
+      logger.info('Display directive matched - bypassing Claude', {
+        requestId,
+        directive: displayDirective,
+      });
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      // Send directive as a text chunk (must include type field for client compatibility)
+      res.write(`data: ${JSON.stringify({ type: 'text', text: displayDirective })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+
+      logger.info('Display directive sent', {
+        requestId,
+        duration: Date.now() - startTime,
+      });
+      return;
+    }
 
     // Set headers for SSE
     res.setHeader('Content-Type', 'text/event-stream');
@@ -204,7 +404,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
 
       // Query all accessible MCP servers in parallel (with cursor for pagination)
       const mcpPromises = accessibleServers.map((server) =>
-        queryMCPServer(server, query, userContext, cursor)
+        queryMCPServer(server, safeQuery, userContext, cursor)
       );
       const mcpResults = await Promise.all(mcpPromises);
 
@@ -322,29 +522,53 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
         return;
       }
 
-      // Stream Claude response
-      const stream = await anthropic.messages.stream({
-        model: config.claudeModel,
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: query,
-          },
-        ],
-      });
+      // Track usage from stream events for cache metrics (declared here for both mock and real mode)
+      let streamUsage: Record<string, unknown> = {};
 
-      // Stream each chunk to the client
-      for await (const chunk of stream) {
-        // Check if client disconnected mid-stream
-        if (streamClosed) {
-          logger.info('Client disconnected mid-stream, aborting', { requestId });
-          break;
-        }
+      // MOCK MODE: Return simulated streaming response for testing/CI
+      if (isMockMode(config.claudeApiKey)) {
+        logger.info('Mock mode: Returning simulated streaming response', {
+          requestId,
+          username: userContext.username,
+          roles: userContext.roles,
+          mcpServers: mcpResults.filter(r => r.status === 'success').map(r => r.server),
+        });
 
-        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-          res.write(`data: ${JSON.stringify({ type: 'text', text: chunk.delta.text })}\n\n`);
+        const successfulServers = mcpResults.filter(r => r.status === 'success').map(r => r.server);
+        writeMockStream(res, safeQuery, userContext, successfulServers);
+      } else {
+        // Stream Claude response
+        const stream = await anthropic.messages.stream({
+          model: config.claudeModel,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: safeQuery,
+            },
+          ],
+        });
+
+        // Stream each chunk to the client
+        for await (const chunk of stream) {
+          // Check if client disconnected mid-stream
+          if (streamClosed) {
+            logger.info('Client disconnected mid-stream, aborting', { requestId });
+            break;
+          }
+
+          if (chunk.type === 'message_start') {
+            const startEvent = chunk as unknown as { message?: { usage?: Record<string, unknown> } };
+            if (startEvent.message?.usage) {
+              streamUsage = startEvent.message.usage;
+            }
+          }
+
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+            const sanitizedChunk = promptDefense.scanOutput(chunk.delta.text);
+            res.write(`data: ${JSON.stringify({ type: 'text', text: sanitizedChunk })}\n\n`);
+          }
         }
       }
 
@@ -365,7 +589,12 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
         res.end();
 
         const durationMs = Date.now() - startTime;
-        logger.info('SSE query completed', { requestId, durationMs });
+        logger.info('SSE query completed', {
+          requestId,
+          durationMs,
+          cacheCreationTokens: streamUsage.cache_creation_input_tokens ?? 0,
+          cacheReadTokens: streamUsage.cache_read_input_tokens ?? 0,
+        });
       }
     } catch (error) {
       // Only send error if client still connected
@@ -381,14 +610,17 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
   }
 
   /**
-   * Build system prompt for Claude with user context and data
+   * Build system prompt for Claude with user context and data.
+   *
+   * Returns TextBlockParam[] with cache_control on the data block
+   * to enable Anthropic's prompt caching (10% cost for cache reads).
    */
   function buildSystemPrompt(
     userContext: UserContext,
     dataContext: string,
     paginationInstructions: string,
     truncationWarnings: string[]
-  ): string {
+  ): TextBlockParam[] {
     const currentDate = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -396,7 +628,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
       timeZone: 'UTC'
     });
 
-    return `You are an AI assistant for Tamshai Corp, a family investment management organization.
+    const instructions = `You are an AI assistant for Tamshai Corp, a family investment management organization.
 You have access to enterprise data based on the user's role permissions.
 The current user is "${userContext.username}" (email: ${userContext.email || 'unknown'}) with system roles: ${userContext.roles.join(', ')}.
 
@@ -413,10 +645,21 @@ When answering questions:
 3. Never make up or infer sensitive information not in the data
 4. Be concise and professional
 5. If asked about data you don't have access to, explain that the user's role doesn't have permission
-6. When asked about "my team", first identify the user in the employee data, then find their direct reports${paginationInstructions}${truncationWarnings.length > 0 ? '\n\n' + truncationWarnings.join('\n') : ''}
+6. When asked about "my team", first identify the user in the employee data, then find their direct reports${paginationInstructions}${truncationWarnings.length > 0 ? '\n\n' + truncationWarnings.join('\n') : ''}`;
 
-Available data context:
-${dataContext || 'No relevant data available for this query.'}`;
+    const dataBlock = `Available data context:\n${dataContext || 'No relevant data available for this query.'}`;
+
+    return [
+      {
+        type: "text" as const,
+        text: instructions,
+      },
+      {
+        type: "text" as const,
+        text: dataBlock,
+        cache_control: { type: "ephemeral" as const },
+      },
+    ];
   }
 
   /**

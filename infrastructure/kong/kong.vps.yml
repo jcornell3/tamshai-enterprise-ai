@@ -97,11 +97,19 @@ routes:
 # =============================================================================
 plugins:
   # CORS - Allow cross-origin requests
-  # Note: In VPS, Caddy also sets CORS headers. Kong adds additional control.
+  # Defense-in-depth: Explicit origins prevent CORS bypass via Caddy misconfiguration
   - name: cors
     config:
       origins:
-        - "*"  # Allow all origins - Caddy handles domain-specific CORS
+        - https://www.tamshai.com
+        - https://portal.tamshai.com
+        - https://finance.tamshai.com
+        - https://sales.tamshai.com
+        - https://support.tamshai.com
+        - https://hr.tamshai.com
+        - https://payroll.tamshai.com
+        - https://tax.tamshai.com
+        - https://customer-support.tamshai.com
       methods:
         - GET
         - POST

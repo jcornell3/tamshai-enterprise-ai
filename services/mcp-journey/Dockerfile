@@ -1,5 +1,8 @@
 # Tamshai Corp MCP Journey Server
 # Multi-stage build for minimal production image
+#
+# Build context: Repository root (for access to services/shared and docs)
+# Usage: docker build -f services/mcp-journey/Dockerfile .
 
 # =============================================================================
 # BUILD STAGE
@@ -8,13 +11,22 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files (from repo root context)
+# Copy shared package first (dependency)
+COPY services/shared ./shared
+
+# Copy mcp-journey package files
 COPY services/mcp-journey/package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Update shared dependency to use local path in container
+RUN sed -i 's|"file:../shared"|"file:./shared"|' package.json
 
-# Copy source code (from repo root context)
+# Build shared package first (required dependency)
+RUN cd shared && npm ci && npm run build
+
+# Install dependencies (regenerates lock file with correct shared path)
+RUN npm install --package-lock-only && npm ci
+
+# Copy source code
 COPY services/mcp-journey/tsconfig.json ./
 COPY services/mcp-journey/src ./src
 
@@ -40,8 +52,7 @@ COPY --from=builder /app/package.json ./
 RUN mkdir -p /indexer/data
 
 # Copy project documentation for indexing
-# Note: These paths are relative to the Docker build context (services/mcp-journey)
-# We use the build context from the repo root to access docs
+# Paths are relative to the Docker build context (repository root)
 COPY docs/ ./project-docs/docs/
 COPY .specify/ ./project-docs/.specify/
 COPY CLAUDE.md ./project-docs/CLAUDE.md
@@ -72,6 +83,8 @@ WORKDIR /app
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+# Copy shared package (referenced via file: link in node_modules)
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
 # Copy pre-built database from indexer stage
 COPY --from=indexer --chown=nodejs:nodejs /indexer/data/journey.db /app/data/journey.db
@@ -79,20 +92,16 @@ COPY --from=indexer --chown=nodejs:nodejs /indexer/data/journey.db /app/data/jou
 # Create data directory if database copy failed
 RUN mkdir -p /app/data && chown nodejs:nodejs /app/data
 
-# Set environment
+# Set environment (PORT set by docker-compose from GitHub variables)
 ENV NODE_ENV=production
-ENV PORT=3105
 ENV DB_PATH=/app/data/journey.db
 
 # Switch to non-root user
 USER nodejs
 
-# Expose port
-EXPOSE 3105
-
-# Health check
+# Health check (PORT from environment)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3105/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
 # Start server
 CMD ["node", "dist/index.js"]

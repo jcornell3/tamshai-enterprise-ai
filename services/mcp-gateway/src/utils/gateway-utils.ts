@@ -31,7 +31,7 @@ export function isValidToolName(toolName: string): boolean {
  */
 export interface MCPServerConfig {
   name: string;
-  url: string;
+  url: string | undefined;
   requiredRoles: string[];
   description: string;
 }

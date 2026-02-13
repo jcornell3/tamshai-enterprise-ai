@@ -1,0 +1,42 @@
+# Keycloak for Local Development (tamshai-playground)
+# Bakes realm exports into the image to avoid Docker Desktop volume mount issues
+#
+# Usage:
+#   docker compose build keycloak  (rebuilds with latest realm export)
+#   docker compose up -d keycloak
+#
+# Why not volume mount?
+#   Docker Desktop on Windows has known issues where mounted files don't reflect
+#   changes made after container creation. By copying the file into the image,
+#   we ensure `docker compose build --no-cache` always includes the latest config.
+
+FROM quay.io/keycloak/keycloak:24.0
+
+# Install jq and curl for realm sync scripts (Authorization Services configuration)
+# Download as static binaries (ADD supports URLs, works with minimal base images)
+USER root
+
+# Install jq (JSON processor)
+ADD https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 /usr/local/bin/jq
+RUN chmod +x /usr/local/bin/jq
+
+# Install curl (HTTP client for REST API calls)
+# Using static binary from GitHub mirror
+ADD https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-amd64 /usr/local/bin/curl
+RUN chmod +x /usr/local/bin/curl
+
+# Copy realm exports into the image (not mounted as volume)
+# This ensures terraform destroy + apply always uses the latest files
+# Keycloak imports all JSON files in /opt/keycloak/data/import/ on startup
+COPY realm-export-dev.json /opt/keycloak/data/import/01-realm-tamshai-corp.json
+COPY realm-export-customers-dev.json /opt/keycloak/data/import/02-realm-tamshai-customers.json
+
+# Security: Explicitly run as keycloak user (UID 1000, inherited from base image)
+# This makes the non-root user explicit for security scanners
+USER 1000
+
+# Default command for dev mode with realm import
+# Enable token-exchange feature for RFC 8693 (OAuth 2.0 Token Exchange)
+# Enable admin-fine-grained-authz for impersonation permissions
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
+CMD ["start-dev", "--import-realm", "--features=token-exchange,admin-fine-grained-authz"]

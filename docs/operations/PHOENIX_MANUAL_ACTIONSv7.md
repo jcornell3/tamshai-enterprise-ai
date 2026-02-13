@@ -1017,7 +1017,7 @@ submit_and_wait_build ... || log_warn "Build failed"
 
 **Symptom**: E2E tests fail with "Invalid authenticator code" after Phoenix rebuild, even though TOTP was configured.
 
-**Root Cause**: Phase 9 (Configure TOTP) had a comment saying "Try to get from GCP secrets" but **no code** to actually fetch the secret. Instead, it used a hardcoded default `JBSWY3DPEHPK3PXP` which doesn't match the E2E test's `TEST_USER_TOTP_SECRET`.
+**Root Cause**: Phase 9 (Configure TOTP) had a comment saying "Try to get from GCP secrets" but **no code** to actually fetch the secret. Instead, it used a hardcoded default `***REDACTED_TOTP***` which doesn't match the E2E test's `TEST_USER_TOTP_SECRET`.
 
 **Code Analysis** (before fix):
 ```bash
@@ -1032,7 +1032,7 @@ fi
 
 if [ -z "$totp_secret" ]; then
     log_warn "TEST_USER_TOTP_SECRET_RAW not set - using default"
-    totp_secret="JBSWY3DPEHPK3PXP"  # <-- HARDCODED DEFAULT - WRONG!
+    totp_secret="***REDACTED_TOTP***"  # <-- HARDCODED DEFAULT - WRONG!
 fi
 ```
 

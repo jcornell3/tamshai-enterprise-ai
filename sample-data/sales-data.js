@@ -5,6 +5,224 @@
 db = db.getSiblingDB('tamshai_sales');
 
 // =============================================================================
+// LEADS COLLECTION
+// =============================================================================
+db.leads.drop();
+db.leads.insertMany([
+  {
+    _id: ObjectId("690000000000000000000001"),
+    company_name: "DataSync Technologies",
+    contact_name: "James Wilson",
+    contact_email: "jwilson@datasync.example.com",
+    contact_phone: "+1-555-111-2222",
+    status: "QUALIFIED",
+    source: "LinkedIn",
+    score: {
+      total: 85,
+      factors: {
+        company_size: 90,
+        industry_fit: 80,
+        engagement: 85,
+        timing: 85
+      }
+    },
+    owner_id: "carol.johnson",
+    industry: "Technology",
+    company_size: "50-200",
+    estimated_value: 75000,
+    notes: "Strong interest in automation platform. Decision maker engaged.",
+    created_at: new Date("2026-01-15"),
+    updated_at: new Date("2026-01-28")
+  },
+  {
+    _id: ObjectId("690000000000000000000002"),
+    company_name: "Green Energy Solutions",
+    contact_name: "Maria Santos",
+    contact_email: "msantos@greenenergy.example.com",
+    contact_phone: "+1-555-222-3333",
+    status: "NEW",
+    source: "Trade Show",
+    score: {
+      total: 65,
+      factors: {
+        company_size: 70,
+        industry_fit: 60,
+        engagement: 70,
+        timing: 60
+      }
+    },
+    owner_id: "ryan.garcia",
+    industry: "Energy",
+    company_size: "200-500",
+    estimated_value: 120000,
+    notes: "Met at CleanTech Expo 2026. Interested in sustainability reporting.",
+    created_at: new Date("2026-01-20"),
+    updated_at: new Date("2026-01-20")
+  },
+  {
+    _id: ObjectId("690000000000000000000003"),
+    company_name: "Metro Logistics Corp",
+    contact_name: "Robert Chen",
+    contact_email: "rchen@metrologistics.example.com",
+    contact_phone: "+1-555-333-4444",
+    status: "CONTACTED",
+    source: "Referral",
+    score: {
+      total: 78,
+      factors: {
+        company_size: 85,
+        industry_fit: 75,
+        engagement: 75,
+        timing: 78
+      }
+    },
+    owner_id: "amanda.white",
+    industry: "Logistics",
+    company_size: "500-1000",
+    estimated_value: 180000,
+    notes: "Referred by Acme Corp. Looking for supply chain visibility.",
+    created_at: new Date("2026-01-10"),
+    updated_at: new Date("2026-01-25")
+  },
+  {
+    _id: ObjectId("690000000000000000000004"),
+    company_name: "Bright Future Education",
+    contact_name: "Dr. Amanda Foster",
+    contact_email: "afoster@brightfuture.example.com",
+    contact_phone: "+1-555-444-5555",
+    status: "QUALIFIED",
+    source: "Webinar",
+    score: {
+      total: 72,
+      factors: {
+        company_size: 60,
+        industry_fit: 85,
+        engagement: 80,
+        timing: 65
+      }
+    },
+    owner_id: "chris.taylor",
+    industry: "Education",
+    company_size: "100-200",
+    estimated_value: 55000,
+    notes: "Attended AI in Education webinar. Budget cycle starts Q2.",
+    created_at: new Date("2026-01-05"),
+    updated_at: new Date("2026-01-22")
+  },
+  {
+    _id: ObjectId("690000000000000000000005"),
+    company_name: "Pacific Manufacturing",
+    contact_name: "Tom Nakamura",
+    contact_email: "tnakamura@pacificmfg.example.com",
+    contact_phone: "+1-555-555-6666",
+    status: "CONVERTED",
+    source: "Cold Call",
+    score: {
+      total: 92,
+      factors: {
+        company_size: 95,
+        industry_fit: 90,
+        engagement: 95,
+        timing: 88
+      }
+    },
+    owner_id: "carol.johnson",
+    industry: "Manufacturing",
+    company_size: "1000+",
+    estimated_value: 250000,
+    notes: "Converted to opportunity. Enterprise deal in negotiation.",
+    converted_deal_id: ObjectId("670000000000000000000010"),
+    created_at: new Date("2025-12-01"),
+    updated_at: new Date("2026-01-15")
+  },
+  {
+    _id: ObjectId("690000000000000000000006"),
+    company_name: "Startup Ventures LLC",
+    contact_name: "Alex Rivera",
+    contact_email: "arivera@startupventures.example.com",
+    contact_phone: "+1-555-666-7777",
+    status: "DISQUALIFIED",
+    source: "Website",
+    score: {
+      total: 35,
+      factors: {
+        company_size: 20,
+        industry_fit: 50,
+        engagement: 40,
+        timing: 30
+      }
+    },
+    owner_id: "ryan.garcia",
+    industry: "Finance",
+    company_size: "1-10",
+    estimated_value: 15000,
+    notes: "Too early stage. No budget allocated. Revisit in 12 months.",
+    disqualified_reason: "Budget constraints",
+    created_at: new Date("2026-01-08"),
+    updated_at: new Date("2026-01-12")
+  },
+  {
+    _id: ObjectId("690000000000000000000007"),
+    company_name: "Coastal Healthcare Network",
+    contact_name: "Dr. Sarah Mitchell",
+    contact_email: "smitchell@coastalhealth.example.com",
+    contact_phone: "+1-555-777-8888",
+    status: "NEW",
+    source: "Partner Referral",
+    score: {
+      total: 82,
+      factors: {
+        company_size: 88,
+        industry_fit: 85,
+        engagement: 75,
+        timing: 80
+      }
+    },
+    owner_id: "chris.taylor",
+    industry: "Healthcare",
+    company_size: "500-1000",
+    estimated_value: 200000,
+    notes: "HIPAA compliance required. Strong budget for digital transformation.",
+    created_at: new Date("2026-01-25"),
+    updated_at: new Date("2026-01-25")
+  },
+  {
+    _id: ObjectId("690000000000000000000008"),
+    company_name: "Urban Development Group",
+    contact_name: "Michael Torres",
+    contact_email: "mtorres@urbandev.example.com",
+    contact_phone: "+1-555-888-9999",
+    status: "CONTACTED",
+    source: "LinkedIn",
+    score: {
+      total: 68,
+      factors: {
+        company_size: 75,
+        industry_fit: 65,
+        engagement: 70,
+        timing: 62
+      }
+    },
+    owner_id: "amanda.white",
+    industry: "Real Estate",
+    company_size: "200-500",
+    estimated_value: 95000,
+    notes: "Interested in project management features. Sent initial materials.",
+    created_at: new Date("2026-01-18"),
+    updated_at: new Date("2026-01-28")
+  }
+]);
+
+// Create indexes for leads collection
+db.leads.createIndex({ "company_name": 1 });
+db.leads.createIndex({ "status": 1 });
+db.leads.createIndex({ "source": 1 });
+db.leads.createIndex({ "owner_id": 1 });
+db.leads.createIndex({ "score.total": -1 });
+db.leads.createIndex({ "industry": 1 });
+db.leads.createIndex({ "created_at": -1 });
+
+// =============================================================================
 // CUSTOMERS COLLECTION
 // =============================================================================
 db.customers.drop();
@@ -577,6 +795,78 @@ db.deals.createIndex({ "customer_id": 1 });
 db.deals.createIndex({ "stage": 1 });
 db.deals.createIndex({ "owner": 1 });
 db.deals.createIndex({ "expected_close_date": 1 });
+db.deals.createIndex({ "forecast_category": 1 });
+
+// Add forecast_category to all deals
+db.deals.updateMany(
+  { stage: "CLOSED_WON" },
+  { $set: { forecast_category: "CLOSED" } }
+);
+db.deals.updateMany(
+  { stage: "CLOSED_LOST" },
+  { $set: { forecast_category: "OMITTED" } }
+);
+db.deals.updateMany(
+  { stage: "NEGOTIATION", forecast_category: { $exists: false } },
+  { $set: { forecast_category: "COMMIT" } }
+);
+db.deals.updateMany(
+  { stage: "PROPOSAL", forecast_category: { $exists: false } },
+  { $set: { forecast_category: "BEST_CASE" } }
+);
+db.deals.updateMany(
+  { stage: { $in: ["DISCOVERY", "QUALIFICATION"] }, forecast_category: { $exists: false } },
+  { $set: { forecast_category: "PIPELINE" } }
+);
+
+// =============================================================================
+// FORECAST QUOTAS COLLECTION
+// =============================================================================
+db.forecast_quotas.drop();
+db.forecast_quotas.insertMany([
+  {
+    _id: "2026-Q1",
+    period: "Q1 2026",
+    fiscal_year: 2026,
+    quarter: "Q1",
+    team_quota: 2500000,
+    reps: [
+      { owner_id: "carol.johnson", name: "Carol Johnson", quota: 750000, title: "VP of Sales" },
+      { owner_id: "ryan.garcia", name: "Ryan Garcia", quota: 500000, title: "Sales Manager" },
+      { owner_id: "amanda.white", name: "Amanda White", quota: 625000, title: "Account Executive" },
+      { owner_id: "chris.taylor", name: "Chris Taylor", quota: 625000, title: "Account Executive" }
+    ],
+    updated_at: new Date()
+  },
+  {
+    _id: "2026-Q2",
+    period: "Q2 2026",
+    fiscal_year: 2026,
+    quarter: "Q2",
+    team_quota: 2750000,
+    reps: [
+      { owner_id: "carol.johnson", name: "Carol Johnson", quota: 825000, title: "VP of Sales" },
+      { owner_id: "ryan.garcia", name: "Ryan Garcia", quota: 550000, title: "Sales Manager" },
+      { owner_id: "amanda.white", name: "Amanda White", quota: 687500, title: "Account Executive" },
+      { owner_id: "chris.taylor", name: "Chris Taylor", quota: 687500, title: "Account Executive" }
+    ],
+    updated_at: new Date()
+  },
+  {
+    _id: "2025-Q4",
+    period: "Q4 2025",
+    fiscal_year: 2025,
+    quarter: "Q4",
+    team_quota: 2200000,
+    reps: [
+      { owner_id: "carol.johnson", name: "Carol Johnson", quota: 660000, title: "VP of Sales" },
+      { owner_id: "ryan.garcia", name: "Ryan Garcia", quota: 440000, title: "Sales Manager" },
+      { owner_id: "amanda.white", name: "Amanda White", quota: 550000, title: "Account Executive" },
+      { owner_id: "chris.taylor", name: "Chris Taylor", quota: 550000, title: "Account Executive" }
+    ],
+    updated_at: new Date("2025-12-31")
+  }
+]);
 
 db.activities.createIndex({ "customer_id": 1 });
 db.activities.createIndex({ "deal_id": 1 });

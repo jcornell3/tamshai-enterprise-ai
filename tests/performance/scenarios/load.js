@@ -13,6 +13,7 @@
 import http from 'k6/http';
 import { check, sleep, group } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
+import { getAccessToken } from '../lib/auth.js';
 
 // Custom metrics
 const errorRate = new Rate('errors');
@@ -23,9 +24,7 @@ const mcpToolsDuration = new Trend('mcp_tools_duration', true);
 const requestCounter = new Counter('total_requests');
 
 // Configuration
-const GATEWAY_URL = __ENV.GATEWAY_URL || 'http://localhost:3100';
-const KEYCLOAK_URL = __ENV.KEYCLOAK_URL || 'http://localhost:8180';
-const KEYCLOAK_REALM = __ENV.KEYCLOAK_REALM || 'tamshai-corp';
+const GATEWAY_URL = __ENV.MCP_GATEWAY_URL;
 
 // =============================================================================
 // TDD: THRESHOLDS DEFINED FIRST
@@ -70,48 +69,6 @@ export const options = {
     environment: __ENV.ENVIRONMENT || 'local',
   },
 };
-
-// Token cache (per VU)
-let cachedToken = null;
-let tokenExpiry = 0;
-
-// Get access token from Keycloak
-function getAccessToken() {
-  const now = Date.now();
-
-  // Return cached token if valid
-  if (cachedToken && tokenExpiry > now + 30000) {
-    return cachedToken;
-  }
-
-  const tokenUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
-
-  const start = Date.now();
-  const response = http.post(
-    tokenUrl,
-    {
-      grant_type: 'password',
-      client_id: 'mcp-gateway',
-      username: 'alice.chen',
-      password: __ENV.DEV_USER_PASSWORD || 'dev-password-not-set',
-      scope: 'openid',
-    },
-    {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      tags: { name: 'keycloak-token' },
-    }
-  );
-  authDuration.add(Date.now() - start);
-
-  if (response.status === 200) {
-    const data = JSON.parse(response.body);
-    cachedToken = data.access_token;
-    tokenExpiry = now + (data.expires_in * 1000);
-    return cachedToken;
-  }
-
-  return null;
-}
 
 // Setup
 export function setup() {
@@ -170,7 +127,9 @@ export default function () {
 
   // Group 3: Authenticated endpoints
   group('Authenticated Endpoints', () => {
+    const authStart = Date.now();
     const token = getAccessToken();
+    authDuration.add(Date.now() - authStart);
 
     if (!token) {
       // If Keycloak unavailable, just test 401 behavior

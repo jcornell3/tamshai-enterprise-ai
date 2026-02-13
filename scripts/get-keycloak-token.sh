@@ -13,10 +13,12 @@ set -e
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180}"
 REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 CLIENT_ID="${KEYCLOAK_CLIENT_ID:-mcp-gateway}"
-CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-}"
+CLIENT_SECRET="${MCP_GATEWAY_CLIENT_SECRET:-}"
 
-# Default password from environment (GitHub Secret: DEV_USER_PASSWORD or TEST_USER_PASSWORD)
-# Falls back to DEV_USER_PASSWORD for corporate users, TEST_PASSWORD for test-user.journey
+# Token exchange service account (preferred method - no user password needed)
+RUNNER_SECRET="${MCP_INTEGRATION_RUNNER_SECRET:-}"
+
+# Default password from environment (ROPC fallback only - used when RUNNER_SECRET is not set)
 DEFAULT_PASSWORD="${KEYCLOAK_PASSWORD:-${DEV_USER_PASSWORD:-${TEST_PASSWORD:-}}}"
 
 # Color codes
@@ -34,15 +36,20 @@ Get JWT access token from Keycloak for testing.
 
 OPTIONS:
   -h, --help              Show this help message
-  -r, --realm REALM       Keycloak realm (default: tamshai)
+  -r, --realm REALM       Keycloak realm (default: tamshai-corp)
   -c, --client CLIENT     Client ID (default: mcp-gateway)
-  -p, --password PASS     User password (default: from DEV_USER_PASSWORD or TEST_PASSWORD env var)
+  -p, --password PASS     User password (ROPC fallback only)
   -u, --url URL           Keycloak URL (default: http://localhost:8180)
   -j, --json              Output full JSON response (default: token only)
   -v, --verbose           Show detailed information
 
+AUTHENTICATION:
+  Preferred: Token exchange via mcp-integration-runner (set MCP_INTEGRATION_RUNNER_SECRET)
+  Fallback:  ROPC password grant (set DEV_USER_PASSWORD or use -p flag)
+
 EXAMPLES:
-  # Get token for alice.chen (HR Manager)
+  # Get token for alice.chen via token exchange (preferred)
+  export MCP_INTEGRATION_RUNNER_SECRET=\$(gh secret get MCP_INTEGRATION_RUNNER_SECRET)
   $0 alice.chen
 
   # Get token for eve.thompson (CEO/Executive)
@@ -55,7 +62,7 @@ EXAMPLES:
   # Get full token response
   $0 --json alice.chen
 
-  # Use custom password
+  # ROPC fallback (when MCP_INTEGRATION_RUNNER_SECRET is not set)
   $0 --password mypassword alice.chen
 
 TEST USERS (all have password: [REDACTED-DEV-PASSWORD]):
@@ -143,44 +150,96 @@ if $VERBOSE; then
   echo -e "${YELLOW}Requesting token for $USERNAME...${NC}" >&2
 fi
 
-# Validate password is set
-if [ -z "$DEFAULT_PASSWORD" ]; then
-  echo -e "${RED}Error: No password configured${NC}" >&2
-  echo -e "${YELLOW}Set one of: KEYCLOAK_PASSWORD, DEV_USER_PASSWORD, or TEST_PASSWORD${NC}" >&2
-  exit 1
-fi
-
 # Request token
 TOKEN_ENDPOINT="$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token"
 
-RESPONSE=$(curl -s -X POST "$TOKEN_ENDPOINT" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=$CLIENT_ID" \
-  -d "client_secret=$CLIENT_SECRET" \
-  -d "username=$USERNAME" \
-  -d "password=$DEFAULT_PASSWORD" \
-  -d "grant_type=password" \
-  -d "scope=openid")
-
-# Check for errors
-if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-  ERROR=$(echo "$RESPONSE" | jq -r '.error')
-  ERROR_DESC=$(echo "$RESPONSE" | jq -r '.error_description // "No description"')
-  echo -e "${RED}Error: $ERROR${NC}" >&2
-  echo -e "${RED}Description: $ERROR_DESC${NC}" >&2
-
-  if [ "$ERROR" = "invalid_grant" ]; then
-    echo -e "${YELLOW}Hints:${NC}" >&2
-    echo "  - Check if username '$USERNAME' exists in Keycloak" >&2
-    echo "  - Verify password is correct (set via DEV_USER_PASSWORD or TEST_PASSWORD env var)" >&2
-    echo "  - Check if user account is enabled" >&2
-  elif [ "$ERROR" = "unauthorized_client" ]; then
-    echo -e "${YELLOW}Hints:${NC}" >&2
-    echo "  - Check if client '$CLIENT_ID' is configured for password grant" >&2
-    echo "  - Verify client secret is correct" >&2
+if [ -n "$RUNNER_SECRET" ]; then
+  # Preferred method: Token exchange via mcp-integration-runner
+  if $VERBOSE; then
+    echo -e "${YELLOW}Using token exchange (mcp-integration-runner)...${NC}" >&2
   fi
 
-  exit 1
+  # Step 1: Get service account token
+  SVC_RESPONSE=$(curl -s -X POST "$TOKEN_ENDPOINT" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "client_id=mcp-integration-runner" \
+    -d "client_secret=$RUNNER_SECRET" \
+    -d "grant_type=client_credentials")
+
+  if echo "$SVC_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+    ERROR=$(echo "$SVC_RESPONSE" | jq -r '.error')
+    ERROR_DESC=$(echo "$SVC_RESPONSE" | jq -r '.error_description // "No description"')
+    echo -e "${RED}Error getting service token: $ERROR${NC}" >&2
+    echo -e "${RED}Description: $ERROR_DESC${NC}" >&2
+    echo -e "${YELLOW}Hints:${NC}" >&2
+    echo "  - Verify MCP_INTEGRATION_RUNNER_SECRET is correct" >&2
+    echo "  - Check if mcp-integration-runner client exists in Keycloak" >&2
+    exit 1
+  fi
+
+  SVC_TOKEN=$(echo "$SVC_RESPONSE" | jq -r '.access_token')
+
+  # Step 2: Exchange for user token
+  RESPONSE=$(curl -s -X POST "$TOKEN_ENDPOINT" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "client_id=mcp-integration-runner" \
+    -d "client_secret=$RUNNER_SECRET" \
+    -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+    -d "subject_token=$SVC_TOKEN" \
+    -d "requested_subject=$USERNAME" \
+    -d "scope=openid profile roles")
+
+  if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+    ERROR=$(echo "$RESPONSE" | jq -r '.error')
+    ERROR_DESC=$(echo "$RESPONSE" | jq -r '.error_description // "No description"')
+    echo -e "${RED}Error exchanging token for $USERNAME: $ERROR${NC}" >&2
+    echo -e "${RED}Description: $ERROR_DESC${NC}" >&2
+    echo -e "${YELLOW}Hints:${NC}" >&2
+    echo "  - Check if user '$USERNAME' exists in Keycloak" >&2
+    echo "  - Verify token exchange permissions are configured" >&2
+    echo "  - See: keycloak/scripts/configure-token-exchange.sh" >&2
+    exit 1
+  fi
+else
+  # Fallback: ROPC (requires password and direct_access_grants_enabled=true)
+  if [ -z "$DEFAULT_PASSWORD" ]; then
+    echo -e "${RED}Error: No authentication method configured${NC}" >&2
+    echo -e "${YELLOW}Set MCP_INTEGRATION_RUNNER_SECRET (preferred) or DEV_USER_PASSWORD (ROPC fallback)${NC}" >&2
+    exit 1
+  fi
+
+  if $VERBOSE; then
+    echo -e "${YELLOW}Using ROPC fallback (password grant)...${NC}" >&2
+    echo -e "${YELLOW}Note: Requires direct_access_grants_enabled=true in Keycloak${NC}" >&2
+  fi
+
+  RESPONSE=$(curl -s -X POST "$TOKEN_ENDPOINT" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "client_id=$CLIENT_ID" \
+    -d "client_secret=$CLIENT_SECRET" \
+    -d "username=$USERNAME" \
+    -d "password=$DEFAULT_PASSWORD" \
+    -d "grant_type=password" \
+    -d "scope=openid")
+
+  if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+    ERROR=$(echo "$RESPONSE" | jq -r '.error')
+    ERROR_DESC=$(echo "$RESPONSE" | jq -r '.error_description // "No description"')
+    echo -e "${RED}Error: $ERROR${NC}" >&2
+    echo -e "${RED}Description: $ERROR_DESC${NC}" >&2
+
+    if [ "$ERROR" = "unauthorized_client" ]; then
+      echo -e "${YELLOW}Hints:${NC}" >&2
+      echo "  - ROPC (direct access grants) is disabled. Use token exchange instead:" >&2
+      echo "    export MCP_INTEGRATION_RUNNER_SECRET=\$(gh secret get MCP_INTEGRATION_RUNNER_SECRET)" >&2
+    elif [ "$ERROR" = "invalid_grant" ]; then
+      echo -e "${YELLOW}Hints:${NC}" >&2
+      echo "  - Check if username '$USERNAME' exists in Keycloak" >&2
+      echo "  - Verify password is correct" >&2
+    fi
+
+    exit 1
+  fi
 fi
 
 # Extract token

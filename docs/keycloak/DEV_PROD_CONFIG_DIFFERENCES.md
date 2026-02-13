@@ -94,7 +94,7 @@ Production includes additional redirect URIs for stage and prod domains:
 - Prod: `http://localhost:400[1-4]/*` + `https://www.tamshai.com/*` + `https://prod.tamshai.com/*`
 
 **tamshai-website**:
-- Dev: localhost, tamshai.local, www.tamshai.local, vps.tamshai.com, tamshai.com, www.tamshai.com
+- Dev: localhost, tamshai-playground.local, www.tamshai-playground.local, vps.tamshai.com, tamshai.com, www.tamshai.com
 - Prod: Same as dev + `https://prod.tamshai.com/*`
 
 **Why**: Allows OAuth redirects from production and staging environments.
@@ -108,7 +108,7 @@ Production includes additional CORS origins:
 - Prod: `http://localhost:400[1-4]` + `https://www.tamshai.com` + `https://prod.tamshai.com`
 
 **tamshai-website**:
-- Dev: localhost, tamshai.local, www.tamshai.local, vps.tamshai.com, tamshai.com, www.tamshai.com
+- Dev: localhost, tamshai-playground.local, www.tamshai-playground.local, vps.tamshai.com, tamshai.com, www.tamshai.com
 - Prod: Same as dev + `https://prod.tamshai.com`
 
 **Why**: Allows CORS requests from production and staging web apps.

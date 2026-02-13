@@ -1,0 +1,59 @@
+# ============================================================
+# Stage Environment Configuration (VPS via GitHub Actions)
+# ============================================================
+#
+# USAGE: This file is a template. Actual values are passed via GitHub Actions
+#         using -var flags from repository secrets.
+#
+# SECRETS (passed via GitHub Actions):
+#   - keycloak_admin_password (from STAGE_KEYCLOAK_ADMIN_PASSWORD)
+#   - test_user_password (from STAGE_USER_PASSWORD)
+#   - mcp_gateway_client_secret (from MCP_GATEWAY_CLIENT_SECRET)
+#
+# ============================================================
+
+# Keycloak connection settings
+keycloak_url        = "https://www.tamshai.com/auth"
+keycloak_admin_user = "admin"
+
+# Realm settings
+realm_name         = "tamshai-corp"
+realm_display_name = "Tamshai Corporation - Stage"
+
+# Environment
+environment = "stage"
+
+# TLS settings (do NOT skip verification in stage/prod)
+tls_insecure_skip_verify = false
+
+# Valid redirect URIs (includes wildcard paths for OAuth callbacks)
+valid_redirect_uris = [
+  "https://www.tamshai.com/*",
+  "https://portal.tamshai.com/*",
+  "https://finance.tamshai.com/*",
+  "https://sales.tamshai.com/*",
+  "https://support.tamshai.com/*",
+  "https://hr.tamshai.com/*",
+  "https://payroll.tamshai.com/*",
+  "https://tax.tamshai.com/*",
+  "https://customer-support.tamshai.com/*",
+]
+
+# Explicit CORS origins (no wildcard paths - defense-in-depth)
+web_origins = [
+  "https://www.tamshai.com",
+  "https://portal.tamshai.com",
+  "https://finance.tamshai.com",
+  "https://sales.tamshai.com",
+  "https://support.tamshai.com",
+  "https://hr.tamshai.com",
+  "https://payroll.tamshai.com",
+  "https://tax.tamshai.com",
+  "https://customer-support.tamshai.com",
+]
+
+# OAuth Flows
+# ROPC (Resource Owner Password Credentials) DISABLED for security (mirror production)
+# Stage uses Authorization Code + PKCE flow only (OAuth 2.0 Security BCP RFC 8252)
+# See docs/security/ROPC_ASSESSMENT.md for security rationale
+direct_access_grants_enabled = false

@@ -18,7 +18,7 @@
   "quickLoginCheckMilliSeconds": 1000,
   "maxDeltaTimeSeconds": 43200,
   "failureFactor": 5,
-  "accessTokenLifespan": 1800,
+  "accessTokenLifespan": 300,
   "accessTokenLifespanForImplicitFlow": 1800,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
@@ -94,6 +94,22 @@
         "description": "Read access to legal data (contracts, compliance)"
       },
       {
+        "name": "payroll-read",
+        "description": "Read access to payroll data (pay stubs, tax withholdings, benefits)"
+      },
+      {
+        "name": "payroll-write",
+        "description": "Full access to payroll data (process payroll, manage contractors)"
+      },
+      {
+        "name": "tax-read",
+        "description": "Read access to tax data (sales tax, quarterly estimates, filings)"
+      },
+      {
+        "name": "tax-write",
+        "description": "Full access to tax data (manage rates, process filings)"
+      },
+      {
         "name": "manager",
         "description": "Manager role - can view direct reports data"
       },
@@ -110,7 +126,9 @@
             "it-read",
             "marketing-read",
             "operations-read",
-            "legal-read"
+            "legal-read",
+            "payroll-read",
+            "tax-read"
           ]
         }
       }
@@ -138,6 +156,22 @@
       "realmRoles": [
         "finance-read",
         "finance-write"
+      ]
+    },
+    {
+      "name": "Payroll-Team",
+      "path": "/Payroll-Team",
+      "realmRoles": [
+        "payroll-read",
+        "payroll-write"
+      ]
+    },
+    {
+      "name": "Tax-Team",
+      "path": "/Tax-Team",
+      "realmRoles": [
+        "tax-read",
+        "tax-write"
       ]
     },
     {
@@ -198,8 +232,203 @@
   ],
   "users": [
     {
+      "username": "alice.chen",
+      "email": "alice@tamshai-playground.local",
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/HR-Department",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Human Resources"],
+        "employeeId": ["EMP010"],
+        "title": ["VP of Human Resources"]
+      }
+    },
+    {
+      "username": "bob.martinez",
+      "email": "bob@tamshai-playground.local",
+      "firstName": "Bob",
+      "lastName": "Martinez",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Finance-Team",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Finance"],
+        "employeeId": ["EMP020"],
+        "title": ["Finance Director"]
+      }
+    },
+    {
+      "username": "carol.johnson",
+      "email": "carol@tamshai-playground.local",
+      "firstName": "Carol",
+      "lastName": "Johnson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Sales-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Sales"],
+        "employeeId": ["EMP030"],
+        "title": ["VP of Sales"]
+      }
+    },
+    {
+      "username": "dan.williams",
+      "email": "dan@tamshai-playground.local",
+      "firstName": "Dan",
+      "lastName": "Williams",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Support-Team",
+        "/Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Customer Support"],
+        "employeeId": ["EMP040"],
+        "title": ["Support Director"]
+      }
+    },
+    {
+      "username": "eve.thompson",
+      "email": "eve@tamshai-playground.local",
+      "firstName": "Eve",
+      "lastName": "Thompson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/C-Suite"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Executive"],
+        "employeeId": ["EMP001"],
+        "title": ["CEO"]
+      }
+    },
+    {
+      "username": "frank.davis",
+      "email": "frank@tamshai-playground.local",
+      "firstName": "Frank",
+      "lastName": "Davis",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/IT-Team"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["IT"],
+        "employeeId": ["EMP061"],
+        "title": ["Intern"]
+      }
+    },
+    {
+      "username": "nina.patel",
+      "email": "nina.p@tamshai-playground.local",
+      "firstName": "Nina",
+      "lastName": "Patel",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Engineering-Managers"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Engineering"],
+        "employeeId": ["EMP051"],
+        "title": ["Engineering Manager"]
+      }
+    },
+    {
+      "username": "marcus.johnson",
+      "email": "marcus.j@tamshai-playground.local",
+      "firstName": "Marcus",
+      "lastName": "Johnson",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SET_VIA_KEYCLOAK_SYNC",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/Engineering-Team"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "department": ["Engineering"],
+        "employeeId": ["EMP052"],
+        "title": ["Software Engineer"]
+      }
+    },
+    {
       "username": "test-user.journey",
-      "email": "test-user@tamshai.local",
+      "email": "test-user@tamshai-playground.local",
       "emailVerified": true,
       "enabled": true,
       "firstName": "Test",
@@ -209,7 +438,7 @@
         "department": ["Testing"],
         "title": ["Journey Test Account"]
       },
-      "groups": ["/All-Employees"],
+      "groups": ["/All-Employees", "/C-Suite"],
       "credentials": [
         {
           "type": "password",
@@ -218,7 +447,7 @@
         },
         {
           "type": "otp",
-          "secretData": "{\"value\":\"x6aQiJjmcl75ip0BdVHe\"}",
+          "secretData": "{\"value\":\"REPLACED_BY_SYNC_SCRIPT\"}",
           "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
         }
       ]
@@ -246,7 +475,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -271,7 +500,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -298,7 +527,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -325,7 +554,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -352,7 +581,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -379,7 +608,7 @@
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": [
-        
+
         "profile",
         "email",
         "roles"
@@ -392,7 +621,7 @@
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": true,
+      "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
       "redirectUris": [
@@ -455,10 +684,14 @@
       "redirectUris": [
         "http://localhost:8080/employee-services.html",
         "http://localhost:8080/*",
-        "https://tamshai.local/employee-services.html",
-        "https://tamshai.local/*",
-        "https://www.tamshai.local/employee-services.html",
-        "https://www.tamshai.local/*",
+        "https://tamshai-playground.local/employee-services.html",
+        "https://tamshai-playground.local/*",
+        "https://www.tamshai-playground.local/employee-services.html",
+        "https://www.tamshai-playground.local/*",
+        "https://tamshai-playground.local:8443/employee-services.html",
+        "https://tamshai-playground.local:8443/*",
+        "https://www.tamshai-playground.local:8443/employee-services.html",
+        "https://www.tamshai-playground.local:8443/*",
         "https://vps.tamshai.com/employee-services.html",
         "https://vps.tamshai.com/*",
         "https://tamshai.com/employee-services.html",
@@ -468,15 +701,17 @@
       ],
       "webOrigins": [
         "http://localhost:8080",
-        "https://tamshai.local",
-        "https://www.tamshai.local",
+        "https://tamshai-playground.local",
+        "https://www.tamshai-playground.local",
+        "https://tamshai-playground.local:8443",
+        "https://www.tamshai-playground.local:8443",
         "https://vps.tamshai.com",
         "https://tamshai.com",
         "https://www.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://vps.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
+        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai-playground.local/*##https://www.tamshai-playground.local/*##https://tamshai-playground.local:8443/*##https://www.tamshai-playground.local:8443/*##https://vps.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
       },
       "defaultClientScopes": [
 
@@ -511,19 +746,21 @@
       "redirectUris": [
         "http://localhost:4000/*",
         "http://localhost:4000/callback",
-        "https://www.tamshai.local/app/*",
+        "https://www.tamshai-playground.local/app/*",
+        "https://www.tamshai-playground.local:8443/app/*",
         "https://www.tamshai.com/app/*",
         "https://prod.tamshai.com/app/*"
       ],
       "webOrigins": [
         "http://localhost:4000",
-        "https://www.tamshai.local",
+        "https://www.tamshai-playground.local",
+        "https://www.tamshai-playground.local:8443",
         "https://www.tamshai.com",
         "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4000/*##https://www.tamshai.local/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
+        "post.logout.redirect.uris": "http://localhost:4000/*##https://www.tamshai-playground.local/*##https://www.tamshai-playground.local:8443/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
       },
       "defaultClientScopes": [
         "profile",
@@ -540,6 +777,95 @@
             "included.client.audience": "mcp-gateway",
             "id.token.claim": "false",
             "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "mcp-gateway",
+      "name": "MCP Gateway",
+      "description": "Backend service for AI orchestration - confidential client for integration tests",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACED_BY_SYNC_SCRIPT",
+      "redirectUris": [
+        "http://localhost:3100/*",
+        "http://127.0.0.1:3100/*",
+        "https://tamshai-playground.local/*",
+        "https://www.tamshai-playground.local/*",
+        "https://tamshai-playground.local:8443/*",
+        "https://www.tamshai-playground.local:8443/*"
+      ],
+      "webOrigins": ["+"],
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "mcp-gateway",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "mcp-ui",
+      "name": "MCP UI Service",
+      "description": "Backend service for Generative UI - confidential client for service-to-service auth",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACED_BY_SYNC_SCRIPT",
+      "redirectUris": [],
+      "webOrigins": [],
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "mcp-gateway",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "hardcoded-realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "realm_access",
+            "claim.value": "{\"roles\":[\"executive\",\"hr-read\",\"finance-read\",\"sales-read\",\"support-read\",\"payroll-read\"]}",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "jsonType.label": "JSON"
           }
         }
       ]

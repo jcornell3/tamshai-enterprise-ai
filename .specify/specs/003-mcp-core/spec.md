@@ -519,7 +519,7 @@ Content-Type: application/json
 {
   "status": "pending_confirmation",
   "confirmationId": "bc482353-28be-4b02-b3a3-376cf5de86e7",
-  "message": "⚠️ Delete employee Lisa Anderson (lisa.a@tamshai.local)?...",
+  "message": "⚠️ Delete employee Lisa Anderson (lisa.a@tamshai-playground.local)?...",
   "confirmationData": {
     "action": "delete_employee",
     "employeeId": "e1000000-0000-0000-0000-000000000021",

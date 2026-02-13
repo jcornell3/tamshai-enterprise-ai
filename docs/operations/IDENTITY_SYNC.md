@@ -268,7 +268,7 @@ The identity sync service supports **environment-based email domain transformati
 
 | Environment | Source Email (HR Database) | Keycloak Email |
 |-------------|---------------------------|----------------|
-| **dev** | `alice@tamshai.com` | `alice@tamshai.local` (transformed) |
+| **dev** | `alice@tamshai.com` | `alice@tamshai-playground.local` (transformed) |
 | **stage** | `alice@tamshai.com` | `alice@tamshai.com` (unchanged) |
 | **prod** | `alice@tamshai.com` | `alice@tamshai.com` (unchanged) |
 
@@ -285,9 +285,9 @@ export function transformEmailForEnvironment(email: string): string {
     return email;
   }
 
-  // In dev, transform @tamshai.com to @tamshai.local
+  // In dev, transform @tamshai.com to @tamshai-playground.local
   if (email.endsWith('@tamshai.com')) {
-    return email.replace('@tamshai.com', '@tamshai.local');
+    return email.replace('@tamshai.com', '@tamshai-playground.local');
   }
 
   return email;
@@ -304,7 +304,7 @@ export function transformEmailForEnvironment(email: string): string {
 ### Configuration
 
 The `ENVIRONMENT` variable is set in:
-- **Dev**: Not set or `dev` (uses docker-compose defaults, transforms to @tamshai.local)
+- **Dev**: Not set or `dev` (uses docker-compose defaults, transforms to @tamshai-playground.local)
 - **Stage/Prod**: Set in `cloud-init.yaml` via Terraform: `ENVIRONMENT=${environment}`
 
 ---
@@ -320,7 +320,7 @@ In development, users are **pre-configured** in `keycloak/realm-export-dev.json`
   "users": [
     {
       "username": "eve.thompson",
-      "email": "eve@tamshai.local",
+      "email": "eve@tamshai-playground.local",
       "enabled": true,
       "credentials": [{"type": "password", "value": "..."}],
       ...
@@ -333,8 +333,8 @@ In development, users are **pre-configured** in `keycloak/realm-export-dev.json`
 This means:
 - Users exist immediately after Keycloak starts (via `--import-realm`)
 - Identity reconciliation finds existing users and verifies/updates them
-- HR database has `@tamshai.com` emails, transformed to `@tamshai.local` for dev
-- Dev realm uses `@tamshai.local` to avoid DNS/email conflicts
+- HR database has `@tamshai.com` emails, transformed to `@tamshai-playground.local` for dev
+- Dev realm uses `@tamshai-playground.local` to avoid DNS/email conflicts
 - Faster development cycle (no waiting for user creation)
 
 ### Stage/Production Environments

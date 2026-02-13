@@ -75,7 +75,7 @@ Document all Keycloak configuration patterns and anti-patterns discovered during
 
 ```json
 // WRONG - causes double-encoding
-"secretData": "{\"value\":\"JBSWY3DPEHPK3PXP\"}"
+"secretData": "{\"value\":\"***REDACTED_TOTP***\"}"
 
 // CORRECT - raw secret
 "secretData": "{\"value\":\"TamshaiTestKey123\"}"

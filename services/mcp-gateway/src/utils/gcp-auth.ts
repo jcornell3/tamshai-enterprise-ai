@@ -55,9 +55,14 @@ async function checkGCPEnvironment(): Promise<boolean> {
  * Get an identity token for calling another Cloud Run service.
  *
  * @param targetUrl - The URL of the target Cloud Run service (used as audience)
- * @returns The identity token, or null if not on GCP
+ * @returns The identity token, or null if not on GCP or URL is undefined
  */
-export async function getIdentityToken(targetUrl: string): Promise<string | null> {
+export async function getIdentityToken(targetUrl: string | undefined): Promise<string | null> {
+  // Return null if URL is not configured
+  if (!targetUrl) {
+    return null;
+  }
+
   // Only fetch tokens on GCP
   if (!(await checkGCPEnvironment())) {
     return null;
@@ -79,10 +84,13 @@ export async function getIdentityToken(targetUrl: string): Promise<string | null
     }
 
     const client = await clientPromise;
-    const headers = await client.getRequestHeaders();
+    // google-auth-library v9 returns {[key: string]: string}, v10+ returns Fetch API Headers
+    const headers = await client.getRequestHeaders() as Record<string, string> | Headers;
 
     // Extract the token from the Authorization header
-    const authHeader = headers['Authorization'] || headers['authorization'];
+    const authHeader = 'get' in headers && typeof headers.get === 'function'
+      ? (headers.get('Authorization') || headers.get('authorization'))
+      : ((headers as Record<string, string>)['Authorization'] || (headers as Record<string, string>)['authorization']);
     if (authHeader && authHeader.startsWith('Bearer ')) {
       return authHeader.substring(7);
     }
@@ -104,7 +112,7 @@ export async function getIdentityToken(targetUrl: string): Promise<string | null
  * @returns Headers object with Authorization if on GCP
  */
 export async function getCloudRunHeaders(
-  targetUrl: string,
+  targetUrl: string | undefined,
   additionalHeaders: Record<string, string> = {}
 ): Promise<Record<string, string>> {
   const token = await getIdentityToken(targetUrl);

@@ -7,6 +7,7 @@
  */
 
 import express, { Express, Request, Response } from 'express';
+import { requireGatewayAuth } from '@tamshai/shared';
 import { IndexBuilder } from './indexer/index-builder.js';
 import { EmbeddingGenerator } from './indexer/embedding-generator.js';
 import { QueryFailuresTool } from './tools/query-failures.js';
@@ -86,6 +87,10 @@ export class McpServer {
     // Middleware
     this.app.use(express.json());
 
+    // Gateway authentication middleware (prevents direct access bypass)
+    // Health endpoints are automatically exempt
+    this.app.use(requireGatewayAuth(process.env.MCP_INTERNAL_SECRET));
+
     // Health endpoint
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({
@@ -140,7 +145,8 @@ export class McpServer {
             break;
 
           default:
-            res.status(404).json({ error: `Unknown tool: ${toolName}` });
+            // Security: Return generic error without user input
+            res.status(404).json({ error: 'Unknown tool requested' });
             return;
         }
 
@@ -196,7 +202,8 @@ export class McpServer {
         } else if (phoenixMatch && phoenixMatch[1]) {
           result = await this.phoenixResource.read({ version: phoenixMatch[1] });
         } else {
-          res.status(404).json({ error: `Unknown resource URI: ${uri}` });
+          // Security: Return generic error without user input
+          res.status(404).json({ error: 'Unknown resource URI requested' });
           return;
         }
 

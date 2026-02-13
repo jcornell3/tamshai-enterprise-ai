@@ -8,20 +8,20 @@
 const axios = require('axios');
 
 const CONFIG = {
-  keycloakUrl: 'http://127.0.0.1:8180',
+  keycloakUrl: process.env.KEYCLOAK_URL,
   realm: 'tamshai-corp',
   clientId: 'mcp-gateway',
 };
 
 async function getAdminToken() {
+  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  const params = clientSecret
+    ? { client_id: 'admin-cli', client_secret: clientSecret, grant_type: 'client_credentials' }
+    : { client_id: 'admin-cli', username: 'admin', password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin', grant_type: 'password' };
+
   const response = await axios.post(
     `${CONFIG.keycloakUrl}/realms/master/protocol/openid-connect/token`,
-    new URLSearchParams({
-      client_id: 'admin-cli',
-      username: 'admin',
-      password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
-      grant_type: 'password',
-    }),
+    new URLSearchParams(params),
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   return response.data.access_token;
@@ -136,17 +136,37 @@ async function main() {
     await createMapper(adminToken, clientUuid, mapper);
   }
 
-  // Verify by getting a test token
-  console.log('\n🧪 Verifying mappers with test token...');
+  // Verify by getting a test token via token exchange (no ROPC)
+  console.log('\n🧪 Verifying mappers with test token (token exchange)...');
   try {
+    const integrationRunnerSecret = process.env.MCP_INTEGRATION_RUNNER_SECRET;
+    if (!integrationRunnerSecret) {
+      console.log('⚠️  MCP_INTEGRATION_RUNNER_SECRET not set - skipping token verification');
+      console.log('   Set this env var to verify mappers via token exchange.');
+      return;
+    }
+
+    // Step 1: Get service account token (client credentials)
+    const serviceTokenResp = await axios.post(
+      `${CONFIG.keycloakUrl}/realms/${CONFIG.realm}/protocol/openid-connect/token`,
+      new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: 'mcp-integration-runner',
+        client_secret: integrationRunnerSecret,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    // Step 2: Exchange for alice.chen's token
     const tokenResp = await axios.post(
       `${CONFIG.keycloakUrl}/realms/${CONFIG.realm}/protocol/openid-connect/token`,
       new URLSearchParams({
-        grant_type: 'password',
-        client_id: 'mcp-gateway',
-        client_secret: process.env.KEYCLOAK_CLIENT_SECRET || '[DEV-SECRET-NOT-SET]',
-        username: 'alice.chen',
-        password: process.env.DEV_USER_PASSWORD || '[DEV-PASSWORD-NOT-SET]',
+        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+        client_id: 'mcp-integration-runner',
+        client_secret: integrationRunnerSecret,
+        subject_token: serviceTokenResp.data.access_token,
+        requested_subject: 'alice.chen',
+        audience: 'mcp-gateway',
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );

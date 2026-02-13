@@ -41,6 +41,7 @@ export function SSEQueryClient({
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const responseRef = useRef<string>(''); // Track accumulated response
 
   const startQuery = () => {
     // Clean up existing EventSource
@@ -51,6 +52,7 @@ export function SSEQueryClient({
     setResponse('');
     setError(null);
     setIsStreaming(true);
+    responseRef.current = ''; // Reset ref
 
     try {
       const token = getAccessToken();
@@ -87,7 +89,7 @@ export function SSEQueryClient({
           eventSource.close();
           setIsStreaming(false);
           if (onComplete) {
-            onComplete(response);
+            onComplete(responseRef.current); // Use ref value for latest response
           }
           return;
         }
@@ -97,7 +99,8 @@ export function SSEQueryClient({
 
           // Append text chunk to response
           if (chunk.text) {
-            setResponse((prev) => prev + chunk.text);
+            responseRef.current += chunk.text; // Update ref immediately
+            setResponse((prev) => prev + chunk.text); // Update state for rendering
           }
         } catch (parseError) {
           console.error('Failed to parse SSE chunk:', parseError);

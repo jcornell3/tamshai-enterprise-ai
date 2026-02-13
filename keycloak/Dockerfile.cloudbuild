@@ -5,7 +5,7 @@
 # =============================================================================
 # Stage 1: Fetch the Cloud SQL JDBC Socket Factory and jq binary
 # =============================================================================
-FROM alpine:latest AS deps
+FROM alpine:3.19 AS deps
 RUN apk add --no-cache curl
 WORKDIR /libs
 

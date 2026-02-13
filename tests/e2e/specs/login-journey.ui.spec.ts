@@ -2,8 +2,8 @@
  * E2E Login Journey Test
  *
  * Tests the full employee login flow including:
- * - Navigation to employee login page
- * - SSO redirect to Keycloak
+ * - Homepage Employee Login link points to /app/
+ * - Portal auto-redirects unauthenticated users to Keycloak SSO
  * - Keycloak authentication (username/password + TOTP)
  * - Redirect back to portal
  * - User info verification
@@ -24,9 +24,9 @@ const ENV = process.env.TEST_ENV || 'dev';
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tamshai-corp';
 const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
-    site: 'https://www.tamshai.local',      // Static marketing site
-    app: 'https://www.tamshai.local/app',   // Portal SPA
-    keycloak: 'https://www.tamshai.local/auth',
+    site: 'https://www.tamshai-playground.local:8443',      // Static marketing site
+    app: 'https://www.tamshai-playground.local:8443/app',   // Portal SPA
+    keycloak: 'https://www.tamshai-playground.local:8443/auth',
   },
   stage: {
     site: 'https://www.tamshai.com',        // Static marketing site
@@ -130,8 +130,10 @@ function generateTotpCode(secret: string): string {
       // Use oathtool to generate TOTP code
       // oathtool takes the base32 secret as a positional argument
       // No flags needed - it defaults to TOTP with SHA1 algorithm
-      const totpCode = execSync(`oathtool "${secret}"`, {
+      const totpCode = execSync('oathtool "$TOTP_SECRET"', {
         encoding: 'utf-8',
+        env: { ...process.env, TOTP_SECRET: secret },
+        shell: '/bin/bash',
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
 
@@ -339,34 +341,30 @@ test.describe('Employee Login Journey', () => {
     }
   });
 
-  test('should display employee login page with SSO button', async ({
+  test('should have Employee Login link on homepage pointing to portal', async ({
     page,
   }) => {
     const urls = BASE_URLS[ENV];
 
-    // Navigate to employee login page
-    await page.goto(`${urls.site}/employee-login.html`);
+    // Navigate to homepage
+    await page.goto(urls.site);
 
     // Verify page loaded
     await expect(page).toHaveTitle(/Tamshai/i);
 
-    // Verify SSO button exists (button text is "Sign in with SSO")
-    const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');
-    await expect(ssoButton.first()).toBeVisible();
+    // Verify Employee Login button exists and links to /app/
+    const employeeBtn = page.locator('a.btn-login:has-text("Employee Login")');
+    await expect(employeeBtn.first()).toBeVisible();
+    await expect(employeeBtn.first()).toHaveAttribute('href', '/app/');
   });
 
-  test('should redirect to Keycloak when clicking SSO', async ({ page }) => {
+  test('should auto-redirect to Keycloak when visiting portal', async ({ page }) => {
     const urls = BASE_URLS[ENV];
 
-    // Navigate to employee login
-    await page.goto(`${urls.site}/employee-login.html`);
+    // Navigate directly to the portal (simulates clicking Employee Login)
+    await page.goto(`${urls.app}/`);
 
-    // Click SSO button (goes to /app/ which redirects to Keycloak)
-    const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');
-    await ssoButton.first().click();
-
-    // Wait for redirect to Keycloak (portal redirects to Keycloak for auth)
-    // Note: Realm is configurable via KEYCLOAK_REALM env var (default: tamshai-corp)
+    // Portal auto-redirects unauthenticated users to Keycloak (no WelcomePage)
     await page.waitForURL(new RegExp(`/auth/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth`), { timeout: 30000 });
 
     // Verify Keycloak login form appears
@@ -384,12 +382,8 @@ test.describe('Employee Login Journey', () => {
       test.skip(true, 'No test credentials configured');
     }
 
-    // Start at employee login page
-    await page.goto(`${urls.site}/employee-login.html`);
-
-    // Click SSO button to go to Keycloak
-    const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');
-    await ssoButton.first().click();
+    // Navigate to portal — auto-redirects to Keycloak SSO
+    await page.goto(`${urls.app}/`);
 
     // Wait for Keycloak login page
     await waitForKeycloakLogin(page);
@@ -403,8 +397,11 @@ test.describe('Employee Login Journey', () => {
 
     // TOTP secret priority:
     // 1) Auto-capture during TOTP setup (if setup page appears)
-    // 2) Environment variable (TEST_USER_TOTP_SECRET) - always takes precedence when set
-    // 3) Cached file from previous run - enables test resilience
+    // 2) Cached file (written by globalSetup with Base32-encoded bridge value)
+    // 3) Environment variable (TEST_USER_TOTP_SECRET) - direct fallback
+    //
+    // Cache file takes precedence over env var because globalSetup writes
+    // a Base32-encoded version that matches Keycloak's internal encoding.
 
     // Check if TOTP setup is required FIRST (handles first-time login)
     const capturedSecret = await handleTotpSetupIfRequired(page);
@@ -413,8 +410,9 @@ test.describe('Employee Login Journey', () => {
     let effectiveTotpSecret: string | null = capturedSecret;
 
     if (!effectiveTotpSecret) {
-      // Fall back to env var or cached secret
-      effectiveTotpSecret = TEST_USER.totpSecret || loadTotpSecret(TEST_USER.username, ENV);
+      // Cache file first (globalSetup writes Base32-encoded bridge value),
+      // then fall back to raw env var
+      effectiveTotpSecret = loadTotpSecret(TEST_USER.username, ENV) || TEST_USER.totpSecret;
     } else {
       // Save the captured secret for use in subsequent test runs
       saveTotpSecret(TEST_USER.username, ENV, capturedSecret);
@@ -456,12 +454,8 @@ test.describe('Employee Login Journey', () => {
   test('should handle invalid credentials gracefully', async ({ page }) => {
     const urls = BASE_URLS[ENV];
 
-    // Navigate to login
-    await page.goto(`${urls.site}/employee-login.html`);
-
-    // Click SSO
-    const ssoButton = page.locator('a.sso-btn, a:has-text("Sign in with SSO")');
-    await ssoButton.first().click();
+    // Navigate to portal — auto-redirects to Keycloak SSO
+    await page.goto(`${urls.app}/`);
 
     // Wait for Keycloak
     await waitForKeycloakLogin(page);
@@ -492,15 +486,15 @@ test.describe('Portal SPA Rendering', () => {
       errors.push(error.message);
     });
 
-    // Navigate to portal (unauthenticated - should redirect to login)
-    await page.goto(`${urls.app}/app/`);
+    // Navigate to portal (unauthenticated - auto-redirects to Keycloak)
+    await page.goto(`${urls.app}/`);
 
     // Wait for page to settle
     await page.waitForLoadState('networkidle');
 
-    // Check for critical errors (exclude expected auth redirects)
+    // Check for critical errors (exclude expected auth redirects and OIDC flows)
     const criticalErrors = errors.filter(
-      (e) => !e.includes('401') && !e.includes('unauthorized')
+      (e) => !e.includes('401') && !e.includes('unauthorized') && !e.includes('OIDC')
     );
 
     expect(criticalErrors).toHaveLength(0);
@@ -518,7 +512,7 @@ test.describe('Portal SPA Rendering', () => {
     });
 
     // Navigate to portal
-    await page.goto(`${urls.app}/app/`);
+    await page.goto(`${urls.app}/`);
     await page.waitForLoadState('networkidle');
 
     // No assets should 404

@@ -167,7 +167,7 @@ show_endpoints() {
     log_header "Service Endpoints"
 
     if [ "$ENV" = "dev" ]; then
-        echo "  Website:      http://localhost:8080 or https://www.tamshai.local"
+        echo "  Website:      http://localhost:8080 or https://www.tamshai-playground.local"
         echo "  Keycloak:     http://localhost:8180"
         echo "  MCP Gateway:  http://localhost:3100"
         echo "  Kong Gateway: http://localhost:8100"

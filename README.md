@@ -211,16 +211,16 @@ Run these commands to verify your development environment:
 
 #### 1\. Add Hosts File Entry (One-Time)
 
-The dev environment uses HTTPS at `https://www.tamshai.local`. Add this entry to your hosts file:
+The dev environment uses HTTPS at `https://www.tamshai-playground.local`. Add this entry to your hosts file:
 
 **Windows** (run PowerShell as Administrator): 
     
-    `Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1 tamshai.local www.tamshai.local"  
+    `Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value "127.0.0.1 tamshai-playground.local www.tamshai-playground.local"  
     `
 
 **macOS/Linux**: 
     
-    `echo "127.0.0.1 tamshai.local www.tamshai.local" | sudo tee -a /etc/hosts  
+    `echo "127.0.0.1 tamshai-playground.local www.tamshai-playground.local" | sudo tee -a /etc/hosts  
     `
 
 #### 2\. Clone and Configure 
@@ -244,7 +244,7 @@ The dev environment uses HTTPS at `https://www.tamshai.local`. Add this entry to
     terraform apply -var-file=dev.tfvars    # Deploy all services  
       
     # Access the application  
-    # https://www.tamshai.local (accept self-signed certificate warning)  
+    # https://www.tamshai-playground.local (accept self-signed certificate warning)  
     `
 
 #### Alternative: Docker Compose Only 
@@ -455,7 +455,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
   "type": "http",
   "environments": {
     "dev": {
-      "base_url": "https://www.tamshai.local/mcp-journey"
+      "base_url": "https://www.tamshai-playground.local/mcp-journey"
     },
     "stage": {
       "base_url": "https://www.tamshai.com/mcp-journey"

@@ -139,7 +139,7 @@ cmd_set() {
     if [ -z "$SECRET_PATH" ] || [ -z "$SECRET_VALUE" ]; then
         log_error "Secret path and value required"
         echo "Usage: $0 set [env] <path> <key=value>"
-        echo "Example: $0 set dev tamshai/test api_key=secret123"
+        echo "Example: $0 set dev tamshai/test api_key=<your-secret>"
         exit 1
     fi
 
@@ -172,7 +172,7 @@ cmd_rotate() {
     NEW_SECRET=$(openssl rand -base64 32)
 
     echo "New secret generated (32 bytes, base64 encoded)"
-    read -p "Apply this rotation? (yes/no): " confirm
+    read -r -p "Apply this rotation? (yes/no): " confirm
 
     if [ "$confirm" = "yes" ]; then
         if [ "$ENV" = "dev" ]; then

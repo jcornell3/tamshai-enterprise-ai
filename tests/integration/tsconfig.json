@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,8 +14,12 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "node",
-    "types": ["jest", "node"]
+    "types": ["jest", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "*": ["node_modules/*", "../shared/*"]
+    }
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "../shared/**/*.ts"],
   "exclude": ["node_modules", "dist", "coverage"]
 }

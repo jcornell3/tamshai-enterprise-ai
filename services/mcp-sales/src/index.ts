@@ -16,6 +16,7 @@ import winston from 'winston';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
+import { requireGatewayAuth } from '@tamshai/shared';
 import { UserContext, checkConnection, closeConnection, getCollection, buildRoleFilter } from './database/connection';
 import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from './types/response';
 import { handleOpportunityNotFound, handleCustomerNotFound, handleInsufficientPermissions, handleCannotDeleteWonOpportunity, handleDatabaseError, withErrorHandling } from './utils/error-handler';
@@ -33,6 +34,10 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3103');
 
 app.use(express.json());
+
+// Gateway authentication middleware (prevents direct access bypass)
+app.use(requireGatewayAuth(process.env.MCP_INTERNAL_SECRET, { logger }));
+
 app.use((req: Request, res: Response, next: NextFunction) => {
   logger.info('Incoming request', { method: req.method, path: req.path, userId: req.headers['x-user-id'] });
   next();
@@ -606,6 +611,454 @@ async function executeDeleteCustomer(confirmationData: Record<string, unknown>, 
 }
 
 // =============================================================================
+// TOOL: list_leads (with cursor-based pagination)
+// =============================================================================
+
+const ListLeadsInputSchema = z.object({
+  status: z.enum(['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'DISQUALIFIED']).optional(),
+  source: z.string().optional(),
+  minScore: z.number().optional(),
+  owner: z.string().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+});
+
+async function listLeads(input: any, userContext: UserContext): Promise<MCPToolResponse<any[]>> {
+  return withErrorHandling('list_leads', async () => {
+    const { status, source, minScore, owner, limit, cursor } = ListLeadsInputSchema.parse(input);
+
+    const cursorData = cursor ? decodeCursor(cursor) : null;
+    const collection = await getCollection('leads');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const filter: any = { ...roleFilter };
+    if (status) filter.status = status;
+    if (source) filter.source = source;
+    if (minScore !== undefined) filter['score.total'] = { $gte: minScore };
+    if (owner) filter.owner_id = owner;
+
+    // Cursor-based pagination
+    if (cursorData) {
+      filter._id = { $lt: new ObjectId(cursorData._id) };
+    }
+
+    const queryLimit = limit + 1;
+    const leads = await collection
+      .find(filter)
+      .sort({ _id: -1 })
+      .limit(queryLimit)
+      .toArray();
+
+    const hasMore = leads.length > limit;
+    const rawResults = hasMore ? leads.slice(0, limit) : leads;
+
+    // Normalize results
+    const results = rawResults.map((lead: any) => ({
+      ...lead,
+      _id: lead._id.toString(),
+      id: lead._id.toString(),
+      converted_deal_id: lead.converted_deal_id?.toString(),
+    }));
+
+    // Build pagination metadata
+    let metadata: PaginationMetadata | undefined;
+
+    if (hasMore || cursorData) {
+      const lastLead = rawResults[rawResults.length - 1];
+
+      metadata = {
+        hasMore,
+        returnedCount: results.length,
+        ...(hasMore && lastLead && {
+          nextCursor: encodeCursor({
+            _id: lastLead._id.toString(),
+          }),
+          totalEstimate: `${limit}+`,
+          hint: `To see more leads, say "show next page" or "get more leads". You can also filter by status, source, or minimum score.`,
+        }),
+      };
+    }
+
+    return createSuccessResponse(results, metadata);
+  }) as Promise<MCPToolResponse<any[]>>;
+}
+
+// =============================================================================
+// TOOL: get_lead
+// =============================================================================
+
+const GetLeadInputSchema = z.object({
+  leadId: z.string(),
+});
+
+async function getLead(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('get_lead', async () => {
+    const { leadId } = GetLeadInputSchema.parse(input);
+
+    const collection = await getCollection('leads');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const lead = await collection.findOne({ ...roleFilter, _id: new ObjectId(leadId) });
+
+    if (!lead) {
+      return createErrorResponse(
+        'LEAD_NOT_FOUND',
+        `Lead with ID ${leadId} not found.`,
+        'Use list_leads tool to find valid lead IDs, or verify the ID format is correct (ObjectId expected).'
+      );
+    }
+
+    const leadData = {
+      ...lead,
+      _id: lead._id.toString(),
+      id: lead._id.toString(),
+      converted_deal_id: lead.converted_deal_id?.toString(),
+    };
+
+    return createSuccessResponse(leadData);
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+// =============================================================================
+// TOOL: convert_lead (v1.5 with confirmation)
+// =============================================================================
+
+const ConvertLeadInputSchema = z.object({
+  leadId: z.string(),
+  opportunity: z.object({
+    title: z.string(),
+    value: z.number(),
+    stage: z.string().default('QUALIFICATION'),
+    expectedCloseDate: z.string(),
+    probability: z.number().min(0).max(100).default(50),
+  }),
+  customer: z.object({
+    action: z.enum(['create', 'link']),
+    companyName: z.string().optional(),
+    industry: z.string().optional(),
+    customerId: z.string().optional(),
+  }),
+});
+
+function hasWritePermission(roles: string[]): boolean {
+  return roles.includes('sales-write') || roles.includes('executive');
+}
+
+async function convertLead(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('convert_lead', async () => {
+    if (!hasWritePermission(userContext.roles)) {
+      return handleInsufficientPermissions('sales-write or executive', userContext.roles);
+    }
+
+    const { leadId, opportunity, customer } = ConvertLeadInputSchema.parse(input);
+
+    const collection = await getCollection('leads');
+    const roleFilter = buildRoleFilter(userContext);
+
+    const lead = await collection.findOne({ ...roleFilter, _id: new ObjectId(leadId) });
+
+    if (!lead) {
+      return createErrorResponse(
+        'LEAD_NOT_FOUND',
+        `Lead with ID ${leadId} not found.`,
+        'Use list_leads tool to find valid lead IDs.'
+      );
+    }
+
+    if (lead.status !== 'QUALIFIED') {
+      return createErrorResponse(
+        'INVALID_LEAD_STATUS',
+        `Lead status is "${lead.status}" but must be "QUALIFIED" to convert.`,
+        'Only leads with status QUALIFIED can be converted. Use list_leads with status=QUALIFIED to find convertible leads.'
+      );
+    }
+
+    const confirmationId = uuidv4();
+    const confirmationData = {
+      action: 'convert_lead',
+      mcpServer: 'sales',
+      userId: userContext.userId,
+      timestamp: Date.now(),
+      leadId,
+      leadCompany: lead.company,
+      leadContact: lead.contact?.name,
+      opportunity,
+      customer,
+    };
+
+    await storePendingConfirmation(confirmationId, confirmationData, 300);
+
+    const message = `⚠️ Convert lead "${lead.company}" to opportunity?
+
+Lead: ${lead.company} (${lead.contact?.name || 'Unknown contact'})
+Score: ${lead.score?.total || 'N/A'}
+
+New Opportunity: ${opportunity.title}
+Value: $${opportunity.value.toLocaleString()}
+Stage: ${opportunity.stage}
+
+Customer: ${customer.action === 'create' ? `Create new (${customer.companyName || lead.company})` : `Link to existing (${customer.customerId})`}
+
+This will update the lead status to CONVERTED and create the associated records.`;
+
+    return createPendingConfirmationResponse(confirmationId, message, confirmationData);
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+async function executeConvertLead(confirmationData: Record<string, unknown>, userContext: UserContext): Promise<MCPToolResponse<any>> {
+  return withErrorHandling('execute_convert_lead', async () => {
+    const leadId = confirmationData.leadId as string;
+    const opportunityInput = confirmationData.opportunity as any;
+    const customerInput = confirmationData.customer as any;
+
+    const leadsCollection = await getCollection('leads');
+    const dealsCollection = await getCollection('deals');
+    const customersCollection = await getCollection('customers');
+    const roleFilter = buildRoleFilter(userContext);
+
+    // Verify lead still exists and is QUALIFIED
+    const lead = await leadsCollection.findOne({ ...roleFilter, _id: new ObjectId(leadId) });
+    if (!lead || lead.status !== 'QUALIFIED') {
+      return createErrorResponse(
+        'LEAD_NOT_FOUND',
+        'Lead no longer available or status changed.',
+        'The lead may have been modified since confirmation was requested.'
+      );
+    }
+
+    // Handle customer (create or link)
+    let customerId: ObjectId;
+    if (customerInput.action === 'create') {
+      const newCustomer = {
+        company_name: customerInput.companyName || lead.company,
+        industry: customerInput.industry || lead.industry || 'Unknown',
+        status: 'ACTIVE',
+        contacts: lead.contact ? [{
+          _id: new ObjectId(),
+          name: lead.contact.name,
+          email: lead.contact.email,
+          phone: lead.contact.phone,
+          title: lead.contact.title,
+        }] : [],
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+      const insertResult = await customersCollection.insertOne(newCustomer);
+      customerId = insertResult.insertedId;
+    } else {
+      customerId = new ObjectId(customerInput.customerId);
+    }
+
+    // Create opportunity
+    const newDeal = {
+      deal_name: opportunityInput.title,
+      customer_id: customerId,
+      stage: opportunityInput.stage,
+      value: opportunityInput.value,
+      currency: 'USD',
+      probability: opportunityInput.probability,
+      expected_close_date: new Date(opportunityInput.expectedCloseDate),
+      deal_type: 'new_business',
+      owner: userContext.username,
+      created_at: new Date(),
+      updated_at: new Date(),
+      source_lead_id: new ObjectId(leadId),
+    };
+    const dealResult = await dealsCollection.insertOne(newDeal);
+
+    // Update lead status to CONVERTED
+    await leadsCollection.updateOne(
+      { _id: new ObjectId(leadId) },
+      {
+        $set: {
+          status: 'CONVERTED',
+          converted_deal_id: dealResult.insertedId,
+          converted_at: new Date(),
+          updated_at: new Date(),
+        },
+      }
+    );
+
+    return createSuccessResponse({
+      success: true,
+      message: 'Lead converted successfully',
+      leadId,
+      opportunityId: dealResult.insertedId.toString(),
+      customerId: customerId.toString(),
+    });
+  }) as Promise<MCPToolResponse<any>>;
+}
+
+// =============================================================================
+// TOOL: get_forecast (sales forecasting by period)
+// =============================================================================
+
+const GetForecastInputSchema = z.object({
+  period: z.string().optional(), // e.g., "Q1 2026" or "2026-Q1"
+  owner: z.string().optional(), // Filter by sales rep
+});
+
+interface ForecastSummary {
+  period: string;
+  team_quota: number;
+  team_commit: number;
+  team_best_case: number;
+  team_pipeline: number;
+  team_closed: number;
+  attainment_percent: number;
+  reps: Array<{
+    owner_id: string;
+    name: string;
+    quota: number;
+    commit: number;
+    best_case: number;
+    pipeline: number;
+    closed: number;
+    attainment_percent: number;
+  }>;
+}
+
+async function getForecast(input: any, userContext: UserContext): Promise<MCPToolResponse<ForecastSummary>> {
+  return withErrorHandling('get_forecast', async () => {
+    const { period, owner } = GetForecastInputSchema.parse(input);
+
+    // Default to current quarter if no period specified
+    const now = new Date();
+    const currentQuarter = `Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+    const currentYear = now.getFullYear();
+    const defaultPeriod = `${currentYear}-${currentQuarter}`;
+
+    const targetPeriod = period || defaultPeriod;
+
+    // Normalize period format (accept "Q1 2026" or "2026-Q1")
+    let periodId: string;
+    if (targetPeriod.includes(' ')) {
+      const parts = targetPeriod.split(' ');
+      periodId = `${parts[1]}-${parts[0]}`;
+    } else {
+      periodId = targetPeriod;
+    }
+
+    // Get quota data
+    const quotaCollection = await getCollection('forecast_quotas');
+    const quotaDoc = await quotaCollection.findOne({ _id: periodId } as any);
+
+    if (!quotaDoc) {
+      return createErrorResponse(
+        'FORECAST_NOT_FOUND',
+        `No forecast quota found for period ${targetPeriod}`,
+        `Available periods can be found in the forecast_quotas collection. Try "Q1 2026" or "2025-Q4".`
+      );
+    }
+
+    // Get deals for the period
+    const dealsCollection = await getCollection('deals');
+    const roleFilter = buildRoleFilter(userContext);
+
+    // Determine date range for the quarter
+    const [year, quarter] = periodId.split('-');
+    const quarterNum = parseInt(quarter.replace('Q', ''));
+    const startMonth = (quarterNum - 1) * 3;
+    const startDate = new Date(parseInt(year), startMonth, 1);
+    const endDate = new Date(parseInt(year), startMonth + 3, 0, 23, 59, 59);
+
+    const dealFilter: any = {
+      ...roleFilter,
+      expected_close_date: { $gte: startDate, $lte: endDate },
+    };
+
+    if (owner) {
+      dealFilter.owner = owner;
+    }
+
+    const deals = await dealsCollection.find(dealFilter).toArray();
+
+    // Aggregate deals by owner and forecast_category
+    const repMetrics: Map<string, any> = new Map();
+
+    // Initialize from quota data
+    for (const rep of quotaDoc.reps) {
+      if (owner && rep.owner_id !== owner) continue;
+
+      repMetrics.set(rep.owner_id, {
+        owner_id: rep.owner_id,
+        name: rep.name,
+        quota: rep.quota,
+        commit: 0,
+        best_case: 0,
+        pipeline: 0,
+        closed: 0,
+      });
+    }
+
+    // Aggregate deal values
+    for (const deal of deals) {
+      const ownerMetrics = repMetrics.get(deal.owner);
+      if (!ownerMetrics) {
+        // Rep not in quota, create entry
+        repMetrics.set(deal.owner, {
+          owner_id: deal.owner,
+          name: deal.owner,
+          quota: 0,
+          commit: 0,
+          best_case: 0,
+          pipeline: 0,
+          closed: 0,
+        });
+      }
+
+      const metrics = repMetrics.get(deal.owner)!;
+      const value = deal.value || 0;
+      const category = deal.forecast_category || 'PIPELINE';
+
+      switch (category) {
+        case 'CLOSED':
+          metrics.closed += value;
+          break;
+        case 'COMMIT':
+          metrics.commit += value;
+          break;
+        case 'BEST_CASE':
+          metrics.best_case += value;
+          break;
+        case 'PIPELINE':
+          metrics.pipeline += value;
+          break;
+        // OMITTED deals are not counted
+      }
+    }
+
+    // Calculate attainment and build rep array
+    const reps = Array.from(repMetrics.values()).map(rep => ({
+      ...rep,
+      attainment_percent: rep.quota > 0
+        ? Math.round((rep.closed / rep.quota) * 100)
+        : 0,
+    }));
+
+    // Calculate team totals
+    const teamQuota = quotaDoc.team_quota;
+    const teamCommit = reps.reduce((sum, r) => sum + r.commit, 0);
+    const teamBestCase = reps.reduce((sum, r) => sum + r.best_case, 0);
+    const teamPipeline = reps.reduce((sum, r) => sum + r.pipeline, 0);
+    const teamClosed = reps.reduce((sum, r) => sum + r.closed, 0);
+
+    const result: ForecastSummary = {
+      period: quotaDoc.period,
+      team_quota: teamQuota,
+      team_commit: teamCommit,
+      team_best_case: teamBestCase,
+      team_pipeline: teamPipeline,
+      team_closed: teamClosed,
+      attainment_percent: teamQuota > 0 ? Math.round((teamClosed / teamQuota) * 100) : 0,
+      reps,
+    };
+
+    return createSuccessResponse(result);
+  }) as Promise<MCPToolResponse<ForecastSummary>>;
+}
+
+// =============================================================================
 // ENDPOINTS
 // =============================================================================
 
@@ -658,7 +1111,7 @@ app.post('/query', async (req: Request, res: Response) => {
     return;
   }
 
-  res.json({ status: 'success', message: 'MCP Sales Server ready', availableTools: ['list_opportunities', 'list_customers', 'get_customer', 'delete_opportunity'], userRoles: userContext.roles });
+  res.json({ status: 'success', message: 'MCP Sales Server ready', availableTools: ['list_opportunities', 'list_customers', 'get_customer', 'delete_opportunity', 'list_leads', 'get_lead', 'convert_lead', 'get_forecast'], userRoles: userContext.roles });
 });
 
 app.post('/tools/list_opportunities', async (req: Request, res: Response) => {
@@ -793,6 +1246,92 @@ app.post('/tools/delete_customer', async (req: Request, res: Response) => {
   res.json(result);
 });
 
+app.post('/tools/list_leads', async (req: Request, res: Response) => {
+  const { userContext, status, source, minScore, owner, limit, cursor } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
+  const result = await listLeads({ status, source, minScore, owner, limit, cursor }, userContext);
+  res.json(result);
+});
+
+app.post('/tools/get_lead', async (req: Request, res: Response) => {
+  const { userContext, leadId } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
+  const result = await getLead({ leadId }, userContext);
+  res.json(result);
+});
+
+app.post('/tools/convert_lead', async (req: Request, res: Response) => {
+  const { userContext, leadId, opportunity, customer } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
+  const result = await convertLead({ leadId, opportunity, customer }, userContext);
+  res.json(result);
+});
+
+app.post('/tools/get_forecast', async (req: Request, res: Response) => {
+  const { userContext, period, owner } = req.body;
+  if (!userContext?.userId) {
+    res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
+    return;
+  }
+
+  // Authorization check - must have Sales access
+  if (!hasSalesAccess(userContext.roles)) {
+    res.status(403).json({
+      status: 'error',
+      code: 'INSUFFICIENT_PERMISSIONS',
+      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
+      suggestedAction: 'Contact your administrator to request Sales access permissions.',
+    });
+    return;
+  }
+
+  const result = await getForecast({ period, owner }, userContext);
+  res.json(result);
+});
+
 app.post('/execute', async (req: Request, res: Response) => {
   const { action, data, userContext } = req.body;
   if (!userContext?.userId) {
@@ -811,6 +1350,9 @@ app.post('/execute', async (req: Request, res: Response) => {
     case 'delete_customer':
       result = await executeDeleteCustomer(data, userContext);
       break;
+    case 'convert_lead':
+      result = await executeConvertLead(data, userContext);
+      break;
     default:
       result = createErrorResponse('UNKNOWN_ACTION', `Unknown action: ${action}`, 'Check the action name and try again');
   }
@@ -821,33 +1363,36 @@ app.post('/execute', async (req: Request, res: Response) => {
 // SERVER STARTUP
 // =============================================================================
 
-const server = app.listen(PORT, async () => {
-  logger.info(`MCP Sales Server listening on port ${PORT}`);
-  logger.info('Architecture version: 1.4');
-  const dbHealthy = await checkConnection();
-  if (dbHealthy) {
-    logger.info('Database connection: OK');
-  } else {
-    logger.error('Database connection: FAILED');
-  }
-});
-
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, closing server...');
-  server.close(async () => {
-    await closeConnection();
-    logger.info('Server closed');
-    process.exit(0);
+// Only start server when run directly, not when imported for testing
+if (require.main === module) {
+  const server = app.listen(PORT, async () => {
+    logger.info(`MCP Sales Server listening on port ${PORT}`);
+    logger.info('Architecture version: 1.4');
+    const dbHealthy = await checkConnection();
+    if (dbHealthy) {
+      logger.info('Database connection: OK');
+    } else {
+      logger.error('Database connection: FAILED');
+    }
   });
-});
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, closing server...');
-  server.close(async () => {
-    await closeConnection();
-    logger.info('Server closed');
-    process.exit(0);
+  process.on('SIGTERM', async () => {
+    logger.info('SIGTERM received, closing server...');
+    server.close(async () => {
+      await closeConnection();
+      logger.info('Server closed');
+      process.exit(0);
+    });
   });
-});
+
+  process.on('SIGINT', async () => {
+    logger.info('SIGINT received, closing server...');
+    server.close(async () => {
+      await closeConnection();
+      logger.info('Server closed');
+      process.exit(0);
+    });
+  });
+}
 
 export default app;

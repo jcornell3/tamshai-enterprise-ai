@@ -12,7 +12,9 @@
     "test:soak:short": "SOAK_DURATION=30m k6 run scenarios/soak.js",
     "test:legacy": "k6 run scenarios/gateway-load.js",
     "test:all": "npm run test:smoke && npm run test:load",
-    "test:ci": "k6 run --vus 3 --duration 15s scenarios/smoke.js"
+    "test:ci": "k6 run --vus 3 --duration 15s scenarios/smoke.js",
+    "generate-tokens": "node lib/generate-tokens.mjs",
+    "generate-tokens:help": "node lib/generate-tokens.mjs --help"
   },
   "keywords": [
     "tamshai",

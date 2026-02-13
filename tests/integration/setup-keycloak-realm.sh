@@ -2,7 +2,7 @@
 set -euo pipefail  # Strict error handling
 
 # Configuration
-KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180}"
+KEYCLOAK_URL="${KEYCLOAK_URL:?KEYCLOAK_URL required - set via environment variable}"
 REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
@@ -18,14 +18,24 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Function: Get admin access token
+# Function: Get admin access token (prefer client credentials over ROPC)
 get_admin_token() {
   log_info "Getting admin access token..."
-  local token=$(curl -sf -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
-    -d "client_id=admin-cli" \
-    -d "username=$ADMIN_USER" \
-    -d "password=$ADMIN_PASSWORD" \
-    -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+  local token
+  if [ -n "${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" ]; then
+    log_info "  Using client credentials (KEYCLOAK_ADMIN_CLIENT_SECRET)"
+    token=$(curl -sf -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+      -d "client_id=admin-cli" \
+      -d "client_secret=$KEYCLOAK_ADMIN_CLIENT_SECRET" \
+      -d "grant_type=client_credentials" 2>/dev/null | jq -r '.access_token')
+  else
+    log_info "  Using ROPC fallback (admin username/password)"
+    token=$(curl -sf -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+      -d "client_id=admin-cli" \
+      -d "username=$ADMIN_USER" \
+      -d "password=$ADMIN_PASSWORD" \
+      -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+  fi
 
   if [ -z "$token" ] || [ "$token" == "null" ]; then
     log_error "Failed to get admin token. Is Keycloak running at $KEYCLOAK_URL?"
@@ -131,8 +141,8 @@ create_client() {
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
-      "redirectUris": ["http://localhost:3100/*"],
-      "webOrigins": ["http://localhost:3100"]
+      "redirectUris": ["http://localhost:${DEV_MCP_GATEWAY:?DEV_MCP_GATEWAY required}/*"],
+      "webOrigins": ["http://localhost:${DEV_MCP_GATEWAY}"]
     }' 2>/dev/null)
 
   if [ "$response" == "201" ]; then

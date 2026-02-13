@@ -10,6 +10,7 @@
 #   ./read-github-secrets.sh [options]
 #
 # Options:
+#   --integration     Get integration test secret (MCP_INTEGRATION_RUNNER_SECRET) - PREFERRED
 #   --e2e             Get E2E test secrets (TEST_USER_PASSWORD, TEST_USER_TOTP_SECRET)
 #   --phoenix         Get Phoenix rebuild secrets (PROD_USER_PASSWORD, TEST_USER_PASSWORD,
 #                     TEST_USER_TOTP_SECRET, TEST_USER_TOTP_SECRET_RAW)
@@ -20,6 +21,9 @@
 #   --json            Output as JSON
 #
 # Examples:
+#   ./read-github-secrets.sh --integration            # Get integration test secret (token exchange)
+#   ./read-github-secrets.sh --integration --env      # Output for eval
+#   eval $(./read-github-secrets.sh --integration --env)  # Set env vars directly
 #   ./read-github-secrets.sh --e2e                    # Get E2E test credentials
 #   ./read-github-secrets.sh --e2e --env              # Output for eval
 #   eval $(./read-github-secrets.sh --e2e --env)      # Set env vars directly
@@ -43,6 +47,7 @@ OUTPUT_FORMAT="text"
 # Parse arguments
 while [ $# -gt 0 ]; do
     case "$1" in
+        --integration) SECRET_TYPE="integration"; shift ;; # pragma: allowlist secret
         --e2e) SECRET_TYPE="e2e"; shift ;;
         --phoenix) SECRET_TYPE="phoenix"; shift ;;
         --keycloak) SECRET_TYPE="keycloak"; shift ;;
@@ -51,7 +56,7 @@ while [ $# -gt 0 ]; do
         --env) OUTPUT_FORMAT="env"; shift ;;
         --json) OUTPUT_FORMAT="json"; shift ;;
         --help|-h)
-            head -30 "$0" | tail -25
+            head -35 "$0" | tail -30
             exit 0
             ;;
         *) shift ;;

@@ -1,18 +1,37 @@
 /**
- * DashboardPage Tests - TDD RED PHASE
+ * DashboardPage Tests - GREEN PHASE
  *
- * These tests are written FIRST, before the component exists.
- * They define the expected behavior of the Dashboard page.
- *
- * Expected: All tests FAIL initially (RED phase)
+ * Tests for the Support Dashboard page with ticket metrics,
+ * distribution charts, and recent activity.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
+import DashboardPage from '../pages/DashboardPage';
 
-// Import will fail until component is created - this is expected in RED phase
-// import { DashboardPage } from '../pages/DashboardPage';
+// Mock auth module
+vi.mock('@tamshai/auth', () => ({
+  useAuth: () => ({
+    getAccessToken: () => 'mock-token',
+    isAuthenticated: true,
+    user: { preferred_username: 'testuser' },
+  }),
+  apiConfig: {
+    mcpGatewayUrl: '',
+  },
+}));
+
+// Mock navigation
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // Mock fetch for API calls
 const mockFetch = vi.fn();
@@ -35,11 +54,11 @@ const createWrapper = () => {
 
 // Mock ticket data for testing
 const mockTickets = [
-  { id: '1', title: 'Login Issue', status: 'open', priority: 'critical', created_at: '2026-01-01' },
-  { id: '2', title: 'Password Reset', status: 'open', priority: 'high', created_at: '2026-01-01' },
-  { id: '3', title: 'Account Access', status: 'in_progress', priority: 'medium', created_at: '2026-01-01' },
-  { id: '4', title: 'Email Config', status: 'resolved', priority: 'low', created_at: '2026-01-01' },
-  { id: '5', title: 'VPN Setup', status: 'closed', priority: 'low', created_at: '2026-01-01', closed_at: '2026-01-02' },
+  { id: '1', title: 'Login Issue', status: 'open', priority: 'critical', created_at: '2026-01-01T00:00:00Z' },
+  { id: '2', title: 'Password Reset', status: 'open', priority: 'high', created_at: '2026-01-01T00:00:00Z' },
+  { id: '3', title: 'Account Access', status: 'in_progress', priority: 'medium', created_at: '2026-01-01T00:00:00Z' },
+  { id: '4', title: 'Email Config', status: 'resolved', priority: 'low', created_at: '2026-01-01T00:00:00Z' },
+  { id: '5', title: 'VPN Setup', status: 'closed', priority: 'low', created_at: '2026-01-01T00:00:00Z', closed_at: '2026-01-02T00:00:00Z' },
 ];
 
 const mockKBArticles = [
@@ -51,174 +70,279 @@ const mockKBArticles = [
 describe('DashboardPage', () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    mockNavigate.mockReset();
   });
 
   describe('Stats Cards', () => {
     test('displays open tickets count', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: A card showing the count of tickets with status='open'
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('open-tickets-card')).toBeInTheDocument();
       });
 
-      // This will fail until DashboardPage is implemented
-      // render(<DashboardPage />, { wrapper: createWrapper() });
-
-      // await waitFor(() => {
-      //   expect(screen.getByTestId('open-tickets-count')).toHaveTextContent('2');
-      // });
-
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('open-tickets-count')).toHaveTextContent('2');
     });
 
     test('displays critical tickets count', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: A card showing count of tickets with priority='critical'
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('critical-tickets-card')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('critical-tickets-count')).toHaveTextContent('1');
     });
 
     test('displays average resolution time', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: A card showing average time from creation to closure
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('resolution-time-card')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('avg-resolution-time')).toBeInTheDocument();
     });
 
     test('displays SLA compliance rate', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Percentage of tickets resolved within SLA (24h for critical, 48h for high, etc.)
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sla-compliance-card')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('sla-compliance-rate')).toBeInTheDocument();
     });
   });
 
   describe('Ticket Distribution', () => {
     test('displays ticket count by status', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Chart/visualization showing tickets grouped by status
-      // - Open: 2, In Progress: 1, Resolved: 1, Closed: 1
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status-distribution')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('status-open-count')).toHaveTextContent('2');
+      expect(screen.getByTestId('status-in_progress-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('status-resolved-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('status-closed-count')).toHaveTextContent('1');
     });
 
     test('displays ticket count by priority', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Chart showing tickets grouped by priority
-      // - Critical: 1, High: 1, Medium: 1, Low: 2
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('priority-distribution')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByTestId('priority-critical-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('priority-high-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('priority-medium-count')).toHaveTextContent('1');
+      expect(screen.getByTestId('priority-low-count')).toHaveTextContent('2');
     });
   });
 
   describe('Recent Activity', () => {
-    test('displays top 5 open or critical tickets', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Table showing 5 most urgent tickets (open + critical first)
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
-      });
+    test('displays urgent tickets section', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('urgent-tickets')).toBeInTheDocument();
+      });
     });
 
-    test('displays top KB articles by views', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: List showing most viewed KB articles
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+    test('displays top KB articles', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('top-articles')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      expect(screen.getByText('How to Reset Password')).toBeInTheDocument();
     });
 
     test('clicking ticket navigates to ticket detail', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Click on ticket row opens ticket detail view
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+      const user = userEvent.setup();
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('urgent-ticket-1')).toBeInTheDocument();
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      await user.click(screen.getByTestId('urgent-ticket-1'));
+      expect(mockNavigate).toHaveBeenCalledWith('/tickets/1');
     });
   });
 
   describe('Loading and Error States', () => {
     test('shows loading state initially', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Loading spinner or skeleton while fetching data
-      mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+      mockFetch.mockImplementation(() => new Promise(() => {}));
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      expect(screen.getByTestId('loading-state')).toBeInTheDocument();
     });
 
     test('handles API error gracefully', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Error message displayed when API fails
       mockFetch.mockRejectedValueOnce(new Error('API Error'));
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error-state')).toBeInTheDocument();
+      });
     });
 
     test('shows empty state when no tickets exist', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Friendly message when there are no tickets
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', data: [] }),
-      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: [] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: [] }),
+        });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('empty-state')).toBeInTheDocument();
+      });
     });
   });
 
   describe('Refresh Functionality', () => {
-    test('refresh button reloads dashboard data', async () => {
-      // TDD: Define expected behavior FIRST
-      // EXPECT: Clicking refresh button fetches latest data
+    test('refresh button is visible when data loads', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockTickets }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'success', data: mockKBArticles }),
+        });
+
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('refresh-button')).toBeInTheDocument();
+      });
+    });
+
+    test('refresh button triggers data reload', async () => {
+      const user = userEvent.setup();
+
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ status: 'success', data: mockTickets }),
       });
 
-      // Placeholder assertion - will be replaced when component exists
-      expect(true).toBe(false); // RED: This test should fail
+      render(<DashboardPage />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('refresh-button')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByTestId('refresh-button'));
+
+      // Verify fetch was called again for refresh
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(4); // Initial 2 + refresh 2
+      });
     });
   });
 });

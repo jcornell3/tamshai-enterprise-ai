@@ -1,7 +1,11 @@
+// Prevent tests from binding to the real service port (avoids conflicts with Docker containers)
+process.env.PORT = '0';
+
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  maxWorkers: '50%', // v1.5: Parallel test execution
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   transform: {

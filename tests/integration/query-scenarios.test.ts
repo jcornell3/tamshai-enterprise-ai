@@ -9,92 +9,66 @@
  * These tests verify the MCP Gateway and MCP HR server work together
  * to handle user queries correctly.
  *
- * IMPORTANT: TOTP Configuration for Testing
- * ==========================================
- * These tests use Resource Owner Password Grant which does not support TOTP.
- * Before running tests, TOTP must be temporarily disabled in Keycloak:
- *
- * Option 1: Disable TOTP for realm (recommended for CI/CD):
- *   1. Login to Keycloak Admin Console (http://127.0.0.1:8180/admin)
- *   2. Select realm 'tamshai-corp'
- *   3. Go to Authentication > Required Actions
- *   4. Disable "Configure OTP" required action
- *   5. Run tests
- *   6. RE-ENABLE "Configure OTP" after tests complete
- *
- * Option 2: Use test-specific users without TOTP:
- *   - Create test users with TOTP disabled
- *   - Never disable TOTP for production users
- *
- * WARNING: Do NOT delete existing TOTP registrations for real users!
+ * Authentication uses token exchange (service account impersonation) via
+ * TestAuthProvider, which bypasses TOTP requirements entirely.
  */
 
 import axios, { AxiosInstance } from 'axios';
+import crypto from 'crypto';
+import { getTestAuthProvider } from '../shared/auth/token-exchange';
 
-// Test configuration
+// Test configuration - all values from environment variables
 const CONFIG = {
-  keycloakUrl: process.env.KEYCLOAK_URL || 'http://127.0.0.1:8180',
-  keycloakRealm: process.env.KEYCLOAK_REALM || 'tamshai-corp',
-  gatewayUrl: process.env.GATEWAY_URL || 'http://127.0.0.1:3100',
-  mcpHrUrl: process.env.MCP_HR_URL || 'http://127.0.0.1:3101',
-  mcpFinanceUrl: process.env.MCP_FINANCE_URL || 'http://127.0.0.1:3102',
-  clientId: 'mcp-gateway',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'test-client-secret',
+  gatewayUrl: process.env.MCP_GATEWAY_URL,
+  mcpHrUrl: process.env.MCP_HR_URL,
+  mcpFinanceUrl: process.env.MCP_FINANCE_URL,
+  mcpInternalSecret: process.env.MCP_INTERNAL_SECRET!,
 };
 
-// Test user password from environment variable
-const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
-if (!TEST_PASSWORD) {
-  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
-}
+// Auth provider (singleton, token exchange)
+const authProvider = getTestAuthProvider();
 
 // Test users with role assignments matching Keycloak and HR database
 const TEST_USERS = {
   executive: {
     username: 'eve.thompson',
-    password: TEST_PASSWORD,
-    email: 'eve@tamshai.local',
+    email: 'eve@tamshai-playground.local',
+    userId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b',
     roles: ['executive', 'manager', 'hr-read', 'support-read', 'sales-read', 'finance-read'],
     // Eve is CEO with direct reports: CFO, CTO, COO, VP of Sales
     expectedDirectReports: ['Michael Roberts', 'Sarah Kim', 'James Wilson', 'Carol Johnson'],
   },
   hrManager: {
     username: 'alice.chen',
-    password: TEST_PASSWORD,
-    email: 'alice@tamshai.local',
+    email: 'alice@tamshai-playground.local',
+    userId: 'f104eddc-21ab-457c-a254-78051ad7ad67',
     roles: ['hr-read', 'hr-write', 'manager'],
     // Alice is VP of HR with direct report: Jennifer Lee
     expectedDirectReports: ['Jennifer Lee'],
   },
   engineeringManager: {
     username: 'nina.patel',
-    password: TEST_PASSWORD,
-    email: 'nina.p@tamshai.local',
+    email: 'nina.p@tamshai-playground.local',
+    userId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d',
     roles: ['manager'],
     // Nina is Engineering Manager with reports: Marcus Johnson, Sophia Wang, Tyler Scott
     expectedDirectReports: ['Marcus Johnson', 'Sophia Wang', 'Tyler Scott'],
   },
   intern: {
     username: 'frank.davis',
-    password: TEST_PASSWORD,
-    email: 'frank@tamshai.local',
+    email: 'frank@tamshai-playground.local',
+    userId: 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e',
     roles: [],
     // Frank is an intern with no direct reports
     expectedDirectReports: [],
   },
   financeUser: {
     username: 'bob.martinez',
-    password: TEST_PASSWORD,
-    email: 'bob@tamshai.local',
+    email: 'bob@tamshai-playground.local',
+    userId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1',
     roles: ['finance-read', 'finance-write'],
   },
 };
-
-interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
 
 interface MCPQueryResponse {
   status: 'success' | 'error';
@@ -112,32 +86,31 @@ interface MCPQueryResponse {
 }
 
 /**
- * Get access token from Keycloak
+ * Generate internal token for MCP Gateway → MCP Server authentication
+ * Mirrors the implementation in @tamshai/shared
  */
-async function getAccessToken(username: string, password: string): Promise<string> {
-  const tokenUrl = `${CONFIG.keycloakUrl}/realms/${CONFIG.keycloakRealm}/protocol/openid-connect/token`;
+function generateInternalToken(userId: string, roles: string[]): string {
+  const secret = CONFIG.mcpInternalSecret;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const rolesString = roles.join(',');
+  const payload = `${timestamp}:${userId}:${rolesString}`;
 
-  const params = new URLSearchParams({
-    grant_type: 'password',
-    client_id: CONFIG.clientId,
-    client_secret: CONFIG.clientSecret,
-    username,
-    password,
-    scope: 'openid profile email',  // Removed "roles" - Keycloak includes roles in resource_access by default
-  });
+  const hmac = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
 
-  const response = await axios.post<TokenResponse>(tokenUrl, params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-
-  return response.data.access_token;
+  return `${payload}.${hmac}`;
 }
 
 /**
- * Create authenticated MCP HR client
+ * Create authenticated MCP HR client with gateway auth token
+ *
+ * IMPORTANT: HMAC token is generated per-request via interceptor (not cached)
+ * because the MCP server enforces a 30-second replay window.
  */
-function createMcpHrClient(token: string): AxiosInstance {
-  return axios.create({
+function createMcpHrClient(token: string, userId: string, roles: string[]): AxiosInstance {
+  const client = axios.create({
     baseURL: CONFIG.mcpHrUrl,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -145,13 +118,21 @@ function createMcpHrClient(token: string): AxiosInstance {
     },
     timeout: 30000,
   });
+  client.interceptors.request.use((config) => {
+    config.headers['X-MCP-Internal-Token'] = generateInternalToken(userId, roles);
+    return config;
+  });
+  return client;
 }
 
 /**
- * Create authenticated MCP Finance client
+ * Create authenticated MCP Finance client with gateway auth token
+ *
+ * IMPORTANT: HMAC token is generated per-request via interceptor (not cached)
+ * because the MCP server enforces a 30-second replay window.
  */
-function createMcpFinanceClient(token: string): AxiosInstance {
-  return axios.create({
+function createMcpFinanceClient(token: string, userId: string, roles: string[]): AxiosInstance {
+  const client = axios.create({
     baseURL: CONFIG.mcpFinanceUrl,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -159,6 +140,11 @@ function createMcpFinanceClient(token: string): AxiosInstance {
     },
     timeout: 30000,
   });
+  client.interceptors.request.use((config) => {
+    config.headers['X-MCP-Internal-Token'] = generateInternalToken(userId, roles);
+    return config;
+  });
+  return client;
 }
 
 /**
@@ -185,8 +171,8 @@ describe('My Team Members Query', () => {
     let hrClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
-      hrClient = createMcpHrClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.executive.username);
+      hrClient = createMcpHrClient(token, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
     });
 
     test('Detects "who are my team members" as team query', async () => {
@@ -262,8 +248,8 @@ describe('My Team Members Query', () => {
     let hrClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.hrManager.username, TEST_USERS.hrManager.password);
-      hrClient = createMcpHrClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.hrManager.username);
+      hrClient = createMcpHrClient(token, TEST_USERS.hrManager.userId, TEST_USERS.hrManager.roles);
     });
 
     test('Returns HR Manager direct report (Jennifer Lee)', async () => {
@@ -292,8 +278,8 @@ describe('My Team Members Query', () => {
     let hrClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.engineeringManager.username, TEST_USERS.engineeringManager.password);
-      hrClient = createMcpHrClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.engineeringManager.username);
+      hrClient = createMcpHrClient(token, TEST_USERS.engineeringManager.userId, TEST_USERS.engineeringManager.roles);
     });
 
     test('Returns Engineering team members', async () => {
@@ -320,8 +306,8 @@ describe('My Team Members Query', () => {
     let hrClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.intern.username, TEST_USERS.intern.password);
-      hrClient = createMcpHrClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.intern.username);
+      hrClient = createMcpHrClient(token, TEST_USERS.intern.userId, TEST_USERS.intern.roles);
     });
 
     test('Returns empty list for non-manager', async () => {
@@ -354,8 +340,8 @@ describe('List All Employees Query', () => {
     let hrClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
-      hrClient = createMcpHrClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.executive.username);
+      hrClient = createMcpHrClient(token, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
     });
 
     test('Returns all 59 employees via cursor-based pagination', async () => {
@@ -465,7 +451,7 @@ describe('List All Employees Query', () => {
     let gatewayClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
+      token = await authProvider.getUserToken(TEST_USERS.executive.username);
       gatewayClient = createGatewayClient(token);
     });
 
@@ -493,8 +479,8 @@ describe('Query Routing', () => {
   let hrClient: AxiosInstance;
 
   beforeAll(async () => {
-    token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
-    hrClient = createMcpHrClient(token);
+    token = await authProvider.getUserToken(TEST_USERS.executive.username);
+    hrClient = createMcpHrClient(token, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
   });
 
   test('Routes UUID queries to get_employee', async () => {
@@ -562,8 +548,8 @@ describe('Budget Status Query', () => {
     let financeClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.financeUser.username, TEST_USERS.financeUser.password);
-      financeClient = createMcpFinanceClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.financeUser.username);
+      financeClient = createMcpFinanceClient(token, TEST_USERS.financeUser.userId, TEST_USERS.financeUser.roles);
     });
 
     test('Returns budget summary with status breakdown', async () => {
@@ -694,8 +680,8 @@ describe('Budget Status Query', () => {
     let financeClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
-      financeClient = createMcpFinanceClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.executive.username);
+      financeClient = createMcpFinanceClient(token, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
     });
 
     test('Executive can view all department budgets', async () => {
@@ -733,8 +719,8 @@ describe('Query Error Handling', () => {
     let hrClient: AxiosInstance;
 
     beforeAll(async () => {
-      token = await getAccessToken(TEST_USERS.executive.username, TEST_USERS.executive.password);
-      hrClient = createMcpHrClient(token);
+      token = await authProvider.getUserToken(TEST_USERS.executive.username);
+      hrClient = createMcpHrClient(token, TEST_USERS.executive.userId, TEST_USERS.executive.roles);
     });
 
     test('Returns helpful error when user email not in HR database', async () => {
@@ -743,7 +729,7 @@ describe('Query Error Handling', () => {
         userContext: {
           userId: '00000000-0000-0000-0000-000000000000',
           username: 'nonexistent.user',
-          email: 'nonexistent@tamshai.local', // Email not in HR database
+          email: 'nonexistent@tamshai-playground.local', // Email not in HR database
           roles: ['executive'],
         },
       });
@@ -751,7 +737,7 @@ describe('Query Error Handling', () => {
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('error');
       expect(response.data.code).toBe('USER_NOT_FOUND');
-      expect(response.data.message).toContain('nonexistent@tamshai.local');
+      expect(response.data.message).toContain('nonexistent@tamshai-playground.local');
       expect(response.data.suggestedAction).toBeDefined();
     });
   });

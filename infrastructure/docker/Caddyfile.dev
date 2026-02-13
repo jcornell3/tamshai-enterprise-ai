@@ -1,9 +1,9 @@
 # Tamshai Enterprise AI - Local Development Caddy Configuration
-# HTTPS with self-signed certificates for *.tamshai.local
+# HTTPS with self-signed certificates for *.tamshai-playground.local
 #
 # Prerequisites:
 # 1. Add to hosts file (C:\Windows\System32\drivers\etc\hosts):
-#    127.0.0.1  tamshai.local www.tamshai.local
+#    127.0.0.1  tamshai-playground.local www.tamshai-playground.local customers.tamshai-playground.local
 #
 # 2. Accept the self-signed certificate warning in your browser
 #    OR install mkcert for trusted local certificates
@@ -13,8 +13,49 @@
   local_certs
 }
 
-# HTTPS on tamshai.local and www.tamshai.local
-tamshai.local, www.tamshai.local {
+# Customer Support Portal (External Customers)
+# Uses separate tamshai-customers realm for authentication
+customers.tamshai-playground.local {
+  encode gzip
+
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+
+  # Keycloak authentication (customer realm)
+  handle /auth/* {
+    reverse_proxy keycloak:8080
+  }
+
+  # API Gateway (customer tools via MCP Support)
+  handle /api/* {
+    # SSE streaming support
+    @sse {
+      path /api/query*
+      header Accept text/event-stream
+    }
+    reverse_proxy @sse kong:8000 {
+      flush_interval -1
+      transport http {
+        read_timeout 120s
+        write_timeout 120s
+      }
+    }
+
+    reverse_proxy kong:8000
+  }
+
+  # Customer Portal SPA
+  handle {
+    reverse_proxy web-customer-support:80
+  }
+}
+
+# HTTPS on tamshai-playground.local and www.tamshai-playground.local
+tamshai-playground.local, www.tamshai-playground.local {
   encode gzip
 
   header {
@@ -67,6 +108,16 @@ tamshai.local, www.tamshai.local {
     reverse_proxy web-support:80
   }
 
+  # Payroll App (/payroll/*)
+  handle_path /payroll/* {
+    reverse_proxy web-payroll:80
+  }
+
+  # Tax App (/tax/*)
+  handle_path /tax/* {
+    reverse_proxy web-tax:80
+  }
+
   # Web Portal (/app/*)
   handle_path /app/* {
     reverse_proxy web-portal:80
@@ -74,7 +125,12 @@ tamshai.local, www.tamshai.local {
 
   # MCP Journey (Project History Agent) (/mcp-journey/*)
   handle_path /mcp-journey/* {
-    reverse_proxy mcp-journey:3105
+    reverse_proxy mcp-journey:3115
+  }
+
+  # MCP UI Service (Generative UI Components) (/mcp-ui/*)
+  handle_path /mcp-ui/* {
+    reverse_proxy mcp-ui:{$MCP_UI_PORT}
   }
 
   # Redirect /downloads to portal app (auth handled by PrivateRoute/Keycloak)
