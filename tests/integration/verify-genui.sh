@@ -15,8 +15,8 @@
 # Prerequisites:
 #   - Docker containers running (all services healthy)
 #   - MCP_INTEGRATION_RUNNER_SECRET environment variable set
-#   - MCP UI service running on port $DEV_MCP_UI
-#   - MCP Gateway running on port $DEV_MCP_GATEWAY
+#   - MCP UI service running on port $PORT_MCP_UI
+#   - MCP Gateway running on port $PORT_MCP_GATEWAY
 #
 # =============================================================================
 
@@ -88,13 +88,13 @@ check_prerequisites() {
   # Check if services are healthy
   log_info "Checking service health..."
 
-  if ! curl -s http://localhost:${DEV_MCP_UI:?DEV_MCP_UI required}/health &> /dev/null; then
-    log_error "MCP UI service not responding on port ${DEV_MCP_UI}"
+  if ! curl -s http://localhost:${PORT_MCP_UI:?PORT_MCP_UI required}/health &> /dev/null; then
+    log_error "MCP UI service not responding on port ${PORT_MCP_UI}"
     exit 1
   fi
 
-  if ! curl -s http://localhost:${DEV_MCP_GATEWAY:?DEV_MCP_GATEWAY required}/health &> /dev/null; then
-    log_error "MCP Gateway not responding on port ${DEV_MCP_GATEWAY}"
+  if ! curl -s http://localhost:${PORT_MCP_GATEWAY:?PORT_MCP_GATEWAY required}/health &> /dev/null; then
+    log_error "MCP Gateway not responding on port ${PORT_MCP_GATEWAY}"
     exit 1
   fi
 

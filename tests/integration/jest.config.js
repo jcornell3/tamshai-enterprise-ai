@@ -22,6 +22,7 @@ process.env.MCP_HR_URL = process.env.MCP_HR_URL || `http://127.0.0.1:${process.e
 process.env.MCP_FINANCE_URL = process.env.MCP_FINANCE_URL || `http://127.0.0.1:${process.env.PORT_MCP_FINANCE}`;
 process.env.MCP_SALES_URL = process.env.MCP_SALES_URL || `http://127.0.0.1:${process.env.PORT_MCP_SALES}`;
 process.env.MCP_SUPPORT_URL = process.env.MCP_SUPPORT_URL || `http://127.0.0.1:${process.env.PORT_MCP_SUPPORT}`;
+process.env.MCP_UI_URL = process.env.MCP_UI_URL || `http://127.0.0.1:${process.env.PORT_MCP_UI}`;
 process.env.REDIS_URL = process.env.REDIS_URL || `redis://127.0.0.1:${process.env.PORT_REDIS}`;
 
 /** @type {import('jest').Config} */
@@ -29,6 +30,7 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>'],
+  modulePaths: ['<rootDir>/node_modules', '<rootDir>/../shared/node_modules'],
   testMatch: ['**/*.test.ts'],
   collectCoverageFrom: [
     '**/*.test.ts',

@@ -11,7 +11,7 @@ import axios, { AxiosInstance } from 'axios';
 import { getTestAuthProvider, Logger } from '../shared/auth/token-exchange';
 
 // Test configuration
-const MCP_UI_URL = process.env.MCP_UI_URL || `http://localhost:${process.env.DEV_MCP_UI}`;
+const MCP_UI_URL = process.env.MCP_UI_URL!; // Set by jest.config.js from PORT_MCP_UI
 const MCP_GATEWAY_URL = process.env.MCP_GATEWAY_URL || `http://localhost:${process.env.DEV_MCP_GATEWAY}`;
 
 // Simple console logger

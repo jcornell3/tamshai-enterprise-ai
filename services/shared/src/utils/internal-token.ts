@@ -144,7 +144,8 @@ export function validateInternalToken(
   const now = Math.floor(Date.now() / 1000);
   const tokenAge = now - timestamp;
 
-  if (tokenAge < 0) {
+  // Allow up to 2 seconds of clock skew (Docker Desktop on Windows can drift slightly)
+  if (tokenAge < -2) {
     return { valid: false, error: 'Token timestamp is in the future' };
   }
 
