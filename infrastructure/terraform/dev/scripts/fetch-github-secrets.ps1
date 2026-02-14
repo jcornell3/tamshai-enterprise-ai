@@ -134,7 +134,7 @@ try {
     # API KEYS (environment-specific)
     # =========================================================================
     $output["gemini_api_key"] = Get-EnvSecret "GEMINI_API_KEY"
-    $output["claude_api_key"] = Get-EnvSecret "CLAUDE_API_KEY"
+    $output["claude_api_key"] = Get-GlobalSecret "CLAUDE_API_KEY_${environment}"
 
     # =========================================================================
     # DATABASE PASSWORDS (environment-specific)

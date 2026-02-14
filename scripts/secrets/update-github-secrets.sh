@@ -201,7 +201,7 @@ update_all_secrets() {
 # GitHub to GCP secret name mapping
 # Uses DEV_/STAGE_/PROD_ prefix convention for environment-specific secrets
 declare -A GITHUB_TO_GCP_MAP=(
-    ["PROD_CLAUDE_API_KEY"]="tamshai-prod-claude-api-key"
+    ["CLAUDE_API_KEY_PROD"]="tamshai-prod-claude-api-key"
     ["PROD_TAMSHAI_DB_PASSWORD"]="tamshai-prod-db-password"
     ["PROD_KEYCLOAK_ADMIN_PASSWORD"]="tamshai-prod-keycloak-admin-password"
     ["PROD_KEYCLOAK_DB_PASSWORD"]="tamshai-prod-keycloak-db-password"

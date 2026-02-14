@@ -267,7 +267,7 @@ Set via `scripts/setup-terraform-dev-env.ps1`:
 - `TF_VAR_mcp_gateway_client_secret` - OAuth client secret
 
 **Auto-fetched from GitHub Secrets**:
-- `CLAUDE_API_KEY` - Claude API key (fetched during terraform apply)
+- `CLAUDE_API_KEY_DEV` - Claude API key (fetched during terraform apply)
 - Override with `TF_VAR_claude_api_key` if needed
 
 **Optional** (have defaults):

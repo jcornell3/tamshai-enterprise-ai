@@ -260,7 +260,7 @@ data "external" "github_variables" {
 # Required secrets:
 #   - DEV_USER_PASSWORD (or STAGE_USER_PASSWORD/PROD_USER_PASSWORD)
 #   - TEST_USER_PASSWORD
-#   - CLAUDE_API_KEY
+#   - CLAUDE_API_KEY_DEV (or CLAUDE_API_KEY_STAGE/CLAUDE_API_KEY_PROD)
 # =============================================================================
 
 resource "null_resource" "validate_github_secrets" {
@@ -275,7 +275,7 @@ resource "null_resource" "validate_github_secrets" {
     }
     precondition {
       condition     = length(data.external.github_secrets.result.claude_api_key) > 0
-      error_message = "GitHub secret CLAUDE_API_KEY is required but not set. Run: gh secret set CLAUDE_API_KEY --body '<api-key>'"
+      error_message = "GitHub secret CLAUDE_API_KEY_${upper(var.environment)} is required but not set. Run: gh secret set CLAUDE_API_KEY_${upper(var.environment)} --body '<api-key>'"
     }
     # Database passwords (environment-specific)
     precondition {
@@ -343,7 +343,7 @@ resource "local_file" "docker_env" {
     )
 
     # MCP Gateway
-    # Use fetched key from GitHub secrets (CLAUDE_API_KEY), fallback to variable
+    # Use fetched key from GitHub secrets (CLAUDE_API_KEY_DEV), fallback to variable
     # Note: coalesce fails on all-empty, so we provide "not-set" as final fallback
     claude_api_key = coalesce(
       data.external.github_secrets.result.claude_api_key,

@@ -110,7 +110,7 @@ declare -A RENAME_MAP=(
 
     # API Keys
     ["GEMINI_API_KEY"]="DEV_GEMINI_API_KEY"
-    ["CLAUDE_API_KEY"]="DEV_CLAUDE_API_KEY"
+    ["CLAUDE_API_KEY"]="CLAUDE_API_KEY_DEV"
 )
 
 # Main function
