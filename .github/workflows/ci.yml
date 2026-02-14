@@ -554,7 +554,7 @@ jobs:
 
       - name: Start Keycloak
         env:
-          DEV_KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          DEV_KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
         run: |
           # Start Keycloak WITHOUT realm import - Terraform will create everything
           docker run -d \
@@ -601,9 +601,9 @@ jobs:
           # Use TF_VAR_ prefix for secrets to avoid bash interpolation issues
           # with special characters (TF_VAR_ has lower precedence than -var-file,
           # so only use it for values NOT in ci.tfvars)
-          TF_VAR_keycloak_admin_password: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           TF_VAR_test_user_password: ${{ secrets.DEV_USER_PASSWORD }}
-          TF_VAR_mcp_gateway_client_secret: ${{ secrets.DEV_MCP_GATEWAY_CLIENT_SECRET }}
+          TF_VAR_mcp_gateway_client_secret: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
           TF_VAR_mcp_integration_runner_secret: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
         working-directory: infrastructure/terraform/keycloak
         run: |
@@ -1013,7 +1013,7 @@ jobs:
           # This ensures tokens issued by Keycloak match Gateway's expected issuer
           KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
           MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
@@ -1039,7 +1039,7 @@ jobs:
           KEYCLOAK_PATH_PREFIX: ''  # CI Keycloak has no path prefix (local uses /auth)
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
           POSTGRES_HOST: localhost
@@ -1152,7 +1152,7 @@ jobs:
         env:
           MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
           KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.DEV_KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           CI: true
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}

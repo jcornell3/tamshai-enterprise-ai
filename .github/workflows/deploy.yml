@@ -127,7 +127,7 @@ jobs:
         # 2. Latest node:20-alpine base image is pulled
         env:
           # Required env vars for docker-compose.yml parsing
-          ELASTIC_PASSWORD: ${{ secrets.DEV_ELASTIC_PASSWORD }}
+          ELASTIC_PASSWORD: ${{ secrets.ELASTIC_PASSWORD }}
           TAMSHAI_DB_PASSWORD: ci_scan_value
           POSTGRES_PASSWORD: ci_scan_value
           KEYCLOAK_DB_PASSWORD: ci_scan_value
