@@ -18,7 +18,17 @@ const logger = winston.createLogger({
 // Support both MONGODB_URI and MONGODB_URL (CI uses MONGODB_URL)
 // NOTE: MongoDB is optional for MCP Support when using Elasticsearch backend.
 // The connection will fail gracefully when MongoDB tools are called without config.
-const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI;
+const RAW_MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI;
+
+// URL-encode the password to handle special characters (/, @, etc.)
+function encodeMongoPassword(uri: string): string {
+  const match = uri.match(/^(mongodb(?:\+srv)?:\/\/)([^:]+):([^@]+)@(.+)$/);
+  if (!match) return uri;
+  const [, scheme, user, password, rest] = match;
+  return `${scheme}${encodeURIComponent(user)}:${encodeURIComponent(password)}@${rest}`;
+}
+
+const MONGODB_URL = RAW_MONGODB_URL ? encodeMongoPassword(RAW_MONGODB_URL) : undefined;
 
 // Extract database name from URL if present, otherwise use env var or default
 function extractDatabaseFromUrl(url: string | undefined): string | null {

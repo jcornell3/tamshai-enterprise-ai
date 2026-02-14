@@ -423,9 +423,9 @@ resource "null_resource" "wait_for_services" {
     command = <<-EOT
       echo "Waiting for services to be healthy..."
 
-      # Wait for PostgreSQL (tamshai-pg-postgres for playground)
+      # Wait for PostgreSQL
       for i in {1..30}; do
-        if docker exec tamshai-pg-postgres pg_isready -U postgres > /dev/null 2>&1; then
+        if docker exec tamshai-dev-postgres pg_isready -U postgres > /dev/null 2>&1; then
           echo "PostgreSQL ready!"
           break
         fi
@@ -764,11 +764,11 @@ resource "null_resource" "keycloak_sync_customer_realm" {
       echo "Syncing customer realm..."
 
       # Copy scripts into container
-      docker cp "${var.project_root}/keycloak/scripts/sync-customer-realm.sh" tamshai-pg-keycloak:/tmp/sync-customer-realm.sh
-      docker cp "${var.project_root}/keycloak/scripts/lib" tamshai-pg-keycloak:/tmp/lib
+      docker cp "${var.project_root}/keycloak/scripts/sync-customer-realm.sh" tamshai-dev-keycloak:/tmp/sync-customer-realm.sh
+      docker cp "${var.project_root}/keycloak/scripts/lib" tamshai-dev-keycloak:/tmp/lib
 
       # Fix line endings and permissions
-      docker exec -u 0 tamshai-pg-keycloak bash -c '
+      docker exec -u 0 tamshai-dev-keycloak bash -c '
         sed -i "s/\r$//" /tmp/sync-customer-realm.sh
         find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \;
         chmod +x /tmp/sync-customer-realm.sh
@@ -777,7 +777,7 @@ resource "null_resource" "keycloak_sync_customer_realm" {
 
       # Run customer realm sync
       docker exec -e CUSTOMER_USER_PASSWORD="$CUSTOMER_USER_PASSWORD" \
-        tamshai-pg-keycloak /tmp/sync-customer-realm.sh dev
+        tamshai-dev-keycloak /tmp/sync-customer-realm.sh dev
 
       echo "Customer realm sync complete!"
     EOT

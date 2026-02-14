@@ -42,13 +42,13 @@ check_prerequisites() {
   log_header "Checking Prerequisites"
 
   # Check if Docker containers are running
-  if ! docker ps --filter "name=tamshai-pg-mcp-ui" --format "{{.Names}}" | grep -q "tamshai-pg-mcp-ui"; then
+  if ! docker ps --filter "name=tamshai-dev-mcp-ui" --format "{{.Names}}" | grep -q "tamshai-dev-mcp-ui"; then
     log_error "MCP UI container not running. Start services first:"
     echo "  cd infrastructure/docker && docker compose up -d"
     exit 1
   fi
 
-  if ! docker ps --filter "name=tamshai-pg-mcp-gateway" --format "{{.Names}}" | grep -q "tamshai-pg-mcp-gateway"; then
+  if ! docker ps --filter "name=tamshai-dev-mcp-gateway" --format "{{.Names}}" | grep -q "tamshai-dev-mcp-gateway"; then
     log_error "MCP Gateway container not running"
     exit 1
   fi
@@ -61,10 +61,10 @@ check_prerequisites() {
 
     # Try to get the secret from Keycloak
     if command -v docker &> /dev/null; then
-      SECRET=$(MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+      SECRET=$(MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
         /opt/keycloak/bin/kcadm.sh config credentials \
         --server http://localhost:8080/auth --realm master --user admin --password admin 2>&1 > /dev/null && \
-        MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+        MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
         /opt/keycloak/bin/kcadm.sh get clients -r tamshai-corp \
         --fields secret -q clientId=mcp-integration-runner 2>/dev/null | grep -oP '"secret"\s*:\s*"\K[^"]+' || echo "")
 

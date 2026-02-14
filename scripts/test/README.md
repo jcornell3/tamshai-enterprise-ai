@@ -25,7 +25,7 @@ Complete guide for running unit tests, integration tests, and obtaining test cov
 Verify Docker containers are running:
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}" | grep tamshai-pg
+docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}" | grep tamshai-dev
 ```
 
 ---
@@ -34,18 +34,18 @@ docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}" | grep tamshai-pg
 
 | Service | Container Name | Internal Port | External Port |
 |---------|---------------|---------------|---------------|
-| **Keycloak** | tamshai-pg-keycloak | 8080 | **8180** |
-| **MCP Gateway** | tamshai-pg-mcp-gateway | 3100 | **3100** |
-| **MCP HR** | tamshai-pg-mcp-hr | 3101 | **3101** |
-| **MCP Finance** | tamshai-pg-mcp-finance | 3102 | **3102** |
-| **MCP Sales** | tamshai-pg-mcp-sales | 3103 | **3103** |
-| **MCP Support** | tamshai-pg-mcp-support | 3104 | **3104** |
-| **MCP Journey** | tamshai-pg-mcp-journey | 3105 | **3105** |
-| **MCP Payroll** | tamshai-pg-mcp-payroll | 3106 | **3106** |
-| **MCP Tax** | tamshai-pg-mcp-tax | 3117 | **3117** |
-| **PostgreSQL** | tamshai-pg-postgres | 5432 | **5433** |
-| **Redis** | tamshai-pg-redis | 6379 | **6380** |
-| **Caddy (HTTPS)** | tamshai-pg-caddy | 443 | **443** |
+| **Keycloak** | tamshai-dev-keycloak | 8080 | **8180** |
+| **MCP Gateway** | tamshai-dev-mcp-gateway | 3100 | **3100** |
+| **MCP HR** | tamshai-dev-mcp-hr | 3101 | **3101** |
+| **MCP Finance** | tamshai-dev-mcp-finance | 3102 | **3102** |
+| **MCP Sales** | tamshai-dev-mcp-sales | 3103 | **3103** |
+| **MCP Support** | tamshai-dev-mcp-support | 3104 | **3104** |
+| **MCP Journey** | tamshai-dev-mcp-journey | 3105 | **3105** |
+| **MCP Payroll** | tamshai-dev-mcp-payroll | 3106 | **3106** |
+| **MCP Tax** | tamshai-dev-mcp-tax | 3117 | **3117** |
+| **PostgreSQL** | tamshai-dev-postgres | 5432 | **5433** |
+| **Redis** | tamshai-dev-redis | 6379 | **6380** |
+| **Caddy (HTTPS)** | tamshai-dev-caddy | 443 | **443** |
 
 **URL Patterns:**
 - Keycloak Admin: `http://127.0.0.1:8180/auth/admin`
@@ -96,11 +96,11 @@ TEST_USER_PASSWORD=<REDACTED>
 The `mcp-gateway` client secret can also be retrieved directly from Keycloak:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh config credentials \
   --server http://localhost:8080/auth --realm master --user admin --password <admin-password>
 
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh get clients -r tamshai-corp \
   --fields clientId,secret -q clientId=mcp-gateway
 ```
@@ -282,7 +282,7 @@ Integration tests use direct access grants which bypass TOTP. However, user acco
 
 ```bash
 # Get user ID
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh get users -r tamshai-corp \
   -q username=alice.chen --fields id,requiredActions
 ```
@@ -291,13 +291,13 @@ MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
 
 ```bash
 # Get admin credentials
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh config credentials \
   --server http://localhost:8080/auth --realm master --user admin --password <admin-password>
 
 # Clear requiredActions for a user
 USER_ID="d3f27af0-3fd7-4e89-beca-b005f997003c"  # alice.chen
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh update users/$USER_ID -r tamshai-corp \
   -s 'requiredActions=[]' -s 'enabled=true'
 ```
@@ -305,7 +305,7 @@ MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
 ### Re-enable TOTP Requirement
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh update users/$USER_ID -r tamshai-corp \
   -s 'requiredActions=["CONFIGURE_TOTP"]'
 ```
@@ -342,7 +342,7 @@ Both integration test locations have automatic TOTP handling:
 **Solution:** Verify containers are running and healthy:
 
 ```bash
-docker ps --filter "name=tamshai-pg" --format "{{.Names}}: {{.Status}}"
+docker ps --filter "name=tamshai-dev" --format "{{.Names}}: {{.Status}}"
 ```
 
 #### "Account is not fully set up"
@@ -356,7 +356,7 @@ docker ps --filter "name=tamshai-pg" --format "{{.Names}}: {{.Status}}"
 **Manual Solution:** Clear user's requiredActions:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh update users/<USER_ID> -r tamshai-corp \
   -s 'requiredActions=[]'
 ```
@@ -366,7 +366,7 @@ MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
 **Solution:** Reset the user's password:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh set-password -r tamshai-corp \
   --username alice.chen --new-password "$DEV_USER_PASSWORD"
 ```
@@ -377,12 +377,12 @@ MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
 
 ```bash
 # Get client ID
-CLIENT_ID=$(MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+CLIENT_ID=$(MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh get clients -r tamshai-corp \
   -q clientId=mcp-gateway --fields id | jq -r '.[0].id')
 
 # Add audience mapper
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh create clients/$CLIENT_ID/protocol-mappers/models \
   -r tamshai-corp \
   -s 'name=mcp-gateway-audience' \
@@ -406,7 +406,7 @@ curl http://127.0.0.1:3102/health  # Finance
 Restart unhealthy container:
 
 ```bash
-docker restart tamshai-pg-mcp-gateway
+docker restart tamshai-dev-mcp-gateway
 ```
 
 ### Debug Token Contents

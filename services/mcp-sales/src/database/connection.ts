@@ -18,11 +18,21 @@ const logger = winston.createLogger({
 });
 
 // Support both MONGODB_URI and MONGODB_URL (CI uses MONGODB_URL) - required
-const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI;
+const RAW_MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI;
 
-if (!MONGODB_URL) {
+if (!RAW_MONGODB_URL) {
   throw new Error('MONGODB_URL or MONGODB_URI environment variable is required');
 }
+
+// URL-encode the password to handle special characters (/, @, etc.)
+function encodeMongoPassword(uri: string): string {
+  const match = uri.match(/^(mongodb(?:\+srv)?:\/\/)([^:]+):([^@]+)@(.+)$/);
+  if (!match) return uri;
+  const [, scheme, user, password, rest] = match;
+  return `${scheme}${encodeURIComponent(user)}:${encodeURIComponent(password)}@${rest}`;
+}
+
+const MONGODB_URL = encodeMongoPassword(RAW_MONGODB_URL);
 
 // Extract database name from URL if present, otherwise use env var or default
 function extractDatabaseFromUrl(url: string): string | null {

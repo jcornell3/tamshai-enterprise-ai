@@ -628,7 +628,7 @@ curl -s http://localhost:${PORT_KEYCLOAK}/auth/realms/tamshai-corp/protocol/open
   | jq -r '.access_token'
 
 # If successful, you'll get an access token
-# If failed, check Keycloak logs: docker logs tamshai-pg-keycloak
+# If failed, check Keycloak logs: docker logs tamshai-dev-keycloak
 # Note: ROPC (grant_type=password) is disabled in all environments
 ```
 
@@ -877,7 +877,7 @@ See [E2E_USER_TESTS.md](./E2E_USER_TESTS.md#special-characters-in-passwords) for
 | 2026-02-09 | Documented TOTP Base32 encoding bridge (globalSetup) | Fixed TOTP mismatch between Keycloak raw storage and otplib Base32 expectation |
 | 2026-02-09 | Updated running syntax with correct export-based commands | Verified working commands from Phoenix rebuild testing |
 | 2026-02-09 | Updated Keycloak URLs to use PORT_KEYCLOAK/PORT_CADDY_HTTPS variables | Avoid hardcoded ports; reference .env variables |
-| 2026-02-09 | Added Phoenix rebuild insights (container names, idempotent sync) | Container prefix is `tamshai-pg-`, sync script always sets passwords |
+| 2026-02-09 | Added Phoenix rebuild insights (container names, idempotent sync) | Container prefix is `tamshai-dev-`, sync script always sets passwords |
 | 2026-01-16 | Verified E2E tests on stage and prod | All 6 tests passing on both environments |
 | 2026-01-16 | Added Windows cross-env requirement | Windows env vars don't propagate to child processes |
 | 2026-01-16 | Documented TOTP secret mismatch after deployment | Stage clears TOTP on each deploy - use auto-capture |

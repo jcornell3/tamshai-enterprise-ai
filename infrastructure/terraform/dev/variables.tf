@@ -148,7 +148,7 @@ variable "gemini_api_key" {
 variable "docker_compose_project" {
   description = "Docker Compose project name"
   type        = string
-  default     = "tamshai-playground"
+  default     = "tamshai-dev"
 }
 
 variable "auto_start_services" {

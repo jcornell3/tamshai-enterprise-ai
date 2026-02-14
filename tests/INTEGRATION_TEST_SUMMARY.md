@@ -452,10 +452,10 @@ services/mcp-journey/tests/integration/
 
 ```bash
 # Check connection count
-docker exec tamshai-pg-postgres psql -U postgres -c "SELECT count(*) FROM pg_stat_activity;"
+docker exec tamshai-dev-postgres psql -U postgres -c "SELECT count(*) FROM pg_stat_activity;"
 
 # If count > 20, terminate idle tamshai_app connections
-docker exec tamshai-pg-postgres psql -U postgres -c \
+docker exec tamshai-dev-postgres psql -U postgres -c \
   "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = 'tamshai_app' AND state = 'idle';"
 ```
 

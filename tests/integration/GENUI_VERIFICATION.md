@@ -29,7 +29,7 @@ cd infrastructure/docker
 docker compose up -d
 
 # 2. Verify services are healthy
-docker ps --filter "name=tamshai-pg" --format "{{.Names}}: {{.Status}}"
+docker ps --filter "name=tamshai-dev" --format "{{.Names}}: {{.Status}}"
 
 # 3. Set integration runner secret (auto-retrieved by test script)
 # export MCP_INTEGRATION_RUNNER_SECRET=<secret>  # Optional - script retrieves it
@@ -299,11 +299,11 @@ const response = await axios.post(url, data, {
 
 ```bash
 # Get secret manually
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh config credentials \
   --server http://localhost:8080/auth --realm master --user admin --password admin
 
-MSYS_NO_PATHCONV=1 docker exec tamshai-pg-keycloak \
+MSYS_NO_PATHCONV=1 docker exec tamshai-dev-keycloak \
   /opt/keycloak/bin/kcadm.sh get clients -r tamshai-corp \
   --fields secret -q clientId=mcp-integration-runner
 
@@ -318,11 +318,11 @@ export MCP_INTEGRATION_RUNNER_SECRET="<secret-from-above>"
 **Check service health**:
 
 ```bash
-docker ps --filter "name=tamshai-pg-mcp-ui"
-docker logs tamshai-pg-mcp-ui --tail 50
+docker ps --filter "name=tamshai-dev-mcp-ui"
+docker logs tamshai-dev-mcp-ui --tail 50
 
 # Restart if needed
-docker restart tamshai-pg-mcp-ui
+docker restart tamshai-dev-mcp-ui
 ```
 
 ---
@@ -374,7 +374,7 @@ docker restart tamshai-pg-mcp-ui
 2. Check database directly:
 
    ```bash
-   docker exec tamshai-pg-postgres psql -U tamshai -d tamshai_hr \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr \
      -c "SELECT status FROM hr.time_off_requests WHERE id = '<request-id>';"
    # Should show 'approved', not 'pending'
    ```
