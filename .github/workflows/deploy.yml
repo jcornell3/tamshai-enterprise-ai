@@ -132,11 +132,20 @@ jobs:
           POSTGRES_PASSWORD: ci_scan_value
           KEYCLOAK_DB_PASSWORD: ci_scan_value
           MONGODB_PASSWORD: ci_scan_value
+          REDIS_PASSWORD: ci_scan_value
+          MINIO_ROOT_USER: ci_scan_value
           MINIO_ROOT_PASSWORD: ci_scan_value
+          KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: ci_scan_value
           KEYCLOAK_ISSUER: http://localhost:8080/realms/tamshai
           KEYCLOAK_URL: http://localhost:8080
           KC_HOSTNAME: localhost
+          VAULT_DEV_ROOT_TOKEN: ci_scan_value
+          MCP_INTERNAL_SECRET: ci_scan_value
+          MCP_UI_CLIENT_SECRET: ci_scan_value
+          MCP_GATEWAY_CLIENT_SECRET: ci_scan_value
+          MCP_HR_SERVICE_CLIENT_SECRET: ci_scan_value
+          E2E_ADMIN_API_KEY: ci_scan_value
           # Port Configuration (from GitHub Variables)
           PORT_CADDY_HTTP: ${{ vars.DEV_CADDY_HTTP }}
           PORT_CADDY_HTTPS: ${{ vars.DEV_CADDY_HTTPS }}
@@ -272,6 +281,58 @@ jobs:
 
       - name: Build Docker images
         working-directory: ./infrastructure/docker
+        env:
+          # Placeholder values for docker-compose.yml parsing (only building mcp-gateway)
+          TAMSHAI_DB_PASSWORD: ci_build_value
+          POSTGRES_PASSWORD: ci_build_value
+          KEYCLOAK_DB_PASSWORD: ci_build_value
+          MONGODB_PASSWORD: ci_build_value
+          REDIS_PASSWORD: ci_build_value
+          MINIO_ROOT_USER: ci_build_value
+          MINIO_ROOT_PASSWORD: ci_build_value
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: ci_build_value
+          KEYCLOAK_ISSUER: http://localhost:8080/realms/tamshai
+          KEYCLOAK_URL: http://localhost:8080
+          KC_HOSTNAME: localhost
+          ELASTIC_PASSWORD: ci_build_value
+          VAULT_DEV_ROOT_TOKEN: ci_build_value
+          MCP_INTERNAL_SECRET: ci_build_value
+          MCP_UI_CLIENT_SECRET: ci_build_value
+          MCP_GATEWAY_CLIENT_SECRET: ci_build_value
+          MCP_HR_SERVICE_CLIENT_SECRET: ci_build_value
+          E2E_ADMIN_API_KEY: ci_build_value
+          # Port Configuration (from GitHub Variables)
+          PORT_CADDY_HTTP: ${{ vars.DEV_CADDY_HTTP }}
+          PORT_CADDY_HTTPS: ${{ vars.DEV_CADDY_HTTPS }}
+          PORT_KEYCLOAK: ${{ vars.DEV_KEYCLOAK }}
+          PORT_KONG_PROXY: ${{ vars.DEV_KONG_PROXY }}
+          PORT_KONG_ADMIN: ${{ vars.DEV_KONG_ADMIN }}
+          PORT_VAULT: ${{ vars.DEV_VAULT }}
+          PORT_POSTGRES: ${{ vars.DEV_POSTGRES }}
+          PORT_MONGODB: ${{ vars.DEV_MONGODB }}
+          PORT_REDIS: ${{ vars.DEV_REDIS }}
+          PORT_ELASTICSEARCH: ${{ vars.DEV_ELASTICSEARCH }}
+          PORT_MINIO_API: ${{ vars.DEV_MINIO_API }}
+          PORT_MINIO_CONSOLE: ${{ vars.DEV_MINIO_CONSOLE }}
+          PORT_MCP_GATEWAY: ${{ vars.DEV_MCP_GATEWAY }}
+          PORT_MCP_HR: ${{ vars.DEV_MCP_HR }}
+          PORT_MCP_FINANCE: ${{ vars.DEV_MCP_FINANCE }}
+          PORT_MCP_SALES: ${{ vars.DEV_MCP_SALES }}
+          PORT_MCP_SUPPORT: ${{ vars.DEV_MCP_SUPPORT }}
+          PORT_MCP_JOURNEY: ${{ vars.DEV_MCP_JOURNEY }}
+          PORT_MCP_PAYROLL: ${{ vars.DEV_MCP_PAYROLL }}
+          PORT_MCP_TAX: ${{ vars.DEV_MCP_TAX }}
+          PORT_MCP_UI: ${{ vars.DEV_MCP_UI }}
+          PORT_WEB_PORTAL: ${{ vars.DEV_WEB_PORTAL }}
+          PORT_WEB_HR: ${{ vars.DEV_WEB_HR }}
+          PORT_WEB_FINANCE: ${{ vars.DEV_WEB_FINANCE }}
+          PORT_WEB_SALES: ${{ vars.DEV_WEB_SALES }}
+          PORT_WEB_SUPPORT: ${{ vars.DEV_WEB_SUPPORT }}
+          PORT_WEB_PAYROLL: ${{ vars.DEV_WEB_PAYROLL }}
+          PORT_WEB_TAX: ${{ vars.DEV_WEB_TAX }}
+          PORT_WEB_CUSTOMER_SUPPORT: ${{ vars.DEV_WEB_CUSTOMER_SUPPORT }}
+          PORT_WEBSITE: ${{ vars.DEV_WEBSITE }}
         run: |
           docker compose build mcp-gateway
 

@@ -130,7 +130,10 @@ jobs:
           POSTGRES_PASSWORD: ci_test_value
           KEYCLOAK_DB_PASSWORD: ci_test_value
           MONGODB_PASSWORD: ci_test_value
+          REDIS_PASSWORD: ci_test_value
+          MINIO_ROOT_USER: ci_test_value
           MINIO_ROOT_PASSWORD: ci_test_value
+          KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: ci_test_value
           KEYCLOAK_ISSUER: http://localhost:8080/realms/tamshai
           KEYCLOAK_URL: http://localhost:8080
@@ -138,6 +141,12 @@ jobs:
           VITE_MCP_GATEWAY_URL: http://localhost:3100
           VITE_KEYCLOAK_URL: http://localhost:8180
           ELASTIC_PASSWORD: ${{ secrets.ELASTIC_PASSWORD }}
+          VAULT_DEV_ROOT_TOKEN: ci_test_value
+          MCP_INTERNAL_SECRET: ci_test_value
+          MCP_UI_CLIENT_SECRET: ci_test_value
+          MCP_GATEWAY_CLIENT_SECRET: ci_test_value
+          MCP_HR_SERVICE_CLIENT_SECRET: ci_test_value
+          E2E_ADMIN_API_KEY: ci_test_value
           # Port Configuration (from GitHub Variables)
           PORT_CADDY_HTTP: ${{ vars.DEV_CADDY_HTTP }}
           PORT_CADDY_HTTPS: ${{ vars.DEV_CADDY_HTTPS }}
