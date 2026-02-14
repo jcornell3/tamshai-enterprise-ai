@@ -400,7 +400,7 @@ resource "keycloak_user" "alice_chen" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "alice.chen"
   enabled    = true
-  email      = "alice@tamshai-playground.local"
+  email      = "alice@tamshai.local"
   first_name = "Alice"
   last_name  = "Chen"
 
@@ -431,7 +431,7 @@ resource "keycloak_user" "bob_martinez" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "bob.martinez"
   enabled    = true
-  email      = "bob@tamshai-playground.local"
+  email      = "bob@tamshai.local"
   first_name = "Bob"
   last_name  = "Martinez"
 
@@ -462,7 +462,7 @@ resource "keycloak_user" "carol_johnson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "carol.johnson"
   enabled    = true
-  email      = "carol@tamshai-playground.local"
+  email      = "carol@tamshai.local"
   first_name = "Carol"
   last_name  = "Johnson"
 
@@ -493,7 +493,7 @@ resource "keycloak_user" "dan_williams" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "dan.williams"
   enabled    = true
-  email      = "dan@tamshai-playground.local"
+  email      = "dan@tamshai.local"
   first_name = "Dan"
   last_name  = "Williams"
 
@@ -524,7 +524,7 @@ resource "keycloak_user" "eve_thompson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "eve.thompson"
   enabled    = true
-  email      = "eve@tamshai-playground.local"
+  email      = "eve@tamshai.local"
   first_name = "Eve"
   last_name  = "Thompson"
 
@@ -554,7 +554,7 @@ resource "keycloak_user" "frank_davis" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "frank.davis"
   enabled    = true
-  email      = "frank@tamshai-playground.local"
+  email      = "frank@tamshai.local"
   first_name = "Frank"
   last_name  = "Davis"
 
@@ -584,7 +584,7 @@ resource "keycloak_user" "nina_patel" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "nina.patel"
   enabled    = true
-  email      = "nina@tamshai-playground.local"
+  email      = "nina@tamshai.local"
   first_name = "Nina"
   last_name  = "Patel"
 
@@ -614,7 +614,7 @@ resource "keycloak_user" "marcus_johnson" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "marcus.johnson"
   enabled    = true
-  email      = "marcus@tamshai-playground.local"
+  email      = "marcus@tamshai.local"
   first_name = "Marcus"
   last_name  = "Johnson"
 
@@ -646,7 +646,7 @@ resource "keycloak_user" "test_user_journey" {
   realm_id   = keycloak_realm.tamshai_corp.id
   username   = "test-user.journey"
   enabled    = true
-  email      = "test-user@tamshai-playground.local"
+  email      = "test-user@tamshai.local"
   first_name = "Test"
   last_name  = "User"
 

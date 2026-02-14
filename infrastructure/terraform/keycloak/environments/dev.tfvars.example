@@ -17,7 +17,7 @@
 # ============================================================
 
 # Keycloak connection settings
-keycloak_url        = "https://www.tamshai-playground.local/auth"
+keycloak_url        = "https://www.tamshai.local/auth"
 keycloak_admin_user = "admin"
 keycloak_admin_password = "SET_THIS_VALUE" # pragma: allowlist secret
 
@@ -39,15 +39,15 @@ tls_insecure_skip_verify = true
 
 # Valid redirect URIs (includes wildcard paths for OAuth callbacks)
 valid_redirect_uris = [
-  "https://www.tamshai-playground.local/*",
-  "https://portal.tamshai-playground.local/*",
-  "https://finance.tamshai-playground.local/*",
-  "https://sales.tamshai-playground.local/*",
-  "https://support.tamshai-playground.local/*",
-  "https://hr.tamshai-playground.local/*",
-  "https://payroll.tamshai-playground.local/*",
-  "https://tax.tamshai-playground.local/*",
-  "https://customer-support.tamshai-playground.local/*",
+  "https://www.tamshai.local/*",
+  "https://portal.tamshai.local/*",
+  "https://finance.tamshai.local/*",
+  "https://sales.tamshai.local/*",
+  "https://support.tamshai.local/*",
+  "https://hr.tamshai.local/*",
+  "https://payroll.tamshai.local/*",
+  "https://tax.tamshai.local/*",
+  "https://customer-support.tamshai.local/*",
   "http://localhost:3100/*",
   "http://localhost:4010/*",
   "http://localhost:4011/*",
@@ -57,15 +57,15 @@ valid_redirect_uris = [
 # Explicit CORS origins (no wildcard paths - defense-in-depth)
 web_origins = [
   # HTTPS (via Caddy/Terraform)
-  "https://www.tamshai-playground.local",
-  "https://portal.tamshai-playground.local",
-  "https://finance.tamshai-playground.local",
-  "https://sales.tamshai-playground.local",
-  "https://support.tamshai-playground.local",
-  "https://hr.tamshai-playground.local",
-  "https://payroll.tamshai-playground.local",
-  "https://tax.tamshai-playground.local",
-  "https://customer-support.tamshai-playground.local",
+  "https://www.tamshai.local",
+  "https://portal.tamshai.local",
+  "https://finance.tamshai.local",
+  "https://sales.tamshai.local",
+  "https://support.tamshai.local",
+  "https://hr.tamshai.local",
+  "https://payroll.tamshai.local",
+  "https://tax.tamshai.local",
+  "https://customer-support.tamshai.local",
   # HTTP (local dev without Caddy)
   "http://localhost:3100",
   "http://localhost:4010",

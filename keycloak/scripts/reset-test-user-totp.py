@@ -40,7 +40,7 @@ import requests
 
 # Environment configuration
 ENVIRONMENTS = {
-    "dev": "https://www.tamshai-playground.local/auth",
+    "dev": "https://www.tamshai.local/auth",
     "stage": "https://www.tamshai.com/auth",
     "prod": "https://keycloak-fn44nd7wba-uc.a.run.app/auth",
 }

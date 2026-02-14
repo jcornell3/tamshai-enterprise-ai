@@ -21,14 +21,14 @@ TRUNCATE payroll.employees CASCADE;
 -- Sample Employees (UUIDs match hr.employees for cross-service joins)
 -- Display names: Alice Chen, Bob Martinez, Carol Johnson, Dan Williams, Eve Thompson, Frank Davis, Sarah Kim, Kevin Brown
 INSERT INTO payroll.employees (employee_id, first_name, last_name, email, hire_date, department, job_title, employment_type, pay_type, annual_salary, hourly_rate, pay_frequency, status) VALUES
-('f104eddc-21ab-457c-a254-78051ad7ad67', 'Alice', 'Chen', 'alice@tamshai-playground.local', '2020-03-15', 'Human Resources', 'VP of HR', 'FULL_TIME', 'SALARY', 150000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
-('1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Bob', 'Martinez', 'bob@tamshai-playground.local', '2019-08-01', 'Finance', 'Finance Director', 'FULL_TIME', 'SALARY', 140000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
-('c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'Carol', 'Johnson', 'carol@tamshai-playground.local', '2021-01-10', 'Sales', 'VP of Sales', 'FULL_TIME', 'SALARY', 160000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
-('d7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'Dan', 'Williams', 'dan@tamshai-playground.local', '2020-06-01', 'Support', 'Support Director', 'FULL_TIME', 'SALARY', 130000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
-('e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'Eve', 'Thompson', 'eve@tamshai-playground.local', '2018-01-01', 'Executive', 'CEO', 'FULL_TIME', 'SALARY', 250000.00, NULL, 'SEMI_MONTHLY', 'ACTIVE'),
-('b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'Frank', 'Davis', 'frank@tamshai-playground.local', '2023-06-15', 'IT', 'IT Intern', 'FULL_TIME', 'HOURLY', NULL, 22.50, 'BI_WEEKLY', 'ACTIVE'),
-('e1000000-0000-0000-0000-000000000003', 'Sarah', 'Kim', 'sarah.k@tamshai-playground.local', '2022-02-01', 'Engineering', 'Senior Developer', 'FULL_TIME', 'SALARY', 135000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
-('e1000000-0000-0000-0000-000000000022', 'Kevin', 'Brown', 'kevin.b@tamshai-playground.local', '2021-09-01', 'Marketing', 'Marketing Manager', 'FULL_TIME', 'SALARY', 95000.00, NULL, 'BI_WEEKLY', 'ACTIVE');
+('f104eddc-21ab-457c-a254-78051ad7ad67', 'Alice', 'Chen', 'alice@tamshai.local', '2020-03-15', 'Human Resources', 'VP of HR', 'FULL_TIME', 'SALARY', 150000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
+('1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1', 'Bob', 'Martinez', 'bob@tamshai.local', '2019-08-01', 'Finance', 'Finance Director', 'FULL_TIME', 'SALARY', 140000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
+('c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c', 'Carol', 'Johnson', 'carol@tamshai.local', '2021-01-10', 'Sales', 'VP of Sales', 'FULL_TIME', 'SALARY', 160000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
+('d7f8e9c0-2a3b-4c5d-9e1f-8a7b6c5d4e3f', 'Dan', 'Williams', 'dan@tamshai.local', '2020-06-01', 'Support', 'Support Director', 'FULL_TIME', 'SALARY', 130000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
+('e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'Eve', 'Thompson', 'eve@tamshai.local', '2018-01-01', 'Executive', 'CEO', 'FULL_TIME', 'SALARY', 250000.00, NULL, 'SEMI_MONTHLY', 'ACTIVE'),
+('b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e', 'Frank', 'Davis', 'frank@tamshai.local', '2023-06-15', 'IT', 'IT Intern', 'FULL_TIME', 'HOURLY', NULL, 22.50, 'BI_WEEKLY', 'ACTIVE'),
+('e1000000-0000-0000-0000-000000000003', 'Sarah', 'Kim', 'sarah.k@tamshai.local', '2022-02-01', 'Engineering', 'Senior Developer', 'FULL_TIME', 'SALARY', 135000.00, NULL, 'BI_WEEKLY', 'ACTIVE'),
+('e1000000-0000-0000-0000-000000000022', 'Kevin', 'Brown', 'kevin.b@tamshai.local', '2021-09-01', 'Marketing', 'Marketing Manager', 'FULL_TIME', 'SALARY', 95000.00, NULL, 'BI_WEEKLY', 'ACTIVE');
 
 -- Sample Pay Runs
 INSERT INTO payroll.pay_runs (pay_run_id, pay_period_start, pay_period_end, pay_date, pay_frequency, status, total_gross, total_net, total_taxes, total_deductions, employer_taxes, employer_benefits, employee_count, processed_at) VALUES
