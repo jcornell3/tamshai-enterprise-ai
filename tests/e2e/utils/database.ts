@@ -18,7 +18,7 @@ import path from 'path';
 const ENV = process.env.TEST_ENV || 'dev';
 
 const API_BASE_URLS: Record<string, string> = {
-  dev: 'https://www.tamshai-playground.local:8443/api/admin',
+  dev: 'https://www.tamshai.local:8443/api/admin',
   stage: 'https://www.tamshai.com/api/admin',
   prod: 'https://app.tamshai.com/api/admin',
 };

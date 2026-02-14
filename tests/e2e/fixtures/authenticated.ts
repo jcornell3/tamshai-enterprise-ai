@@ -27,9 +27,9 @@ const STORAGE_STATE_PATH = path.join(__dirname, '..', '.auth', `${ENV}-storage.j
 
 const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
-    site: 'https://www.tamshai-playground.local:8443',
-    app: 'https://www.tamshai-playground.local:8443/app',
-    keycloak: 'https://www.tamshai-playground.local:8443/auth',
+    site: 'https://www.tamshai.local:8443',
+    app: 'https://www.tamshai.local:8443/app',
+    keycloak: 'https://www.tamshai.local:8443/auth',
   },
   stage: {
     site: 'https://www.tamshai.com',

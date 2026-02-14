@@ -21,7 +21,7 @@ logger.info('MCP-UI initialized with Keycloak service authentication');
 app.use((req: Request, res: Response, next: NextFunction) => {
   const origin = req.headers.origin;
   // Allow localhost origins on any port (for local development)
-  if (origin && origin.match(/^https?:\/\/(localhost|127\.0\.0\.1|www\.tamshai-playground\.local)(:\d+)?$/)) {
+  if (origin && origin.match(/^https?:\/\/(localhost|127\.0\.0\.1|www\.tamshai\.local)(:\d+)?$/)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

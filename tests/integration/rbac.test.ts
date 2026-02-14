@@ -60,7 +60,7 @@ describe('Authentication Tests', () => {
 
   test('Token exchange rejects invalid username format', async () => {
     await expect(
-      authProvider.getUserToken('nonexistent@tamshai-playground.local')
+      authProvider.getUserToken('nonexistent@tamshai.local')
     ).rejects.toThrow();
   });
 });

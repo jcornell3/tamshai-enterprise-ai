@@ -25,7 +25,7 @@ const ENV = process.env.TEST_ENV || 'dev';
 const REALM = 'tamshai-corp';
 
 const KEYCLOAK_URLS: Record<string, string> = {
-  dev: 'https://www.tamshai-playground.local:8443/auth',
+  dev: 'https://www.tamshai.local:8443/auth',
   stage: 'https://www.tamshai.com/auth',
   prod: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth',
 };

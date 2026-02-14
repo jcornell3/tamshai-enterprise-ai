@@ -40,7 +40,7 @@ The `keycloak/scripts/set-user-totp.sh` script was created to:
 
 | Environment | Keycloak URL | Use Case |
 |-------------|--------------|----------|
-| dev | https://www.tamshai-playground.local/auth | Local development |
+| dev | https://www.tamshai.local/auth | Local development |
 | stage | https://www.tamshai.com/auth | VPS staging |
 | prod | https://keycloak-fn44nd7wba-uc.a.run.app/auth | GCP Cloud Run |
 

@@ -2,7 +2,7 @@
 
 ## 📋 Executive Summary
 
-**GitHub Actions Run**: [21934210542](https://github.com/bunnyfoo/Tamshai-AI-Playground/actions/runs/21934210542)
+**GitHub Actions Run**: [21934210542](https://github.com/bunnyfoo/tamshai-enterprise-ai/actions/runs/21934210542)
 
 **Root Cause**: TypeScript error in integration test setup - `process.env.MCP_INTEGRATION_RUNNER_SECRET` is `string | undefined` but URLSearchParams requires `string`
 

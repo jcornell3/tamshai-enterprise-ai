@@ -46,7 +46,7 @@ git config user.email
 | Setting | Value | Notes |
 |---------|-------|-------|
 | **GitHub Account** | `bunnyfoo` | Never use `jcornell3` |
-| **Repository** | `Tamshai-AI-Playground` | Not `Tamshai-AI-Playground-new` |
+| **Repository** | `tamshai-enterprise-ai` | Not `tamshai-enterprise-ai-new` |
 | **Token Variable** | `BUNNYFOO_GH_TOKEN` | Never use `GITHUB_TOKEN` |
 
 **Authentication Method**:
@@ -72,7 +72,7 @@ unset GITHUB_TOKEN
 TOKEN=$(gh auth token)
 
 # 3. Push using token directly (bypasses credential manager)
-git -c credential.helper= push https://bunnyfoo:${TOKEN}@github.com/bunnyfoo/Tamshai-AI-Playground.git main
+git -c credential.helper= push https://bunnyfoo:${TOKEN}@github.com/bunnyfoo/tamshai-enterprise-ai.git main
 ```
 
 **Note**: This embeds the token in the command but NOT in git config. The token is ephemeral in the shell session only.
@@ -177,7 +177,7 @@ This ensures the user can immediately pull and test the changes on their local m
 cd infrastructure/terraform/dev
 terraform init                           # First time only
 terraform apply -var-file=dev.tfvars     # Deploy environment
-# Access at: https://www.tamshai-playground.local
+# Access at: https://www.tamshai.local
 
 # Teardown and redeploy
 terraform destroy -var-file=dev.tfvars   # Stop services
@@ -722,7 +722,7 @@ Browser-based E2E tests with full authentication flow including TOTP.
 **Test Environments**:
 | Environment | App URL | Keycloak URL | TOTP Secret Source |
 |-------------|---------|--------------|-------------------|
-| dev | <https://www.tamshai-playground.local> | <https://www.tamshai-playground.local/auth> | Hardcoded (dev only) |
+| dev | <https://www.tamshai.local> | <https://www.tamshai.local/auth> | Hardcoded (dev only) |
 | stage | <https://www.tamshai.com> | <https://www.tamshai.com/auth> | Environment variable |
 | prod | <https://prod.tamshai.com> | <https://keycloak-fn44nd7wba-uc.a.run.app/auth> | Secrets manager |
 

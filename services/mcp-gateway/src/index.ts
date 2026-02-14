@@ -321,8 +321,8 @@ app.use(cors({
       'http://localhost:4001',     // HR app
       'http://localhost:4002',     // Finance app
       // Dev environment (port from DEV_CADDY_HTTPS GitHub variable)
-      'https://www.tamshai-playground.local',
-      ...(caddyHttpsPort ? [`https://www.tamshai-playground.local:${caddyHttpsPort}`] : []),
+      'https://www.tamshai.local',
+      ...(caddyHttpsPort ? [`https://www.tamshai.local:${caddyHttpsPort}`] : []),
       // Stage environment
       'https://www.tamshai.com',
       // Production environment

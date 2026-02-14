@@ -17,7 +17,7 @@ import { test, expect, Page, BrowserContext } from '@playwright/test';
 const ENV = process.env.TEST_ENV || 'dev';
 
 const BASE_URLS: Record<string, { customerPortal: string }> = {
-  dev: { customerPortal: 'https://customers.tamshai-playground.local:8443' },
+  dev: { customerPortal: 'https://customers.tamshai.local:8443' },
   stage: { customerPortal: 'https://customers.tamshai.com' },
   prod: { customerPortal: 'https://customers.tamshai.com' },
 };

@@ -29,8 +29,8 @@ Add the following to your hosts file:
 **macOS/Linux**: `/etc/hosts`
 
 ```
-127.0.0.1   customers.tamshai-playground.local
-127.0.0.1   www.tamshai-playground.local
+127.0.0.1   customers.tamshai.local
+127.0.0.1   www.tamshai.local
 ```
 
 ### 3.2 Start Infrastructure
@@ -173,7 +173,7 @@ services:
       - tamshai-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.customer-support.rule=Host(`customers.tamshai-playground.local`)"
+      - "traefik.http.routers.customer-support.rule=Host(`customers.tamshai.local`)"
       - "traefik.http.services.customer-support.loadbalancer.server.port=80"
 ```
 
@@ -274,17 +274,17 @@ mongosh mongodb://localhost:27018/support --file support-customers.js
 
 ```caddyfile
 # Customer Portal
-customers.tamshai-playground.local {
+customers.tamshai.local {
     reverse_proxy web-customer-support:80
 }
 
 # Internal Portal (existing)
-www.tamshai-playground.local {
+www.tamshai.local {
     reverse_proxy portal:80
 
     # Route to customer portal link
     handle /customer-login {
-        redir https://customers.tamshai-playground.local 302
+        redir https://customers.tamshai.local 302
     }
 }
 ```

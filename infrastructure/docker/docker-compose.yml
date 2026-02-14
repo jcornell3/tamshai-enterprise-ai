@@ -38,7 +38,7 @@
 #
 # NETWORK: Uses 172.30.0.0/16 subnet
 
-name: ${COMPOSE_PROJECT_NAME:-tamshai-playground}
+name: ${COMPOSE_PROJECT_NAME:-tamshai-dev}
 
 services:
   # =============================================================================
@@ -114,7 +114,7 @@ services:
       - tamshai-network
 
   # =============================================================================
-  # REVERSE PROXY (Caddy - HTTPS for tamshai-playground.local)
+  # REVERSE PROXY (Caddy - HTTPS for tamshai.local)
   # =============================================================================
   caddy:
     image: caddy:2-alpine
@@ -165,7 +165,7 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is required}
       # Hostname configuration for reverse proxy (Caddy)
       # KC_HOSTNAME_URL sets the full issuer URL in tokens - must match what clients see
-      KC_HOSTNAME_URL: https://www.tamshai-playground.local:8443/auth
+      KC_HOSTNAME_URL: https://www.tamshai.local:8443/auth
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -230,7 +230,7 @@ services:
       # KEYCLOAK_URL: Used for container-to-container communication (includes /auth prefix)
       KEYCLOAK_URL: http://keycloak:8080/auth
       # KEYCLOAK_ISSUER: Must match the "iss" claim in JWT tokens (what clients see via Caddy)
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai-playground.local:8443/auth/realms/tamshai-corp}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai.local:8443/auth/realms/tamshai-corp}
       # JWKS_URI: Internal container URL to fetch public keys (includes /auth prefix)
       JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp

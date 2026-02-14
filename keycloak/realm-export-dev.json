@@ -233,7 +233,7 @@
   "users": [
     {
       "username": "alice.chen",
-      "email": "alice@tamshai-playground.local",
+      "email": "alice@tamshai.local",
       "firstName": "Alice",
       "lastName": "Chen",
       "enabled": true,
@@ -258,7 +258,7 @@
     },
     {
       "username": "bob.martinez",
-      "email": "bob@tamshai-playground.local",
+      "email": "bob@tamshai.local",
       "firstName": "Bob",
       "lastName": "Martinez",
       "enabled": true,
@@ -283,7 +283,7 @@
     },
     {
       "username": "carol.johnson",
-      "email": "carol@tamshai-playground.local",
+      "email": "carol@tamshai.local",
       "firstName": "Carol",
       "lastName": "Johnson",
       "enabled": true,
@@ -307,7 +307,7 @@
     },
     {
       "username": "dan.williams",
-      "email": "dan@tamshai-playground.local",
+      "email": "dan@tamshai.local",
       "firstName": "Dan",
       "lastName": "Williams",
       "enabled": true,
@@ -332,7 +332,7 @@
     },
     {
       "username": "eve.thompson",
-      "email": "eve@tamshai-playground.local",
+      "email": "eve@tamshai.local",
       "firstName": "Eve",
       "lastName": "Thompson",
       "enabled": true,
@@ -356,7 +356,7 @@
     },
     {
       "username": "frank.davis",
-      "email": "frank@tamshai-playground.local",
+      "email": "frank@tamshai.local",
       "firstName": "Frank",
       "lastName": "Davis",
       "enabled": true,
@@ -380,7 +380,7 @@
     },
     {
       "username": "nina.patel",
-      "email": "nina.p@tamshai-playground.local",
+      "email": "nina.p@tamshai.local",
       "firstName": "Nina",
       "lastName": "Patel",
       "enabled": true,
@@ -404,7 +404,7 @@
     },
     {
       "username": "marcus.johnson",
-      "email": "marcus.j@tamshai-playground.local",
+      "email": "marcus.j@tamshai.local",
       "firstName": "Marcus",
       "lastName": "Johnson",
       "enabled": true,
@@ -428,7 +428,7 @@
     },
     {
       "username": "test-user.journey",
-      "email": "test-user@tamshai-playground.local",
+      "email": "test-user@tamshai.local",
       "emailVerified": true,
       "enabled": true,
       "firstName": "Test",
@@ -684,14 +684,14 @@
       "redirectUris": [
         "http://localhost:8080/employee-services.html",
         "http://localhost:8080/*",
-        "https://tamshai-playground.local/employee-services.html",
-        "https://tamshai-playground.local/*",
-        "https://www.tamshai-playground.local/employee-services.html",
-        "https://www.tamshai-playground.local/*",
-        "https://tamshai-playground.local:8443/employee-services.html",
-        "https://tamshai-playground.local:8443/*",
-        "https://www.tamshai-playground.local:8443/employee-services.html",
-        "https://www.tamshai-playground.local:8443/*",
+        "https://tamshai.local/employee-services.html",
+        "https://tamshai.local/*",
+        "https://www.tamshai.local/employee-services.html",
+        "https://www.tamshai.local/*",
+        "https://tamshai.local:8443/employee-services.html",
+        "https://tamshai.local:8443/*",
+        "https://www.tamshai.local:8443/employee-services.html",
+        "https://www.tamshai.local:8443/*",
         "https://vps.tamshai.com/employee-services.html",
         "https://vps.tamshai.com/*",
         "https://tamshai.com/employee-services.html",
@@ -701,17 +701,17 @@
       ],
       "webOrigins": [
         "http://localhost:8080",
-        "https://tamshai-playground.local",
-        "https://www.tamshai-playground.local",
-        "https://tamshai-playground.local:8443",
-        "https://www.tamshai-playground.local:8443",
+        "https://tamshai.local",
+        "https://www.tamshai.local",
+        "https://tamshai.local:8443",
+        "https://www.tamshai.local:8443",
         "https://vps.tamshai.com",
         "https://tamshai.com",
         "https://www.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai-playground.local/*##https://www.tamshai-playground.local/*##https://tamshai-playground.local:8443/*##https://www.tamshai-playground.local:8443/*##https://vps.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
+        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://tamshai.local:8443/*##https://www.tamshai.local:8443/*##https://vps.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
       },
       "defaultClientScopes": [
 
@@ -746,21 +746,21 @@
       "redirectUris": [
         "http://localhost:4000/*",
         "http://localhost:4000/callback",
-        "https://www.tamshai-playground.local/app/*",
-        "https://www.tamshai-playground.local:8443/app/*",
+        "https://www.tamshai.local/app/*",
+        "https://www.tamshai.local:8443/app/*",
         "https://www.tamshai.com/app/*",
         "https://prod.tamshai.com/app/*"
       ],
       "webOrigins": [
         "http://localhost:4000",
-        "https://www.tamshai-playground.local",
-        "https://www.tamshai-playground.local:8443",
+        "https://www.tamshai.local",
+        "https://www.tamshai.local:8443",
         "https://www.tamshai.com",
         "https://prod.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4000/*##https://www.tamshai-playground.local/*##https://www.tamshai-playground.local:8443/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
+        "post.logout.redirect.uris": "http://localhost:4000/*##https://www.tamshai.local/*##https://www.tamshai.local:8443/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
       },
       "defaultClientScopes": [
         "profile",
@@ -795,10 +795,10 @@
       "redirectUris": [
         "http://localhost:3100/*",
         "http://127.0.0.1:3100/*",
-        "https://tamshai-playground.local/*",
-        "https://www.tamshai-playground.local/*",
-        "https://tamshai-playground.local:8443/*",
-        "https://www.tamshai-playground.local:8443/*"
+        "https://tamshai.local/*",
+        "https://www.tamshai.local/*",
+        "https://tamshai.local:8443/*",
+        "https://www.tamshai.local:8443/*"
       ],
       "webOrigins": ["+"],
       "fullScopeAllowed": false,

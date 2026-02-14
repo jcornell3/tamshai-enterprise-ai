@@ -346,10 +346,10 @@
 │  ┌───────────────────────────────────────────────────────────┐ │
 │  │                     CADDY (Reverse Proxy)                 │ │
 │  │                                                           │ │
-│  │  customers.tamshai-playground.local → web-customer-support│ │
-│  │  www.tamshai-playground.local → portal                    │ │
-│  │  www.tamshai-playground.local/support → web-support       │ │
-│  │  www.tamshai-playground.local/api → kong                  │ │
+│  │  customers.tamshai.local → web-customer-support│ │
+│  │  www.tamshai.local → portal                    │ │
+│  │  www.tamshai.local/support → web-support       │ │
+│  │  www.tamshai.local/api → kong                  │ │
 │  │                                                           │ │
 │  └───────────────────────────────────────────────────────────┘ │
 │                              │                                  │

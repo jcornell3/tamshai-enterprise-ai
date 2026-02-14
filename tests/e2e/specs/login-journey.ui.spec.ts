@@ -24,9 +24,9 @@ const ENV = process.env.TEST_ENV || 'dev';
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tamshai-corp';
 const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
-    site: 'https://www.tamshai-playground.local:8443',      // Static marketing site
-    app: 'https://www.tamshai-playground.local:8443/app',   // Portal SPA
-    keycloak: 'https://www.tamshai-playground.local:8443/auth',
+    site: 'https://www.tamshai.local:8443',      // Static marketing site
+    app: 'https://www.tamshai.local:8443/app',   // Portal SPA
+    keycloak: 'https://www.tamshai.local:8443/auth',
   },
   stage: {
     site: 'https://www.tamshai.com',        // Static marketing site

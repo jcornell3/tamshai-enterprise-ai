@@ -10,7 +10,7 @@
 #   ./login-journey.sh [environment]
 #
 # Environments:
-#   dev    - Local development (https://www.tamshai-playground.local)
+#   dev    - Local development (https://www.tamshai.local)
 #   stage  - VPS staging (https://www.tamshai.com)
 #
 # Test Steps:
@@ -42,8 +42,8 @@ log_step() { echo -e "${BLUE}[TEST]${NC} $1"; }
 
 # Configure URLs based on environment
 if [ "$ENV" = "dev" ]; then
-    BASE_URL="https://www.tamshai-playground.local"
-    KEYCLOAK_URL="https://www.tamshai-playground.local/auth"
+    BASE_URL="https://www.tamshai.local"
+    KEYCLOAK_URL="https://www.tamshai.local/auth"
     # Skip SSL verification for local self-signed certs
     INSECURE="-k"
 elif [ "$ENV" = "prod" ]; then

@@ -216,21 +216,21 @@
         "http://localhost:4006/*",
         "http://127.0.0.1:4017/*",
         "http://localhost:4017/*",
-        "https://customers.tamshai-playground.local/*",
-        "https://customers.tamshai-playground.local:8443/*",
+        "https://customers.tamshai.local/*",
+        "https://customers.tamshai.local:8443/*",
         "https://customers.tamshai.com/*"
       ],
       "webOrigins": [
         "http://localhost:4006",
         "http://127.0.0.1:4017",
         "http://localhost:4017",
-        "https://customers.tamshai-playground.local",
-        "https://customers.tamshai-playground.local:8443",
+        "https://customers.tamshai.local",
+        "https://customers.tamshai.local:8443",
         "https://customers.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4006/*##http://127.0.0.1:4017/*##https://customers.tamshai-playground.local/*##https://customers.tamshai-playground.local:8443/*"
+        "post.logout.redirect.uris": "http://localhost:4006/*##http://127.0.0.1:4017/*##https://customers.tamshai.local/*##https://customers.tamshai.local:8443/*"
       },
       "defaultClientScopes": [
         "openid",

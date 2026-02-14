@@ -24,8 +24,8 @@ function getAppBasePath(): string {
 function isDeployedEnvironment(hostname: string): boolean {
   // Known deployed hostnames
   const deployedHosts = [
-    'tamshai-playground.local',
-    'www.tamshai-playground.local',
+    'tamshai.local',
+    'www.tamshai.local',
     'tamshai.com',
     'www.tamshai.com',
     'vps.tamshai.com',

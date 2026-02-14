@@ -81,7 +81,7 @@ if [[ -n "${KEYCLOAK_URL:-}" ]]; then
 else
     case "$ENV" in
         dev)
-            KEYCLOAK_URL="https://www.tamshai-playground.local/auth"
+            KEYCLOAK_URL="https://www.tamshai.local/auth"
             ;;
         stage)
             KEYCLOAK_URL="https://www.tamshai.com/auth"

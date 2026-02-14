@@ -17,7 +17,7 @@ const PORT_MCP_GATEWAY = process.env.PORT_MCP_GATEWAY || '3100';
 // Base URLs per environment
 const envConfig: Record<string, { baseURL: string; ignoreHTTPSErrors: boolean }> = {
   dev: {
-    baseURL: `https://www.tamshai-playground.local:${PORT_CADDY_HTTPS}`,
+    baseURL: `https://www.tamshai.local:${PORT_CADDY_HTTPS}`,
     ignoreHTTPSErrors: true, // Self-signed certs in dev
   },
   stage: {
@@ -50,7 +50,7 @@ export default defineConfig({
     ...(process.env.CI ? [['github' as const]] : []),
   ],
   use: {
-    baseURL: envConfig[testEnv]?.baseURL || `https://www.tamshai-playground.local:${PORT_CADDY_HTTPS}`,
+    baseURL: envConfig[testEnv]?.baseURL || `https://www.tamshai.local:${PORT_CADDY_HTTPS}`,
     ignoreHTTPSErrors: envConfig[testEnv]?.ignoreHTTPSErrors ?? true,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',

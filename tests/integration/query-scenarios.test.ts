@@ -32,7 +32,7 @@ const authProvider = getTestAuthProvider();
 const TEST_USERS = {
   executive: {
     username: 'eve.thompson',
-    email: 'eve@tamshai-playground.local',
+    email: 'eve@tamshai.local',
     userId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b',
     roles: ['executive', 'manager', 'hr-read', 'support-read', 'sales-read', 'finance-read'],
     // Eve is CEO with direct reports: CFO, CTO, COO, VP of Sales
@@ -40,7 +40,7 @@ const TEST_USERS = {
   },
   hrManager: {
     username: 'alice.chen',
-    email: 'alice@tamshai-playground.local',
+    email: 'alice@tamshai.local',
     userId: 'f104eddc-21ab-457c-a254-78051ad7ad67',
     roles: ['hr-read', 'hr-write', 'manager'],
     // Alice is VP of HR with direct report: Jennifer Lee
@@ -48,7 +48,7 @@ const TEST_USERS = {
   },
   engineeringManager: {
     username: 'nina.patel',
-    email: 'nina.p@tamshai-playground.local',
+    email: 'nina.p@tamshai.local',
     userId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d',
     roles: ['manager'],
     // Nina is Engineering Manager with reports: Marcus Johnson, Sophia Wang, Tyler Scott
@@ -56,7 +56,7 @@ const TEST_USERS = {
   },
   intern: {
     username: 'frank.davis',
-    email: 'frank@tamshai-playground.local',
+    email: 'frank@tamshai.local',
     userId: 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e',
     roles: [],
     // Frank is an intern with no direct reports
@@ -64,7 +64,7 @@ const TEST_USERS = {
   },
   financeUser: {
     username: 'bob.martinez',
-    email: 'bob@tamshai-playground.local',
+    email: 'bob@tamshai.local',
     userId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1',
     roles: ['finance-read', 'finance-write'],
   },
@@ -729,7 +729,7 @@ describe('Query Error Handling', () => {
         userContext: {
           userId: '00000000-0000-0000-0000-000000000000',
           username: 'nonexistent.user',
-          email: 'nonexistent@tamshai-playground.local', // Email not in HR database
+          email: 'nonexistent@tamshai.local', // Email not in HR database
           roles: ['executive'],
         },
       });
@@ -737,7 +737,7 @@ describe('Query Error Handling', () => {
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('error');
       expect(response.data.code).toBe('USER_NOT_FOUND');
-      expect(response.data.message).toContain('nonexistent@tamshai-playground.local');
+      expect(response.data.message).toContain('nonexistent@tamshai.local');
       expect(response.data.suggestedAction).toBeDefined();
     });
   });

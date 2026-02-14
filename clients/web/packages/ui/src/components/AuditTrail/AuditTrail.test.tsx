@@ -13,7 +13,7 @@ const mockEntries: AuditEntryData[] = [
   {
     id: 'audit-001',
     timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 minutes ago
-    userEmail: 'bob@tamshai-playground.local',
+    userEmail: 'bob@tamshai.local',
     userName: 'Bob Martinez',
     action: 'APPROVE',
     resource: 'invoices',
@@ -23,7 +23,7 @@ const mockEntries: AuditEntryData[] = [
   {
     id: 'audit-002',
     timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hour ago
-    userEmail: 'alice@tamshai-playground.local',
+    userEmail: 'alice@tamshai.local',
     userName: 'Alice Chen',
     action: 'UPDATE',
     resource: 'invoices',
@@ -35,7 +35,7 @@ const mockEntries: AuditEntryData[] = [
   {
     id: 'audit-003',
     timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-    userEmail: 'carol@tamshai-playground.local',
+    userEmail: 'carol@tamshai.local',
     action: 'INSERT',
     resource: 'invoices',
     targetId: 'inv-001',
@@ -44,7 +44,7 @@ const mockEntries: AuditEntryData[] = [
   {
     id: 'audit-004',
     timestamp: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
-    userEmail: 'dan@tamshai-playground.local',
+    userEmail: 'dan@tamshai.local',
     userName: 'Dan Williams',
     action: 'CREATE',
     resource: 'invoices',

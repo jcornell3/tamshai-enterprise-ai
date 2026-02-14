@@ -25,9 +25,9 @@ const BASE_URLS: Record<string, {
   keycloak: string;
 }> = {
   dev: {
-    homepage: 'https://www.tamshai-playground.local:8443',
-    customerPortal: 'https://customers.tamshai-playground.local:8443',
-    keycloak: 'https://www.tamshai-playground.local:8443/auth',
+    homepage: 'https://www.tamshai.local:8443',
+    customerPortal: 'https://customers.tamshai.local:8443',
+    keycloak: 'https://www.tamshai.local:8443/auth',
   },
   stage: {
     homepage: 'https://www.tamshai.com',

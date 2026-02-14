@@ -39,25 +39,25 @@ const TEST_USERS = {
   executive: {
     userId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b',
     username: 'eve.thompson',
-    email: 'eve@tamshai-playground.local',
+    email: 'eve@tamshai.local',
     roles: ['executive'],
   },
   hrRead: {
     userId: 'f104eddc-21ab-457c-a254-78051ad7ad67',
     username: 'alice.chen',
-    email: 'alice@tamshai-playground.local',
+    email: 'alice@tamshai.local',
     roles: ['hr-read'],
   },
   financeRead: {
     userId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1',
     username: 'bob.martinez',
-    email: 'bob@tamshai-playground.local',
+    email: 'bob@tamshai.local',
     roles: ['finance-read'],
   },
   manager: {
     userId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d',
     username: 'nina.patel',
-    email: 'nina.p@tamshai-playground.local',
+    email: 'nina.p@tamshai.local',
     roles: ['manager'],
   },
 };

@@ -1,4 +1,4 @@
-# Keycloak for Local Development (tamshai-playground)
+# Keycloak for Local Development (tamshai-dev)
 # Bakes realm exports into the image to avoid Docker Desktop volume mount issues
 #
 # Usage:

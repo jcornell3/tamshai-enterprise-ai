@@ -247,7 +247,7 @@ Realm: tamshai-corp
 {
   "sub": "user-uuid",
   "preferred_username": "alice.chen",
-  "email": "alice@tamshai-playground.local",
+  "email": "alice@tamshai.local",
   "realm_access": {
     "roles": ["hr-read", "hr-write"]
   },

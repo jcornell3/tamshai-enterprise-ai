@@ -14,7 +14,7 @@ const TEST_USER = {
   password: process.env.TEST_USER_PASSWORD || '',
 };
 
-const BASE_URL = 'https://www.tamshai-playground.local';
+const BASE_URL = 'https://www.tamshai.local';
 
 async function testAuth() {
   console.log(`Testing authentication for ${TEST_USER.username}...`);

@@ -13,8 +13,8 @@ import { useAuth } from '@tamshai/auth';
  */
 // Allowlist of valid hostnames for customer portal URL generation
 const CUSTOMER_PORTAL_HOSTS: Record<string, string> = {
-  'www.tamshai-playground.local': 'https://customers.tamshai-playground.local',
-  'tamshai-playground.local': 'https://customers.tamshai-playground.local',
+  'www.tamshai.local': 'https://customers.tamshai.local',
+  'tamshai.local': 'https://customers.tamshai.local',
   'www.tamshai.com': 'https://customers.tamshai.com',
   'tamshai.com': 'https://customers.tamshai.com',
 };

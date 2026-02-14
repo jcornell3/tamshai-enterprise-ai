@@ -69,7 +69,7 @@ services:
 2. **Install the hook**:
 
    ```bash
-   cd /path/to/Tamshai-AI-Playground
+   cd /path/to/tamshai-enterprise-ai
    pre-commit install
    ```
 

@@ -3,7 +3,7 @@
 # Generate environment-specific Keycloak realm export
 #
 # This script generates realm exports with proper environment-specific values:
-# - Email domains (tamshai-playground.local for dev, tamshai.com for stage/prod)
+# - Email domains (tamshai.local for dev, tamshai.com for stage/prod)
 # - Redirect URIs
 # - Secret placeholders
 #
@@ -23,19 +23,19 @@ KEYCLOAK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Environment-specific configuration
 declare -A EMAIL_DOMAINS=(
-    ["dev"]="tamshai-playground.local"
+    ["dev"]="tamshai.local"
     ["stage"]="tamshai.com"
     ["prod"]="tamshai.com"
 )
 
 declare -A BASE_URLS=(
-    ["dev"]="https://www.tamshai-playground.local"
+    ["dev"]="https://www.tamshai.local"
     ["stage"]="https://www.tamshai.com"
     ["prod"]="https://app.tamshai.com"
 )
 
 declare -A AUTH_URLS=(
-    ["dev"]="https://www.tamshai-playground.local/auth"
+    ["dev"]="https://www.tamshai.local/auth"
     ["stage"]="https://www.tamshai.com/auth"
     ["prod"]="https://auth.tamshai.com/auth"
 )
@@ -80,7 +80,7 @@ Examples:
 Environment Configuration:
     Environment | Email Domain    | Base URL               | Auth URL
     ------------|-----------------|------------------------|-------------------------
-    dev         | tamshai-playground.local   | https://www.tamshai-playground.local  | https://www.tamshai-playground.local/auth
+    dev         | tamshai.local   | https://www.tamshai.local  | https://www.tamshai.local/auth
     stage       | tamshai.com     | https://www.tamshai.com    | https://www.tamshai.com/auth
     prod        | tamshai.com     | https://app.tamshai.com    | https://auth.tamshai.com/auth
 
@@ -217,7 +217,7 @@ generate_client_redirects() {
 
     case $env in
         dev)
-            echo '["http://localhost:*", "https://www.tamshai-playground.local/*", "https://localhost:*"]'
+            echo '["http://localhost:*", "https://www.tamshai.local/*", "https://localhost:*"]'
             ;;
         stage)
             echo '["https://www.tamshai.com/*", "https://vps.tamshai.com/*"]'
@@ -234,7 +234,7 @@ generate_web_origins() {
 
     case $env in
         dev)
-            echo '["http://localhost:3000", "http://localhost:5173", "https://www.tamshai-playground.local"]'
+            echo '["http://localhost:3000", "http://localhost:5173", "https://www.tamshai.local"]'
             ;;
         stage)
             echo '["https://www.tamshai.com", "https://vps.tamshai.com"]'
@@ -312,10 +312,10 @@ if [ -n "$TEMPLATE_FILE" ]; then
 
     # Update email domain for users
     if [ "$ENV" = "dev" ]; then
-        # Replace @tamshai.com with @tamshai-playground.local for dev
-        REALM_JSON=$(echo "$REALM_JSON" | sed 's/@tamshai\.com/@tamshai-playground.local/g')
+        # Replace @tamshai.com with @tamshai.local for dev
+        REALM_JSON=$(echo "$REALM_JSON" | sed 's/@tamshai\.com/@tamshai.local/g')
     else
-        # Replace @tamshai-playground.local with @tamshai.com for stage/prod
+        # Replace @tamshai.local with @tamshai.com for stage/prod
         REALM_JSON=$(echo "$REALM_JSON" | sed 's/@tamshai\.local/@tamshai.com/g')
     fi
 
@@ -384,7 +384,7 @@ else
         dev)
             echo ""
             log_info "Dev Notes:"
-            log_info "  - Email domain: tamshai-playground.local"
+            log_info "  - Email domain: tamshai.local"
             log_info "  - Test credentials: hardcoded (safe for dev)"
             log_info "  - Use with: terraform apply -var-file=dev.tfvars"
             ;;

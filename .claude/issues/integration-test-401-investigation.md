@@ -99,10 +99,10 @@ claim.name: "resource_access.mcp-gateway.roles"
 
 ```bash
 # Token issuer (from Keycloak)
-"iss": "https://www.tamshai-playground.local:8443/auth/realms/tamshai-corp"
+"iss": "https://www.tamshai.local:8443/auth/realms/tamshai-corp"
 
 # Gateway expects (from KEYCLOAK_ISSUER env var)
-"https://www.tamshai-playground.local:8443/auth/realms/tamshai-corp"
+"https://www.tamshai.local:8443/auth/realms/tamshai-corp"
 ```
 
 **Result**: ✅ Issuers match correctly
@@ -163,7 +163,7 @@ POST http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/toke
   "preferred_username": "bob.martinez",
   "exp": 1771010783,
   "iat": 1771010483,
-  "iss": "https://www.tamshai-playground.local:8443/auth/realms/tamshai-corp",
+  "iss": "https://www.tamshai.local:8443/auth/realms/tamshai-corp",
   "aud": "mcp-gateway",
   "resource_access": {
     "mcp-gateway": {
@@ -179,7 +179,7 @@ POST http://localhost:8180/auth/realms/tamshai-corp/protocol/openid-connect/toke
 
 ```bash
 KEYCLOAK_URL=http://keycloak:8080/auth
-KEYCLOAK_ISSUER=https://www.tamshai-playground.local:8443/auth/realms/tamshai-corp
+KEYCLOAK_ISSUER=https://www.tamshai.local:8443/auth/realms/tamshai-corp
 KEYCLOAK_REALM=tamshai-corp
 KEYCLOAK_CLIENT_ID=mcp-gateway
 JWKS_URI=http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
@@ -197,7 +197,7 @@ jwt.verify(
   },
   {
     algorithms: ['RS256'],
-    issuer: this.config.issuer,  // https://www.tamshai-playground.local:8443/auth/realms/tamshai-corp
+    issuer: this.config.issuer,  // https://www.tamshai.local:8443/auth/realms/tamshai-corp
     audience: ['mcp-gateway', 'account'],
   },
   (err, decoded) => { /* ... */ }
@@ -268,7 +268,7 @@ grep -n "app.use" services/mcp-gateway/src/index.ts
 **Hypothesis**: Keycloak realm has frontend URL configured incorrectly for dev environment.
 
 **Evidence**:
-- Issuer is `https://www.tamshai-playground.local:8443` (production URL)
+- Issuer is `https://www.tamshai.local:8443` (production URL)
 - Dev environment should use `http://localhost:8180` or `http://keycloak:8080`
 
 **Test**:

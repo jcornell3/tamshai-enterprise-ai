@@ -220,7 +220,7 @@ export CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' ../../infrastruc
 
 ```bash
 # Employee login tests by environment
-npm run test:login:dev    # https://www.tamshai-playground.local
+npm run test:login:dev    # https://www.tamshai.local
 npm run test:login:stage  # https://www.tamshai.com
 npm run test:login:prod   # https://app.tamshai.com
 

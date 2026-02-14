@@ -64,7 +64,7 @@ if [ "$ENV" = "dev" ]; then
     POSTGRES_CONTAINER="tamshai-postgres"
     POSTGRES_USER="postgres"
     POSTGRES_DB="keycloak"
-    KEYCLOAK_URL="https://www.tamshai-playground.local"
+    KEYCLOAK_URL="https://www.tamshai.local"
     USE_SSH=false
 elif [ "$ENV" = "stage" ]; then
     # Stage environment - connect via SSH to VPS

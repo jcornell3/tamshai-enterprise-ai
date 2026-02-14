@@ -18,7 +18,7 @@
    ```
 
 3. **Login to portal:**
-   - URL: https://www.tamshai-playground.local
+   - URL: https://www.tamshai.local
    - User: alice.chen (HR manager with access to all components)
    - Password: [DEV_PASSWORD]
 

@@ -73,7 +73,7 @@ This document details the security architecture for the Tamshai Corp Enterprise 
     "exp": 1699003600,
     "iat": 1699003300,
     "jti": "unique-token-id",
-    "iss": "https://auth.tamshai-playground.local/realms/tamshai-corp",
+    "iss": "https://auth.tamshai.local/realms/tamshai-corp",
     "aud": ["ai-desktop", "mcp-gateway"],
     "sub": "user-uuid-12345",
     "typ": "Bearer",
@@ -88,7 +88,7 @@ This document details the security architecture for the Tamshai Corp Enterprise 
     "preferred_username": "alice.chen",
     "given_name": "Alice",
     "family_name": "Chen",
-    "email": "alice@tamshai-playground.local"
+    "email": "alice@tamshai.local"
   },
   "signature": "..."
 }
@@ -572,7 +572,7 @@ class SecureTokenStore {
   "user": {
     "id": "user-uuid-12345",
     "username": "alice.chen",
-    "email": "alice@tamshai-playground.local",
+    "email": "alice@tamshai.local",
     "roles": ["hr-read", "hr-write"],
     "groups": ["/HR-Department"]
   },

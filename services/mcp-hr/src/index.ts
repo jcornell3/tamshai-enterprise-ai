@@ -220,7 +220,7 @@ app.post('/query', async (req: Request, res: Response) => {
           suggestedAction: 'Ensure your authentication token includes your email address',
         };
       } else {
-        // Transform email from Keycloak format (@tamshai-playground.local in dev) to DB format (@tamshai.com)
+        // Transform email from Keycloak format (@tamshai.local in dev) to DB format (@tamshai.com)
         const dbEmail = transformEmailForDatabaseLookup(userContext.email);
         logger.info('Looking up user employee ID for team query', {
           email: userContext.email,

@@ -55,7 +55,7 @@ db.tickets.insertMany([
     _id: ObjectId("670000000000000000000003"),
     ticket_id: "TICK-003",
     title: "Add new user to Finance team",
-    description: "Please create account for new hire Sarah Martinez (sarah.martinez@tamshai-playground.local) with finance-read role.",
+    description: "Please create account for new hire Sarah Martinez (sarah.martinez@tamshai.local) with finance-read role.",
     status: "resolved",
     priority: "medium",
     created_by: "bob.martinez",

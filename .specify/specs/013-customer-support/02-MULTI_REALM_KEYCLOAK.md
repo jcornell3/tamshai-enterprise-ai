@@ -90,15 +90,15 @@ The Customer Support Portal uses a separate Keycloak realm (`tamshai-customers`)
       "baseUrl": "/",
       "redirectUris": [
         "http://localhost:4006/*",
-        "https://customers.tamshai-playground.local/*"
+        "https://customers.tamshai.local/*"
       ],
       "webOrigins": [
         "http://localhost:4006",
-        "https://customers.tamshai-playground.local"
+        "https://customers.tamshai.local"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4006/*##https://customers.tamshai-playground.local/*"
+        "post.logout.redirect.uris": "http://localhost:4006/*##https://customers.tamshai.local/*"
       },
       "defaultClientScopes": [
         "openid",
@@ -460,8 +460,8 @@ create_customer_portal_client() {
         "enabled": true,
         "publicClient": true,
         "standardFlowEnabled": true,
-        "redirectUris": ["http://localhost:4006/*", "https://customers.tamshai-playground.local/*"],
-        "webOrigins": ["http://localhost:4006", "https://customers.tamshai-playground.local"],
+        "redirectUris": ["http://localhost:4006/*", "https://customers.tamshai.local/*"],
+        "webOrigins": ["http://localhost:4006", "https://customers.tamshai.local"],
         "attributes": {
             "pkce.code.challenge.method": "S256"
         },

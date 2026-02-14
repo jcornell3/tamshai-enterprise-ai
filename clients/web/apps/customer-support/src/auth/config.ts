@@ -12,7 +12,7 @@ import { WebStorageStateStore } from 'oidc-client-ts';
  */
 function isDeployedEnvironment(hostname: string): boolean {
   const deployedHosts = [
-    'customers.tamshai-playground.local',
+    'customers.tamshai.local',
     'customers.tamshai.com',
     'customer-support.tamshai.com',
   ];
@@ -42,7 +42,7 @@ function getKeycloakAuthorityUrl(): string {
 
   // Map customer subdomain to www domain (matches Keycloak's issuer)
   const domainMap: Record<string, string> = {
-    'customers.tamshai-playground.local': 'www.tamshai-playground.local',
+    'customers.tamshai.local': 'www.tamshai.local',
     'customers.tamshai.com': 'www.tamshai.com',
     'customer-support.tamshai.com': 'www.tamshai.com',
   };

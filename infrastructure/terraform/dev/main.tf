@@ -186,7 +186,7 @@ locals {
 # PRE-FLIGHT CHECKS
 # =============================================================================
 
-# Verify hosts file contains tamshai-playground.local entry
+# Verify hosts file contains tamshai.local entry
 resource "null_resource" "hosts_file_check" {
   provisioner "local-exec" {
     interpreter = ["powershell", "-Command"]
@@ -195,15 +195,15 @@ resource "null_resource" "hosts_file_check" {
       if (Test-Path $hostsPath) {
         $hosts = Get-Content $hostsPath -Raw
         if ($hosts -match "tamshai\.local") {
-          Write-Host "✓ tamshai-playground.local found in hosts file" -ForegroundColor Green
+          Write-Host "✓ tamshai.local found in hosts file" -ForegroundColor Green
         } else {
-          Write-Host "ERROR: tamshai-playground.local not found in hosts file" -ForegroundColor Red
+          Write-Host "ERROR: tamshai.local not found in hosts file" -ForegroundColor Red
           Write-Host ""
           Write-Host "Please add the following entry to your hosts file:" -ForegroundColor Yellow
-          Write-Host "  127.0.0.1  tamshai-playground.local www.tamshai-playground.local" -ForegroundColor Cyan
+          Write-Host "  127.0.0.1  tamshai.local www.tamshai.local" -ForegroundColor Cyan
           Write-Host ""
           Write-Host "Run this command as Administrator:" -ForegroundColor Yellow
-          Write-Host "  Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value '127.0.0.1  tamshai-playground.local www.tamshai-playground.local'" -ForegroundColor Cyan
+          Write-Host "  Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value '127.0.0.1  tamshai.local www.tamshai.local'" -ForegroundColor Cyan
           exit 1
         }
       } else {
@@ -475,7 +475,7 @@ resource "null_resource" "wait_for_services" {
 
       echo "All critical services are healthy!"
       echo ""
-      echo "Access your dev environment at: https://www.tamshai-playground.local:${local.ports.caddy_https}"
+      echo "Access your dev environment at: https://www.tamshai.local:${local.ports.caddy_https}"
       echo "(Accept the self-signed certificate warning in your browser)"
     EOT
   }

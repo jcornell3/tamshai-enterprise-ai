@@ -20,7 +20,7 @@ const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 export const ENV = process.env.TEST_ENV || 'dev';
 
 export const BASE_URLS: Record<string, string> = {
-  dev: `https://www.tamshai-playground.local:${process.env.PORT_CADDY_HTTPS || '8443'}`,
+  dev: `https://www.tamshai.local:${process.env.PORT_CADDY_HTTPS || '8443'}`,
   stage: 'https://www.tamshai.com',
   prod: 'https://app.tamshai.com',
 };
