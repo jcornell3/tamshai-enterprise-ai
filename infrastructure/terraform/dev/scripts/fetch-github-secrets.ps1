@@ -19,13 +19,25 @@
 #
 # =============================================================================
 
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop"
 
 # Read JSON input from stdin
 $inputJson = [Console]::In.ReadToEnd()
 $inputData = $inputJson | ConvertFrom-Json
 
 $environment = $inputData.environment.ToUpper()
+
+# Use JCORNELL_GH_TOKEN if available (repo owner token with workflow permissions)
+if ($env:JCORNELL_GH_TOKEN) {
+    $env:GH_TOKEN = $env:JCORNELL_GH_TOKEN
+}
+
+# Verify gh CLI authentication
+$ghStatus = gh auth status 2>&1
+if ($LASTEXITCODE -ne 0) {
+    [Console]::Error.WriteLine("ERROR: gh CLI is not authenticated.")
+    [Console]::Error.WriteLine("Set JCORNELL_GH_TOKEN environment variable or run: gh auth login")
+}
 
 # Build output object - defaults to empty
 $output = @{

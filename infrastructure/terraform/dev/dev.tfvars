@@ -24,9 +24,9 @@
 # =============================================================================
 
 environment            = "dev"
-project_root           = "C:/Users/jcorn/Tamshai-AI-Playground"
+project_root           = "C:/Users/jcorn/tamshai-enterprise-ai"
 docker_compose_dir     = "infrastructure/docker"
-docker_compose_project = "tamshai-playground"
+docker_compose_project = "tamshai-dev"
 
 # =============================================================================
 # AUTOMATION SETTINGS
@@ -83,7 +83,7 @@ redis_password = "" # No password for dev
 # This is automatically fetched from GitHub Secrets during terraform apply.
 # Only set TF_VAR_claude_api_key if you need to override the GitHub Secret.
 #
-# GitHub Secret: CLAUDE_API_KEY (this repo's secret, separate from tamshai-dev)
+# GitHub Secret: CLAUDE_API_KEY_DEV (environment-specific)
 # Format: sk-ant-api03-...
 
 # =============================================================================
