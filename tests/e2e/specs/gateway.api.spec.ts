@@ -29,12 +29,6 @@ if (!INTEGRATION_CLIENT_SECRET) {
   console.warn('WARNING: MCP_INTEGRATION_RUNNER_SECRET (or MCP_GATEWAY_CLIENT_SECRET) not set - authenticated tests will be skipped');
 }
 
-// Test user password from environment variable
-const TEST_PASSWORD = process.env.DEV_USER_PASSWORD || '';
-if (!TEST_PASSWORD) {
-  console.warn('WARNING: DEV_USER_PASSWORD not set - tests may fail');
-}
-
 // Test user credentials (from Keycloak setup)
 const TEST_USERS = {
   hr: {

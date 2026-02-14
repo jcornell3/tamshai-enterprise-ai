@@ -33,42 +33,42 @@ locals {
   # Port configuration from GitHub Variables (with defaults)
   ports = {
     # Infrastructure
-    caddy_http          = tonumber(data.external.github_variables.result.port_caddy_http)
-    caddy_https         = tonumber(data.external.github_variables.result.port_caddy_https)
-    keycloak            = tonumber(data.external.github_variables.result.port_keycloak)
-    kong_proxy          = tonumber(data.external.github_variables.result.port_kong_proxy)
-    kong_admin          = tonumber(data.external.github_variables.result.port_kong_admin)
-    vault               = tonumber(data.external.github_variables.result.port_vault)
+    caddy_http  = tonumber(data.external.github_variables.result.port_caddy_http)
+    caddy_https = tonumber(data.external.github_variables.result.port_caddy_https)
+    keycloak    = tonumber(data.external.github_variables.result.port_keycloak)
+    kong_proxy  = tonumber(data.external.github_variables.result.port_kong_proxy)
+    kong_admin  = tonumber(data.external.github_variables.result.port_kong_admin)
+    vault       = tonumber(data.external.github_variables.result.port_vault)
 
     # Databases
-    postgres            = tonumber(data.external.github_variables.result.port_postgres)
-    mongodb             = tonumber(data.external.github_variables.result.port_mongodb)
-    redis               = tonumber(data.external.github_variables.result.port_redis)
-    elasticsearch       = tonumber(data.external.github_variables.result.port_elasticsearch)
-    minio_api           = tonumber(data.external.github_variables.result.port_minio_api)
-    minio_console       = tonumber(data.external.github_variables.result.port_minio_console)
+    postgres      = tonumber(data.external.github_variables.result.port_postgres)
+    mongodb       = tonumber(data.external.github_variables.result.port_mongodb)
+    redis         = tonumber(data.external.github_variables.result.port_redis)
+    elasticsearch = tonumber(data.external.github_variables.result.port_elasticsearch)
+    minio_api     = tonumber(data.external.github_variables.result.port_minio_api)
+    minio_console = tonumber(data.external.github_variables.result.port_minio_console)
 
     # MCP Services
-    mcp_gateway         = tonumber(data.external.github_variables.result.port_mcp_gateway)
-    mcp_hr              = tonumber(data.external.github_variables.result.port_mcp_hr)
-    mcp_finance         = tonumber(data.external.github_variables.result.port_mcp_finance)
-    mcp_sales           = tonumber(data.external.github_variables.result.port_mcp_sales)
-    mcp_support         = tonumber(data.external.github_variables.result.port_mcp_support)
-    mcp_journey         = tonumber(data.external.github_variables.result.port_mcp_journey)
-    mcp_payroll         = tonumber(data.external.github_variables.result.port_mcp_payroll)
-    mcp_tax             = tonumber(data.external.github_variables.result.port_mcp_tax)
-    mcp_ui              = tonumber(data.external.github_variables.result.port_mcp_ui)
+    mcp_gateway = tonumber(data.external.github_variables.result.port_mcp_gateway)
+    mcp_hr      = tonumber(data.external.github_variables.result.port_mcp_hr)
+    mcp_finance = tonumber(data.external.github_variables.result.port_mcp_finance)
+    mcp_sales   = tonumber(data.external.github_variables.result.port_mcp_sales)
+    mcp_support = tonumber(data.external.github_variables.result.port_mcp_support)
+    mcp_journey = tonumber(data.external.github_variables.result.port_mcp_journey)
+    mcp_payroll = tonumber(data.external.github_variables.result.port_mcp_payroll)
+    mcp_tax     = tonumber(data.external.github_variables.result.port_mcp_tax)
+    mcp_ui      = tonumber(data.external.github_variables.result.port_mcp_ui)
 
     # Web Apps
-    web_portal          = tonumber(data.external.github_variables.result.port_web_portal)
-    web_hr              = tonumber(data.external.github_variables.result.port_web_hr)
-    web_finance         = tonumber(data.external.github_variables.result.port_web_finance)
-    web_sales           = tonumber(data.external.github_variables.result.port_web_sales)
-    web_support         = tonumber(data.external.github_variables.result.port_web_support)
-    web_payroll         = tonumber(data.external.github_variables.result.port_web_payroll)
-    web_tax             = tonumber(data.external.github_variables.result.port_web_tax)
-    web_customer_support= tonumber(data.external.github_variables.result.port_web_customer_support)
-    website             = tonumber(data.external.github_variables.result.port_website)
+    web_portal           = tonumber(data.external.github_variables.result.port_web_portal)
+    web_hr               = tonumber(data.external.github_variables.result.port_web_hr)
+    web_finance          = tonumber(data.external.github_variables.result.port_web_finance)
+    web_sales            = tonumber(data.external.github_variables.result.port_web_sales)
+    web_support          = tonumber(data.external.github_variables.result.port_web_support)
+    web_payroll          = tonumber(data.external.github_variables.result.port_web_payroll)
+    web_tax              = tonumber(data.external.github_variables.result.port_web_tax)
+    web_customer_support = tonumber(data.external.github_variables.result.port_web_customer_support)
+    website              = tonumber(data.external.github_variables.result.port_website)
   }
 
   # Keycloak admin password (from GitHub secrets, fallback to variable)
@@ -317,7 +317,7 @@ resource "local_file" "docker_env" {
     mongodb_password     = data.external.github_secrets.result.mongodb_password
 
     # Keycloak (from GitHub secrets, fallback to variable)
-    keycloak_admin          = "admin"
+    keycloak_admin = "admin"
     keycloak_admin_password = coalesce(
       try(data.external.github_secrets.result.keycloak_admin_password, ""),
       var.keycloak_admin_password
@@ -352,13 +352,13 @@ resource "local_file" "docker_env" {
     )
 
     # MCP Gateway additional secrets (use try to handle empty values)
-    mcp_internal_secret          = try(data.external.github_secrets.result.mcp_internal_secret, "")
-    mcp_gateway_client_secret    = try(data.external.github_secrets.result.mcp_gateway_client_secret, "")
-    e2e_admin_api_key            = try(data.external.github_secrets.result.e2e_admin_api_key, "")
-    elastic_password             = try(data.external.github_secrets.result.elastic_password, "")
-    mcp_ui_client_secret         = try(data.external.github_secrets.result.mcp_ui_client_secret, "")
-    mcp_hr_service_client_secret   = try(data.external.github_secrets.result.mcp_hr_service_client_secret, "")
-    mcp_integration_runner_secret  = try(data.external.github_secrets.result.mcp_integration_runner_secret, "")
+    mcp_internal_secret           = try(data.external.github_secrets.result.mcp_internal_secret, "")
+    mcp_gateway_client_secret     = try(data.external.github_secrets.result.mcp_gateway_client_secret, "")
+    e2e_admin_api_key             = try(data.external.github_secrets.result.e2e_admin_api_key, "")
+    elastic_password              = try(data.external.github_secrets.result.elastic_password, "")
+    mcp_ui_client_secret          = try(data.external.github_secrets.result.mcp_ui_client_secret, "")
+    mcp_hr_service_client_secret  = try(data.external.github_secrets.result.mcp_hr_service_client_secret, "")
+    mcp_integration_runner_secret = try(data.external.github_secrets.result.mcp_integration_runner_secret, "")
 
     # MCP Journey (Project History Agent)
     # Use fetched key from GitHub secrets, fallback to variable

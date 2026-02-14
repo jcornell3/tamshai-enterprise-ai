@@ -84,5 +84,5 @@ variable "web_origins" {
 variable "direct_access_grants_enabled" {
   description = "Enable Resource Owner Password Credentials (ROPC) flow for mcp-gateway client. SECURITY: Only enable in dev/CI for integration testing. Disable in stage/prod per OAuth 2.0 Security BCP (RFC 8252)."
   type        = bool
-  default     = false  # Secure default: disabled
+  default     = false # Secure default: disabled
 }

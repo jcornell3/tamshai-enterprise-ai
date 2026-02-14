@@ -184,9 +184,10 @@ jobs:
 
       - name: Build and Push Image
         run: |
-          docker build -t ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
+          docker build -f services/mcp-gateway/Dockerfile \
+                       -t ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
                        -t ${{ env.AR_REPO }}/mcp-gateway:latest \
-                       services/mcp-gateway
+                       .
           docker push ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }}
           docker push ${{ env.AR_REPO }}/mcp-gateway:latest
 
@@ -266,9 +267,10 @@ jobs:
 
       - name: Build and Push
         run: |
-          docker build -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+          docker build -f services/${{ matrix.service }}/Dockerfile \
+                       -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
                        -t ${{ env.AR_REPO }}/${{ matrix.service }}:latest \
-                       services/${{ matrix.service }}
+                       .
           docker push ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }}
           docker push ${{ env.AR_REPO }}/${{ matrix.service }}:latest
 
@@ -326,9 +328,10 @@ jobs:
 
       - name: Build and Push
         run: |
-          docker build -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
+          docker build -f services/${{ matrix.service }}/Dockerfile \
+                       -t ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }} \
                        -t ${{ env.AR_REPO }}/${{ matrix.service }}:latest \
-                       services/${{ matrix.service }}
+                       .
           docker push ${{ env.AR_REPO }}/${{ matrix.service }}:${{ github.sha }}
           docker push ${{ env.AR_REPO }}/${{ matrix.service }}:latest
 

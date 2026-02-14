@@ -124,7 +124,7 @@ describe('get-employee tool', () => {
 
       expect(mockQueryWithRLS).toHaveBeenCalledWith(
         mockHrReadUser,
-        expect.stringContaining('WHERE (e.id::text = $1 OR e.keycloak_user_id = $1)'),
+        expect.stringContaining('WHERE (e.id::text = $1 OR e.employee_id = $1 OR e.keycloak_user_id = $1)'),
         [employeeId]
       );
     });

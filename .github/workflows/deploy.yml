@@ -125,6 +125,49 @@ jobs:
         # Use --no-cache --pull to ensure:
         # 1. apk upgrade runs fresh and applies latest security patches
         # 2. Latest node:20-alpine base image is pulled
+        env:
+          # Required env vars for docker-compose.yml parsing
+          ELASTIC_PASSWORD: ${{ secrets.DEV_ELASTIC_PASSWORD }}
+          TAMSHAI_DB_PASSWORD: ci_scan_value
+          POSTGRES_PASSWORD: ci_scan_value
+          KEYCLOAK_DB_PASSWORD: ci_scan_value
+          MONGODB_PASSWORD: ci_scan_value
+          MINIO_ROOT_PASSWORD: ci_scan_value
+          KEYCLOAK_ADMIN_PASSWORD: ci_scan_value
+          KEYCLOAK_ISSUER: http://localhost:8080/realms/tamshai
+          KEYCLOAK_URL: http://localhost:8080
+          KC_HOSTNAME: localhost
+          # Port Configuration (from GitHub Variables)
+          PORT_CADDY_HTTP: ${{ vars.DEV_CADDY_HTTP }}
+          PORT_CADDY_HTTPS: ${{ vars.DEV_CADDY_HTTPS }}
+          PORT_KEYCLOAK: ${{ vars.DEV_KEYCLOAK }}
+          PORT_KONG_PROXY: ${{ vars.DEV_KONG_PROXY }}
+          PORT_KONG_ADMIN: ${{ vars.DEV_KONG_ADMIN }}
+          PORT_VAULT: ${{ vars.DEV_VAULT }}
+          PORT_POSTGRES: ${{ vars.DEV_POSTGRES }}
+          PORT_MONGODB: ${{ vars.DEV_MONGODB }}
+          PORT_REDIS: ${{ vars.DEV_REDIS }}
+          PORT_ELASTICSEARCH: ${{ vars.DEV_ELASTICSEARCH }}
+          PORT_MINIO_API: ${{ vars.DEV_MINIO_API }}
+          PORT_MINIO_CONSOLE: ${{ vars.DEV_MINIO_CONSOLE }}
+          PORT_MCP_GATEWAY: ${{ vars.DEV_MCP_GATEWAY }}
+          PORT_MCP_HR: ${{ vars.DEV_MCP_HR }}
+          PORT_MCP_FINANCE: ${{ vars.DEV_MCP_FINANCE }}
+          PORT_MCP_SALES: ${{ vars.DEV_MCP_SALES }}
+          PORT_MCP_SUPPORT: ${{ vars.DEV_MCP_SUPPORT }}
+          PORT_MCP_JOURNEY: ${{ vars.DEV_MCP_JOURNEY }}
+          PORT_MCP_PAYROLL: ${{ vars.DEV_MCP_PAYROLL }}
+          PORT_MCP_TAX: ${{ vars.DEV_MCP_TAX }}
+          PORT_MCP_UI: ${{ vars.DEV_MCP_UI }}
+          PORT_WEB_PORTAL: ${{ vars.DEV_WEB_PORTAL }}
+          PORT_WEB_HR: ${{ vars.DEV_WEB_HR }}
+          PORT_WEB_FINANCE: ${{ vars.DEV_WEB_FINANCE }}
+          PORT_WEB_SALES: ${{ vars.DEV_WEB_SALES }}
+          PORT_WEB_SUPPORT: ${{ vars.DEV_WEB_SUPPORT }}
+          PORT_WEB_PAYROLL: ${{ vars.DEV_WEB_PAYROLL }}
+          PORT_WEB_TAX: ${{ vars.DEV_WEB_TAX }}
+          PORT_WEB_CUSTOMER_SUPPORT: ${{ vars.DEV_WEB_CUSTOMER_SUPPORT }}
+          PORT_WEBSITE: ${{ vars.DEV_WEBSITE }}
         run: docker compose build --no-cache --pull
       
       - name: Run Trivy vulnerability scanner
