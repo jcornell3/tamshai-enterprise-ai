@@ -224,7 +224,29 @@ sync_token_exchange_permissions() {
 
     log_info "  realm-management UUID: $rm_client_uuid"
 
-    # Step 2: Verify mcp-integration-runner client exists
+    # Step 2: Enable users management permissions
+    # IMPORTANT: This MUST happen before creating policies.
+    # In Keycloak 24, enabling users-management-permissions is what bootstraps
+    # Authorization Services on the realm-management client (sets authorizationServicesEnabled=true
+    # and creates the resource server). Without this, the authz/resource-server/* endpoints return 404.
+    # You cannot enable authorizationServicesEnabled directly via PUT on realm-management.
+    log_info "  Enabling users management permissions (bootstraps Authorization Services)..."
+    local users_perm_json='{"enabled": true}'
+    local users_perm_result
+    users_perm_result=$(rest_api_call PUT "users-management-permissions" "$users_perm_json")
+
+    local impersonate_perm_id
+    impersonate_perm_id=$(echo "$users_perm_result" | jq -r '.scopePermissions.impersonate // empty')
+
+    if [ -z "$impersonate_perm_id" ]; then
+        log_error "  Failed to get impersonate permission ID"
+        echo "$users_perm_result" | jq '.' >&2
+        return 1
+    fi
+
+    log_info "  Impersonate permission ID: $impersonate_perm_id"
+
+    # Step 3: Verify mcp-integration-runner client exists
     log_info "  Verifying mcp-integration-runner client..."
     local mcp_client_uuid
     mcp_client_uuid=$(get_client_uuid "mcp-integration-runner")
@@ -236,7 +258,8 @@ sync_token_exchange_permissions() {
 
     log_info "  mcp-integration-runner UUID: $mcp_client_uuid"
 
-    # Step 3: Create or get client policy
+    # Step 4: Create or get client policy
+    # Now that Authorization Services are bootstrapped (step 2), the authz endpoints work.
     log_info "  Creating client policy..."
     local policy_name="mcp-integration-runner-policy"
     local policy_id
@@ -272,33 +295,12 @@ EOF
         log_info "  Policy created: $policy_id"
     fi
 
-    # Step 4: Enable users management permissions
-    log_info "  Enabling users management permissions..."
-    local users_perm_json='{"enabled": true}'
-    local users_perm_result
-    users_perm_result=$(rest_api_call PUT "users-management-permissions" "$users_perm_json")
-
-    local impersonate_perm_id
-    impersonate_perm_id=$(echo "$users_perm_result" | jq -r '.scopePermissions.impersonate // empty')
-
-    if [ -z "$impersonate_perm_id" ]; then
-        log_error "  Failed to get impersonate permission ID"
-        echo "$users_perm_result" | jq '.' >&2
-        return 1
-    fi
-
-    log_info "  Impersonate permission ID: $impersonate_perm_id"
-
     # Step 5: Read-Modify-Write - Bind policy to impersonate permission
     log_info "  Binding policy to impersonate permission (read-modify-write)..."
 
     # READ: Get current permission state (from scope endpoint to match where we write)
     local current_perm
     current_perm=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/permission/scope/${impersonate_perm_id}")
-
-    # DEBUG: Log what we read (full object to see all fields)
-    log_info "  Current permission state (before modification - FULL):"
-    echo "$current_perm" | /usr/local/bin/jq '.' >&2
 
     # Check if policy is already bound
     local existing_policies
@@ -318,10 +320,6 @@ EOF
             .policies = (.policies + [$policy_id] | unique)
         end
     ')
-
-    # DEBUG: Log what we're sending (full object)
-    log_info "  Modified permission payload (FULL):"
-    echo "$modified_perm" | /usr/local/bin/jq '.' >&2
 
     # WRITE: Send complete modified object back
     rest_api_call PUT "clients/${rm_client_uuid}/authz/resource-server/permission/scope/${impersonate_perm_id}" "$modified_perm" > /dev/null
