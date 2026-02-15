@@ -1,9 +1,9 @@
 name: 'Setup Keycloak'
-description: 'Start Keycloak container with realm import for CI testing'
+description: 'Start Keycloak container for CI testing. Supports realm import (default) or Terraform-managed configuration.'
 
 inputs:
   realm-export-path:
-    description: 'Path to realm export JSON file'
+    description: 'Path to realm export JSON file (ignored when import-realm is false)'
     required: false
     default: 'keycloak/realm-export-dev.json'
   keycloak-port:
@@ -17,6 +17,22 @@ inputs:
     description: 'Maximum wait time in seconds for Keycloak to start'
     required: false
     default: '300'
+  import-realm:
+    description: 'Whether to import realm from JSON on startup. Set to false when using Terraform.'
+    required: false
+    default: 'true'
+  admin-password:
+    description: 'Keycloak admin password'
+    required: false
+    default: 'admin'
+  http-relative-path:
+    description: 'HTTP relative path for Keycloak (e.g. /auth). Empty string for no prefix.'
+    required: false
+    default: '/auth'
+  extra-features:
+    description: 'Comma-separated Keycloak features to enable (e.g. token-exchange,admin-fine-grained-authz)'
+    required: false
+    default: ''
 
 outputs:
   keycloak-url:
@@ -52,30 +68,52 @@ runs:
           sleep $((i * 10))
         done
 
+        # Build docker run command
+        DOCKER_ARGS="-d --name keycloak -p ${{ inputs.keycloak-port }}:8080"
         # pragma: allowlist secret (KC_BOOTSTRAP_ADMIN_PASSWORD is dev/CI only)
-        docker run -d --name keycloak \
-          -p ${{ inputs.keycloak-port }}:8080 \
-          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
-          -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-          -e KC_HTTP_RELATIVE_PATH=/auth \
-          -v ${{ github.workspace }}/${{ inputs.realm-export-path }}:/opt/keycloak/data/import/realm.json \
-          quay.io/keycloak/keycloak:${{ inputs.keycloak-version }} \
-          start-dev --import-realm --http-port=8080
+        DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_USERNAME=admin"
+        DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_PASSWORD=${{ inputs.admin-password }}"
+
+        # Set relative path if provided
+        REL_PATH="${{ inputs.http-relative-path }}"
+        if [ -n "$REL_PATH" ]; then
+          DOCKER_ARGS="$DOCKER_ARGS -e KC_HTTP_RELATIVE_PATH=$REL_PATH"
+        fi
+
+        # Build start command args
+        START_ARGS="start-dev --http-port=8080"
+
+        # Add realm import if enabled
+        if [ "${{ inputs.import-realm }}" = "true" ]; then
+          DOCKER_ARGS="$DOCKER_ARGS -v ${{ github.workspace }}/${{ inputs.realm-export-path }}:/opt/keycloak/data/import/realm.json"
+          START_ARGS="$START_ARGS --import-realm"
+        fi
+
+        # Add extra features if specified
+        FEATURES="${{ inputs.extra-features }}"
+        if [ -n "$FEATURES" ]; then
+          START_ARGS="$START_ARGS --features=$FEATURES"
+        fi
+
+        # Run Keycloak
+        eval docker run $DOCKER_ARGS quay.io/keycloak/keycloak:${{ inputs.keycloak-version }} $START_ARGS
         echo "Keycloak container started"
 
-        # Set outputs
+        # Set outputs - build path prefix from relative path
+        PATH_PREFIX="${{ inputs.http-relative-path }}"
         echo "keycloak-url=http://localhost:${{ inputs.keycloak-port }}" >> $GITHUB_OUTPUT
-        echo "issuer=http://localhost:${{ inputs.keycloak-port }}/auth/realms/tamshai-corp" >> $GITHUB_OUTPUT
-        echo "jwks-uri=http://localhost:${{ inputs.keycloak-port }}/auth/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
+        echo "issuer=http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/tamshai-corp" >> $GITHUB_OUTPUT
+        echo "jwks-uri=http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
 
     - name: Wait for Keycloak
       shell: bash
       run: |
         echo "Waiting for Keycloak to be ready..."
+        PATH_PREFIX="${{ inputs.http-relative-path }}"
         TIMEOUT=${{ inputs.wait-timeout }}
         ATTEMPTS=$((TIMEOUT / 5))
         for i in $(seq 1 $ATTEMPTS); do
-          if curl -sf http://localhost:${{ inputs.keycloak-port }}/auth/realms/master > /dev/null 2>&1; then
+          if curl -sf http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/master > /dev/null 2>&1; then
             echo "Keycloak is ready after $i attempts"
             sleep 5
             exit 0
@@ -90,7 +128,13 @@ runs:
     - name: Verify Keycloak Realm
       shell: bash
       run: |
-        REALM_CHECK=$(curl -sf http://localhost:${{ inputs.keycloak-port }}/auth/realms/tamshai-corp/.well-known/openid-configuration || echo "FAILED")
+        PATH_PREFIX="${{ inputs.http-relative-path }}"
+        # Skip realm verification when not importing (Terraform will create it later)
+        if [ "${{ inputs.import-realm }}" = "false" ]; then
+          echo "Skipping realm verification (import-realm=false, Terraform will configure)"
+          exit 0
+        fi
+        REALM_CHECK=$(curl -sf http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/tamshai-corp/.well-known/openid-configuration || echo "FAILED")
         if [[ "$REALM_CHECK" == "FAILED" ]]; then
           echo "ERROR: tamshai-corp realm not found"
           docker logs keycloak | tail -50

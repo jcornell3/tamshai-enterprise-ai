@@ -1,14 +1,17 @@
 /**
- * Centralized Error Handler (Architecture v1.4)
+ * Finance Error Handler (Architecture v1.4)
  *
- * Implements Section 7.4: LLM-Friendly Error Schemas
- * Fulfills Article II.3: No raw exceptions to AI
- *
- * All errors are converted to MCPErrorResponse with suggestedAction.
+ * Domain-specific error handlers for the Finance MCP service.
+ * Common error handling utilities are imported from @tamshai/shared.
  */
 
+import {
+  ErrorCode,
+  createErrorResponse,
+  MCPErrorResponse,
+} from '@tamshai/shared';
+import { MCPToolResponse } from '../types/response';
 import winston from 'winston';
-import { MCPErrorResponse, MCPToolResponse, createErrorResponse } from '../types/response';
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -19,39 +22,16 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-/**
- * Error codes for finance operations
- */
-export enum ErrorCode {
-  // Input validation
-  INVALID_INPUT = 'INVALID_INPUT',
-  MISSING_REQUIRED_FIELD = 'MISSING_REQUIRED_FIELD',
-
-  // Resource not found
-  BUDGET_NOT_FOUND = 'BUDGET_NOT_FOUND',
-  INVOICE_NOT_FOUND = 'INVOICE_NOT_FOUND',
-  EXPENSE_REPORT_NOT_FOUND = 'EXPENSE_REPORT_NOT_FOUND',
-
-  // Authorization
-  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
-  CANNOT_DELETE_APPROVED_INVOICE = 'CANNOT_DELETE_APPROVED_INVOICE',
-  BUDGET_ALREADY_APPROVED = 'BUDGET_ALREADY_APPROVED',
-
-  // Database errors
-  DATABASE_ERROR = 'DATABASE_ERROR',
-  TRANSACTION_FAILED = 'TRANSACTION_FAILED',
-
-  // General errors
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-}
+// Re-export ErrorCode and types for consumers
+export { ErrorCode, MCPErrorResponse };
 
 /**
  * Handle validation errors from Zod
  */
-export function handleValidationError(error: any): MCPErrorResponse {
+export function handleValidationError(error: { errors: Array<{ path: string[]; message: string }> }): MCPErrorResponse {
   logger.warn('Input validation failed', { error: error.errors });
 
-  const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ');
+  const fieldErrors = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
 
   return createErrorResponse(
     ErrorCode.INVALID_INPUT,
@@ -66,7 +46,6 @@ export function handleValidationError(error: any): MCPErrorResponse {
  */
 export function handleBudgetNotFound(budgetId: string): MCPErrorResponse {
   logger.warn('Budget not found', { budgetId });
-
   return createErrorResponse(
     ErrorCode.BUDGET_NOT_FOUND,
     `Budget with ID "${budgetId}" was not found`,
@@ -80,7 +59,6 @@ export function handleBudgetNotFound(budgetId: string): MCPErrorResponse {
  */
 export function handleInvoiceNotFound(invoiceId: string): MCPErrorResponse {
   logger.warn('Invoice not found', { invoiceId });
-
   return createErrorResponse(
     ErrorCode.INVOICE_NOT_FOUND,
     `Invoice with ID "${invoiceId}" was not found`,
@@ -94,7 +72,6 @@ export function handleInvoiceNotFound(invoiceId: string): MCPErrorResponse {
  */
 export function handleExpenseReportNotFound(reportId: string): MCPErrorResponse {
   logger.warn('Expense report not found', { reportId });
-
   return createErrorResponse(
     ErrorCode.EXPENSE_REPORT_NOT_FOUND,
     `Expense report with ID "${reportId}" was not found`,
@@ -108,7 +85,6 @@ export function handleExpenseReportNotFound(reportId: string): MCPErrorResponse 
  */
 export function handleInsufficientPermissions(requiredRole: string, userRoles: string[]): MCPErrorResponse {
   logger.warn('Insufficient permissions', { requiredRole, userRoles });
-
   return createErrorResponse(
     ErrorCode.INSUFFICIENT_PERMISSIONS,
     `This operation requires "${requiredRole}" role. You have: ${userRoles.join(', ')}`,
@@ -122,7 +98,6 @@ export function handleInsufficientPermissions(requiredRole: string, userRoles: s
  */
 export function handleCannotDeleteApprovedInvoice(invoiceId: string): MCPErrorResponse {
   logger.warn('Attempted to delete approved invoice', { invoiceId });
-
   return createErrorResponse(
     ErrorCode.CANNOT_DELETE_APPROVED_INVOICE,
     `Cannot delete invoice "${invoiceId}" because it has already been approved`,
@@ -136,7 +111,6 @@ export function handleCannotDeleteApprovedInvoice(invoiceId: string): MCPErrorRe
  */
 export function handleBudgetAlreadyApproved(budgetId: string): MCPErrorResponse {
   logger.warn('Budget already approved', { budgetId });
-
   return createErrorResponse(
     ErrorCode.BUDGET_ALREADY_APPROVED,
     `Budget "${budgetId}" has already been approved`,
@@ -150,7 +124,6 @@ export function handleBudgetAlreadyApproved(budgetId: string): MCPErrorResponse 
  */
 export function handleDatabaseError(error: Error, operation: string): MCPErrorResponse {
   logger.error('Database error', { error: error.message, stack: error.stack, operation });
-
   return createErrorResponse(
     ErrorCode.DATABASE_ERROR,
     'A database error occurred while processing your request',
@@ -168,17 +141,18 @@ export async function withErrorHandling<T>(
 ): Promise<MCPToolResponse<T>> {
   try {
     return await fn();
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle Zod validation errors
-    if (error.name === 'ZodError') {
-      return handleValidationError(error);
+    if (error && typeof error === 'object' && 'name' in error && (error as { name: string }).name === 'ZodError') {
+      return handleValidationError(error as unknown as { errors: Array<{ path: string[]; message: string }> });
     }
 
     // Handle all other errors
+    const err = error instanceof Error ? error : new Error(String(error));
     logger.error('Unexpected error in operation', {
       operation,
-      error: error.message,
-      stack: error.stack,
+      error: err.message,
+      stack: err.stack,
     });
 
     return createErrorResponse(

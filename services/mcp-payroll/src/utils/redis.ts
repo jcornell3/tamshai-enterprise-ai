@@ -1,101 +1,44 @@
 /**
- * Redis Utility
+ * Redis Utility for Pending Confirmations - Payroll Server
  *
- * Redis client for storing pending confirmations.
+ * Thin wrapper around @tamshai/shared Redis confirmation cache.
  * Used for human-in-the-loop approval flow.
  */
-import Redis from 'ioredis';
+
+import { createRedisConfirmationCache, RedisConfirmationCache } from '@tamshai/shared';
 import { logger } from './logger';
 
-const redisHost = process.env.REDIS_HOST;
-const redisPort = parseInt(process.env.REDIS_PORT!, 10);
-const redisPassword = process.env.REDIS_PASSWORD;
-
-let redis: Redis | null = null;
+const cache: RedisConfirmationCache = createRedisConfirmationCache('payroll', logger);
 
 /**
- * Get or create Redis client.
+ * Store a pending confirmation with TTL
  */
-export function getRedisClient(): Redis {
-  if (!redis) {
-    redis = new Redis({
-      host: redisHost,
-      port: redisPort,
-      password: redisPassword,
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times) => {
-        if (times > 3) {
-          logger.error('Redis connection failed after 3 retries');
-          return null;
-        }
-        return Math.min(times * 200, 2000);
-      },
-    });
-
-    redis.on('error', (err) => {
-      logger.error('Redis error', { error: err.message });
-    });
-
-    redis.on('connect', () => {
-      logger.info('Redis connected', { host: redisHost, port: redisPort });
-    });
-  }
-  return redis;
-}
+export const storePendingConfirmation = cache.storePendingConfirmation;
 
 /**
- * Store a pending confirmation with TTL.
+ * Retrieve and delete a pending confirmation (one-time use)
  */
-export async function storePendingConfirmation(
-  confirmationId: string,
-  data: Record<string, unknown>,
-  ttlSeconds: number = 300
-): Promise<void> {
-  const client = getRedisClient();
-  const key = `pending:payroll:${confirmationId}`;
-  await client.setex(key, ttlSeconds, JSON.stringify(data));
-  logger.debug('Stored pending confirmation', { confirmationId, ttlSeconds });
-}
+export const getPendingConfirmation = cache.getPendingConfirmation;
 
 /**
- * Retrieve and delete a pending confirmation.
+ * Check if a confirmation exists
  */
-export async function getPendingConfirmation(
-  confirmationId: string
-): Promise<Record<string, unknown> | null> {
-  const client = getRedisClient();
-  const key = `pending:payroll:${confirmationId}`;
-  const data = await client.get(key);
-
-  if (!data) {
-    return null;
-  }
-
-  // Delete after retrieval (one-time use)
-  await client.del(key);
-  return JSON.parse(data);
-}
+export const confirmationExists = cache.confirmationExists;
 
 /**
- * Check Redis connection health.
+ * Check Redis connection health
  */
-export async function checkRedisConnection(): Promise<boolean> {
-  try {
-    const client = getRedisClient();
-    const result = await client.ping();
-    return result === 'PONG';
-  } catch (error) {
-    logger.error('Redis connection check failed', { error });
-    return false;
-  }
-}
+export const checkRedisConnection = cache.checkRedisConnection;
 
 /**
- * Close Redis connection.
+ * Close Redis connection (for graceful shutdown)
  */
-export async function closeRedis(): Promise<void> {
-  if (redis) {
-    await redis.quit();
-    redis = null;
-  }
+export const closeRedis = cache.closeRedis;
+
+/**
+ * Get the underlying Redis client
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getRedisClient(): any {
+  return cache.getRedisClient();
 }

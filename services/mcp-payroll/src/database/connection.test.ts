@@ -1,24 +1,73 @@
 /**
  * Database Connection Unit Tests
+ *
+ * Tests that the thin wrapper correctly delegates to @tamshai/shared createPostgresClient.
  */
 
-// Mock pg module before imports
-const mockQuery = jest.fn();
-const mockConnect = jest.fn();
-const mockRelease = jest.fn();
-const mockEnd = jest.fn();
+const mockPoolQuery = jest.fn();
+const mockPoolConnect = jest.fn();
+const mockPoolEnd = jest.fn().mockResolvedValue(undefined);
 const mockPoolOn = jest.fn();
+const mockClientQuery = jest.fn();
+const mockClientRelease = jest.fn();
 
-jest.mock('pg', () => ({
-  Pool: jest.fn().mockImplementation(() => ({
-    query: mockQuery,
-    connect: mockConnect,
-    end: mockEnd,
-    on: mockPoolOn,
-  })),
+const mockClient = {
+  query: mockClientQuery,
+  release: mockClientRelease,
+};
+
+const mockPool = {
+  connect: mockPoolConnect,
+  query: mockPoolQuery,
+  end: mockPoolEnd,
+  on: mockPoolOn,
+};
+
+// Use regular functions (not jest.fn) so clearAllMocks doesn't wipe implementations
+jest.mock('@tamshai/shared', () => ({
+  createPostgresClient: () => ({
+    pool: mockPool,
+    queryWithRLS: async (userContext: any, queryText: string, values?: any[]) => {
+      const client = await mockPoolConnect();
+      try {
+        await client.query('BEGIN');
+        await client.query('set_config', [
+          userContext.userId,
+          userContext.email || '',
+          userContext.roles.join(','),
+          userContext.departmentId || '',
+          userContext.managerId || '',
+        ]);
+        const result = await client.query(queryText, values);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    queryWithoutRLS: async (queryText: string, values?: any[]) => {
+      return mockPoolQuery(queryText, values);
+    },
+    getClient: async () => {
+      return mockPoolConnect();
+    },
+    checkConnection: async () => {
+      try {
+        const result = await mockPoolQuery('SELECT 1 as ok');
+        return result.rows[0]?.ok === 1;
+      } catch {
+        return false;
+      }
+    },
+    closePool: async () => {
+      await mockPoolEnd();
+    },
+  }),
 }));
 
-// Mock logger
 jest.mock('../utils/logger', () => ({
   logger: {
     debug: jest.fn(),
@@ -31,14 +80,12 @@ jest.mock('../utils/logger', () => ({
 import { UserContext, queryWithRLS, queryWithoutRLS, checkConnection, closePool } from './connection';
 
 describe('Database Connection Module', () => {
-  const mockClient = {
-    query: jest.fn(),
-    release: mockRelease,
-  };
-
   beforeEach(() => {
     jest.clearAllMocks();
-    mockConnect.mockResolvedValue(mockClient);
+    mockClientQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+    mockPoolConnect.mockResolvedValue(mockClient);
+    mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+    mockPoolEnd.mockResolvedValue(undefined);
   });
 
   describe('UserContext interface', () => {
@@ -79,7 +126,7 @@ describe('Database Connection Module', () => {
     };
 
     it('should execute query with RLS context', async () => {
-      mockClient.query
+      mockClientQuery
         .mockResolvedValueOnce({}) // BEGIN
         .mockResolvedValueOnce({}) // set_config
         .mockResolvedValueOnce({ rows: [{ id: 1 }], rowCount: 1 }) // actual query
@@ -92,13 +139,13 @@ describe('Database Connection Module', () => {
       );
 
       expect(result.rows).toEqual([{ id: 1 }]);
-      expect(mockClient.query).toHaveBeenCalledWith('BEGIN');
-      expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
-      expect(mockRelease).toHaveBeenCalled();
+      expect(mockClientQuery).toHaveBeenCalledWith('BEGIN');
+      expect(mockClientQuery).toHaveBeenCalledWith('COMMIT');
+      expect(mockClientRelease).toHaveBeenCalled();
     });
 
     it('should set all session variables', async () => {
-      mockClient.query
+      mockClientQuery
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ rows: [], rowCount: 0 })
@@ -106,9 +153,7 @@ describe('Database Connection Module', () => {
 
       await queryWithRLS(userContext, 'SELECT 1');
 
-      // Check set_config call
-      const setConfigCall = mockClient.query.mock.calls[1];
-      expect(setConfigCall[0]).toContain('set_config');
+      const setConfigCall = mockClientQuery.mock.calls[1];
       expect(setConfigCall[1]).toEqual([
         'user-123',
         'alice@tamshai.local',
@@ -119,7 +164,7 @@ describe('Database Connection Module', () => {
     });
 
     it('should rollback on query error', async () => {
-      mockClient.query
+      mockClientQuery
         .mockResolvedValueOnce({}) // BEGIN
         .mockResolvedValueOnce({}) // set_config
         .mockRejectedValueOnce(new Error('Query failed')) // actual query
@@ -129,8 +174,8 @@ describe('Database Connection Module', () => {
         queryWithRLS(userContext, 'SELECT * FROM invalid_table')
       ).rejects.toThrow('Query failed');
 
-      expect(mockClient.query).toHaveBeenCalledWith('ROLLBACK');
-      expect(mockRelease).toHaveBeenCalled();
+      expect(mockClientQuery).toHaveBeenCalledWith('ROLLBACK');
+      expect(mockClientRelease).toHaveBeenCalled();
     });
 
     it('should handle empty optional fields', async () => {
@@ -140,7 +185,7 @@ describe('Database Connection Module', () => {
         roles: ['payroll-read', 'payroll-write'],
       };
 
-      mockClient.query
+      mockClientQuery
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({ rows: [], rowCount: 0 })
@@ -148,7 +193,7 @@ describe('Database Connection Module', () => {
 
       await queryWithRLS(minimalContext, 'SELECT 1');
 
-      const setConfigCall = mockClient.query.mock.calls[1];
+      const setConfigCall = mockClientQuery.mock.calls[1];
       expect(setConfigCall[1]).toEqual([
         'user-456',
         '', // empty email
@@ -161,20 +206,20 @@ describe('Database Connection Module', () => {
 
   describe('queryWithoutRLS', () => {
     it('should execute query directly on pool', async () => {
-      mockQuery.mockResolvedValue({ rows: [{ count: 10 }], rowCount: 1 });
+      mockPoolQuery.mockResolvedValue({ rows: [{ count: 10 }], rowCount: 1 });
 
       const result = await queryWithoutRLS('SELECT COUNT(*) FROM pay_runs');
 
       expect(result.rows).toEqual([{ count: 10 }]);
-      expect(mockQuery).toHaveBeenCalledWith('SELECT COUNT(*) FROM pay_runs', undefined);
+      expect(mockPoolQuery).toHaveBeenCalledWith('SELECT COUNT(*) FROM pay_runs', undefined);
     });
 
     it('should pass query parameters', async () => {
-      mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 });
 
       await queryWithoutRLS('SELECT * FROM employees WHERE id = $1', ['emp-123']);
 
-      expect(mockQuery).toHaveBeenCalledWith(
+      expect(mockPoolQuery).toHaveBeenCalledWith(
         'SELECT * FROM employees WHERE id = $1',
         ['emp-123']
       );
@@ -183,16 +228,16 @@ describe('Database Connection Module', () => {
 
   describe('checkConnection', () => {
     it('should return true when connection is healthy', async () => {
-      mockQuery.mockResolvedValue({ rows: [{ ok: 1 }] });
+      mockPoolQuery.mockResolvedValue({ rows: [{ ok: 1 }] });
 
       const result = await checkConnection();
 
       expect(result).toBe(true);
-      expect(mockQuery).toHaveBeenCalledWith('SELECT 1 as ok');
+      expect(mockPoolQuery).toHaveBeenCalledWith('SELECT 1 as ok');
     });
 
     it('should return false when query fails', async () => {
-      mockQuery.mockRejectedValue(new Error('Connection failed'));
+      mockPoolQuery.mockRejectedValue(new Error('Connection failed'));
 
       const result = await checkConnection();
 
@@ -200,7 +245,7 @@ describe('Database Connection Module', () => {
     });
 
     it('should return false when result is unexpected', async () => {
-      mockQuery.mockResolvedValue({ rows: [{ ok: 0 }] });
+      mockPoolQuery.mockResolvedValue({ rows: [{ ok: 0 }] });
 
       const result = await checkConnection();
 
@@ -208,7 +253,7 @@ describe('Database Connection Module', () => {
     });
 
     it('should return false when rows are empty', async () => {
-      mockQuery.mockResolvedValue({ rows: [] });
+      mockPoolQuery.mockResolvedValue({ rows: [] });
 
       const result = await checkConnection();
 
@@ -218,11 +263,9 @@ describe('Database Connection Module', () => {
 
   describe('closePool', () => {
     it('should close the connection pool', async () => {
-      mockEnd.mockResolvedValue(undefined);
-
       await closePool();
 
-      expect(mockEnd).toHaveBeenCalled();
+      expect(mockPoolEnd).toHaveBeenCalled();
     });
   });
 });

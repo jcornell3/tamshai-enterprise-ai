@@ -9,3 +9,10 @@ export {
   getQueryCache,
   createQueryCache,
 } from './query-cache';
+
+export {
+  createRedisConfirmationCache,
+  resetSharedRedisClient,
+  RedisConfirmationCache,
+  ConfirmationLogger,
+} from './redis-confirmation';

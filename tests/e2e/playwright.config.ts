@@ -33,16 +33,21 @@ const envConfig: Record<string, { baseURL: string; ignoreHTTPSErrors: boolean }>
 /**
  * Playwright E2E Test Configuration
  * @see https://playwright.dev/docs/test-configuration
+ *
+ * Worker strategy:
+ *   - CI: 3 workers — api, customer, and employee projects run in parallel.
+ *     API specs need no browser/TOTP. Customer specs use password-only auth (no TOTP).
+ *     Employee specs share a TOTP secret and run sequentially within their worker,
+ *     using ensureFreshTotpWindow() to avoid Keycloak code reuse rejections.
+ *   - Local: 1 worker — sequential for simpler debugging.
  */
 export default defineConfig({
   globalSetup: './global-setup.ts',
   testDir: './specs',
-  // IMPORTANT: E2E tests must run sequentially due to TOTP authentication
-  // TOTP codes are time-based and auth sessions can conflict in parallel
-  fullyParallel: false,
+  fullyParallel: false, // Sequential within each project (worker)
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1, // Always sequential for TOTP-based authentication
+  workers: process.env.CI ? 3 : 1,
   timeout: 60000, // 60 seconds per test (login can be slow)
   reporter: [
     ['html', { outputFolder: 'playwright-report' }],
@@ -61,11 +66,19 @@ export default defineConfig({
     {
       name: 'api',
       testMatch: /.*\.api\.spec\.ts/,
+      // No browser, no TOTP — fully independent
     },
     {
-      name: 'chromium',
+      name: 'customer',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /.*\.ui\.spec\.ts/,
+      testMatch: /customer-.*\.ui\.spec\.ts/,
+      // Customer realm uses password-only auth (no TOTP conflict)
+    },
+    {
+      name: 'employee',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /^(?!customer-).*\.ui\.spec\.ts/,
+      // Employee specs share TOTP — sequential within this worker
     },
   ],
 

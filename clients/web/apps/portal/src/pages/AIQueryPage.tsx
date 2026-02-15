@@ -1,195 +1,53 @@
-import { useState, useCallback, useEffect } from 'react';
-import { SSEQueryClient, ComponentRenderer, useVoiceInput, useVoiceOutput } from '@tamshai/ui';
-import { useAuth, apiConfig } from '@tamshai/auth';
-import type { ComponentResponse } from '@tamshai/ui/dist/components/generative/types';
+import { useCallback } from 'react';
+import { SSEQueryClient, ComponentRenderer, useAIQuery } from '@tamshai/ui';
+import { apiConfig } from '@tamshai/auth';
 
 /**
  * Universal AI Query Page with Generative UI Support
  *
  * Supports ALL domains and directives (hr, finance, sales, support, payroll, tax, approvals)
  *
- * Features:
- * - Server-Sent Events (SSE) for streaming responses
- * - Generic directive detection (display:*:*:*)
- * - Generative UI rendering via ComponentRenderer
- * - Voice input (Speech-to-Text) and output (Text-to-Speech)
- * - Real-time chunk-by-chunk rendering
- * - Cross-domain query support
+ * Uses domain='\\w+' so the hook's regex becomes display:\w+:(\w+):([^\s]*)
+ * which matches ANY domain directive.
  */
+
+const exampleQueries = [
+  // HR queries
+  'Show me my org chart',
+  'List employees in Engineering',
+  // Finance queries
+  'Show Q1 budget summary',
+  'Display quarterly report for Q4 2025',
+  // Sales queries
+  'Show hot leads',
+  'List customer details',
+  // Support queries
+  'Show critical tickets',
+  'Search knowledge base for VPN',
+  // Payroll queries
+  'Show my last pay stub',
+  'List pay runs this month',
+  // Tax queries
+  'Show quarterly estimate for Q1',
+  'List pending tax filings',
+  // Approvals (cross-domain)
+  'Show pending approvals',
+  'List items awaiting my approval',
+];
+
 export default function AIQueryPage() {
-  const { getAccessToken } = useAuth();
-  const [query, setQuery] = useState('');
-  const [activeQuery, setActiveQuery] = useState('');
-  const [componentResponse, setComponentResponse] = useState<ComponentResponse | null>(null);
-  const [directiveError, setDirectiveError] = useState<string | null>(null);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-
-  // Voice input hook - captures speech and updates query
-  const { isListening, transcript, error: voiceInputError, startListening, stopListening } = useVoiceInput({
-    language: 'en-US',
-    interimResults: false,
-    onResult: (recognizedText) => {
-      setQuery(recognizedText);
-    },
-  });
-
-  // Voice output hook - speaks component narration
-  const { speak, stop: stopSpeaking, isSpeaking } = useVoiceOutput({
-    language: 'en-US',
-    rate: 1.0,
-    pitch: 1.0,
-  });
-
-  // Update query input when transcript changes
-  useEffect(() => {
-    if (transcript) {
-      setQuery(transcript);
-    }
-  }, [transcript]);
-
-  const exampleQueries = [
-    // HR queries
-    'Show me my org chart',
-    'List employees in Engineering',
-    // Finance queries
-    'Show Q1 budget summary',
-    'Display quarterly report for Q4 2025',
-    // Sales queries
-    'Show hot leads',
-    'List customer details',
-    // Support queries
-    'Show critical tickets',
-    'Search knowledge base for VPN',
-    // Payroll queries
-    'Show my last pay stub',
-    'List pay runs this month',
-    // Tax queries
-    'Show quarterly estimate for Q1',
-    'List pending tax filings',
-    // Approvals (cross-domain)
-    'Show pending approvals',
-    'List items awaiting my approval',
-  ];
+  // Use \w+ as domain to match ANY domain in directives
+  const ai = useAIQuery({ domain: '\\w+' });
 
   /**
-   * Detect display directives in AI response
-   * GENERIC PATTERN: Matches ANY domain (hr, finance, sales, support, payroll, tax, approvals, etc.)
-   * Format: display:<domain>:<component>:<params>
-   * Examples:
-   * - display:hr:org_chart:userId=me
-   * - display:finance:budget:department=engineering
-   * - display:sales:leads:status=hot
-   * - display:approvals:pending:userId=me
+   * Portal-specific component action handler with approval logic.
+   * Handles approve, reject, and drilldown actions across all domains.
    */
-  const detectDirective = (text: string): string | null => {
-    // Generic pattern matches ANY domain, component, and params
-    const directiveRegex = /display:(\w+):(\w+):([^\s]*)/;
-    const match = text.match(directiveRegex);
-    return match ? match[0] : null;
-  };
-
-  /**
-   * Call MCP UI Service to render directive
-   */
-  const fetchComponentResponse = async (directive: string): Promise<void> => {
-    try {
-      const token = getAccessToken();
-      if (!token) {
-        throw new Error('Not authenticated');
-      }
-
-      // Construct MCP UI Service URL
-      let mcpUiUrl: string;
-      if (apiConfig.mcpUiUrl) {
-        // Use configured MCP UI URL (from VITE_MCP_UI_URL)
-        mcpUiUrl = `${apiConfig.mcpUiUrl}/api/display`;
-      } else {
-        // Fallback to relative URL (proxied through Caddy)
-        mcpUiUrl = '/mcp-ui/api/display';
-      }
-
-      const response = await fetch(mcpUiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ directive }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`MCP UI Service error: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      // MCP UI returns: { status, component: { type, props, actions }, narration, metadata }
-      // We need to merge component and narration into ComponentResponse format
-      if (!result || !result.component) {
-        throw new Error('Invalid response from MCP UI: missing component data');
-      }
-
-      const componentData: ComponentResponse = {
-        type: result.component.type,
-        props: result.component.props || {},
-        actions: result.component.actions || [],
-        narration: result.narration,
-      };
-
-      setComponentResponse(componentData);
-      setDirectiveError(null);
-    } catch (error) {
-      console.error('Failed to fetch component response:', error);
-      setDirectiveError(error instanceof Error ? error.message : 'Unknown error');
-      setComponentResponse(null);
-    }
-  };
-
-  /**
-   * Handle SSE response completion
-   * Check for directives and fetch component if found
-   */
-  const handleQueryComplete = useCallback(async (response: string) => {
-    console.log('Query complete:', response);
-
-    // Reset component state
-    setComponentResponse(null);
-    setDirectiveError(null);
-
-    // Detect directive (supports ANY domain)
-    const directive = detectDirective(response);
-    if (directive) {
-      console.log('Detected directive:', directive);
-      await fetchComponentResponse(directive);
-    }
-  }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) {
-      setActiveQuery(query);
-      // Reset component state when new query submitted
-      setComponentResponse(null);
-      setDirectiveError(null);
-    }
-  };
-
-  const handleExampleClick = (example: string) => {
-    setQuery(example);
-    setActiveQuery(example);
-    // Reset component state
-    setComponentResponse(null);
-    setDirectiveError(null);
-  };
-
-  /**
-   * Handle component actions (navigate, drilldown, approve, reject, etc.)
-   */
-  const handleComponentAction = async (action: any) => {
+  const handleComponentAction = useCallback(async (action: any) => {
     console.log('Component action:', action);
 
     try {
-      const token = getAccessToken();
+      const token = ai.getAccessToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -199,7 +57,6 @@ export default function AIQueryPage() {
         const { approvalType, id } = action.params;
         console.log(`Approving ${approvalType}:`, id);
 
-        // Map approval type to MCP server endpoint and request body
         let mcpEndpoint: string;
         let requestBody: any;
 
@@ -217,7 +74,6 @@ export default function AIQueryPage() {
           return;
         }
 
-        // Call MCP Gateway with POST method
         const response = await fetch(mcpEndpoint, {
           method: 'POST',
           headers: {
@@ -235,13 +91,10 @@ export default function AIQueryPage() {
         const result = await response.json();
         console.log('Approve result:', result);
 
-        // Check if this is a pending_confirmation response (human-in-the-loop for AI)
-        // Since the user already clicked Approve, they ARE the human confirmation
-        // So we auto-confirm immediately
+        // Auto-confirm pending_confirmation (user already clicked Approve in UI)
         if (result.status === 'pending_confirmation' && result.confirmationId) {
           console.log('Auto-confirming (user already approved via UI button)');
 
-          // Automatically call the confirmation endpoint
           const confirmResponse = await fetch(`${apiConfig.mcpGatewayUrl}/api/confirm/${result.confirmationId}`, {
             method: 'POST',
             headers: {
@@ -260,14 +113,7 @@ export default function AIQueryPage() {
           console.log('Confirmation result:', confirmResult);
         }
 
-        // Show success message (for both direct and confirmed approvals)
         alert(`Successfully approved ${approvalType}!`);
-
-        // Refresh the component by re-fetching
-        const directive = detectDirective(activeQuery || '');
-        if (directive) {
-          await fetchComponentResponse(directive);
-        }
       }
 
       // Handle reject action
@@ -275,7 +121,6 @@ export default function AIQueryPage() {
         const { approvalType, id, reason } = action.params;
         console.log(`Rejecting ${approvalType}:`, id, 'Reason:', reason);
 
-        // Map approval type to MCP server endpoint and request body
         let mcpEndpoint: string;
         let requestBody: any;
 
@@ -293,7 +138,6 @@ export default function AIQueryPage() {
           return;
         }
 
-        // Call MCP Gateway with POST method
         const response = await fetch(mcpEndpoint, {
           method: 'POST',
           headers: {
@@ -311,19 +155,17 @@ export default function AIQueryPage() {
         const result = await response.json();
         console.log('Reject result:', result);
 
-        // Check if this is a pending_confirmation response
-        // Auto-confirm since the user already clicked Reject
+        // Auto-confirm pending_confirmation (user already clicked Reject in UI)
         if (result.status === 'pending_confirmation' && result.confirmationId) {
           console.log('Auto-confirming reject (user already rejected via UI button)');
 
-          // Automatically call the confirmation endpoint
           const confirmResponse = await fetch(`${apiConfig.mcpGatewayUrl}/api/confirm/${result.confirmationId}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ approved: true }), // approved=true means "yes, execute this reject action"
+            body: JSON.stringify({ approved: true }),
           });
 
           if (!confirmResponse.ok) {
@@ -335,14 +177,7 @@ export default function AIQueryPage() {
           console.log('Confirmation result:', confirmResult);
         }
 
-        // Show success message
         alert(`Successfully rejected ${approvalType}!`);
-
-        // Refresh the component by re-fetching
-        const directive = detectDirective(activeQuery || '');
-        if (directive) {
-          await fetchComponentResponse(directive);
-        }
       }
 
       // Handle drilldown action (view details)
@@ -355,7 +190,7 @@ export default function AIQueryPage() {
       console.error('Action handler error:', error);
       alert(error instanceof Error ? error.message : 'Failed to execute action');
     }
-  };
+  }, [ai.getAccessToken]);
 
   return (
     <div className="page-container">
@@ -376,30 +211,24 @@ export default function AIQueryPage() {
               id="voice-toggle"
               type="button"
               onClick={() => {
-                const newVoiceEnabled = !voiceEnabled;
-                setVoiceEnabled(newVoiceEnabled);
-                if (!newVoiceEnabled) {
-                  stopSpeaking(); // Stop any ongoing speech when disabled
-                }
+                const newVoiceEnabled = !ai.voiceEnabled;
+                ai.setVoiceEnabled(newVoiceEnabled);
+                if (!newVoiceEnabled) ai.stopSpeaking();
               }}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                voiceEnabled ? 'bg-primary-600' : 'bg-secondary-300'
+                ai.voiceEnabled ? 'bg-primary-600' : 'bg-secondary-300'
               }`}
               data-testid="voice-toggle"
               aria-label="Toggle voice output"
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  voiceEnabled ? 'translate-x-6' : 'translate-x-1'
+                  ai.voiceEnabled ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
             </button>
-            {isSpeaking && (
-              <svg
-                className="w-5 h-5 text-primary-600 animate-pulse"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
+            {ai.isSpeaking && (
+              <svg className="w-5 h-5 text-primary-600 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
               </svg>
             )}
@@ -422,28 +251,28 @@ export default function AIQueryPage() {
 
       {/* Query Input */}
       <div className="card mb-6">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={ai.handleSubmit}>
           <label className="block text-sm font-medium text-secondary-700 mb-2">
             Ask anything across all domains
           </label>
           <div className="flex gap-3">
             <input
               type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={ai.query}
+              onChange={(e) => ai.setQuery(e.target.value)}
               placeholder="e.g., Show pending approvals or Show my org chart"
               className="input flex-1"
             />
             {/* Voice Input Button */}
             <button
               type="button"
-              onClick={isListening ? stopListening : startListening}
-              className={`btn-secondary ${isListening ? 'bg-red-100 border-red-300 text-red-700' : ''}`}
-              title={isListening ? 'Stop listening' : 'Start voice input'}
+              onClick={ai.isListening ? ai.stopListening : ai.startListening}
+              className={`btn-secondary ${ai.isListening ? 'bg-red-100 border-red-300 text-red-700' : ''}`}
+              title={ai.isListening ? 'Stop listening' : 'Start voice input'}
               data-testid="voice-input"
             >
               <svg
-                className={`w-5 h-5 ${isListening ? 'animate-pulse' : ''}`}
+                className={`w-5 h-5 ${ai.isListening ? 'animate-pulse' : ''}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -458,7 +287,7 @@ export default function AIQueryPage() {
             </button>
             <button
               type="submit"
-              disabled={!query.trim()}
+              disabled={!ai.query.trim()}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg
@@ -479,15 +308,15 @@ export default function AIQueryPage() {
           </div>
 
           {/* Voice Status */}
-          {isListening && (
+          {ai.isListening && (
             <div className="mt-2 text-sm text-primary-600 flex items-center gap-2" data-testid="listening-indicator">
               <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
               Listening... Speak your query
             </div>
           )}
-          {voiceInputError && (
+          {ai.voiceInputError && (
             <div className="mt-2 text-sm text-red-600">
-              Voice input error: {voiceInputError}
+              Voice input error: {ai.voiceInputError}
             </div>
           )}
         </form>
@@ -501,7 +330,7 @@ export default function AIQueryPage() {
             {exampleQueries.map((example) => (
               <button
                 key={example}
-                onClick={() => handleExampleClick(example)}
+                onClick={() => ai.handleExampleClick(example)}
                 className="text-xs px-3 py-2 bg-secondary-100 hover:bg-secondary-200 text-secondary-700 rounded-lg transition-colors text-left"
               >
                 {example}
@@ -512,23 +341,22 @@ export default function AIQueryPage() {
       </div>
 
       {/* SSE Query Client */}
-      {activeQuery && (
+      {ai.activeQuery && (
         <div className="mb-6">
           <SSEQueryClient
-            query={activeQuery}
+            query={ai.activeQuery}
             autoStart={true}
-            onComplete={handleQueryComplete}
+            onComplete={ai.handleQueryComplete}
             onError={(error) => {
               console.error('Query error:', error);
-              setComponentResponse(null);
-              setDirectiveError(null);
+              ai.setComponentResponse(null);
             }}
           />
         </div>
       )}
 
       {/* Component Renderer - Display generative UI components */}
-      {componentResponse && (
+      {ai.componentResponse && (
         <div className="mb-6" data-testid="generative-ui-container">
           <div className="card bg-primary-50 border-primary-200">
             <div className="flex items-center gap-2 mb-4">
@@ -550,20 +378,20 @@ export default function AIQueryPage() {
               </h3>
             </div>
             <ComponentRenderer
-              component={componentResponse}
+              component={ai.componentResponse}
               onAction={handleComponentAction}
-              voiceEnabled={voiceEnabled}
+              voiceEnabled={ai.voiceEnabled}
             />
           </div>
         </div>
       )}
 
       {/* Directive Error */}
-      {directiveError && (
+      {ai.directiveError && (
         <div className="mb-6" data-testid="directive-error">
           <div className="alert-danger">
             <p className="font-medium">Failed to render component</p>
-            <p className="text-sm mt-1">{directiveError}</p>
+            <p className="text-sm mt-1">{ai.directiveError}</p>
           </div>
         </div>
       )}
@@ -577,57 +405,57 @@ export default function AIQueryPage() {
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">HR Domain</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Org charts, employee data</li>
-              <li>• Department information</li>
+              <li>Org charts, employee data</li>
+              <li>Department information</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Finance Domain</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Budget summaries</li>
-              <li>• Quarterly reports</li>
+              <li>Budget summaries</li>
+              <li>Quarterly reports</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Sales Domain</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Customer details</li>
-              <li>• Lead pipeline (hot/warm/cold)</li>
+              <li>Customer details</li>
+              <li>Lead pipeline (hot/warm/cold)</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Support Domain</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Ticket status (open/critical)</li>
-              <li>• Knowledge base articles</li>
+              <li>Ticket status (open/critical)</li>
+              <li>Knowledge base articles</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Payroll Domain</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Pay stubs and pay runs</li>
-              <li>• Tax withholdings, 1099s</li>
+              <li>Pay stubs and pay runs</li>
+              <li>Tax withholdings, 1099s</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Tax Domain</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Quarterly estimates</li>
-              <li>• Tax filings and deadlines</li>
+              <li>Quarterly estimates</li>
+              <li>Tax filings and deadlines</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Approvals (Cross-Domain)</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Pending time-off requests</li>
-              <li>• Expense and budget approvals</li>
+              <li>Pending time-off requests</li>
+              <li>Expense and budget approvals</li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold text-sm text-secondary-800 mb-2">Access Control</h4>
             <ul className="space-y-1 text-sm text-secondary-700">
-              <li>• Results respect your roles</li>
-              <li>• 50-record limit with warnings</li>
+              <li>Results respect your roles</li>
+              <li>50-record limit with warnings</li>
             </ul>
           </div>
         </div>

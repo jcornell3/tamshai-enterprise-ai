@@ -1,14 +1,17 @@
 /**
- * Centralized Error Handler - MCP-Support (Architecture v1.4)
+ * Support Error Handler (Architecture v1.4)
  *
- * Implements Section 7.4: LLM-Friendly Error Schemas
- * Fulfills Article II.3: No raw exceptions to AI
- *
- * All errors are converted to MCPErrorResponse with suggestedAction.
+ * Domain-specific error handlers for the Support MCP service.
+ * Common error handling utilities are imported from @tamshai/shared.
  */
 
+import {
+  ErrorCode,
+  createErrorResponse,
+  MCPErrorResponse,
+} from '@tamshai/shared';
+import { MCPToolResponse } from '../types/response';
 import winston from 'winston';
-import { MCPErrorResponse, MCPToolResponse, createErrorResponse } from '../types/response';
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -19,39 +22,16 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-/**
- * Error codes for support operations
- */
-export enum ErrorCode {
-  // Input validation
-  INVALID_INPUT = 'INVALID_INPUT',
-  MISSING_REQUIRED_FIELD = 'MISSING_REQUIRED_FIELD',
-
-  // Resource not found
-  TICKET_NOT_FOUND = 'TICKET_NOT_FOUND',
-  ARTICLE_NOT_FOUND = 'ARTICLE_NOT_FOUND',
-
-  // Authorization
-  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
-
-  // Business logic errors
-  CANNOT_CLOSE_TICKET = 'CANNOT_CLOSE_TICKET',
-
-  // Database/Search errors
-  DATABASE_ERROR = 'DATABASE_ERROR',
-  SEARCH_ERROR = 'SEARCH_ERROR',
-
-  // General errors
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-}
+// Re-export ErrorCode and types for consumers
+export { ErrorCode, MCPErrorResponse };
 
 /**
  * Handle validation errors from Zod
  */
-export function handleValidationError(error: any): MCPErrorResponse {
+export function handleValidationError(error: { errors: Array<{ path: string[]; message: string }> }): MCPErrorResponse {
   logger.warn('Input validation failed', { error: error.errors });
 
-  const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ');
+  const fieldErrors = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
 
   return createErrorResponse(
     ErrorCode.INVALID_INPUT,
@@ -66,7 +46,6 @@ export function handleValidationError(error: any): MCPErrorResponse {
  */
 export function handleTicketNotFound(ticketId: string): MCPErrorResponse {
   logger.warn('Ticket not found', { ticketId });
-
   return createErrorResponse(
     ErrorCode.TICKET_NOT_FOUND,
     `Ticket with ID "${ticketId}" was not found`,
@@ -80,7 +59,6 @@ export function handleTicketNotFound(ticketId: string): MCPErrorResponse {
  */
 export function handleArticleNotFound(articleId: string): MCPErrorResponse {
   logger.warn('Article not found', { articleId });
-
   return createErrorResponse(
     ErrorCode.ARTICLE_NOT_FOUND,
     `Knowledge base article with ID "${articleId}" was not found`,
@@ -94,7 +72,6 @@ export function handleArticleNotFound(articleId: string): MCPErrorResponse {
  */
 export function handleInsufficientPermissions(requiredRole: string, userRoles: string[]): MCPErrorResponse {
   logger.warn('Insufficient permissions', { requiredRole, userRoles });
-
   return createErrorResponse(
     ErrorCode.INSUFFICIENT_PERMISSIONS,
     `This operation requires "${requiredRole}" role. You have: ${userRoles.join(', ') || 'none'}`,
@@ -139,7 +116,6 @@ export function handleCannotCloseTicket(ticketId: string, reason: string): MCPEr
  */
 export function handleDatabaseError(error: Error, operation: string): MCPErrorResponse {
   logger.error('Database error', { error: error.message, stack: error.stack, operation });
-
   return createErrorResponse(
     ErrorCode.DATABASE_ERROR,
     'A database error occurred while processing your request',
@@ -153,7 +129,6 @@ export function handleDatabaseError(error: Error, operation: string): MCPErrorRe
  */
 export function handleSearchError(error: Error, searchType: string): MCPErrorResponse {
   logger.error('Search error', { error: error.message, stack: error.stack, searchType });
-
   return createErrorResponse(
     ErrorCode.SEARCH_ERROR,
     `Search operation failed for ${searchType}`,
@@ -171,17 +146,16 @@ export async function withErrorHandling<T>(
 ): Promise<MCPToolResponse<T>> {
   try {
     return await fn();
-  } catch (error: any) {
-    // Handle Zod validation errors
-    if (error.name === 'ZodError') {
-      return handleValidationError(error);
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'name' in error && (error as { name: string }).name === 'ZodError') {
+      return handleValidationError(error as unknown as { errors: Array<{ path: string[]; message: string }> });
     }
 
-    // Handle all other errors
+    const err = error instanceof Error ? error : new Error(String(error));
     logger.error('Unexpected error in operation', {
       operation,
-      error: error.message,
-      stack: error.stack,
+      error: err.message,
+      stack: err.stack,
     });
 
     return createErrorResponse(

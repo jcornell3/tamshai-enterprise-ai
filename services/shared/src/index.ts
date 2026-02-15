@@ -10,8 +10,10 @@
  * - Shared types and response builders
  * - Error handling utilities
  * - Internal token generation/validation
+ * - PostgreSQL database connection with RLS support
  */
 
+export * from './database';
 export * from './middleware/authorize';
 export * from './middleware/gateway-auth';
 export * from './cache';

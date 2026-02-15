@@ -1,11 +1,12 @@
 /**
  * Redis Utility for Pending Confirmations
  *
+ * Thin wrapper around @tamshai/shared Redis confirmation cache.
  * Implements Section 5.6: Human-in-the-Loop Confirmations
  * Stores pending write operations with 5-minute TTL
  */
 
-import Redis from 'ioredis';
+import { createRedisConfirmationCache, RedisConfirmationCache } from '@tamshai/shared';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -17,98 +18,35 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-const redis = new Redis({
-  host: process.env.REDIS_HOST,
-  port: parseInt(process.env.REDIS_PORT!, 10),
-  password: process.env.REDIS_PASSWORD,
-  maxRetriesPerRequest: 3,
-  enableReadyCheck: true,
-  lazyConnect: true,
-});
-
-redis.on('error', (err) => {
-  logger.error('Redis connection error', err);
-});
-
-redis.on('connect', () => {
-  logger.info('Connected to Redis');
-});
+const cache: RedisConfirmationCache = createRedisConfirmationCache('finance', logger);
 
 /**
  * Store a pending confirmation with TTL
- *
- * @param confirmationId - UUID for the confirmation
- * @param data - Action data to store
- * @param ttlSeconds - Time to live in seconds (default 300 = 5 minutes)
  */
-export async function storePendingConfirmation(
-  confirmationId: string,
-  data: Record<string, unknown>,
-  ttlSeconds: number = 300
-): Promise<void> {
-  const key = `pending:${confirmationId}`;
-
-  try {
-    await redis.setex(key, ttlSeconds, JSON.stringify(data));
-    logger.info('Stored pending confirmation', { confirmationId, ttlSeconds });
-  } catch (error) {
-    logger.error('Failed to store pending confirmation', { confirmationId, error });
-    throw new Error('Failed to store confirmation');
-  }
-}
+export const storePendingConfirmation = cache.storePendingConfirmation;
 
 /**
  * Check if a confirmation exists in Redis
- *
- * @param confirmationId - UUID for the confirmation
- * @returns true if confirmation exists, false otherwise
  */
-export async function confirmationExists(confirmationId: string): Promise<boolean> {
-  const key = `pending:${confirmationId}`;
-
-  try {
-    const exists = await redis.exists(key);
-    return exists === 1;
-  } catch (error) {
-    logger.error('Failed to check confirmation existence', { confirmationId, error });
-    return false;
-  }
-}
+export const confirmationExists = cache.confirmationExists;
 
 /**
- * Get pending confirmation data from Redis
- *
- * @param confirmationId - UUID for the confirmation
- * @returns Confirmation data or null if not found/expired
+ * Get pending confirmation data from Redis (one-time use: retrieves and deletes)
  */
-export async function getPendingConfirmation(
-  confirmationId: string
-): Promise<Record<string, unknown> | null> {
-  const key = `pending:${confirmationId}`;
-
-  try {
-    const data = await redis.get(key);
-    if (!data) {
-      logger.warn('Confirmation not found or expired', { confirmationId });
-      return null;
-    }
-    return JSON.parse(data);
-  } catch (error) {
-    logger.error('Failed to get pending confirmation', { confirmationId, error });
-    return null;
-  }
-}
+export const getPendingConfirmation = cache.getPendingConfirmation;
 
 /**
  * Delete a pending confirmation from Redis
  *
- * @param confirmationId - UUID for the confirmation
+ * @deprecated Use getPendingConfirmation which auto-deletes. Kept for backward compatibility.
  */
 export async function deletePendingConfirmation(confirmationId: string): Promise<void> {
-  const key = `pending:${confirmationId}`;
-
+  // getPendingConfirmation already deletes, but this is called separately in finance.
+  // We need to just delete the key without retrieving.
+  const client = cache.getRedisClient();
+  const key = `pending:finance:${confirmationId}`;
   try {
-    await redis.del(key);
+    await client.del(key);
     logger.info('Deleted pending confirmation', { confirmationId });
   } catch (error) {
     logger.error('Failed to delete pending confirmation', { confirmationId, error });
@@ -118,9 +56,21 @@ export async function deletePendingConfirmation(confirmationId: string): Promise
 /**
  * Close Redis connection (for graceful shutdown)
  */
-export async function closeRedis(): Promise<void> {
-  await redis.quit();
-  logger.info('Redis connection closed');
+export const closeRedis = cache.closeRedis;
+
+/**
+ * Check Redis connection health
+ */
+export const checkRedisConnection = cache.checkRedisConnection;
+
+/**
+ * Get the underlying Redis client
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getRedisClient(): any {
+  return cache.getRedisClient();
 }
 
-export default redis;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const redisClient: any = cache.getRedisClient();
+export default redisClient;

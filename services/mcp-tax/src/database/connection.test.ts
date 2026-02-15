@@ -1,11 +1,9 @@
 /**
  * Database Connection Tests
  *
- * Tests for PostgreSQL connection pool and RLS query execution.
+ * Tests that the thin wrapper correctly delegates to @tamshai/shared createPostgresClient.
  */
-import { UserContext } from './connection';
 
-// Create mock functions before jest.mock
 const mockClientQuery = jest.fn();
 const mockClientRelease = jest.fn();
 const mockPoolQuery = jest.fn();
@@ -13,19 +11,61 @@ const mockPoolEnd = jest.fn().mockResolvedValue(undefined);
 const mockPoolConnect = jest.fn();
 const mockPoolOn = jest.fn();
 
+const mockPool = {
+  connect: mockPoolConnect,
+  query: mockPoolQuery,
+  end: mockPoolEnd,
+  on: mockPoolOn,
+};
+
 const mockClient = {
   query: mockClientQuery,
   release: mockClientRelease,
 };
 
-// Mock pg Pool before importing connection module
-jest.mock('pg', () => ({
-  Pool: jest.fn(() => ({
-    connect: mockPoolConnect.mockResolvedValue(mockClient),
-    query: mockPoolQuery,
-    end: mockPoolEnd,
-    on: mockPoolOn,
-  })),
+// Use regular functions (not jest.fn) so clearAllMocks doesn't wipe implementations
+jest.mock('@tamshai/shared', () => ({
+  createPostgresClient: () => ({
+    pool: mockPool,
+    queryWithRLS: async (userContext: any, queryText: string, values?: any[]) => {
+      const client = await mockPoolConnect();
+      try {
+        await client.query('BEGIN');
+        await client.query('set_config', [
+          userContext.userId,
+          userContext.email || '',
+          userContext.roles.join(','),
+          userContext.departmentId || '',
+          userContext.managerId || '',
+        ]);
+        const result = await client.query(queryText, values);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    queryWithoutRLS: async (queryText: string, values?: any[]) => {
+      return mockPoolQuery(queryText, values);
+    },
+    getClient: async () => {
+      return mockPoolConnect();
+    },
+    checkConnection: async () => {
+      try {
+        const result = await mockPoolQuery('SELECT 1 as ok');
+        return result.rows[0]?.ok === 1;
+      } catch {
+        return false;
+      }
+    },
+    closePool: async () => {
+      await mockPoolEnd();
+    },
+  }),
 }));
 
 jest.mock('../utils/logger', () => ({
@@ -37,7 +77,7 @@ jest.mock('../utils/logger', () => ({
   },
 }));
 
-// Import after mocking
+import { UserContext } from './connection';
 import {
   queryWithRLS,
   queryWithoutRLS,
@@ -65,12 +105,9 @@ describe('queryWithRLS', () => {
 
     await queryWithRLS(userContext, 'SELECT * FROM tax.rates', []);
 
-    // Verify BEGIN
     expect(mockClientQuery).toHaveBeenCalledWith('BEGIN');
-
-    // Verify set_config call with user context
     expect(mockClientQuery).toHaveBeenCalledWith(
-      expect.stringContaining('set_config'),
+      'set_config',
       [
         userContext.userId,
         userContext.email,
@@ -79,8 +116,6 @@ describe('queryWithRLS', () => {
         userContext.managerId,
       ]
     );
-
-    // Verify COMMIT
     expect(mockClientQuery).toHaveBeenCalledWith('COMMIT');
   });
 
@@ -156,9 +191,8 @@ describe('queryWithRLS', () => {
 
     await queryWithRLS(minimalContext, 'SELECT 1', []);
 
-    // Should use empty strings for missing optional fields
     expect(mockClientQuery).toHaveBeenCalledWith(
-      expect.stringContaining('set_config'),
+      'set_config',
       [
         minimalContext.userId,
         '', // email
@@ -254,26 +288,22 @@ describe('checkConnection', () => {
 describe('closePool', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPoolEnd.mockResolvedValue(undefined);
   });
 
   it('calls pool.end()', async () => {
-    mockPoolEnd.mockResolvedValue(undefined);
-
     await closePool();
 
     expect(mockPoolEnd).toHaveBeenCalled();
   });
 
   it('resolves when pool ends successfully', async () => {
-    mockPoolEnd.mockResolvedValue(undefined);
-
     await expect(closePool()).resolves.toBeUndefined();
   });
 });
 
 describe('pool configuration', () => {
   it('pool has on method for event handling', () => {
-    // Verify the mock pool has the on method
     expect(typeof mockPoolOn).toBe('function');
   });
 

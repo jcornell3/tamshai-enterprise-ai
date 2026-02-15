@@ -1,45 +1,28 @@
 /**
- * Error Handler Utility
+ * Payroll Error Handler
  *
- * LLM-friendly error handling with structured responses.
- * All errors include suggestedAction for Claude to act on.
+ * Domain-specific error handlers for the Payroll MCP service.
+ * Common error handling utilities are imported from @tamshai/shared.
  */
+
+import {
+  ErrorCode,
+  createErrorHandlers,
+  createErrorResponse,
+  MCPErrorResponse,
+} from '@tamshai/shared';
 import { ZodError } from 'zod';
-import { createErrorResponse, MCPErrorResponse, MCPToolResponse } from '../types/response';
 import { logger } from './logger';
 
-// Error codes for payroll domain
-export enum ErrorCode {
-  // Not Found
-  PAY_RUN_NOT_FOUND = 'PAY_RUN_NOT_FOUND',
-  PAY_STUB_NOT_FOUND = 'PAY_STUB_NOT_FOUND',
-  CONTRACTOR_NOT_FOUND = 'CONTRACTOR_NOT_FOUND',
-  TAX_WITHHOLDING_NOT_FOUND = 'TAX_WITHHOLDING_NOT_FOUND',
-  BENEFIT_NOT_FOUND = 'BENEFIT_NOT_FOUND',
-  EMPLOYEE_NOT_FOUND = 'EMPLOYEE_NOT_FOUND',
+// Create shared error handlers with our logger
+const handlers = createErrorHandlers(logger);
 
-  // Permission
-  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
-  WRITE_PERMISSION_REQUIRED = 'WRITE_PERMISSION_REQUIRED',
+// Re-export ErrorCode and types for consumers
+export { ErrorCode, MCPErrorResponse };
 
-  // Validation
-  INVALID_INPUT = 'INVALID_INPUT',
-  INVALID_DATE_RANGE = 'INVALID_DATE_RANGE',
-  INVALID_PAY_PERIOD = 'INVALID_PAY_PERIOD',
-
-  // Business Logic
-  PAY_RUN_ALREADY_PROCESSED = 'PAY_RUN_ALREADY_PROCESSED',
-  PAY_RUN_LOCKED = 'PAY_RUN_LOCKED',
-  DUPLICATE_ENTRY = 'DUPLICATE_ENTRY',
-
-  // Database
-  DATABASE_ERROR = 'DATABASE_ERROR',
-
-  // System
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-}
-
-// Error handler functions
+/**
+ * Handle pay run not found error
+ */
 export function handlePayRunNotFound(payRunId: string): MCPErrorResponse {
   logger.warn('Pay run not found', { payRunId });
   return createErrorResponse(
@@ -49,6 +32,9 @@ export function handlePayRunNotFound(payRunId: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle pay stub not found error
+ */
 export function handlePayStubNotFound(payStubId: string): MCPErrorResponse {
   logger.warn('Pay stub not found', { payStubId });
   return createErrorResponse(
@@ -58,6 +44,9 @@ export function handlePayStubNotFound(payStubId: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle contractor not found error
+ */
 export function handleContractorNotFound(contractorId: string): MCPErrorResponse {
   logger.warn('Contractor not found', { contractorId });
   return createErrorResponse(
@@ -67,6 +56,9 @@ export function handleContractorNotFound(contractorId: string): MCPErrorResponse
   );
 }
 
+/**
+ * Handle tax withholding not found error
+ */
 export function handleTaxWithholdingNotFound(employeeId: string): MCPErrorResponse {
   logger.warn('Tax withholding not found', { employeeId });
   return createErrorResponse(
@@ -76,6 +68,9 @@ export function handleTaxWithholdingNotFound(employeeId: string): MCPErrorRespon
   );
 }
 
+/**
+ * Handle benefit not found error
+ */
 export function handleBenefitNotFound(benefitId: string): MCPErrorResponse {
   logger.warn('Benefit not found', { benefitId });
   return createErrorResponse(
@@ -85,6 +80,9 @@ export function handleBenefitNotFound(benefitId: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle insufficient permissions error
+ */
 export function handleInsufficientPermissions(
   operation: string,
   requiredRoles: string[]
@@ -97,6 +95,9 @@ export function handleInsufficientPermissions(
   );
 }
 
+/**
+ * Handle write permission required error
+ */
 export function handleWritePermissionRequired(
   operation: string,
   currentRoles: string[]
@@ -109,6 +110,9 @@ export function handleWritePermissionRequired(
   );
 }
 
+/**
+ * Handle invalid input error
+ */
 export function handleInvalidInput(message: string, field?: string): MCPErrorResponse {
   logger.warn('Invalid input', { message, field });
   return createErrorResponse(
@@ -120,6 +124,9 @@ export function handleInvalidInput(message: string, field?: string): MCPErrorRes
   );
 }
 
+/**
+ * Handle database errors
+ */
 export function handleDatabaseError(error: Error, operation: string): MCPErrorResponse {
   logger.error('Database error', { operation, error: error.message });
   return createErrorResponse(
@@ -129,13 +136,11 @@ export function handleDatabaseError(error: Error, operation: string): MCPErrorRe
   );
 }
 
+/**
+ * Handle unexpected/unknown errors
+ */
 export function handleUnknownError(error: Error, operation: string): MCPErrorResponse {
-  logger.error('Unknown error', { operation, error: error.message, stack: error.stack });
-  return createErrorResponse(
-    ErrorCode.INTERNAL_ERROR,
-    'An unexpected error occurred',
-    'Please try again. If the problem persists, contact support with the operation you were attempting.'
-  );
+  return handlers.handleUnknownError(error, operation);
 }
 
 /**

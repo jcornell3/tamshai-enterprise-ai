@@ -1,46 +1,28 @@
 /**
- * Error Handler Utility
+ * Tax Error Handler
  *
- * LLM-friendly error handling with structured responses.
- * All errors include suggestedAction for Claude to act on.
+ * Domain-specific error handlers for the Tax MCP service.
+ * Common error handling utilities are imported from @tamshai/shared.
  */
+
+import {
+  ErrorCode,
+  createErrorHandlers,
+  createErrorResponse,
+  MCPErrorResponse,
+} from '@tamshai/shared';
 import { ZodError } from 'zod';
-import { createErrorResponse, MCPErrorResponse, MCPToolResponse } from '../types/response';
 import { logger } from './logger';
 
-// Error codes for tax domain
-export enum ErrorCode {
-  // Not Found
-  TAX_RATE_NOT_FOUND = 'TAX_RATE_NOT_FOUND',
-  ESTIMATE_NOT_FOUND = 'ESTIMATE_NOT_FOUND',
-  FILING_NOT_FOUND = 'FILING_NOT_FOUND',
-  REGISTRATION_NOT_FOUND = 'REGISTRATION_NOT_FOUND',
-  AUDIT_LOG_NOT_FOUND = 'AUDIT_LOG_NOT_FOUND',
+// Create shared error handlers with our logger
+const handlers = createErrorHandlers(logger);
 
-  // Permission
-  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
-  WRITE_PERMISSION_REQUIRED = 'WRITE_PERMISSION_REQUIRED',
+// Re-export ErrorCode and types for consumers
+export { ErrorCode, MCPErrorResponse };
 
-  // Validation
-  INVALID_INPUT = 'INVALID_INPUT',
-  INVALID_DATE_RANGE = 'INVALID_DATE_RANGE',
-  INVALID_STATE_CODE = 'INVALID_STATE_CODE',
-  INVALID_QUARTER = 'INVALID_QUARTER',
-
-  // Business Logic
-  FILING_ALREADY_SUBMITTED = 'FILING_ALREADY_SUBMITTED',
-  ESTIMATE_ALREADY_PAID = 'ESTIMATE_ALREADY_PAID',
-  REGISTRATION_EXPIRED = 'REGISTRATION_EXPIRED',
-  DUPLICATE_ENTRY = 'DUPLICATE_ENTRY',
-
-  // Database
-  DATABASE_ERROR = 'DATABASE_ERROR',
-
-  // System
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-}
-
-// Error handler functions
+/**
+ * Handle tax rate not found error
+ */
 export function handleTaxRateNotFound(stateCode: string): MCPErrorResponse {
   logger.warn('Tax rate not found', { stateCode });
   return createErrorResponse(
@@ -50,6 +32,9 @@ export function handleTaxRateNotFound(stateCode: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle quarterly estimate not found error
+ */
 export function handleEstimateNotFound(estimateId: string): MCPErrorResponse {
   logger.warn('Quarterly estimate not found', { estimateId });
   return createErrorResponse(
@@ -59,6 +44,9 @@ export function handleEstimateNotFound(estimateId: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle filing not found error
+ */
 export function handleFilingNotFound(filingId: string): MCPErrorResponse {
   logger.warn('Filing not found', { filingId });
   return createErrorResponse(
@@ -68,6 +56,9 @@ export function handleFilingNotFound(filingId: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle registration not found error
+ */
 export function handleRegistrationNotFound(registrationId: string): MCPErrorResponse {
   logger.warn('State registration not found', { registrationId });
   return createErrorResponse(
@@ -77,6 +68,9 @@ export function handleRegistrationNotFound(registrationId: string): MCPErrorResp
   );
 }
 
+/**
+ * Handle insufficient permissions error
+ */
 export function handleInsufficientPermissions(
   operation: string,
   requiredRoles: string[]
@@ -89,6 +83,9 @@ export function handleInsufficientPermissions(
   );
 }
 
+/**
+ * Handle write permission required error
+ */
 export function handleWritePermissionRequired(
   operation: string,
   currentRoles: string[]
@@ -101,6 +98,9 @@ export function handleWritePermissionRequired(
   );
 }
 
+/**
+ * Handle invalid input error
+ */
 export function handleInvalidInput(message: string, field?: string): MCPErrorResponse {
   logger.warn('Invalid input', { message, field });
   return createErrorResponse(
@@ -112,6 +112,9 @@ export function handleInvalidInput(message: string, field?: string): MCPErrorRes
   );
 }
 
+/**
+ * Handle invalid state code error
+ */
 export function handleInvalidStateCode(stateCode: string): MCPErrorResponse {
   logger.warn('Invalid state code', { stateCode });
   return createErrorResponse(
@@ -121,6 +124,9 @@ export function handleInvalidStateCode(stateCode: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle database errors
+ */
 export function handleDatabaseError(error: Error, operation: string): MCPErrorResponse {
   logger.error('Database error', { operation, error: error.message });
   return createErrorResponse(
@@ -130,13 +136,11 @@ export function handleDatabaseError(error: Error, operation: string): MCPErrorRe
   );
 }
 
+/**
+ * Handle unexpected/unknown errors
+ */
 export function handleUnknownError(error: Error, operation: string): MCPErrorResponse {
-  logger.error('Unknown error', { operation, error: error.message, stack: error.stack });
-  return createErrorResponse(
-    ErrorCode.INTERNAL_ERROR,
-    'An unexpected error occurred',
-    'Please try again. If the problem persists, contact support with the operation you were attempting.'
-  );
+  return handlers.handleUnknownError(error, operation);
 }
 
 /**

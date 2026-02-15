@@ -1,12 +1,17 @@
 /**
- * Centralized Error Handler (Architecture v1.4) - Sales Server
+ * Sales Error Handler (Architecture v1.4)
  *
- * Implements Section 7.4: LLM-Friendly Error Schemas
- * Fulfills Article II.3: No raw exceptions to AI
+ * Domain-specific error handlers for the Sales MCP service.
+ * Common error handling utilities are imported from @tamshai/shared.
  */
 
+import {
+  ErrorCode,
+  createErrorResponse,
+  MCPErrorResponse,
+} from '@tamshai/shared';
+import { MCPToolResponse } from '../types/response';
 import winston from 'winston';
-import { MCPErrorResponse, MCPToolResponse, createErrorResponse } from '../types/response';
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -14,19 +19,15 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-export enum ErrorCode {
-  INVALID_INPUT = 'INVALID_INPUT',
-  OPPORTUNITY_NOT_FOUND = 'OPPORTUNITY_NOT_FOUND',
-  CUSTOMER_NOT_FOUND = 'CUSTOMER_NOT_FOUND',
-  INSUFFICIENT_PERMISSIONS = 'INSUFFICIENT_PERMISSIONS',
-  CANNOT_DELETE_WON_OPPORTUNITY = 'CANNOT_DELETE_WON_OPPORTUNITY',
-  DATABASE_ERROR = 'DATABASE_ERROR',
-  INTERNAL_ERROR = 'INTERNAL_ERROR',
-}
+// Re-export ErrorCode and types for consumers
+export { ErrorCode, MCPErrorResponse };
 
-export function handleValidationError(error: any): MCPErrorResponse {
+/**
+ * Handle validation errors from Zod
+ */
+export function handleValidationError(error: { errors: Array<{ path: string[]; message: string }> }): MCPErrorResponse {
   logger.warn('Input validation failed', { error: error.errors });
-  const fieldErrors = error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; ');
+  const fieldErrors = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
   return createErrorResponse(
     ErrorCode.INVALID_INPUT,
     `Input validation failed: ${fieldErrors}`,
@@ -35,6 +36,9 @@ export function handleValidationError(error: any): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle opportunity not found error
+ */
 export function handleOpportunityNotFound(opportunityId: string): MCPErrorResponse {
   logger.warn('Opportunity not found', { opportunityId });
   return createErrorResponse(
@@ -45,6 +49,9 @@ export function handleOpportunityNotFound(opportunityId: string): MCPErrorRespon
   );
 }
 
+/**
+ * Handle customer not found error
+ */
 export function handleCustomerNotFound(customerId: string): MCPErrorResponse {
   logger.warn('Customer not found', { customerId });
   return createErrorResponse(
@@ -55,6 +62,9 @@ export function handleCustomerNotFound(customerId: string): MCPErrorResponse {
   );
 }
 
+/**
+ * Handle insufficient permissions error
+ */
 export function handleInsufficientPermissions(requiredRole: string, userRoles: string[]): MCPErrorResponse {
   logger.warn('Insufficient permissions', { requiredRole, userRoles });
   return createErrorResponse(
@@ -65,6 +75,9 @@ export function handleInsufficientPermissions(requiredRole: string, userRoles: s
   );
 }
 
+/**
+ * Handle cannot delete won opportunity error
+ */
 export function handleCannotDeleteWonOpportunity(opportunityId: string): MCPErrorResponse {
   logger.warn('Attempted to delete won opportunity', { opportunityId });
   return createErrorResponse(
@@ -75,6 +88,9 @@ export function handleCannotDeleteWonOpportunity(opportunityId: string): MCPErro
   );
 }
 
+/**
+ * Handle database errors
+ */
 export function handleDatabaseError(error: Error, operation: string): MCPErrorResponse {
   logger.error('Database error', { error: error.message, stack: error.stack, operation });
   return createErrorResponse(
@@ -85,17 +101,21 @@ export function handleDatabaseError(error: Error, operation: string): MCPErrorRe
   );
 }
 
+/**
+ * Generic error handler wrapper
+ */
 export async function withErrorHandling<T>(
   operation: string,
   fn: () => Promise<MCPToolResponse<T>>
 ): Promise<MCPToolResponse<T>> {
   try {
     return await fn();
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return handleValidationError(error);
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'name' in error && (error as { name: string }).name === 'ZodError') {
+      return handleValidationError(error as unknown as { errors: Array<{ path: string[]; message: string }> });
     }
-    logger.error('Unexpected error in operation', { operation, error: error.message, stack: error.stack });
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Unexpected error in operation', { operation, error: err.message, stack: err.stack });
     return createErrorResponse(
       ErrorCode.INTERNAL_ERROR,
       'An unexpected error occurred',
