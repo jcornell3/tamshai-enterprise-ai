@@ -57,10 +57,10 @@ variable "mongodb_root_password" {
 # =============================================================================
 
 variable "keycloak_admin_password" {
-  description = "Keycloak admin password"
+  description = "Keycloak admin password (from GitHub secret DEV_KEYCLOAK_ADMIN_PASSWORD)"
   type        = string
   sensitive   = true
-  default     = "admin"
+  default     = ""
 }
 
 variable "dev_user_password" {

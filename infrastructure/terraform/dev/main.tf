@@ -71,11 +71,8 @@ locals {
     website              = tonumber(data.external.github_variables.result.port_website)
   }
 
-  # Keycloak admin password (from GitHub secrets, fallback to variable)
-  keycloak_admin_password = coalesce(
-    try(data.external.github_secrets.result.keycloak_admin_password, ""),
-    var.keycloak_admin_password
-  )
+  # Keycloak admin password (from GitHub secrets only - no defaults)
+  keycloak_admin_password = data.external.github_secrets.result.keycloak_admin_password
 
   # Service URLs for outputs (dynamically built from ports)
   services = {
@@ -297,6 +294,10 @@ resource "null_resource" "validate_github_secrets" {
     precondition {
       condition     = length(data.external.github_secrets.result.redis_password) > 0
       error_message = "GitHub secret REDIS_${upper(var.environment)}_PASSWORD is required but not set. Run: gh secret set REDIS_${upper(var.environment)}_PASSWORD --body '<password>'"
+    }
+    precondition {
+      condition     = length(data.external.github_secrets.result.keycloak_admin_password) > 0
+      error_message = "GitHub secret ${upper(var.environment)}_KEYCLOAK_ADMIN_PASSWORD is required but not set. Run: gh secret set ${upper(var.environment)}_KEYCLOAK_ADMIN_PASSWORD --body '<password>'"
     }
   }
 }
@@ -533,7 +534,7 @@ resource "null_resource" "keycloak_set_passwords" {
       TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:${local.ports.keycloak}/auth/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=${local.keycloak_admin_password}" \
+        --data-urlencode "password=$KC_ADMIN_PASSWORD" \
         -d "grant_type=password" \
         -d "client_id=admin-cli")
 
@@ -615,6 +616,7 @@ resource "null_resource" "keycloak_set_passwords" {
     EOT
 
     environment = {
+      KC_ADMIN_PASSWORD  = local.keycloak_admin_password
       TEST_USER_PASSWORD = data.external.github_secrets.result.test_user_password
       DEV_USER_PASSWORD  = data.external.github_secrets.result.user_password
       MSYS_NO_PATHCONV   = "1" # Prevent Git Bash from converting Unix paths to Windows paths
@@ -659,7 +661,7 @@ resource "null_resource" "keycloak_set_totp" {
       TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:${local.ports.keycloak}/auth/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=${local.keycloak_admin_password}" \
+        --data-urlencode "password=$KC_ADMIN_PASSWORD" \
         -d "grant_type=password" \
         -d "client_id=admin-cli")
 
@@ -734,6 +736,7 @@ EOF
     EOT
 
     environment = {
+      KC_ADMIN_PASSWORD         = local.keycloak_admin_password
       TEST_USER_TOTP_SECRET_RAW = data.external.github_secrets.result.test_user_totp_secret_raw
       MSYS_NO_PATHCONV          = "1"
     }
@@ -783,6 +786,7 @@ resource "null_resource" "keycloak_sync_customer_realm" {
     EOT
 
     environment = {
+      KC_ADMIN_PASSWORD      = local.keycloak_admin_password
       CUSTOMER_USER_PASSWORD = try(data.external.github_secrets.result.customer_user_password, "")
       MSYS_NO_PATHCONV       = "1"
     }
@@ -818,7 +822,7 @@ resource "null_resource" "keycloak_set_client_secrets" {
       TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:${local.ports.keycloak}/auth/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=${local.keycloak_admin_password}" \
+        --data-urlencode "password=$KC_ADMIN_PASSWORD" \
         -d "grant_type=password" \
         -d "client_id=admin-cli")
 
@@ -899,6 +903,7 @@ resource "null_resource" "keycloak_set_client_secrets" {
     EOT
 
     environment = {
+      KC_ADMIN_PASSWORD         = local.keycloak_admin_password
       MCP_UI_CLIENT_SECRET      = data.external.github_secrets.result.mcp_ui_client_secret
       MCP_GATEWAY_CLIENT_SECRET = data.external.github_secrets.result.mcp_gateway_client_secret
       MSYS_NO_PATHCONV          = "1"
