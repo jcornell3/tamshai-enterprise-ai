@@ -421,6 +421,57 @@ jobs:
           echo "=== Cleaning up ==="
           docker image prune -f
 
+          # =========================================================================
+          # PHOENIX: Ensure all PostgreSQL databases exist
+          # docker-entrypoint-initdb.d scripts only run on first volume creation.
+          # If new databases were added after the volume was initialized, they must
+          # be created manually with their schemas and sample data.
+          # =========================================================================
+          echo "=== Ensuring all PostgreSQL databases exist ==="
+          EXPECTED_DBS="tamshai_hr tamshai_finance tamshai_payroll tamshai_tax"
+          EXISTING_DBS=$(docker exec tamshai-dev-postgres psql -U postgres -t -c "SELECT datname FROM pg_database WHERE datistemplate = false;" | tr -d ' ' | tr '\n' ' ')
+
+          for DB in $EXPECTED_DBS; do
+            if echo "$EXISTING_DBS" | grep -qw "$DB"; then
+              echo "  [OK] $DB exists"
+            else
+              echo "  [CREATE] $DB missing - creating database and loading schema..."
+              docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE $DB OWNER tamshai;"
+              docker exec tamshai-dev-postgres psql -U postgres -d "$DB" -c "GRANT ALL ON SCHEMA public TO tamshai;"
+
+              # Apply schema and sample data from initdb mount points
+              case $DB in
+                tamshai_hr)
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/02-hr-data.sql 2>&1 | tail -1
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/08-hr-time-off-schema.sql 2>&1 | tail -1
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/09-hr-time-off-data.sql 2>&1 | tail -1
+                  ;;
+                tamshai_finance)
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/03-finance-data.sql 2>&1 | tail -1
+                  ;;
+                tamshai_payroll)
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/04-payroll-schema.sql 2>&1 | tail -1
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/05-payroll-data.sql 2>&1 | tail -1
+                  ;;
+                tamshai_tax)
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/06-tax-schema.sql 2>&1 | tail -1
+                  docker exec tamshai-dev-postgres psql -U tamshai -d "$DB" -f /docker-entrypoint-initdb.d/07-tax-data.sql 2>&1 | tail -1
+                  ;;
+              esac
+
+              echo "  [OK] $DB created and initialized"
+            fi
+          done
+
+          # Restart any MCP services that were unhealthy due to missing databases
+          for SVC in tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-payroll tamshai-dev-mcp-tax; do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$SVC" 2>/dev/null || echo "unknown")
+            if [ "$STATUS" = "unhealthy" ]; then
+              echo "  [RESTART] $SVC was unhealthy - restarting..."
+              docker restart "$SVC"
+            fi
+          done
+
           echo "=== Waiting for services ==="
           sleep 45
 
