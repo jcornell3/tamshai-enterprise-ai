@@ -11,7 +11,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.21.2",
     "ioredis": "^5.9.2",
     "opossum": "^9.0.0",
     "pg": "^8.13.0",
