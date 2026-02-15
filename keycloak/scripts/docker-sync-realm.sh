@@ -20,6 +20,12 @@
 #   ./docker-sync-realm.sh dev tamshai-keycloak customers    # Customer realm
 #   ./docker-sync-realm.sh stage keycloak                    # Stage employee realm
 #
+# Required Environment Variables (for corp realm):
+#   MCP_GATEWAY_CLIENT_SECRET     - Set in .env or exported
+#   MCP_UI_CLIENT_SECRET          - Set in .env or exported
+#   MCP_HR_SERVICE_CLIENT_SECRET  - Set in .env or exported
+#   KEYCLOAK_ADMIN_PASSWORD       - Set in .env or exported (stage/prod: required)
+#
 # =============================================================================
 
 set -euo pipefail
@@ -64,32 +70,71 @@ docker exec "$CONTAINER" bash -c "
     find /tmp/lib -name '*.sh' -exec chmod +x {} \;
 "
 
+# =============================================================================
+# Load secrets from .env file (all environments)
+# =============================================================================
+# The sync script requires client secrets (MCP_GATEWAY_CLIENT_SECRET, etc.)
+# Source the .env file so these are available, then validate they exist.
+ENV_FILE="$SCRIPT_DIR/../../infrastructure/docker/.env"
+if [ -f "$ENV_FILE" ]; then
+    echo "Loading secrets from $ENV_FILE..."
+    set -a
+    # shellcheck disable=SC1090
+    source <(grep -v '^#' "$ENV_FILE" | grep -v '^$')
+    set +a
+else
+    echo "WARNING: $ENV_FILE not found - secrets must be exported in environment"
+fi
+
+# =============================================================================
+# Validate required secrets (fail hard if missing)
+# =============================================================================
+if [ "$REALM_TYPE" = "corp" ]; then
+    MISSING_SECRETS=()
+
+    if [ -z "${MCP_GATEWAY_CLIENT_SECRET:-}" ]; then
+        MISSING_SECRETS+=("MCP_GATEWAY_CLIENT_SECRET")
+    fi
+    if [ -z "${MCP_UI_CLIENT_SECRET:-}" ]; then
+        MISSING_SECRETS+=("MCP_UI_CLIENT_SECRET")
+    fi
+    if [ -z "${MCP_HR_SERVICE_CLIENT_SECRET:-}" ]; then
+        MISSING_SECRETS+=("MCP_HR_SERVICE_CLIENT_SECRET")
+    fi
+    if [ "$ENV" != "dev" ] && [ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
+        MISSING_SECRETS+=("KEYCLOAK_ADMIN_PASSWORD")
+    fi
+
+    if [ ${#MISSING_SECRETS[@]} -gt 0 ]; then
+        echo ""
+        echo "ERROR: Required secrets are not set:"
+        for secret in "${MISSING_SECRETS[@]}"; do
+            echo "  - $secret"
+        done
+        echo ""
+        echo "These must be defined in $ENV_FILE or exported in your environment."
+        echo "See infrastructure/docker/.env.example for reference."
+        exit 1
+    fi
+    echo "All required secrets loaded"
+fi
+
 # Run the sync script inside the container
 echo "Running realm sync ($REALM_TYPE)..."
 echo ""
 
-# Pass environment variables for stage/prod and customer realm
+# Pass environment variables to the container
 if [ "$REALM_TYPE" = "customers" ]; then
     docker exec -e CUSTOMER_USER_PASSWORD="${CUSTOMER_USER_PASSWORD:-}" \
         -e KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}" \
         "$CONTAINER" /tmp/$SYNC_SCRIPT "$ENV"
-elif [ "$ENV" = "stage" ] || [ "$ENV" = "prod" ]; then
-    docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
-        "$CONTAINER" /tmp/$SYNC_SCRIPT "$ENV"
 else
-    # Dev environment: source .env to get client secrets
-    # These are required by sync functions (MCP_GATEWAY_CLIENT_SECRET:?, etc.)
-    ENV_FILE="$SCRIPT_DIR/../../infrastructure/docker/.env"
-    if [ -f "$ENV_FILE" ]; then
-        set -a
-        # shellcheck disable=SC1090
-        source <(grep -v '^#' "$ENV_FILE" | grep -v '^$')
-        set +a
-    fi
     docker exec \
-        -e MCP_UI_CLIENT_SECRET="${MCP_UI_CLIENT_SECRET:-}" \
-        -e MCP_GATEWAY_CLIENT_SECRET="${MCP_GATEWAY_CLIENT_SECRET:-}" \
-        -e MCP_HR_SERVICE_CLIENT_SECRET="${MCP_HR_SERVICE_CLIENT_SECRET:-}" \
+        -e KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}" \
+        -e MCP_GATEWAY_CLIENT_SECRET="$MCP_GATEWAY_CLIENT_SECRET" \
+        -e MCP_UI_CLIENT_SECRET="$MCP_UI_CLIENT_SECRET" \
+        -e MCP_HR_SERVICE_CLIENT_SECRET="$MCP_HR_SERVICE_CLIENT_SECRET" \
+        -e TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-}" \
         "$CONTAINER" /tmp/$SYNC_SCRIPT "$ENV"
 fi
 
