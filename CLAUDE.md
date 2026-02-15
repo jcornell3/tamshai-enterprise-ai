@@ -45,41 +45,41 @@ git config user.email
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| **GitHub Account** | `bunnyfoo` | Never use `jcornell3` |
+| **GitHub Account** | `jcornell3` | Never use `bunnyfoo` |
 | **Repository** | `tamshai-enterprise-ai` | Not `tamshai-enterprise-ai-new` |
-| **Token Variable** | `BUNNYFOO_GH_TOKEN` | Never use `GITHUB_TOKEN` |
+| **Token Variable** | `JCORNELL_GH_TOKEN` | Never use `GITHUB_TOKEN` |
 
 **Authentication Method**:
 
 ```bash
 # Authenticate via gh CLI (preferred)
 unset GITHUB_TOKEN
-gh auth login --with-token <<< "$BUNNYFOO_GH_TOKEN"
+gh auth login --with-token <<< "$JCORNELL_GH_TOKEN"
 
 # Verify correct account
-gh api user --jq '.login'  # Must return: bunnyfoo
+gh api user --jq '.login'  # Must return: jcornell3
 ```
 
 **Git Push Method**:
 
-The Windows Credential Manager may cache incorrect credentials (jcornell3) that override gh CLI authentication. To reliably push:
+The Windows Credential Manager may cache incorrect credentials that override gh CLI authentication. To reliably push:
 
 ```bash
 # 1. Unset GITHUB_TOKEN (it may point to wrong account)
 unset GITHUB_TOKEN
 
-# 2. Get bunnyfoo's token from gh CLI
+# 2. Get jcornell3's token from gh CLI
 TOKEN=$(gh auth token)
 
 # 3. Push using token directly (bypasses credential manager)
-git -c credential.helper= push https://bunnyfoo:${TOKEN}@github.com/bunnyfoo/tamshai-enterprise-ai.git main
+git -c credential.helper= push https://jcornell3:${TOKEN}@github.com/jcornell3/tamshai-enterprise-ai.git main
 ```
 
 **Note**: This embeds the token in the command but NOT in git config. The token is ephemeral in the shell session only.
 
 **NEVER**:
 - Use `GITHUB_TOKEN` environment variable (points to wrong account)
-- Push to or reference `jcornell3` repositories
+- Push to or reference `bunnyfoo` repositories
 - Store tokens in `.git/config` or git credential store
 
 ---
@@ -1384,6 +1384,10 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 - [VPS Firewall Justification](docs/security/VPS_FIREWALL_JUSTIFICATION.md)
 - [Security Remediation Plan](docs/archived/keycloak-debugging-2025-12/2025-12-31-security-remediation-plan.md)
 - [Phase 5 Security Analysis](docs/archived/keycloak-debugging-2025-12/2025-12-31-phase5-remaining-issues.md)
+
+### Operations & Deployment
+
+- [VPS Access & Phoenix Rebuild](.claude/vps-access-and-phoenix.md) - SSH access, container names, credentials, Phoenix rebuild procedure
 
 ### Development
 
