@@ -521,7 +521,7 @@ export async function customerListContacts(
     const collection = await getCollection('contacts');
 
     const contacts = await collection
-      .find({ organization_id: userContext.organizationId })
+      .find({ organization_id: String(userContext.organizationId) })
       .sort({ role: 1, last_name: 1 })
       .toArray() as unknown as CustomerContact[];
 
@@ -664,8 +664,8 @@ export async function customerTransferLead(
     // Verify new lead exists in organization
     const collection = await getCollection('contacts');
     const newLead = await collection.findOne({
-      keycloak_user_id: newLeadUserId,
-      organization_id: userContext.organizationId,
+      keycloak_user_id: String(newLeadUserId),
+      organization_id: String(userContext.organizationId),
     });
 
     if (!newLead) {
@@ -819,13 +819,13 @@ export async function executeTransferLead(
 
     // Update current lead to basic
     await collection.updateOne(
-      { keycloak_user_id: currentLeadId, organization_id: organizationId },
+      { keycloak_user_id: String(currentLeadId), organization_id: String(organizationId) },
       { $set: { role: 'basic', updated_at: new Date(now) } }
     );
 
     // Update new lead to lead
     await collection.updateOne(
-      { keycloak_user_id: newLeadId, organization_id: organizationId },
+      { keycloak_user_id: String(newLeadId), organization_id: String(organizationId) },
       { $set: { role: 'lead', updated_at: new Date(now) } }
     );
 

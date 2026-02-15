@@ -154,7 +154,7 @@ describe('CustomerDetailCard', () => {
         />
       );
 
-      const websiteLink = screen.getByRole('link', { name: /acme\.com/i });
+      const websiteLink = screen.getByRole('link', { name: /^acme\.com$/i });
       expect(websiteLink).toHaveAttribute('href', 'https://acme.com');
       expect(websiteLink).toHaveAttribute('target', '_blank');
     });

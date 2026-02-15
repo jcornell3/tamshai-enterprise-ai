@@ -9,16 +9,14 @@ const fs = require('fs');
 // Load environment
 require('dotenv').config({ path: path.join(__dirname, '../../infrastructure/docker/.env') });
 
-const TEST_USER = {
-  username: process.env.TEST_USERNAME || 'test-user.journey',
-  password: process.env.TEST_USER_PASSWORD || '',
-};
+const testUsername = process.env.TEST_USERNAME || 'test-user.journey';
+const testPassword = process.env.TEST_USER_PASSWORD || '';
 
 const BASE_URL = 'https://www.tamshai.local';
 
 async function testAuth() {
-  console.log(`Testing authentication for ${TEST_USER.username}...`);
-  console.log(`Password available: ${TEST_USER.password ? 'YES' : 'NO'}`);
+  console.log(`Testing authentication for ${testUsername}...`);
+  console.log(`Password available: ${testPassword ? 'YES' : 'NO'}`);
 
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -34,8 +32,8 @@ async function testAuth() {
     await page.waitForSelector('#username, input[name="username"]', { timeout: 10000 });
 
     console.log('Filling credentials...');
-    await page.fill('#username, input[name="username"]', TEST_USER.username);
-    await page.fill('#password, input[name="password"]', TEST_USER.password);
+    await page.fill('#username, input[name="username"]', testUsername);
+    await page.fill('#password, input[name="password"]', testPassword);
 
     console.log('Clicking login...');
     await page.click('#kc-login, button[type="submit"]');
@@ -49,7 +47,7 @@ async function testAuth() {
         console.log('TOTP required - checking for secret...');
 
         // Load secret from cache
-        const secretFile = path.join(__dirname, '.totp-secrets', `${TEST_USER.username}-dev.secret`);
+        const secretFile = path.join(__dirname, '.totp-secrets', `${testUsername}-dev.secret`);
         if (fs.existsSync(secretFile)) {
           const secret = fs.readFileSync(secretFile, 'utf-8').trim();
           console.log(`Secret loaded from cache: ${secret.substring(0, 10)}...`);

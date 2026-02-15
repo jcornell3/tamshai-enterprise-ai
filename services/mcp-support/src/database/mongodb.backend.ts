@@ -173,7 +173,7 @@ export class MongoDBBackend implements ISupportBackend {
     // Ensure updated_at is set
     safeUpdates['updated_at'] = new Date().toISOString();
 
-    const result = await ticketsCollection.updateOne({ ticket_id: ticketId }, { $set: safeUpdates });
+    const result = await ticketsCollection.updateOne({ ticket_id: String(ticketId) }, { $set: safeUpdates });
 
     return result.matchedCount > 0;
   }

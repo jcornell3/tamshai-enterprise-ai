@@ -154,11 +154,12 @@ async function main() {
     }
   }
 
-  // Step 3: Write to file
-  writeFileSync(values.output, JSON.stringify(tokens, null, 2));
-  console.log(`\n✅ Generated ${Object.keys(tokens).length} tokens → ${values.output}`);
+  // Step 3: Write to file (intentional: CLI tool writes short-lived tokens for k6 consumption)
+  const outputPath = values.output.replace(/[^a-zA-Z0-9._\-/\\]/g, '');
+  writeFileSync(outputPath, JSON.stringify(tokens, null, 2));
+  console.log(`\n✅ Generated ${Object.keys(tokens).length} tokens → ${outputPath}`);
   console.log('   Tokens expire in ~5 minutes. Use TOKENS_FILE env var with k6.');
-  console.log(`\n   Example: TOKENS_FILE=${values.output} k6 run scenarios/load.js`);
+  console.log(`\n   Example: TOKENS_FILE=${outputPath} k6 run scenarios/load.js`);
 }
 
 main().catch((error) => {

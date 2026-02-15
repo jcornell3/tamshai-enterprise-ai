@@ -303,15 +303,18 @@ export class MarkdownParser {
     text = text.replace(/^[-*+]\s+/gm, '');
     text = text.replace(/^\d+\.\s+/gm, '');
 
-    // Remove HTML tags (including JSON-LD script tags)
-    // lgtm[js/bad-tag-filter] lgtm[js/incomplete-multi-character-sanitization] - stripping for text extraction, not security
-    text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-    // lgtm[js/incomplete-multi-character-sanitization] - stripping for text extraction, not security
-    text = text.replace(/<[^>]+>/g, '');
-
-    // Remove HTML comments
-    // lgtm[js/incomplete-multi-character-sanitization] - stripping for text extraction, not security
-    text = text.replace(/<!--[\s\S]*?-->/g, '');
+    // Remove HTML tags and comments for text extraction (not security sanitization).
+    // Use loop to handle nested/overlapping cases that single-pass regex misses.
+    let prev = '';
+    while (prev !== text) {
+      prev = text;
+      // Remove script tags with content
+      text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      // Remove all HTML tags
+      text = text.replace(/<[^>]+>/g, '');
+      // Remove HTML comments
+      text = text.replace(/<!--[\s\S]*?-->/g, '');
+    }
 
     // Collapse multiple newlines and trim
     text = text.replace(/\n{3,}/g, '\n\n').trim();
