@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -172,7 +172,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -255,7 +255,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -316,7 +316,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -365,7 +365,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -453,7 +453,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -630,7 +630,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
@@ -656,7 +656,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
