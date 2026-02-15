@@ -226,6 +226,36 @@ resource "random_password" "mcp_hr_service_secret" {
   special = false
 }
 
+resource "random_password" "redis_password" {
+  length  = 24
+  special = false
+}
+
+resource "random_password" "elastic_password" {
+  length  = 24
+  special = false
+}
+
+resource "random_password" "vault_dev_root_token" {
+  length  = 24
+  special = false
+}
+
+resource "random_password" "mcp_internal_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "mcp_ui_client_secret" {
+  length  = 32
+  special = false
+}
+
+resource "random_password" "e2e_admin_api_key" {
+  length  = 32
+  special = false
+}
+
 # SECURITY: Root password stored in encrypted Terraform Cloud state.
 # Only used for emergency console access. SSH key auth preferred.
 #checkov:skip=CKV_SECRET_6:Password stored in encrypted Terraform Cloud state. Access restricted via workspace RBAC.
@@ -309,6 +339,44 @@ resource "null_resource" "update_github_keycloak_secret" {
   }
 
   depends_on = [random_password.keycloak_admin_password]
+}
+
+# Auto-update additional GitHub secrets so deploy-vps.yml has matching values
+resource "null_resource" "update_github_stage_secrets" {
+  count = var.auto_update_github_secrets ? 1 : 0
+
+  triggers = {
+    redis_hash    = sha256(random_password.redis_password.result)
+    elastic_hash  = sha256(random_password.elastic_password.result)
+    vault_hash    = sha256(random_password.vault_dev_root_token.result)
+    mcp_int_hash  = sha256(random_password.mcp_internal_secret.result)
+    mcp_ui_hash   = sha256(random_password.mcp_ui_client_secret.result)
+    e2e_api_hash  = sha256(random_password.e2e_admin_api_key.result)
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Updating GitHub stage secrets..."
+      echo "${random_password.redis_password.result}" | gh secret set STAGE_REDIS_PASSWORD --repo "${var.github_repo}"
+      echo "${random_password.elastic_password.result}" | gh secret set ELASTIC_PASSWORD --repo "${var.github_repo}"
+      echo "${random_password.vault_dev_root_token.result}" | gh secret set VAULT_DEV_ROOT_TOKEN_ID --repo "${var.github_repo}"
+      echo "${random_password.mcp_internal_secret.result}" | gh secret set MCP_INTERNAL_SECRET --repo "${var.github_repo}"
+      echo "${random_password.mcp_ui_client_secret.result}" | gh secret set MCP_UI_CLIENT_SECRET --repo "${var.github_repo}"
+      echo "${random_password.e2e_admin_api_key.result}" | gh secret set E2E_ADMIN_API_KEY --repo "${var.github_repo}"
+      echo "GitHub stage secrets updated successfully"
+    EOT
+
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [
+    random_password.redis_password,
+    random_password.elastic_password,
+    random_password.vault_dev_root_token,
+    random_password.mcp_internal_secret,
+    random_password.mcp_ui_client_secret,
+    random_password.e2e_admin_api_key,
+  ]
 }
 
 # =============================================================================
@@ -423,6 +491,12 @@ locals {
     stage_user_password          = local.stage_user_password_resolved
     test_user_password           = local.test_user_password
     test_user_totp_secret_raw    = local.test_user_totp_secret_raw
+    redis_password               = random_password.redis_password.result
+    elastic_password             = random_password.elastic_password.result
+    vault_dev_root_token         = random_password.vault_dev_root_token.result
+    mcp_internal_secret          = random_password.mcp_internal_secret.result
+    mcp_ui_client_secret         = random_password.mcp_ui_client_secret.result
+    e2e_admin_api_key            = random_password.e2e_admin_api_key.result
   })
 }
 

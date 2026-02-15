@@ -90,6 +90,46 @@ write_files:
       # Keycloak client secrets (must match realm-export-stage.json)
       MCP_GATEWAY_CLIENT_SECRET=mcp-gateway-secret
 
+      # Secrets (Terraform-generated)
+      REDIS_PASSWORD=${redis_password}
+      ELASTIC_PASSWORD=${elastic_password}
+      VAULT_DEV_ROOT_TOKEN=${vault_dev_root_token}
+      MCP_INTERNAL_SECRET=${mcp_internal_secret}
+      MCP_UI_CLIENT_SECRET=${mcp_ui_client_secret}
+      E2E_ADMIN_API_KEY=${e2e_admin_api_key}
+
+      # Port Configuration
+      PORT_CADDY_HTTP=80
+      PORT_CADDY_HTTPS=443
+      PORT_KEYCLOAK=8180
+      PORT_KONG_PROXY=8100
+      PORT_KONG_ADMIN=8101
+      PORT_VAULT=8200
+      PORT_REDIS=6380
+      PORT_MCP_GATEWAY=3100
+      PORT_MCP_HR=3101
+      PORT_MCP_FINANCE=3102
+      PORT_MCP_SALES=3103
+      PORT_MCP_SUPPORT=3104
+      PORT_MCP_JOURNEY=3105
+      PORT_MCP_PAYROLL=3106
+      PORT_MCP_TAX=3117
+      PORT_MCP_UI=3118
+      PORT_WEB_PORTAL=4000
+      PORT_WEB_HR=4001
+      PORT_WEB_FINANCE=4002
+      PORT_WEB_SALES=4003
+      PORT_WEB_SUPPORT=4004
+      PORT_WEB_PAYROLL=4005
+      PORT_WEB_TAX=4006
+      PORT_WEB_CUSTOMER_SUPPORT=4007
+      PORT_WEBSITE=8080
+      PORT_POSTGRES=5433
+      PORT_MONGODB=27018
+      PORT_ELASTICSEARCH=9201
+      PORT_MINIO_API=9100
+      PORT_MINIO_CONSOLE=9102
+
       # Docker compose settings for VPS
       COMPOSE_PROJECT_NAME=tamshai-vps
       KEYCLOAK_MODE=start
@@ -178,14 +218,15 @@ write_files:
 
       # Pull latest images
       echo "Pulling Docker images..."
-      docker compose pull
+      cd /opt/tamshai/infrastructure/docker
+      docker compose --env-file ../../.env pull
 
-      # Deploy with optional build (uses root docker-compose.yml)
+      # Deploy with optional build (uses infrastructure/docker/docker-compose.yml)
       echo "Deploying services..."
       if [ -n "$BUILD_FLAG" ]; then
-        docker compose build $NO_CACHE_FLAG && docker compose up -d
+        docker compose --env-file ../../.env build $NO_CACHE_FLAG && docker compose --env-file ../../.env up -d
       else
-        docker compose up -d
+        docker compose --env-file ../../.env up -d
       fi
 
       # Cleanup old images
@@ -294,6 +335,9 @@ runcmd:
   # Move generated .env file from temp location
   - mv /tmp/tamshai.env /opt/tamshai/.env
 
+  # Symlink .env so docker compose in infrastructure/docker/ can find it
+  - ln -sf /opt/tamshai/.env /opt/tamshai/infrastructure/docker/.env
+
   # Set ownership
   - chown -R tamshai:tamshai /opt/tamshai
 
@@ -303,8 +347,8 @@ runcmd:
   - chown tamshai:tamshai /opt/tamshai/.webhook-secret
 
   # Start services (build from source with no cache, pull base images)
-  # Uses root docker-compose.yml with VPS environment variables
-  - cd /opt/tamshai && docker compose build --no-cache && docker compose up -d
+  # Uses infrastructure/docker/docker-compose.yml with .env symlinked
+  - cd /opt/tamshai/infrastructure/docker && docker compose --env-file ../../.env build --no-cache && docker compose --env-file ../../.env up -d
 
   # Wait for Keycloak to be healthy before syncing
   - |
@@ -325,13 +369,17 @@ runcmd:
   # Note: Use sed to extract values after first '=' to handle passwords with special chars
   - |
     cd /opt/tamshai
-    docker cp keycloak/scripts tamshai-keycloak:/tmp/keycloak-scripts
-    docker exec -u 0 tamshai-keycloak bash -c 'find /tmp/keycloak-scripts -name "*.sh" -exec sed -i "s/\r$//" {} \; && chmod -R 755 /tmp/keycloak-scripts'
+    docker cp keycloak/scripts tamshai-dev-keycloak:/tmp/keycloak-scripts
+    docker exec -u 0 tamshai-dev-keycloak bash -c 'find /tmp/keycloak-scripts -name "*.sh" -exec sed -i "s/\r$//" {} \; && chmod -R 755 /tmp/keycloak-scripts'
     KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env)
     HR_SECRET=$(sed -n "s/^MCP_HR_SERVICE_CLIENT_SECRET=//p" .env)
+    GW_SECRET=$(sed -n "s/^MCP_GATEWAY_CLIENT_SECRET=//p" .env)
+    UI_SECRET=$(sed -n "s/^MCP_UI_CLIENT_SECRET=//p" .env)
     docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KC_PASS" \
       -e MCP_HR_SERVICE_CLIENT_SECRET="$HR_SECRET" \
-      tamshai-keycloak /tmp/keycloak-scripts/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
+      -e MCP_GATEWAY_CLIENT_SECRET="$GW_SECRET" \
+      -e MCP_UI_CLIENT_SECRET="$UI_SECRET" \
+      tamshai-dev-keycloak /tmp/keycloak-scripts/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
   # NOTE: Identity sync is now handled by mcp-hr on startup (Phoenix Architecture)
   # The mcp-hr service automatically reconciles HR employees to Keycloak users
