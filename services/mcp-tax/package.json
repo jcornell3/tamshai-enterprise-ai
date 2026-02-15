@@ -18,7 +18,7 @@
     "@tamshai/shared": "file:../shared",
     "dotenv": "^16.3.1",
     "express": "^4.21.2",
-    "ioredis": "^5.3.2",
+    "ioredis": "^5.9.2",
     "pg": "^8.11.3",
     "pg-format": "^1.0.4",
     "uuid": "^9.0.1",

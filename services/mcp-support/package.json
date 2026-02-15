@@ -21,7 +21,7 @@
     "@tamshai/shared": "file:../shared",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "ioredis": "^5.8.2",
+    "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.1.0",
     "mongodb": "^6.3.0",
