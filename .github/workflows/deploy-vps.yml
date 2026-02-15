@@ -259,6 +259,70 @@ jobs:
           }
           echo "SSH key configured"
 
+      - name: Ensure VPS .env has all required variables
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+          # Secrets that may be missing from old VPS .env files
+          REDIS_PASSWORD: ${{ secrets.STAGE_REDIS_PASSWORD || 'changeme' }}
+          ELASTIC_PASSWORD: ${{ secrets.ELASTIC_PASSWORD }}
+          VAULT_DEV_ROOT_TOKEN: ${{ secrets.VAULT_DEV_ROOT_TOKEN_ID || 'dev-root-token' }}
+          MCP_INTERNAL_SECRET: ${{ secrets.MCP_INTERNAL_SECRET }}
+          MCP_UI_CLIENT_SECRET: ${{ secrets.MCP_UI_CLIENT_SECRET }}
+          E2E_ADMIN_API_KEY: ${{ secrets.E2E_ADMIN_API_KEY }}
+        run: |
+          SSH_CMD="ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          # Build a list of var=value pairs to ensure exist in .env
+          # Only appends if the variable is not already present
+          ENSURE_SCRIPT='cd /opt/tamshai && ensure() { grep -q "^$1=" .env 2>/dev/null || echo "$1=$2" >> .env; }'
+
+          # Secret variables (may be missing from original bootstrap)
+          ENSURE_SCRIPT="$ENSURE_SCRIPT"'
+          ensure REDIS_PASSWORD "'"$REDIS_PASSWORD"'"
+          ensure ELASTIC_PASSWORD "'"$ELASTIC_PASSWORD"'"
+          ensure VAULT_DEV_ROOT_TOKEN "'"$VAULT_DEV_ROOT_TOKEN"'"
+          ensure MCP_INTERNAL_SECRET "'"$MCP_INTERNAL_SECRET"'"
+          ensure MCP_UI_CLIENT_SECRET "'"$MCP_UI_CLIENT_SECRET"'"
+          ensure E2E_ADMIN_API_KEY "'"$E2E_ADMIN_API_KEY"'"
+          ensure KEYCLOAK_ADMIN admin'
+
+          # Port variables (all with standard defaults)
+          ENSURE_SCRIPT="$ENSURE_SCRIPT"'
+          ensure PORT_REDIS 6380
+          ensure PORT_VAULT 8200
+          ensure PORT_CADDY_HTTP 80
+          ensure PORT_CADDY_HTTPS 443
+          ensure PORT_KEYCLOAK 8180
+          ensure PORT_KONG_PROXY 8100
+          ensure PORT_KONG_ADMIN 8101
+          ensure PORT_MCP_GATEWAY 3100
+          ensure PORT_MCP_UI 3118
+          ensure PORT_MCP_HR 3101
+          ensure PORT_MCP_FINANCE 3102
+          ensure PORT_MCP_SALES 3103
+          ensure PORT_MCP_SUPPORT 3104
+          ensure PORT_MCP_JOURNEY 3105
+          ensure PORT_MCP_PAYROLL 3106
+          ensure PORT_MCP_TAX 3117
+          ensure PORT_WEB_PORTAL 4000
+          ensure PORT_WEB_HR 4001
+          ensure PORT_WEB_FINANCE 4002
+          ensure PORT_WEB_SALES 4003
+          ensure PORT_WEB_SUPPORT 4004
+          ensure PORT_WEB_PAYROLL 4005
+          ensure PORT_WEB_TAX 4006
+          ensure PORT_WEB_CUSTOMER_SUPPORT 4007
+          ensure PORT_WEBSITE 8080
+          ensure PORT_POSTGRES 5433
+          ensure PORT_MONGODB 27018
+          ensure PORT_ELASTICSEARCH 9201
+          ensure PORT_MINIO_API 9100
+          ensure PORT_MINIO_CONSOLE 9102'
+
+          $SSH_CMD "$ENSURE_SCRIPT"
+          echo "VPS .env updated with any missing variables"
+
       - name: Deploy to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -295,48 +359,6 @@ jobs:
           echo "[OK] .env paths updated for infrastructure/docker/ working directory"
 
           echo "=== Loading environment ==="
-          export $(cat .env | grep -v '^#' | xargs)
-
-          # =========================================================================
-          # Ensure ALL required variables exist in .env
-          # The VPS .env may be outdated — append any missing vars with defaults.
-          # docker compose --env-file reads .env directly, so exported vars aren't enough.
-          # =========================================================================
-          ensure_var() { grep -q "^$1=" .env || echo "$1=$2" >> .env; }
-
-          # Port variables (source of truth: infrastructure/docker/.env.example)
-          ensure_var PORT_REDIS 6380
-          ensure_var PORT_VAULT 8200
-          ensure_var PORT_CADDY_HTTP 80
-          ensure_var PORT_CADDY_HTTPS 443
-          ensure_var PORT_KEYCLOAK 8180
-          ensure_var PORT_KONG_PROXY 8100
-          ensure_var PORT_KONG_ADMIN 8101
-          ensure_var PORT_MCP_GATEWAY 3100
-          ensure_var PORT_MCP_UI 3118
-          ensure_var PORT_MCP_HR 3101
-          ensure_var PORT_MCP_FINANCE 3102
-          ensure_var PORT_MCP_SALES 3103
-          ensure_var PORT_MCP_SUPPORT 3104
-          ensure_var PORT_MCP_JOURNEY 3105
-          ensure_var PORT_MCP_PAYROLL 3106
-          ensure_var PORT_MCP_TAX 3117
-          ensure_var PORT_WEB_PORTAL 4000
-          ensure_var PORT_WEB_HR 4001
-          ensure_var PORT_WEB_FINANCE 4002
-          ensure_var PORT_WEB_SALES 4003
-          ensure_var PORT_WEB_SUPPORT 4004
-          ensure_var PORT_WEB_PAYROLL 4005
-          ensure_var PORT_WEB_TAX 4006
-          ensure_var PORT_WEB_CUSTOMER_SUPPORT 4007
-          ensure_var PORT_WEBSITE 8080
-          ensure_var PORT_POSTGRES 5433
-          ensure_var PORT_MONGODB 27018
-          ensure_var PORT_ELASTICSEARCH 9201
-          ensure_var PORT_MINIO_API 9100
-          ensure_var PORT_MINIO_CONSOLE 9102
-
-          # Reload with any additions
           export $(cat .env | grep -v '^#' | xargs)
 
           # =========================================================================
