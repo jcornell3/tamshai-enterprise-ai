@@ -41,7 +41,7 @@ jobs:
     uses: ./.github/workflows/deploy-mcp-service.yml
     with:
       service-name: mcp-journey
-      health-check-port: '3105'
+      health-check-port: ${{ vars.DEV_MCP_JOURNEY }}
       environment: ${{ github.event.inputs.environment || 'staging' }}
       rollback: ${{ github.event.inputs.rollback == 'true' }}
     secrets:

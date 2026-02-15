@@ -605,7 +605,7 @@ jobs:
 
             # Health check
             sleep 15
-            if ! curl -f http://localhost:3100/health; then
+            if ! curl -f http://localhost:\${PORT_MCP_GATEWAY}/health; then
               echo "Health check failed, rolling back"
               docker compose rollback mcp-gateway
               exit 1

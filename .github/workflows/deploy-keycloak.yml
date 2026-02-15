@@ -39,7 +39,7 @@ concurrency:
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
   SERVICE_NAME: keycloak
-  HEALTH_CHECK_URL: http://localhost:8180/health/ready
+  HEALTH_CHECK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/health/ready
   HEALTH_CHECK_TIMEOUT: 60
 
 permissions:

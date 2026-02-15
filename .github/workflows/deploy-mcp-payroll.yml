@@ -41,7 +41,7 @@ jobs:
     uses: ./.github/workflows/deploy-mcp-service.yml
     with:
       service-name: mcp-payroll
-      health-check-port: '3106'
+      health-check-port: ${{ vars.DEV_MCP_PAYROLL }}
       environment: ${{ github.event.inputs.environment || 'staging' }}
       rollback: ${{ github.event.inputs.rollback == 'true' }}
     secrets:

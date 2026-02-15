@@ -149,8 +149,8 @@ jobs:
           KEYCLOAK_ISSUER: http://localhost:8080/realms/tamshai
           KEYCLOAK_URL: http://localhost:8080
           KC_HOSTNAME: localhost
-          VITE_MCP_GATEWAY_URL: http://localhost:3100
-          VITE_KEYCLOAK_URL: http://localhost:8180
+          VITE_MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
+          VITE_KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
           ELASTIC_PASSWORD: ${{ secrets.ELASTIC_PASSWORD }}
           VAULT_DEV_ROOT_TOKEN: ci_test_value
           MCP_INTERNAL_SECRET: ci_test_value
@@ -298,38 +298,38 @@ jobs:
           ensure E2E_ADMIN_API_KEY "'"$E2E_ADMIN_API_KEY"'"
           ensure KEYCLOAK_ADMIN admin'
 
-          # Port variables (all with standard defaults)
+          # Port variables (sourced from GitHub repository variables)
           ENSURE_SCRIPT="$ENSURE_SCRIPT"'
-          ensure PORT_REDIS 6380
-          ensure PORT_VAULT 8200
-          ensure PORT_CADDY_HTTP 80
-          ensure PORT_CADDY_HTTPS 443
-          ensure PORT_KEYCLOAK 8180
-          ensure PORT_KONG_PROXY 8100
-          ensure PORT_KONG_ADMIN 8101
-          ensure PORT_MCP_GATEWAY 3100
-          ensure PORT_MCP_UI 3108
-          ensure PORT_MCP_HR 3101
-          ensure PORT_MCP_FINANCE 3102
-          ensure PORT_MCP_SALES 3103
-          ensure PORT_MCP_SUPPORT 3104
-          ensure PORT_MCP_JOURNEY 3105
-          ensure PORT_MCP_PAYROLL 3106
-          ensure PORT_MCP_TAX 3107
-          ensure PORT_WEB_PORTAL 4000
-          ensure PORT_WEB_HR 4001
-          ensure PORT_WEB_FINANCE 4002
-          ensure PORT_WEB_SALES 4003
-          ensure PORT_WEB_SUPPORT 4004
-          ensure PORT_WEB_PAYROLL 4005
-          ensure PORT_WEB_TAX 4006
-          ensure PORT_WEB_CUSTOMER_SUPPORT 4007
-          ensure PORT_WEBSITE 8080
-          ensure PORT_POSTGRES 5433
-          ensure PORT_MONGODB 27018
-          ensure PORT_ELASTICSEARCH 9201
-          ensure PORT_MINIO_API 9100
-          ensure PORT_MINIO_CONSOLE 9102'
+          ensure PORT_REDIS '"${{ vars.DEV_REDIS }}"'
+          ensure PORT_VAULT '"${{ vars.DEV_VAULT }}"'
+          ensure PORT_CADDY_HTTP '"${{ vars.DEV_CADDY_HTTP }}"'
+          ensure PORT_CADDY_HTTPS '"${{ vars.DEV_CADDY_HTTPS }}"'
+          ensure PORT_KEYCLOAK '"${{ vars.DEV_KEYCLOAK }}"'
+          ensure PORT_KONG_PROXY '"${{ vars.DEV_KONG_PROXY }}"'
+          ensure PORT_KONG_ADMIN '"${{ vars.DEV_KONG_ADMIN }}"'
+          ensure PORT_MCP_GATEWAY '"${{ vars.DEV_MCP_GATEWAY }}"'
+          ensure PORT_MCP_UI '"${{ vars.DEV_MCP_UI }}"'
+          ensure PORT_MCP_HR '"${{ vars.DEV_MCP_HR }}"'
+          ensure PORT_MCP_FINANCE '"${{ vars.DEV_MCP_FINANCE }}"'
+          ensure PORT_MCP_SALES '"${{ vars.DEV_MCP_SALES }}"'
+          ensure PORT_MCP_SUPPORT '"${{ vars.DEV_MCP_SUPPORT }}"'
+          ensure PORT_MCP_JOURNEY '"${{ vars.DEV_MCP_JOURNEY }}"'
+          ensure PORT_MCP_PAYROLL '"${{ vars.DEV_MCP_PAYROLL }}"'
+          ensure PORT_MCP_TAX '"${{ vars.DEV_MCP_TAX }}"'
+          ensure PORT_WEB_PORTAL '"${{ vars.DEV_WEB_PORTAL }}"'
+          ensure PORT_WEB_HR '"${{ vars.DEV_WEB_HR }}"'
+          ensure PORT_WEB_FINANCE '"${{ vars.DEV_WEB_FINANCE }}"'
+          ensure PORT_WEB_SALES '"${{ vars.DEV_WEB_SALES }}"'
+          ensure PORT_WEB_SUPPORT '"${{ vars.DEV_WEB_SUPPORT }}"'
+          ensure PORT_WEB_PAYROLL '"${{ vars.DEV_WEB_PAYROLL }}"'
+          ensure PORT_WEB_TAX '"${{ vars.DEV_WEB_TAX }}"'
+          ensure PORT_WEB_CUSTOMER_SUPPORT '"${{ vars.DEV_WEB_CUSTOMER_SUPPORT }}"'
+          ensure PORT_WEBSITE '"${{ vars.DEV_WEBSITE }}"'
+          ensure PORT_POSTGRES '"${{ vars.DEV_POSTGRES }}"'
+          ensure PORT_MONGODB '"${{ vars.DEV_MONGODB }}"'
+          ensure PORT_ELASTICSEARCH '"${{ vars.DEV_ELASTICSEARCH }}"'
+          ensure PORT_MINIO_API '"${{ vars.DEV_MINIO_API }}"'
+          ensure PORT_MINIO_CONSOLE '"${{ vars.DEV_MINIO_CONSOLE }}"''
 
           $SSH_CMD "$ENSURE_SCRIPT"
           echo "VPS .env updated with any missing variables"
@@ -487,7 +487,7 @@ jobs:
           sleep 45
 
           echo "=== Health check ==="
-          curl -sf http://localhost:3100/health && echo "[OK] MCP Gateway: healthy" || echo "[WARN] MCP Gateway: still starting..."
+          curl -sf http://localhost:${{ vars.DEV_MCP_GATEWAY }}/health && echo "[OK] MCP Gateway: healthy" || echo "[WARN] MCP Gateway: still starting..."
           curl -sf http://localhost:8080/auth/health/ready && echo "[OK] Keycloak: healthy" || echo "[WARN] Keycloak: still starting..."
 
           echo "=== Waiting for Keycloak to be ready ==="
