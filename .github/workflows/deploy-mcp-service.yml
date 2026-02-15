@@ -94,10 +94,16 @@ jobs:
             echo "No existing image to tag for rollback"
           fi
 
-          # Pull latest code
-          git update-ref -d refs/remotes/origin/main 2>/dev/null || true
-          git fetch -f origin main
-          git reset --hard origin/main
+          # Pull latest code (with lock retry for concurrent deploys)
+          for attempt in 1 2 3; do
+            rm -f /opt/tamshai/.git/index.lock 2>/dev/null || true
+            git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+            if git fetch -f origin main && git reset --hard origin/main; then
+              break
+            fi
+            echo "Git locked (attempt \$attempt/3), retrying in 5s..."
+            sleep 5
+          done
 
           # Change to docker compose directory
           cd infrastructure/docker
