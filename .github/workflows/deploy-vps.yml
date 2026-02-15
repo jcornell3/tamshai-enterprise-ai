@@ -415,7 +415,7 @@ jobs:
           # Always restart Kong to reload declarative config
           # (Docker doesn't restart Kong when only the mounted config file changes)
           echo "=== Restarting Kong to load updated config ==="
-          docker restart tamshai-kong
+          docker restart tamshai-dev-kong
           sleep 5
 
           echo "=== Cleaning up ==="
@@ -444,54 +444,54 @@ jobs:
             echo "=== Re-seeding sample data (clean reload) ==="
 
             echo "  [1/5] Stopping MCP services..."
-            docker stop tamshai-mcp-hr tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support || true
+            docker stop tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support || true
 
             echo "  [2/5] Reloading HR data (PostgreSQL)..."
-            docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_hr;" && \
-            docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_hr OWNER tamshai;" && \
-            docker exec -i tamshai-postgres psql -U tamshai -d tamshai_hr < sample-data/hr-data.sql && \
+            docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_hr;" && \
+            docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_hr OWNER tamshai;" && \
+            docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_hr < sample-data/hr-data.sql && \
               echo "  [OK] HR database dropped and reloaded" || \
               echo "  [ERROR] HR data reload failed"
 
             echo "  [3/5] Reloading Finance data (PostgreSQL)..."
-            docker exec tamshai-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
-            docker exec tamshai-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
-            docker exec -i tamshai-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql && \
+            docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
+            docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
+            docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql && \
               echo "  [OK] Finance database dropped and reloaded" || \
               echo "  [ERROR] Finance data reload failed"
 
             echo "  [4/5] Reloading Sales data (MongoDB)..."
             # Get MongoDB password from environment
             MONGODB_PASSWORD=$(grep '^MONGODB_PASSWORD=' .env | cut -d= -f2)
-            docker exec -i tamshai-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js && \
+            docker exec -i tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js && \
               echo "  [OK] Sales data reloaded (MongoDB script handles drop/recreate)" || \
               echo "  [ERROR] Sales data reload failed"
 
             echo "  [5/5] Reloading Support data (Elasticsearch)..."
             # Delete existing indexes
-            docker exec tamshai-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
+            docker exec tamshai-dev-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
             # Bulk load fresh data
-            cat sample-data/support-data.ndjson | docker exec -i tamshai-elasticsearch curl -X POST "http://localhost:9200/_bulk" \
+            cat sample-data/support-data.ndjson | docker exec -i tamshai-dev-elasticsearch curl -X POST "http://localhost:9200/_bulk" \
               -H "Content-Type: application/x-ndjson" --data-binary @- 2>/dev/null && \
               echo "  [OK] Support indexes deleted and reloaded" || \
               echo "  [ERROR] Support data reload failed"
 
             echo "=== Restarting MCP services ==="
-            docker start tamshai-mcp-hr tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support
-            docker restart tamshai-mcp-gateway
+            docker start tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support
+            docker restart tamshai-dev-mcp-gateway
             sleep 10
 
             echo "=== Verifying data counts ==="
             echo "  HR employees:"
-            docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" || true
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" || true
             echo "  Finance budgets (FY2025):"
-            docker exec tamshai-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" || true
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" || true
             echo "  Sales deals:"
-            docker exec tamshai-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin tamshai_sales --quiet --eval "db.deals.countDocuments()" || true
+            docker exec tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin tamshai_sales --quiet --eval "db.deals.countDocuments()" || true
             echo "  Support tickets:"
-            docker exec tamshai-elasticsearch curl -s "http://localhost:9200/support_tickets/_count" | grep -o '"count":[0-9]*' || true
+            docker exec tamshai-dev-elasticsearch curl -s "http://localhost:9200/support_tickets/_count" | grep -o '"count":[0-9]*' || true
             echo "  Knowledge base articles:"
-            docker exec tamshai-elasticsearch curl -s "http://localhost:9200/knowledge_base/_count" | grep -o '"count":[0-9]*' || true
+            docker exec tamshai-dev-elasticsearch curl -s "http://localhost:9200/knowledge_base/_count" | grep -o '"count":[0-9]*' || true
           else
             echo "=== Skipping sample data re-seed (use reseed_data=true to enable) ==="
           fi
@@ -502,14 +502,14 @@ jobs:
           # may not exist if this is a fresh deployment. Load if needed.
           # =========================================================================
           echo "=== Ensuring HR sample data exists (Phoenix principle) ==="
-          HR_COUNT=$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
+          HR_COUNT=$(docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
 
           if [ "$HR_COUNT" = "0" ] || [ -z "$HR_COUNT" ]; then
             echo "[INFO] No HR employees found - loading sample data..."
             # Check if hr schema exists, if not load the full HR data file
-            if ! docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -c "\\dt hr.*" 2>/dev/null | grep -q employees; then
+            if ! docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -c "\\dt hr.*" 2>/dev/null | grep -q employees; then
               echo "[INFO] HR schema not found - initializing from sample-data/hr-data.sql"
-              docker exec -i tamshai-postgres psql -U tamshai -d tamshai_hr < /opt/tamshai/sample-data/hr-data.sql && \
+              docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_hr < /opt/tamshai/sample-data/hr-data.sql && \
                 echo "[OK] HR sample data loaded successfully" || \
                 echo "[ERROR] Failed to load HR sample data"
             else
@@ -517,7 +517,7 @@ jobs:
               echo "[WARN] Run deployment with reseed_data=true to reload HR employees"
             fi
             # Verify again
-            HR_COUNT=$(docker exec tamshai-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
+            HR_COUNT=$(docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null | tr -d ' ' || echo "0")
           fi
 
           echo "[INFO] HR employees in database: $HR_COUNT"
@@ -529,10 +529,10 @@ jobs:
           # Copy sync script and library modules, then fix permissions
           # IMPORTANT: Remove old /tmp/lib first to prevent docker cp nesting issue
           # (docker cp creates /tmp/lib/lib if /tmp/lib already exists)
-          docker exec -u 0 tamshai-keycloak rm -rf /tmp/lib /tmp/sync-realm.sh 2>/dev/null || true
-          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-keycloak:/tmp/sync-realm.sh
-          docker cp /opt/tamshai/keycloak/scripts/lib tamshai-keycloak:/tmp/lib
-          docker exec -u 0 tamshai-keycloak bash -c '
+          docker exec -u 0 tamshai-dev-keycloak rm -rf /tmp/lib /tmp/sync-realm.sh 2>/dev/null || true
+          docker cp /opt/tamshai/keycloak/scripts/sync-realm.sh tamshai-dev-keycloak:/tmp/sync-realm.sh
+          docker cp /opt/tamshai/keycloak/scripts/lib tamshai-dev-keycloak:/tmp/lib
+          docker exec -u 0 tamshai-dev-keycloak bash -c '
             sed -i "s/\r$//" /tmp/sync-realm.sh && chmod 755 /tmp/sync-realm.sh
             find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \; -exec chmod 755 {} \;
           ' || true
@@ -542,9 +542,9 @@ jobs:
             -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
             -e MCP_HR_SERVICE_CLIENT_SECRET="$MCP_HR_SERVICE_CLIENT_SECRET" \
             -e TEST_USER_PASSWORD="${{ secrets.TEST_USER_PASSWORD }}" \
-            tamshai-keycloak /tmp/sync-realm.sh stage || {
+            tamshai-dev-keycloak /tmp/sync-realm.sh stage || {
               echo "[WARN] Keycloak sync failed - clients may need manual configuration"
-              echo "Run: ./keycloak/scripts/docker-sync-realm.sh stage tamshai-keycloak"
+              echo "Run: ./keycloak/scripts/docker-sync-realm.sh stage tamshai-dev-keycloak"
             }
 
           echo "=== Syncing HR users to Keycloak ==="
