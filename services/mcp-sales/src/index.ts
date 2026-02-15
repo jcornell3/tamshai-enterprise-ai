@@ -12,23 +12,17 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import winston from 'winston';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
-import { requireGatewayAuth } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, hasDomainAccess, hasDomainWriteAccess } from '@tamshai/shared';
 import { UserContext, checkConnection, closeConnection, getCollection, buildRoleFilter } from './database/connection';
-import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from './types/response';
 import { handleOpportunityNotFound, handleCustomerNotFound, handleInsufficientPermissions, handleCannotDeleteWonOpportunity, handleDatabaseError, withErrorHandling } from './utils/error-handler';
 import { storePendingConfirmation } from './utils/redis';
 
 dotenv.config();
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-sales');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3103');
@@ -43,14 +37,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Authorization helper - checks if user has Sales access
-function hasSalesAccess(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'sales-read' ||
-    role === 'sales-write' ||
-    role === 'executive'
-  );
-}
+// Authorization helper - checks if user has Sales access (uses shared utility)
+const hasSalesAccess = (roles: string[]) => hasDomainAccess(roles, 'sales');
 
 // =============================================================================
 // HEALTH CHECK
@@ -332,9 +320,7 @@ const DeleteOpportunityInputSchema = z.object({
   reason: z.string().optional(),
 });
 
-function hasDeletePermission(roles: string[]): boolean {
-  return roles.includes('sales-write') || roles.includes('executive');
-}
+const hasDeletePermission = (roles: string[]) => hasDomainWriteAccess(roles, 'sales');
 
 async function deleteOpportunity(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
   return withErrorHandling('delete_opportunity', async () => {
@@ -740,9 +726,7 @@ const ConvertLeadInputSchema = z.object({
   }),
 });
 
-function hasWritePermission(roles: string[]): boolean {
-  return roles.includes('sales-write') || roles.includes('executive');
-}
+const hasWritePermission = (roles: string[]) => hasDomainWriteAccess(roles, 'sales');
 
 async function convertLead(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
   return withErrorHandling('convert_lead', async () => {

@@ -3,3 +3,4 @@
  */
 
 export * from './internal-token';
+export * from './logger';

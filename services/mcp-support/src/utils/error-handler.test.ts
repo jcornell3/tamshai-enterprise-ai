@@ -18,7 +18,7 @@ import {
   handleSearchError,
   withErrorHandling,
 } from './error-handler';
-import { isErrorResponse } from '../types/response';
+import { isErrorResponse } from '@tamshai/shared';
 
 describe('ErrorCode enum', () => {
   describe('should define all support-specific error codes', () => {

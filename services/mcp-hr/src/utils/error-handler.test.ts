@@ -18,7 +18,7 @@ import {
   handleUnknownError,
   withErrorHandling,
 } from './error-handler';
-import { createErrorResponse, MCPErrorResponse } from '../types/response';
+import { createErrorResponse, MCPErrorResponse } from '@tamshai/shared';
 
 describe('Error Handler Utility', () => {
   describe('ErrorCode enum', () => {

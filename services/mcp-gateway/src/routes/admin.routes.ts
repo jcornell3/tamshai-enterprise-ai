@@ -16,20 +16,13 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
-import winston from 'winston';
+import { createLogger } from '@tamshai/shared';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // Logger setup
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-gateway');
 
 // Snapshot storage directory
 const SNAPSHOT_DIR = process.env.SNAPSHOT_DIR || '/tmp/tamshai-snapshots';

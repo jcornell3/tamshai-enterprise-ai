@@ -1,7 +1,7 @@
 import { getPendingTimeOff, GetPendingTimeOffInput, PendingTimeOffRequest } from './get-pending-time-off';
 import { UserContext } from '../database/connection';
 import * as dbConnection from '../database/connection';
-import { isSuccessResponse, isErrorResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({
   queryWithRLS: jest.fn(),

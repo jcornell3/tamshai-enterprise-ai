@@ -15,7 +15,7 @@ import {
   handleDatabaseError,
   withErrorHandling,
 } from './error-handler';
-import { MCPToolResponse } from '../types/response';
+import { MCPToolResponse } from '@tamshai/shared';
 
 describe('ErrorCode enum', () => {
   describe('should define all sales-specific error codes', () => {

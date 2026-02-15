@@ -12,7 +12,7 @@ import {
   createSuccessResponse,
   createErrorResponse,
   createPendingConfirmationResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import { withErrorHandling, handleWritePermissionRequired } from '../utils/error-handler';
 import { storePendingConfirmation } from '../utils/redis';
 import { logger } from '../utils/logger';

@@ -1,7 +1,8 @@
 /**
  * MCP Tool Response Types Unit Tests
  *
- * Tests for type guards and response factory functions.
+ * Tests for shared type guards and response factory functions.
+ * These types are now imported from @tamshai/shared.
  */
 
 import {
@@ -16,7 +17,7 @@ import {
   createSuccessResponse,
   createErrorResponse,
   createPendingConfirmationResponse,
-} from './response';
+} from '@tamshai/shared';
 
 describe('MCP Response Types', () => {
   // ===========================================================================
@@ -38,6 +39,7 @@ describe('MCP Response Types', () => {
         status: 'error',
         code: 'TEST_ERROR',
         message: 'Test error',
+        suggestedAction: 'Try again',
       };
 
       expect(isSuccessResponse(response)).toBe(false);
@@ -48,8 +50,12 @@ describe('MCP Response Types', () => {
         status: 'pending_confirmation',
         confirmationId: 'test-123',
         message: 'Please confirm',
-        action: 'delete',
-        data: {},
+        confirmationData: {
+          action: 'delete',
+          mcpServer: 'sales',
+          userId: 'user-1',
+          timestamp: Date.now(),
+        },
       };
 
       expect(isSuccessResponse(response)).toBe(false);
@@ -74,6 +80,7 @@ describe('MCP Response Types', () => {
         status: 'error',
         code: 'TEST_ERROR',
         message: 'Test error',
+        suggestedAction: 'Try again',
       };
 
       expect(isErrorResponse(response)).toBe(true);
@@ -93,8 +100,12 @@ describe('MCP Response Types', () => {
         status: 'pending_confirmation',
         confirmationId: 'test-123',
         message: 'Please confirm',
-        action: 'delete',
-        data: {},
+        confirmationData: {
+          action: 'delete',
+          mcpServer: 'sales',
+          userId: 'user-1',
+          timestamp: Date.now(),
+        },
       };
 
       expect(isErrorResponse(response)).toBe(false);
@@ -121,8 +132,13 @@ describe('MCP Response Types', () => {
         status: 'pending_confirmation',
         confirmationId: 'test-123',
         message: 'Please confirm deletion',
-        action: 'delete_opportunity',
-        data: { opportunityId: 'opp-123' },
+        confirmationData: {
+          action: 'delete_opportunity',
+          mcpServer: 'sales',
+          userId: 'user-1',
+          timestamp: Date.now(),
+          opportunityId: 'opp-123',
+        },
       };
 
       expect(isPendingConfirmationResponse(response)).toBe(true);
@@ -142,6 +158,7 @@ describe('MCP Response Types', () => {
         status: 'error',
         code: 'ERROR',
         message: 'Error',
+        suggestedAction: 'Try again',
       };
 
       expect(isPendingConfirmationResponse(response)).toBe(false);
@@ -152,13 +169,18 @@ describe('MCP Response Types', () => {
         status: 'pending_confirmation',
         confirmationId: 'confirm-456',
         message: 'Confirm action',
-        action: 'close_opportunity',
-        data: { outcome: 'won' },
+        confirmationData: {
+          action: 'close_opportunity',
+          mcpServer: 'sales',
+          userId: 'user-1',
+          timestamp: Date.now(),
+          outcome: 'won',
+        },
       };
 
       if (isPendingConfirmationResponse(response)) {
         expect(response.confirmationId).toBe('confirm-456');
-        expect(response.action).toBe('close_opportunity');
+        expect(response.confirmationData.action).toBe('close_opportunity');
       }
     });
   });
@@ -223,16 +245,17 @@ describe('MCP Response Types', () => {
   });
 
   describe('createErrorResponse', () => {
-    it('should create error response with required fields only', () => {
+    it('should create error response with required fields', () => {
       const response = createErrorResponse(
         'NOT_FOUND',
-        'Customer not found'
+        'Customer not found',
+        'Use list_customers to find valid IDs'
       );
 
       expect(response.status).toBe('error');
       expect(response.code).toBe('NOT_FOUND');
       expect(response.message).toBe('Customer not found');
-      expect(response.suggestedAction).toBeUndefined();
+      expect(response.suggestedAction).toBe('Use list_customers to find valid IDs');
       expect(response.details).toBeUndefined();
     });
 
@@ -286,8 +309,11 @@ describe('MCP Response Types', () => {
     it('should create pending confirmation response', () => {
       const confirmationId = 'uuid-123-456';
       const message = 'Delete opportunity for Acme Corp?';
-      const data = {
+      const confirmationData = {
         action: 'delete_opportunity',
+        mcpServer: 'sales',
+        userId: 'user-1',
+        timestamp: Date.now(),
         opportunityId: 'opp-123',
         customerName: 'Acme Corp',
         value: 50000,
@@ -296,50 +322,51 @@ describe('MCP Response Types', () => {
       const response = createPendingConfirmationResponse(
         confirmationId,
         message,
-        data
+        confirmationData
       );
 
       expect(response.status).toBe('pending_confirmation');
       expect(response.confirmationId).toBe('uuid-123-456');
       expect(response.message).toBe('Delete opportunity for Acme Corp?');
-      expect(response.action).toBe('delete_opportunity');
-      expect(response.data).toEqual(data);
+      expect(response.confirmationData).toEqual(confirmationData);
     });
 
-    it('should extract action from data', () => {
+    it('should include action in confirmationData', () => {
       const response = createPendingConfirmationResponse(
         'test-id',
         'Confirm?',
-        { action: 'close_opportunity', outcome: 'won' }
+        {
+          action: 'close_opportunity',
+          mcpServer: 'sales',
+          userId: 'user-1',
+          timestamp: Date.now(),
+          outcome: 'won',
+        }
       );
 
-      expect(response.action).toBe('close_opportunity');
+      expect(response.confirmationData.action).toBe('close_opportunity');
     });
 
-    it('should handle complex data objects', () => {
-      const data = {
+    it('should handle complex confirmationData objects', () => {
+      const confirmationData = {
         action: 'delete_customer',
+        mcpServer: 'sales',
+        userId: 'user-1',
+        timestamp: 1234567890,
         customerId: 'cust-123',
         customerName: 'Test Corp',
         activeDeals: 3,
         reason: 'Duplicate record',
-        metadata: {
-          requestedBy: 'admin',
-          timestamp: 1234567890,
-        },
       };
 
       const response = createPendingConfirmationResponse(
         'complex-id',
         'Delete customer with active deals?',
-        data
+        confirmationData
       );
 
-      expect(response.data).toEqual(data);
-      expect(response.data.metadata).toEqual({
-        requestedBy: 'admin',
-        timestamp: 1234567890,
-      });
+      expect(response.confirmationData).toEqual(confirmationData);
+      expect(response.confirmationData.action).toBe('delete_customer');
     });
   });
 
@@ -364,6 +391,7 @@ describe('MCP Response Types', () => {
         status: 'error',
         code: 'TEST',
         message: 'Test',
+        suggestedAction: 'Try again',
       };
 
       const response: MCPToolResponse = error;
@@ -376,8 +404,12 @@ describe('MCP Response Types', () => {
         status: 'pending_confirmation',
         confirmationId: 'test',
         message: 'Test',
-        action: 'test',
-        data: {},
+        confirmationData: {
+          action: 'test',
+          mcpServer: 'sales',
+          userId: 'user-1',
+          timestamp: Date.now(),
+        },
       };
 
       const response: MCPToolResponse = pending;

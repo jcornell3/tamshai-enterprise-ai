@@ -1,200 +1,216 @@
 /**
  * Tiered Authorization Tests (v1.5 - Role-Based Access Control Enhancement)
  *
- * Tests for the three authorization tiers:
+ * Tests for the three authorization tiers using shared utilities:
  * - TIER 1: Expenses - All employees (self-access via RLS)
- * - TIER 2: Budgets - Managers and above
+ * - TIER 2: Budgets - All employees (filtered via RLS)
  * - TIER 3: Dashboard/ARR/Invoices - Finance personnel only
+ * - Write: finance-write or executive only
  */
 
-import { canAccessExpenses, canAccessBudgets, canAccessDashboard } from './index';
+import { hasFinanceTierAccess, hasDomainWriteAccess } from '@tamshai/shared';
 
 describe('Tiered Authorization', () => {
-  describe('canAccessExpenses (TIER 1 - All Employees)', () => {
+  describe('hasFinanceTierAccess(roles, "expenses") (TIER 1 - All Employees)', () => {
     it('allows employee role', () => {
-      expect(canAccessExpenses(['employee'])).toBe(true);
+      expect(hasFinanceTierAccess(['employee'], 'expenses')).toBe(true);
     });
 
     it('allows manager role', () => {
-      expect(canAccessExpenses(['manager'])).toBe(true);
+      expect(hasFinanceTierAccess(['manager'], 'expenses')).toBe(true);
     });
 
     it('allows finance-read role', () => {
-      expect(canAccessExpenses(['finance-read'])).toBe(true);
+      expect(hasFinanceTierAccess(['finance-read'], 'expenses')).toBe(true);
     });
 
     it('allows finance-write role', () => {
-      expect(canAccessExpenses(['finance-write'])).toBe(true);
+      expect(hasFinanceTierAccess(['finance-write'], 'expenses')).toBe(true);
     });
 
     it('allows executive role', () => {
-      expect(canAccessExpenses(['executive'])).toBe(true);
+      expect(hasFinanceTierAccess(['executive'], 'expenses')).toBe(true);
     });
 
     it('allows multiple valid roles', () => {
-      expect(canAccessExpenses(['employee', 'manager'])).toBe(true);
+      expect(hasFinanceTierAccess(['employee', 'manager'], 'expenses')).toBe(true);
     });
 
     it('denies empty roles array', () => {
-      expect(canAccessExpenses([])).toBe(false);
+      expect(hasFinanceTierAccess([], 'expenses')).toBe(false);
     });
 
     it('denies unknown roles', () => {
-      expect(canAccessExpenses(['intern', 'guest'])).toBe(false);
+      expect(hasFinanceTierAccess(['intern', 'guest'], 'expenses')).toBe(false);
     });
 
     it('denies roles from other departments', () => {
-      expect(canAccessExpenses(['hr-read', 'sales-write'])).toBe(false);
+      expect(hasFinanceTierAccess(['hr-read', 'sales-write'], 'expenses')).toBe(false);
     });
   });
 
-  describe('canAccessBudgets (TIER 2 - Managers and Above)', () => {
-    it('denies employee role (must be manager+)', () => {
-      expect(canAccessBudgets(['employee'])).toBe(false);
+  describe('hasFinanceTierAccess(roles, "budgets") (TIER 2 - All Employees)', () => {
+    it('allows employee role', () => {
+      expect(hasFinanceTierAccess(['employee'], 'budgets')).toBe(true);
     });
 
     it('allows manager role', () => {
-      expect(canAccessBudgets(['manager'])).toBe(true);
+      expect(hasFinanceTierAccess(['manager'], 'budgets')).toBe(true);
     });
 
     it('allows finance-read role', () => {
-      expect(canAccessBudgets(['finance-read'])).toBe(true);
+      expect(hasFinanceTierAccess(['finance-read'], 'budgets')).toBe(true);
     });
 
     it('allows finance-write role', () => {
-      expect(canAccessBudgets(['finance-write'])).toBe(true);
+      expect(hasFinanceTierAccess(['finance-write'], 'budgets')).toBe(true);
     });
 
     it('allows executive role', () => {
-      expect(canAccessBudgets(['executive'])).toBe(true);
+      expect(hasFinanceTierAccess(['executive'], 'budgets')).toBe(true);
     });
 
-    it('allows employee+manager combination (manager grants access)', () => {
-      expect(canAccessBudgets(['employee', 'manager'])).toBe(true);
+    it('allows employee+manager combination', () => {
+      expect(hasFinanceTierAccess(['employee', 'manager'], 'budgets')).toBe(true);
     });
 
     it('denies empty roles array', () => {
-      expect(canAccessBudgets([])).toBe(false);
+      expect(hasFinanceTierAccess([], 'budgets')).toBe(false);
     });
 
     it('denies unknown roles', () => {
-      expect(canAccessBudgets(['intern', 'guest'])).toBe(false);
+      expect(hasFinanceTierAccess(['intern', 'guest'], 'budgets')).toBe(false);
     });
 
-    it('denies roles from other departments without manager', () => {
-      expect(canAccessBudgets(['hr-read', 'sales-write'])).toBe(false);
+    it('denies roles from other departments without employee/manager', () => {
+      expect(hasFinanceTierAccess(['hr-read', 'sales-write'], 'budgets')).toBe(false);
     });
   });
 
-  describe('canAccessDashboard (TIER 3 - Finance Personnel Only)', () => {
+  describe('hasFinanceTierAccess(roles, "dashboard") (TIER 3 - Finance Personnel Only)', () => {
     it('denies employee role', () => {
-      expect(canAccessDashboard(['employee'])).toBe(false);
+      expect(hasFinanceTierAccess(['employee'], 'dashboard')).toBe(false);
     });
 
     it('denies manager role', () => {
-      expect(canAccessDashboard(['manager'])).toBe(false);
+      expect(hasFinanceTierAccess(['manager'], 'dashboard')).toBe(false);
     });
 
     it('allows finance-read role', () => {
-      expect(canAccessDashboard(['finance-read'])).toBe(true);
+      expect(hasFinanceTierAccess(['finance-read'], 'dashboard')).toBe(true);
     });
 
     it('allows finance-write role', () => {
-      expect(canAccessDashboard(['finance-write'])).toBe(true);
+      expect(hasFinanceTierAccess(['finance-write'], 'dashboard')).toBe(true);
     });
 
     it('allows executive role', () => {
-      expect(canAccessDashboard(['executive'])).toBe(true);
+      expect(hasFinanceTierAccess(['executive'], 'dashboard')).toBe(true);
     });
 
     it('allows finance+manager combination', () => {
-      expect(canAccessDashboard(['manager', 'finance-read'])).toBe(true);
+      expect(hasFinanceTierAccess(['manager', 'finance-read'], 'dashboard')).toBe(true);
     });
 
     it('denies empty roles array', () => {
-      expect(canAccessDashboard([])).toBe(false);
+      expect(hasFinanceTierAccess([], 'dashboard')).toBe(false);
     });
 
     it('denies unknown roles', () => {
-      expect(canAccessDashboard(['intern', 'guest'])).toBe(false);
+      expect(hasFinanceTierAccess(['intern', 'guest'], 'dashboard')).toBe(false);
     });
 
     it('denies employee+manager without finance role', () => {
-      expect(canAccessDashboard(['employee', 'manager'])).toBe(false);
+      expect(hasFinanceTierAccess(['employee', 'manager'], 'dashboard')).toBe(false);
     });
 
     it('denies roles from other departments', () => {
-      expect(canAccessDashboard(['hr-read', 'hr-write', 'sales-read'])).toBe(false);
+      expect(hasFinanceTierAccess(['hr-read', 'hr-write', 'sales-read'], 'dashboard')).toBe(false);
+    });
+  });
+
+  describe('hasDomainWriteAccess(roles, "finance") (Write Operations)', () => {
+    it('denies employee role', () => {
+      expect(hasDomainWriteAccess(['employee'], 'finance')).toBe(false);
+    });
+
+    it('denies finance-read role', () => {
+      expect(hasDomainWriteAccess(['finance-read'], 'finance')).toBe(false);
+    });
+
+    it('allows finance-write role', () => {
+      expect(hasDomainWriteAccess(['finance-write'], 'finance')).toBe(true);
+    });
+
+    it('allows executive role', () => {
+      expect(hasDomainWriteAccess(['executive'], 'finance')).toBe(true);
     });
   });
 
   describe('Access Hierarchy', () => {
-    // Verify the tiered access model works correctly
-
     it('TIER 3 roles can access all tiers', () => {
       const financeRoles = ['finance-read'];
-      expect(canAccessExpenses(financeRoles)).toBe(true);
-      expect(canAccessBudgets(financeRoles)).toBe(true);
-      expect(canAccessDashboard(financeRoles)).toBe(true);
+      expect(hasFinanceTierAccess(financeRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(financeRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(financeRoles, 'dashboard')).toBe(true);
     });
 
     it('executive can access all tiers', () => {
       const execRoles = ['executive'];
-      expect(canAccessExpenses(execRoles)).toBe(true);
-      expect(canAccessBudgets(execRoles)).toBe(true);
-      expect(canAccessDashboard(execRoles)).toBe(true);
+      expect(hasFinanceTierAccess(execRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(execRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(execRoles, 'dashboard')).toBe(true);
     });
 
-    it('TIER 2 (manager) can access expenses but not dashboard', () => {
+    it('TIER 2 (manager) can access expenses and budgets but not dashboard', () => {
       const managerRoles = ['manager'];
-      expect(canAccessExpenses(managerRoles)).toBe(true);
-      expect(canAccessBudgets(managerRoles)).toBe(true);
-      expect(canAccessDashboard(managerRoles)).toBe(false);
+      expect(hasFinanceTierAccess(managerRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(managerRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(managerRoles, 'dashboard')).toBe(false);
     });
 
-    it('TIER 1 (employee) can only access expenses', () => {
+    it('TIER 1 (employee) can access expenses and budgets but not dashboard', () => {
       const employeeRoles = ['employee'];
-      expect(canAccessExpenses(employeeRoles)).toBe(true);
-      expect(canAccessBudgets(employeeRoles)).toBe(false);
-      expect(canAccessDashboard(employeeRoles)).toBe(false);
+      expect(hasFinanceTierAccess(employeeRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(employeeRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(employeeRoles, 'dashboard')).toBe(false);
     });
   });
 
   describe('Real-World User Scenarios', () => {
-    it('alice.chen (HR user with employee role) can access expenses only', () => {
-      // Alice is HR, has employee role but not finance roles
+    it('alice.chen (HR user with employee role) can access expenses and budgets only', () => {
       const aliceRoles = ['employee', 'hr-read', 'hr-write'];
-      expect(canAccessExpenses(aliceRoles)).toBe(true);
-      expect(canAccessBudgets(aliceRoles)).toBe(false);
-      expect(canAccessDashboard(aliceRoles)).toBe(false);
+      expect(hasFinanceTierAccess(aliceRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(aliceRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(aliceRoles, 'dashboard')).toBe(false);
     });
 
     it('bob.martinez (Finance user) can access everything', () => {
       const bobRoles = ['employee', 'finance-read', 'finance-write'];
-      expect(canAccessExpenses(bobRoles)).toBe(true);
-      expect(canAccessBudgets(bobRoles)).toBe(true);
-      expect(canAccessDashboard(bobRoles)).toBe(true);
+      expect(hasFinanceTierAccess(bobRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(bobRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(bobRoles, 'dashboard')).toBe(true);
     });
 
     it('nina.patel (Manager) can access expenses and budgets', () => {
       const ninaRoles = ['employee', 'manager'];
-      expect(canAccessExpenses(ninaRoles)).toBe(true);
-      expect(canAccessBudgets(ninaRoles)).toBe(true);
-      expect(canAccessDashboard(ninaRoles)).toBe(false);
+      expect(hasFinanceTierAccess(ninaRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(ninaRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(ninaRoles, 'dashboard')).toBe(false);
     });
 
     it('eve.thompson (Executive) can access everything', () => {
       const eveRoles = ['executive'];
-      expect(canAccessExpenses(eveRoles)).toBe(true);
-      expect(canAccessBudgets(eveRoles)).toBe(true);
-      expect(canAccessDashboard(eveRoles)).toBe(true);
+      expect(hasFinanceTierAccess(eveRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(eveRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(eveRoles, 'dashboard')).toBe(true);
     });
 
-    it('marcus.johnson (Regular employee) can access expenses only', () => {
+    it('marcus.johnson (Regular employee) can access expenses and budgets only', () => {
       const marcusRoles = ['employee', 'user'];
-      expect(canAccessExpenses(marcusRoles)).toBe(true);
-      expect(canAccessBudgets(marcusRoles)).toBe(false);
-      expect(canAccessDashboard(marcusRoles)).toBe(false);
+      expect(hasFinanceTierAccess(marcusRoles, 'expenses')).toBe(true);
+      expect(hasFinanceTierAccess(marcusRoles, 'budgets')).toBe(true);
+      expect(hasFinanceTierAccess(marcusRoles, 'dashboard')).toBe(false);
     });
   });
 });

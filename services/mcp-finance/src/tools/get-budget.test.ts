@@ -11,7 +11,7 @@ import {
   createMockDbResult,
   TEST_BUDGETS,
 } from '../test-utils';
-import { isSuccessResponse, isErrorResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse } from '@tamshai/shared';
 
 // Mock the database connection
 jest.mock('../database/connection', () => ({

@@ -14,7 +14,7 @@ import {
   encodeCursor,
   decodeCursor,
   PaginationCursor,
-} from './response';
+} from '@tamshai/shared';
 
 describe('MCP Response Types', () => {
   describe('createSuccessResponse', () => {

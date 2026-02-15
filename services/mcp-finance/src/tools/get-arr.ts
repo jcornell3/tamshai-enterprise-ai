@@ -11,7 +11,7 @@ import { queryWithRLS, UserContext } from '../database/connection';
 import {
   MCPToolResponse,
   createSuccessResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import {
   handleDatabaseError,
   withErrorHandling,

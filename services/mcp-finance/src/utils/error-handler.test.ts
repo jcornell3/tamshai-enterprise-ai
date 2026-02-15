@@ -17,7 +17,7 @@ import {
   handleDatabaseError,
   withErrorHandling,
 } from './error-handler';
-import { createSuccessResponse } from '../types/response';
+import { createSuccessResponse } from '@tamshai/shared';
 
 describe('Error Handler - MCP Finance', () => {
   describe('ErrorCode enum', () => {

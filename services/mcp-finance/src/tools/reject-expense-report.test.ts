@@ -4,7 +4,7 @@
 
 import { rejectExpenseReport, executeRejectExpenseReport } from './reject-expense-report';
 import { createMockUserContext, createMockDbResult } from '../test-utils';
-import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({ queryWithRLS: jest.fn() }));
 jest.mock('../utils/redis', () => ({ storePendingConfirmation: jest.fn().mockResolvedValue(undefined) }));
@@ -86,7 +86,7 @@ describe('rejectExpenseReport', () => {
     );
     expect(isPendingConfirmationResponse(result)).toBe(true);
     if (isPendingConfirmationResponse(result)) {
-      expect(result.action).toBe('reject_expense_report');
+      expect(result.confirmationData.action).toBe('reject_expense_report');
       expect(result.message).toContain('Missing receipt');
     }
   });

@@ -16,7 +16,7 @@ import {
   MCPToolResponse,
   createSuccessResponse,
   PaginationMetadata,
-} from '../types/response';
+} from '@tamshai/shared';
 import { withErrorHandling, handleDatabaseError } from '../utils/error-handler';
 
 /**

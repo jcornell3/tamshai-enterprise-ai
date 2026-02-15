@@ -4,7 +4,7 @@
 
 import { reimburseExpenseReport, executeReimburseExpenseReport } from './reimburse-expense-report';
 import { createMockUserContext, createMockDbResult } from '../test-utils';
-import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({ queryWithRLS: jest.fn() }));
 jest.mock('../utils/redis', () => ({ storePendingConfirmation: jest.fn().mockResolvedValue(undefined) }));
@@ -100,7 +100,7 @@ describe('reimburseExpenseReport', () => {
     );
     expect(isPendingConfirmationResponse(result)).toBe(true);
     if (isPendingConfirmationResponse(result)) {
-      expect(result.action).toBe('reimburse_expense_report');
+      expect(result.confirmationData.action).toBe('reimburse_expense_report');
       expect(result.message).toContain('APPROVED to REIMBURSED');
     }
   });

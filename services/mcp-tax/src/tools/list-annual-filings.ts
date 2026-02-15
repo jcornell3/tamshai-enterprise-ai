@@ -11,7 +11,7 @@ import {
   encodeCursor,
   decodeCursor,
   PaginationMetadata,
-} from '../types/response';
+} from '@tamshai/shared';
 import { withErrorHandling, handleInvalidInput } from '../utils/error-handler';
 import { logger } from '../utils/logger';
 

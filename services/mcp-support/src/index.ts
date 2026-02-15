@@ -12,11 +12,9 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import winston from 'winston';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { requireGatewayAuth } from '@tamshai/shared';
-import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from './types/response';
+import { requireGatewayAuth, createLogger, hasDomainAccess, hasDomainWriteAccess, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from '@tamshai/shared';
 import { storePendingConfirmation } from './utils/redis';
 import { ISupportBackend, UserContext } from './database/types';
 import { createSupportBackend } from './database/backend.factory';
@@ -47,11 +45,7 @@ import { listTickets } from './tools/employee-ticket-tools';
 
 dotenv.config();
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-support');
 
 // Initialize backend based on SUPPORT_DATA_BACKEND environment variable
 // - elasticsearch (default): Dev/Stage with Elasticsearch
@@ -74,14 +68,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Authorization helper - checks if user has Support access
-function hasSupportAccess(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'support-read' ||
-    role === 'support-write' ||
-    role === 'executive'
-  );
-}
 
 // =============================================================================
 // HEALTH CHECK
@@ -282,13 +268,10 @@ const CloseTicketInputSchema = z.object({
   resolution: z.string(),
 });
 
-function hasClosePermission(roles: string[]): boolean {
-  return roles.includes('support-write') || roles.includes('executive');
-}
 
 async function closeTicket(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
   try {
-    if (!hasClosePermission(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'support')) {
       return createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
         `This operation requires "support-write or executive" role. You have: ${userContext.roles.join(', ')}`,
@@ -800,13 +783,10 @@ const EscalateTicketInputSchema = z.object({
   notes: z.string().optional(),
 });
 
-function hasEscalatePermission(roles: string[]): boolean {
-  return roles.includes('support-write') || roles.includes('executive');
-}
 
 async function escalateTicket(input: any, userContext: UserContext): Promise<MCPToolResponse<any>> {
   try {
-    if (!hasEscalatePermission(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'support')) {
       return createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
         `This operation requires "support-write or executive" role. You have: ${userContext.roles.join(', ')}`,
@@ -1032,7 +1012,7 @@ app.post('/tools/search_tickets', async (req: Request, res: Response) => {
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1054,7 +1034,7 @@ app.post('/tools/list_tickets', async (req: Request, res: Response) => {
   }
 
   // Note: listTickets handles role-based filtering internally (support, manager, user)
-  // No explicit hasSupportAccess check - all authenticated users can list their tickets
+  // No explicit hasDomainAccess check - all authenticated users can list their tickets
 
   const result = await listTickets({ priority, status, assignedTo, limit, cursor }, userContext);
   res.json(result);
@@ -1068,7 +1048,7 @@ app.post('/tools/search_knowledge_base', async (req: Request, res: Response) => 
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1090,7 +1070,7 @@ app.post('/tools/get_knowledge_article', async (req: Request, res: Response) => 
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1112,7 +1092,7 @@ app.post('/tools/close_ticket', async (req: Request, res: Response) => {
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1134,7 +1114,7 @@ app.post('/tools/get_sla_summary', async (req: Request, res: Response) => {
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1156,7 +1136,7 @@ app.post('/tools/get_sla_tickets', async (req: Request, res: Response) => {
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1178,7 +1158,7 @@ app.post('/tools/get_agent_metrics', async (req: Request, res: Response) => {
   }
 
   // Authorization check - must have Support access
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1199,7 +1179,7 @@ app.post('/tools/get_escalation_targets', async (req: Request, res: Response) =>
     return;
   }
 
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',
@@ -1220,7 +1200,7 @@ app.post('/tools/escalate_ticket', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!hasSupportAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'support')) {
     res.status(403).json({
       status: 'error',
       code: 'INSUFFICIENT_PERMISSIONS',

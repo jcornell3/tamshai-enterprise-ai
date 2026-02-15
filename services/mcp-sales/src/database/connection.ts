@@ -6,16 +6,9 @@
  */
 
 import { MongoClient, Db, Collection, Filter } from 'mongodb';
-import winston from 'winston';
+import { createLogger } from '@tamshai/shared';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-sales');
 
 // Support both MONGODB_URI and MONGODB_URL (CI uses MONGODB_URL) - required
 const RAW_MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI;

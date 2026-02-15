@@ -12,8 +12,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import winston from 'winston';
-import { requireGatewayAuth } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, hasFinanceTierAccess, hasDomainWriteAccess } from '@tamshai/shared';
 import { UserContext, checkConnection, closePool } from './database/connection';
 import { getBudget, GetBudgetInputSchema } from './tools/get-budget';
 import { listBudgets, ListBudgetsInputSchema } from './tools/list-budgets';
@@ -84,89 +83,24 @@ import {
 } from './tools/bulk-approve-invoices';
 import { getPendingExpenses, GetPendingExpensesInputSchema } from './tools/get-pending-expenses';
 import { getPendingBudgets, GetPendingBudgetsInputSchema } from './tools/get-pending-budgets';
-import { MCPToolResponse } from './types/response';
+import { MCPToolResponse } from '@tamshai/shared';
 import { getPendingConfirmation, deletePendingConfirmation } from './utils/redis';
 
 dotenv.config();
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-finance');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3102');
 
 // =============================================================================
-// TIERED AUTHORIZATION (v1.5 - Role-Based Access Control Enhancement)
+// TIERED AUTHORIZATION (v1.5 - Uses shared authorization utilities)
 // =============================================================================
-
-/**
- * TIER 1: Expenses - accessible by all employees (self-access via RLS)
- *
- * All employees can access their own expense reports.
- * RLS policies in the database enforce self-access filtering.
- */
-export function canAccessExpenses(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'employee' ||
-    role === 'manager' ||
-    role === 'finance-read' ||
-    role === 'finance-write' ||
-    role === 'executive'
-  );
-}
-
-/**
- * TIER 2: Budgets - accessible by employees+ (filtered via RLS)
- *
- * Employees can view budgets (RLS filters to relevant data).
- * Managers can view their department's budget.
- * Finance users can view all budgets.
- */
-export function canAccessBudgets(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'employee' ||
-    role === 'manager' ||
-    role === 'finance-read' ||
-    role === 'finance-write' ||
-    role === 'executive'
-  );
-}
-
-/**
- * TIER 3: Dashboard/ARR/Invoices - only finance personnel
- *
- * Company-wide financial data (ARR, all invoices, dashboard metrics)
- * is restricted to Finance team and executives.
- */
-export function canAccessDashboard(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'finance-read' ||
-    role === 'finance-write' ||
-    role === 'executive'
-  );
-}
-
-/**
- * Write operations - finance-write or executive only
- * (unchanged from original implementation)
- */
-function canWriteFinance(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'finance-write' ||
-    role === 'executive'
-  );
-}
-
-// Legacy alias for backward compatibility during transition
-function hasFinanceAccess(roles: string[]): boolean {
-  return canAccessDashboard(roles);
-}
+// Authorization functions are imported from @tamshai/shared:
+// - hasFinanceTierAccess(roles, 'expenses')  → TIER 1: All employees (self-access via RLS)
+// - hasFinanceTierAccess(roles, 'budgets')   → TIER 2: Employees+ (filtered via RLS)
+// - hasFinanceTierAccess(roles, 'dashboard') → TIER 3: Finance personnel only
+// - hasDomainWriteAccess(roles, 'finance')   → Write: finance-write or executive only
 
 // Middleware
 app.use(express.json());
@@ -332,7 +266,7 @@ app.post('/tools/get_budget', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 2: Employees and above can access budgets (RLS filters data)
-    if (!canAccessBudgets(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'budgets')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -371,7 +305,7 @@ app.post('/tools/get_quarterly_report', async (req: Request, res: Response) => {
     }
 
     // Authorization check - Finance read and executive only
-    if (!canAccessBudgets(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'budgets')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -410,7 +344,7 @@ app.post('/tools/list_invoices', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 3: Finance personnel only
-    if (!canAccessDashboard(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'dashboard')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -449,7 +383,7 @@ app.post('/tools/list_budgets', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 2: Employees and above can access budgets (RLS filters data)
-    if (!canAccessBudgets(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'budgets')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -488,7 +422,7 @@ app.post('/tools/get_expense_report', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 1: All employees can access (own reports via RLS)
-    if (!canAccessExpenses(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'expenses')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -527,7 +461,7 @@ app.post('/tools/list_expense_reports', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 1: All employees can access (own reports via RLS)
-    if (!canAccessExpenses(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'expenses')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -571,7 +505,7 @@ app.post('/tools/get_pending_expenses', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 1: All employees can access (own reports via RLS)
-    if (!canAccessExpenses(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'expenses')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -615,7 +549,7 @@ app.post('/tools/get_pending_budgets', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 2: Employees and above can access budgets (RLS filters data)
-    if (!canAccessBudgets(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'budgets')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -654,7 +588,7 @@ app.post('/tools/get_arr', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 3: Finance personnel only (company-wide financial data)
-    if (!canAccessDashboard(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'dashboard')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -693,7 +627,7 @@ app.post('/tools/get_arr_movement', async (req: Request, res: Response) => {
     }
 
     // Authorization check - TIER 3: Finance personnel only (company-wide financial data)
-    if (!canAccessDashboard(userContext.roles)) {
+    if (!hasFinanceTierAccess(userContext.roles, 'dashboard')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -732,7 +666,7 @@ app.post('/tools/delete_invoice', async (req: Request, res: Response) => {
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -771,7 +705,7 @@ app.post('/tools/approve_invoice', async (req: Request, res: Response) => {
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -810,7 +744,7 @@ app.post('/tools/bulk_approve_invoices', async (req: Request, res: Response) => 
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -849,7 +783,7 @@ app.post('/tools/pay_invoice', async (req: Request, res: Response) => {
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -935,7 +869,7 @@ app.post('/tools/approve_budget', async (req: Request, res: Response) => {
 
     // Authorization check - WRITE: finance-write or executive only
     // Note: Return JSON error (not 403 HTTP) for consistent MCP tool response format
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.json({
         status: 'error',
         code: 'UNAUTHORIZED',
@@ -974,7 +908,7 @@ app.post('/tools/reject_budget', async (req: Request, res: Response) => {
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -1013,7 +947,7 @@ app.post('/tools/delete_budget', async (req: Request, res: Response) => {
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -1052,7 +986,7 @@ app.post('/tools/approve_expense_report', async (req: Request, res: Response) =>
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -1091,7 +1025,7 @@ app.post('/tools/reject_expense_report', async (req: Request, res: Response) => 
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -1130,7 +1064,7 @@ app.post('/tools/reimburse_expense_report', async (req: Request, res: Response) 
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -1169,7 +1103,7 @@ app.post('/tools/delete_expense_report', async (req: Request, res: Response) => 
     }
 
     // Authorization check - WRITE: finance-write or executive only
-    if (!canWriteFinance(userContext.roles)) {
+    if (!hasDomainWriteAccess(userContext.roles, 'finance')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',

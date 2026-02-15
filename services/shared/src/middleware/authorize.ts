@@ -20,18 +20,43 @@ export interface UserContext {
 }
 
 /**
- * Role definitions for each domain
+ * Role definitions for each domain.
+ * Includes cross-domain roles (e.g., HR roles grant Payroll access).
  */
 export const ROLE_DEFINITIONS = {
-  hr: ['hr-read', 'hr-write'],
+  hr: ['hr-read', 'hr-write', 'manager', 'user', 'employee'],
   finance: ['finance-read', 'finance-write'],
   sales: ['sales-read', 'sales-write'],
   support: ['support-read', 'support-write'],
-  payroll: ['payroll-read', 'payroll-write'],
-  tax: ['tax-read', 'tax-write'],
+  payroll: ['payroll-read', 'payroll-write', 'hr-read', 'hr-write'],
+  tax: ['tax-read', 'tax-write', 'finance-read', 'finance-write'],
 } as const;
 
 export type Domain = keyof typeof ROLE_DEFINITIONS;
+
+/**
+ * Write-specific role map for each domain.
+ * Used by hasDomainWriteAccess() for write operation authorization.
+ */
+export const WRITE_ROLES: Record<Domain, readonly string[]> = {
+  hr: ['hr-write'],
+  finance: ['finance-write'],
+  sales: ['sales-write'],
+  support: ['support-write'],
+  payroll: ['payroll-write', 'hr-write'],
+  tax: ['tax-write', 'finance-write'],
+} as const;
+
+/**
+ * Finance tiered access model (v1.5).
+ * Different finance features require different access levels.
+ */
+export const FINANCE_TIERS = {
+  expenses: ['employee', 'manager', 'finance-read', 'finance-write'],
+  budgets: ['employee', 'manager', 'finance-read', 'finance-write'],
+  dashboard: ['finance-read', 'finance-write'],
+  write: ['finance-write'],
+} as const;
 
 /**
  * Check if user has access to a specific domain
@@ -40,6 +65,33 @@ export function hasDomainAccess(roles: string[], domain: Domain): boolean {
   const domainRoles = ROLE_DEFINITIONS[domain] as readonly string[];
   return roles.some(role =>
     domainRoles.includes(role) || role === 'executive'
+  );
+}
+
+/**
+ * Check if user has write access to a domain.
+ * Respects cross-domain write grants (e.g., hr-write grants payroll write).
+ */
+export function hasDomainWriteAccess(roles: string[], domain: Domain): boolean {
+  const writeRoles = WRITE_ROLES[domain] as readonly string[];
+  return roles.some(role =>
+    writeRoles.includes(role) || role === 'executive'
+  );
+}
+
+/**
+ * Check if user has access to a specific Finance tier.
+ *
+ * Tiers:
+ * - expenses: All employees (self-access via RLS)
+ * - budgets: All employees (filtered via RLS)
+ * - dashboard: Finance personnel and executives only
+ * - write: Finance-write and executives only
+ */
+export function hasFinanceTierAccess(roles: string[], tier: keyof typeof FINANCE_TIERS): boolean {
+  const tierRoles = FINANCE_TIERS[tier] as readonly string[];
+  return roles.some(role =>
+    tierRoles.includes(role) || role === 'executive'
   );
 }
 
@@ -53,7 +105,7 @@ export function hasAnyRole(userRoles: string[], requiredRoles: string[]): boolea
 }
 
 /**
- * Check if user has write access to a domain
+ * Check if user has write access to a domain (legacy - use hasDomainWriteAccess instead)
  */
 export function hasWriteAccess(roles: string[], domain: Domain): boolean {
   const writeRole = `${domain}-write`;

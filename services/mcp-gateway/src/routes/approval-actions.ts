@@ -7,14 +7,9 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import axios from 'axios';
-import winston from 'winston';
-import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
+import { generateInternalToken, INTERNAL_TOKEN_HEADER, createLogger } from '@tamshai/shared';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-gateway');
 
 const router = Router();
 

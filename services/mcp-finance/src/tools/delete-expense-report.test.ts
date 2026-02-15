@@ -4,7 +4,7 @@
 
 import { deleteExpenseReport, executeDeleteExpenseReport } from './delete-expense-report';
 import { createMockUserContext, createMockDbResult } from '../test-utils';
-import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({ queryWithRLS: jest.fn() }));
 jest.mock('../utils/redis', () => ({ storePendingConfirmation: jest.fn().mockResolvedValue(undefined) }));
@@ -94,7 +94,7 @@ describe('deleteExpenseReport', () => {
     );
     expect(isPendingConfirmationResponse(result)).toBe(true);
     if (isPendingConfirmationResponse(result)) {
-      expect(result.action).toBe('delete_expense_report');
+      expect(result.confirmationData.action).toBe('delete_expense_report');
       expect(result.message).toContain('cannot be undone');
     }
   });

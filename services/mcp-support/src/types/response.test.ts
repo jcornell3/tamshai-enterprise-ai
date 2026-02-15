@@ -3,6 +3,7 @@
  *
  * RED Phase: Tests for MCPToolResponse discriminated union.
  * Validates type guards and helper functions.
+ * Uses shared types from @tamshai/shared.
  */
 
 import {
@@ -14,15 +15,10 @@ import {
   createSuccessResponse,
   createErrorResponse,
   createPendingConfirmationResponse,
-} from './response';
-
-// Type guards - these need to be added to response.ts
-// Importing them here will fail until they're implemented
-import {
   isSuccessResponse,
   isErrorResponse,
   isPendingConfirmationResponse,
-} from './response';
+} from '@tamshai/shared';
 
 describe('Response Types', () => {
   describe('Type Guards', () => {
@@ -37,6 +33,7 @@ describe('Response Types', () => {
           status: 'error',
           code: 'TEST_ERROR',
           message: 'Test error',
+          suggestedAction: 'Try again',
         };
         expect(isSuccessResponse(response)).toBe(false);
       });
@@ -46,8 +43,12 @@ describe('Response Types', () => {
           status: 'pending_confirmation',
           confirmationId: 'conf-123',
           message: 'Confirm action',
-          action: 'close_ticket',
-          data: {},
+          confirmationData: {
+            action: 'close_ticket',
+            mcpServer: 'support',
+            userId: 'user-1',
+            timestamp: Date.now(),
+          },
         };
         expect(isSuccessResponse(response)).toBe(false);
       });
@@ -67,6 +68,7 @@ describe('Response Types', () => {
           status: 'error',
           code: 'TICKET_NOT_FOUND',
           message: 'Ticket not found',
+          suggestedAction: 'Use search_tickets to find valid ticket IDs.',
         };
         expect(isErrorResponse(response)).toBe(true);
       });
@@ -81,8 +83,12 @@ describe('Response Types', () => {
           status: 'pending_confirmation',
           confirmationId: 'conf-123',
           message: 'Confirm action',
-          action: 'close_ticket',
-          data: {},
+          confirmationData: {
+            action: 'close_ticket',
+            mcpServer: 'support',
+            userId: 'user-1',
+            timestamp: Date.now(),
+          },
         };
         expect(isErrorResponse(response)).toBe(false);
       });
@@ -106,8 +112,13 @@ describe('Response Types', () => {
           status: 'pending_confirmation',
           confirmationId: 'conf-123',
           message: 'Confirm ticket closure',
-          action: 'close_ticket',
-          data: { ticketId: 'ticket-1' },
+          confirmationData: {
+            action: 'close_ticket',
+            mcpServer: 'support',
+            userId: 'user-1',
+            timestamp: Date.now(),
+            ticketId: 'ticket-1',
+          },
         };
         expect(isPendingConfirmationResponse(response)).toBe(true);
       });
@@ -122,6 +133,7 @@ describe('Response Types', () => {
           status: 'error',
           code: 'TEST_ERROR',
           message: 'Test error',
+          suggestedAction: 'Try again',
         };
         expect(isPendingConfirmationResponse(response)).toBe(false);
       });
@@ -166,11 +178,12 @@ describe('Response Types', () => {
 
     describe('createErrorResponse', () => {
       it('should create error response with required fields', () => {
-        const result = createErrorResponse('TICKET_NOT_FOUND', 'Ticket not found');
+        const result = createErrorResponse('TICKET_NOT_FOUND', 'Ticket not found', 'Use search_tickets to find valid ticket IDs.');
 
         expect(result.status).toBe('error');
         expect(result.code).toBe('TICKET_NOT_FOUND');
         expect(result.message).toBe('Ticket not found');
+        expect(result.suggestedAction).toBe('Use search_tickets to find valid ticket IDs.');
       });
 
       it('should create error response with suggested action', () => {
@@ -198,18 +211,24 @@ describe('Response Types', () => {
 
     describe('createPendingConfirmationResponse', () => {
       it('should create pending confirmation response', () => {
-        const data = { ticketId: 'ticket-123', action: 'close_ticket' };
+        const confirmationData = {
+          action: 'close_ticket',
+          mcpServer: 'support',
+          userId: 'user-1',
+          timestamp: Date.now(),
+          ticketId: 'ticket-123',
+        };
         const result = createPendingConfirmationResponse(
           'conf-456',
           'Are you sure you want to close this ticket?',
-          data
+          confirmationData
         );
 
         expect(result.status).toBe('pending_confirmation');
         expect(result.confirmationId).toBe('conf-456');
         expect(result.message).toBe('Are you sure you want to close this ticket?');
-        expect(result.action).toBe('close_ticket');
-        expect(result.data).toEqual(data);
+        expect(result.confirmationData.action).toBe('close_ticket');
+        expect(result.confirmationData.ticketId).toBe('ticket-123');
       });
     });
   });

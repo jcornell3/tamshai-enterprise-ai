@@ -18,7 +18,7 @@ import {
   createPendingConfirmationResponse,
   createSuccessResponse,
   createErrorResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import {
   handleExpenseReportNotFound,
   handleInsufficientPermissions,

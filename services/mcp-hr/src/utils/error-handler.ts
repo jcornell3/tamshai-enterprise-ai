@@ -10,18 +10,11 @@ import {
   createErrorHandlers,
   withErrorHandling as sharedWithErrorHandling,
   createErrorResponse,
+  createLogger,
   MCPErrorResponse,
 } from '@tamshai/shared';
-import winston from 'winston';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-hr');
 
 // Create shared error handlers with our logger
 const handlers = createErrorHandlers(logger);

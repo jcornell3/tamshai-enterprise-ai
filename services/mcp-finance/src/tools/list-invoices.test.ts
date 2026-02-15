@@ -14,7 +14,7 @@ import {
 import {
   isSuccessResponse,
   isErrorResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 
 // Mock the database connection
 jest.mock('../database/connection', () => ({

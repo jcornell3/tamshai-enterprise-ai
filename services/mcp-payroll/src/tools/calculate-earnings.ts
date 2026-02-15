@@ -7,7 +7,7 @@
  */
 import { z } from 'zod';
 import { queryWithRLS, UserContext } from '../database/connection';
-import { MCPToolResponse, createSuccessResponse } from '../types/response';
+import { MCPToolResponse, createSuccessResponse } from '@tamshai/shared';
 import { withErrorHandling } from '../utils/error-handler';
 import { logger } from '../utils/logger';
 

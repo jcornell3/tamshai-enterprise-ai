@@ -12,10 +12,9 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import winston from 'winston';
 import { Queue } from 'bullmq';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { requireGatewayAuth } from '@tamshai/shared';
+import { createLogger, requireGatewayAuth, hasDomainAccess, MCPToolResponse } from '@tamshai/shared';
 import pool, { UserContext, checkConnection, closePool, queryWithRLS } from './database/connection';
 import {
   IdentityService,
@@ -53,33 +52,13 @@ import {
   ApproveTimeOffRequestInputSchema,
 } from './tools/approve-time-off-request';
 import { getPendingTimeOff, GetPendingTimeOffInputSchema } from './tools/get-pending-time-off';
-import { MCPToolResponse } from './types/response';
-
 dotenv.config();
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-hr');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3101');
 
-// Authorization helper - checks if user has HR access
-function hasHRAccess(roles: string[]): boolean {
-  return roles.some(role =>
-    role === 'hr-read' ||
-    role === 'hr-write' ||
-    role === 'executive' ||
-    role === 'manager' ||
-    role === 'user' ||      // Legacy role for self-service
-    role === 'employee'     // Standard employee role (from All-Employees group)
-  );
-}
 
 // Middleware
 app.use(express.json());
@@ -323,7 +302,7 @@ app.post('/tools/get_employee', async (req: Request, res: Response) => {
     }
 
     // Authorization check - must have HR access
-    if (!hasHRAccess(userContext.roles)) {
+    if (!hasDomainAccess(userContext.roles, 'hr')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -362,7 +341,7 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
     }
 
     // Authorization check - must have HR access
-    if (!hasHRAccess(userContext.roles)) {
+    if (!hasDomainAccess(userContext.roles, 'hr')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -401,7 +380,7 @@ app.post('/tools/get_org_chart', async (req: Request, res: Response) => {
     }
 
     // Authorization check - must have HR access
-    if (!hasHRAccess(userContext.roles)) {
+    if (!hasDomainAccess(userContext.roles, 'hr')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -534,7 +513,7 @@ app.post('/tools/get_pending_time_off', async (req: Request, res: Response) => {
     }
 
     // Authorization check - must have HR access or be a manager
-    if (!hasHRAccess(userContext.roles)) {
+    if (!hasDomainAccess(userContext.roles, 'hr')) {
       res.status(403).json({
         status: 'error',
         code: 'INSUFFICIENT_PERMISSIONS',

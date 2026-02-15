@@ -14,7 +14,7 @@ import {
   isSuccessResponse,
   isErrorResponse,
   isPendingConfirmationResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 
 // Mock the database connection
 jest.mock('../database/connection', () => ({
@@ -167,7 +167,7 @@ describe('bulkApproveInvoices', () => {
       expect(isPendingConfirmationResponse(result)).toBe(true);
       if (isPendingConfirmationResponse(result)) {
         expect(result.confirmationId).toBe('test-bulk-confirmation-id');
-        expect(result.action).toBe('bulk_approve_invoices');
+        expect(result.confirmationData.action).toBe('bulk_approve_invoices');
         expect(result.message).toContain('2 Invoice(s)');
         expect(result.message).toContain('Acme Corp');
         expect(result.message).toContain('Tech Solutions');

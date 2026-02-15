@@ -11,7 +11,7 @@ import {
   MCPToolResponse,
   createSuccessResponse,
   createErrorResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import {
   handleDatabaseError,
   withErrorHandling,

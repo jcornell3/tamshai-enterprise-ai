@@ -17,7 +17,7 @@ import {
   createSuccessResponse,
   createErrorResponse,
   PaginationMetadata,
-} from '../types/response';
+} from '@tamshai/shared';
 import { withErrorHandling, handleDatabaseError } from '../utils/error-handler';
 import { TimeOffRequest } from './list-time-off-requests';
 

@@ -6,7 +6,7 @@
 
 import { getExpenseReport } from './get-expense-report';
 import { createMockUserContext, createMockDbResult } from '../test-utils';
-import { isSuccessResponse, isErrorResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({ queryWithRLS: jest.fn() }));
 

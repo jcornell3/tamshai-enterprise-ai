@@ -6,16 +6,11 @@
  */
 
 import { z } from 'zod';
-import winston from 'winston';
-import { MCPToolResponse, createSuccessResponse, PaginationMetadata } from '../types/response';
+import { MCPToolResponse, createSuccessResponse, PaginationMetadata, createLogger } from '@tamshai/shared';
 import { getCollection } from '../database/connection';
 import { UserContext } from '../database/types';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-support');
 
 // Employee ticket interface
 export interface EmployeeTicket {

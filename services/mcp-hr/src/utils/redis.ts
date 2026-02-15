@@ -6,17 +6,9 @@
  * with 5-minute TTL before they expire.
  */
 
-import { createRedisConfirmationCache, RedisConfirmationCache } from '@tamshai/shared';
-import winston from 'winston';
+import { createRedisConfirmationCache, createLogger, RedisConfirmationCache } from '@tamshai/shared';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-hr');
 
 const cache: RedisConfirmationCache = createRedisConfirmationCache('hr', logger);
 

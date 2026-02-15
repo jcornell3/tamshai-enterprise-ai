@@ -11,7 +11,7 @@ import {
   decodeCursor,
   PaginationCursor,
   PaginationMetadata,
-} from './response';
+} from '@tamshai/shared';
 
 describe('createSuccessResponse', () => {
   it('creates success response with data only', () => {

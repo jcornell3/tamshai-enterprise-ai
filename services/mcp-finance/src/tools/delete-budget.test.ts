@@ -14,7 +14,7 @@ import {
   isSuccessResponse,
   isErrorResponse,
   isPendingConfirmationResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 
 // Mock the database connection
 jest.mock('../database/connection', () => ({
@@ -184,7 +184,7 @@ describe('deleteBudget', () => {
       expect(isPendingConfirmationResponse(result)).toBe(true);
       if (isPendingConfirmationResponse(result)) {
         expect(result.confirmationId).toBe('test-confirmation-id');
-        expect(result.action).toBe('delete_budget');
+        expect(result.confirmationData.action).toBe('delete_budget');
       }
     });
 

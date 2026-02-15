@@ -4,7 +4,7 @@
 
 import { approveExpenseReport, executeApproveExpenseReport } from './approve-expense-report';
 import { createMockUserContext, createMockDbResult } from '../test-utils';
-import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse, isPendingConfirmationResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({ queryWithRLS: jest.fn() }));
 jest.mock('../utils/redis', () => ({ storePendingConfirmation: jest.fn().mockResolvedValue(undefined) }));
@@ -77,7 +77,7 @@ describe('approveExpenseReport', () => {
     );
     expect(isPendingConfirmationResponse(result)).toBe(true);
     if (isPendingConfirmationResponse(result)) {
-      expect(result.action).toBe('approve_expense_report');
+      expect(result.confirmationData.action).toBe('approve_expense_report');
       expect(result.message).toContain('Q1 Travel Expenses');
       expect(result.message).toContain('EXP-2024-001');
     }

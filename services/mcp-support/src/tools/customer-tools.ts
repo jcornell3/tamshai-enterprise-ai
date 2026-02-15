@@ -16,8 +16,7 @@
 
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import winston from 'winston';
-import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from '../types/response';
+import { MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, createLogger } from '@tamshai/shared';
 import { storePendingConfirmation } from '../utils/redis';
 import { getCollection } from '../database/connection';
 import {
@@ -30,11 +29,7 @@ import {
   canManageContacts,
 } from '../auth/customer-helpers';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-support');
 
 // =============================================================================
 // CUSTOMER TICKET TYPES

@@ -18,7 +18,7 @@ import {
   createSuccessResponse,
   createErrorResponse,
   createPendingConfirmationResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import { withErrorHandling, handleDatabaseError } from '../utils/error-handler';
 import { storePendingConfirmation } from '../utils/redis';
 

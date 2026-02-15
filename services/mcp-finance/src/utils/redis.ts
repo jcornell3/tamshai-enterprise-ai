@@ -6,17 +6,9 @@
  * Stores pending write operations with 5-minute TTL
  */
 
-import { createRedisConfirmationCache, RedisConfirmationCache } from '@tamshai/shared';
-import winston from 'winston';
+import { createRedisConfirmationCache, RedisConfirmationCache, createLogger } from '@tamshai/shared';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-finance');
 
 const cache: RedisConfirmationCache = createRedisConfirmationCache('finance', logger);
 

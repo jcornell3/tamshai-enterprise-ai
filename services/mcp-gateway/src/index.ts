@@ -22,7 +22,6 @@ import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 // jwt import removed - now handled by JWTValidator class
-import winston from 'winston';
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -115,21 +114,8 @@ if (missingVars.length > 0) {
 // LOGGER SETUP
 // =============================================================================
 
-const logger = winston.createLogger({
-  level: config.logLevel,
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    }),
-  ],
-});
+import { createLogger } from '@tamshai/shared';
+const logger = createLogger('mcp-gateway');
 
 // =============================================================================
 // JWT VALIDATOR (Extracted for testability - Phase 3 Refactoring)

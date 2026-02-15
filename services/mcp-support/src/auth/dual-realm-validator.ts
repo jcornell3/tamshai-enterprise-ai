@@ -10,13 +10,9 @@
 
 import jwt from 'jsonwebtoken';
 import jwksClient, { JwksClient, SigningKey } from 'jwks-rsa';
-import winston from 'winston';
+import { createLogger } from '@tamshai/shared';
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-support');
 
 /**
  * Realm type discriminator

@@ -23,6 +23,17 @@ export interface PaginationMetadata {
 }
 
 /**
+ * Legacy truncation metadata (for backwards compatibility)
+ * @deprecated Use PaginationMetadata instead
+ */
+export interface TruncationMetadata {
+  truncated: boolean;
+  totalCount?: number;
+  returnedCount: number;
+  warning?: string;
+}
+
+/**
  * Success response with optional pagination metadata
  */
 export interface MCPSuccessResponse<T = unknown> {
@@ -133,6 +144,33 @@ export function decodeCursor(encoded: string): PaginationCursor | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Type guard to check if response is a success response
+ */
+export function isSuccessResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPSuccessResponse<T> {
+  return response.status === 'success';
+}
+
+/**
+ * Type guard to check if response is an error response
+ */
+export function isErrorResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPErrorResponse {
+  return response.status === 'error';
+}
+
+/**
+ * Type guard to check if response is a pending confirmation response
+ */
+export function isPendingConfirmationResponse<T>(
+  response: MCPToolResponse<T>
+): response is MCPPendingConfirmationResponse {
+  return response.status === 'pending_confirmation';
 }
 
 /**

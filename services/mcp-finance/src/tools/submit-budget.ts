@@ -17,7 +17,7 @@ import {
   MCPToolResponse,
   createSuccessResponse,
   createErrorResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import {
   handleBudgetNotFound,
   handleDatabaseError,

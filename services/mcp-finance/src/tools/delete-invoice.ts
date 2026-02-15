@@ -13,7 +13,7 @@ import {
   MCPToolResponse,
   createPendingConfirmationResponse,
   createSuccessResponse,
-} from '../types/response';
+} from '@tamshai/shared';
 import {
   handleInvoiceNotFound,
   handleInsufficientPermissions,

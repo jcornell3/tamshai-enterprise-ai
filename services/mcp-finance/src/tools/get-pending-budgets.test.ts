@@ -1,7 +1,7 @@
 import { getPendingBudgets, GetPendingBudgetsInput, PendingBudget } from './get-pending-budgets';
 import { UserContext } from '../database/connection';
 import * as dbConnection from '../database/connection';
-import { isSuccessResponse, isErrorResponse } from '../types/response';
+import { isSuccessResponse, isErrorResponse } from '@tamshai/shared';
 
 jest.mock('../database/connection', () => ({
   queryWithRLS: jest.fn(),

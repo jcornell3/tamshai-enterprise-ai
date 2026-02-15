@@ -12,7 +12,7 @@ import {
   MCPErrorResponse,
   MCPPendingConfirmationResponse,
   PaginationMetadata,
-} from './response';
+} from '@tamshai/shared';
 
 describe('MCP Response Helpers', () => {
   describe('createSuccessResponse', () => {

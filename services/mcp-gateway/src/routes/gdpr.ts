@@ -11,7 +11,7 @@
 
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import winston from 'winston';
+import { createLogger } from '@tamshai/shared';
 
 // Types
 interface UserContext {
@@ -94,14 +94,7 @@ const erasures: Map<string, GDPRErasure> = new Map();
 const breaches: Map<string, GDPRBreach> = new Map();
 
 // Logger
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [new winston.transports.Console()],
-});
+const logger = createLogger('mcp-gateway');
 
 // Create router
 const router = Router();

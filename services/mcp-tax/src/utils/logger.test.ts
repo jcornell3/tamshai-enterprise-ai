@@ -15,12 +15,7 @@ describe('logger', () => {
     expect(typeof logger.debug).toBe('function');
   });
 
-  it('has correct service metadata', () => {
-    expect(logger.defaultMeta).toEqual({ service: 'mcp-tax' });
-  });
-
   it('can log info messages', () => {
-    // This should not throw
     expect(() => logger.info('Test info message')).not.toThrow();
   });
 
@@ -30,12 +25,5 @@ describe('logger', () => {
 
   it('can log error messages', () => {
     expect(() => logger.error('Test error', { error: new Error('test') })).not.toThrow();
-  });
-
-  it('has console transport configured', () => {
-    const consoleTransport = logger.transports.find(
-      (t) => t instanceof (require('winston').transports.Console)
-    );
-    expect(consoleTransport).toBeDefined();
   });
 });

@@ -6,7 +6,7 @@
  */
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
-import { requireGatewayAuth } from '@tamshai/shared';
+import { requireGatewayAuth, hasDomainAccess, hasDomainWriteAccess } from '@tamshai/shared';
 import { UserContext, checkConnection } from './database/connection';
 import { checkRedisConnection } from './utils/redis';
 import { logger } from './utils/logger';
@@ -45,24 +45,6 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// Authorization helpers
-function hasTaxReadAccess(roles: string[]): boolean {
-  return roles.some(
-    (role) =>
-      role === 'tax-read' ||
-      role === 'tax-write' ||
-      role === 'executive' ||
-      role === 'finance-read' ||
-      role === 'finance-write'
-  );
-}
-
-function hasTaxWriteAccess(roles: string[]): boolean {
-  return roles.some(
-    (role) => role === 'tax-write' || role === 'executive' || role === 'finance-write'
-  );
-}
-
 // Health check endpoint
 app.get('/health', async (_req: Request, res: Response) => {
   const dbHealthy = await checkConnection();
@@ -90,7 +72,7 @@ app.post('/tools/list_sales_tax_rates', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListSalesTaxRatesInput;
 
   // Sales tax rates are public reference data, so we allow broader access
-  if (!hasTaxReadAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'tax')) {
     res.json(
       handleInsufficientPermissions('list_sales_tax_rates', ['tax-read', 'tax-write', 'executive'])
     );
@@ -105,7 +87,7 @@ app.post('/tools/list_sales_tax_rates', async (req: Request, res: Response) => {
 app.post('/tools/list_quarterly_estimates', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListQuarterlyEstimatesInput;
 
-  if (!hasTaxReadAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'tax')) {
     res.json(
       handleInsufficientPermissions('list_quarterly_estimates', [
         'tax-read',
@@ -124,7 +106,7 @@ app.post('/tools/list_quarterly_estimates', async (req: Request, res: Response) 
 app.post('/tools/list_annual_filings', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListAnnualFilingsInput;
 
-  if (!hasTaxReadAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'tax')) {
     res.json(
       handleInsufficientPermissions('list_annual_filings', ['tax-read', 'tax-write', 'executive'])
     );
@@ -139,7 +121,7 @@ app.post('/tools/list_annual_filings', async (req: Request, res: Response) => {
 app.post('/tools/list_state_registrations', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListStateRegistrationsInput;
 
-  if (!hasTaxReadAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'tax')) {
     res.json(
       handleInsufficientPermissions('list_state_registrations', [
         'tax-read',
@@ -158,7 +140,7 @@ app.post('/tools/list_state_registrations', async (req: Request, res: Response) 
 app.post('/tools/list_audit_logs', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListAuditLogsInput;
 
-  if (!hasTaxReadAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'tax')) {
     res.json(
       handleInsufficientPermissions('list_audit_logs', ['tax-read', 'tax-write', 'executive'])
     );
@@ -173,7 +155,7 @@ app.post('/tools/list_audit_logs', async (req: Request, res: Response) => {
 app.post('/tools/get_tax_summary', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & GetTaxSummaryInput;
 
-  if (!hasTaxReadAccess(userContext.roles)) {
+  if (!hasDomainAccess(userContext.roles, 'tax')) {
     res.json(
       handleInsufficientPermissions('get_tax_summary', ['tax-read', 'tax-write', 'executive'])
     );
