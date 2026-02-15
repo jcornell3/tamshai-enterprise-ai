@@ -340,7 +340,7 @@ export class MarkdownParser {
         const end = input.indexOf('>', i + 1);
         i = end === -1 ? input.length : end + 1;
       } else {
-        out.push(input[i]);
+        out.push(input.charAt(i));
         i++;
       }
     }

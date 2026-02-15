@@ -298,16 +298,44 @@ jobs:
           export $(cat .env | grep -v '^#' | xargs)
 
           # =========================================================================
-          # Ensure newer PORT_ variables exist in .env (may be missing from older VPS)
-          # These were added in Payroll/Tax/UI phases and may not exist on VPS yet
-          # docker compose --env-file reads .env directly, so exported vars aren't enough
+          # Ensure ALL required variables exist in .env
+          # The VPS .env may be outdated — append any missing vars with defaults.
+          # docker compose --env-file reads .env directly, so exported vars aren't enough.
           # =========================================================================
-          grep -q '^PORT_MCP_PAYROLL=' .env || echo 'PORT_MCP_PAYROLL=3106' >> .env
-          grep -q '^PORT_MCP_TAX=' .env || echo 'PORT_MCP_TAX=3117' >> .env
-          grep -q '^PORT_MCP_UI=' .env || echo 'PORT_MCP_UI=3118' >> .env
-          grep -q '^PORT_WEB_PAYROLL=' .env || echo 'PORT_WEB_PAYROLL=4005' >> .env
-          grep -q '^PORT_WEB_TAX=' .env || echo 'PORT_WEB_TAX=4006' >> .env
-          grep -q '^PORT_WEB_CUSTOMER_SUPPORT=' .env || echo 'PORT_WEB_CUSTOMER_SUPPORT=4007' >> .env
+          ensure_var() { grep -q "^$1=" .env || echo "$1=$2" >> .env; }
+
+          # Port variables (source of truth: infrastructure/docker/.env.example)
+          ensure_var PORT_REDIS 6380
+          ensure_var PORT_VAULT 8200
+          ensure_var PORT_CADDY_HTTP 80
+          ensure_var PORT_CADDY_HTTPS 443
+          ensure_var PORT_KEYCLOAK 8180
+          ensure_var PORT_KONG_PROXY 8100
+          ensure_var PORT_KONG_ADMIN 8101
+          ensure_var PORT_MCP_GATEWAY 3100
+          ensure_var PORT_MCP_UI 3118
+          ensure_var PORT_MCP_HR 3101
+          ensure_var PORT_MCP_FINANCE 3102
+          ensure_var PORT_MCP_SALES 3103
+          ensure_var PORT_MCP_SUPPORT 3104
+          ensure_var PORT_MCP_JOURNEY 3105
+          ensure_var PORT_MCP_PAYROLL 3106
+          ensure_var PORT_MCP_TAX 3117
+          ensure_var PORT_WEB_PORTAL 4000
+          ensure_var PORT_WEB_HR 4001
+          ensure_var PORT_WEB_FINANCE 4002
+          ensure_var PORT_WEB_SALES 4003
+          ensure_var PORT_WEB_SUPPORT 4004
+          ensure_var PORT_WEB_PAYROLL 4005
+          ensure_var PORT_WEB_TAX 4006
+          ensure_var PORT_WEB_CUSTOMER_SUPPORT 4007
+          ensure_var PORT_WEBSITE 8080
+          ensure_var PORT_POSTGRES 5433
+          ensure_var PORT_MONGODB 27018
+          ensure_var PORT_ELASTICSEARCH 9201
+          ensure_var PORT_MINIO_API 9100
+          ensure_var PORT_MINIO_CONSOLE 9102
+
           # Reload with any additions
           export $(cat .env | grep -v '^#' | xargs)
 
