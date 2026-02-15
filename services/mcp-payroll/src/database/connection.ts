@@ -6,9 +6,10 @@
  */
 
 import { createPostgresClient } from '@tamshai/shared';
+import type { PostgresClient } from '@tamshai/shared';
 import { logger } from '../utils/logger';
 
-const db = createPostgresClient(logger);
+const db: PostgresClient = createPostgresClient(logger);
 
 export const { pool, queryWithRLS, queryWithoutRLS, getClient, checkConnection, closePool } = db;
 

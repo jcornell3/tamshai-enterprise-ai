@@ -6,6 +6,7 @@
  */
 
 import { createPostgresClient } from '@tamshai/shared';
+import type { PostgresClient } from '@tamshai/shared';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -17,7 +18,7 @@ const logger = winston.createLogger({
   transports: [new winston.transports.Console()],
 });
 
-const db = createPostgresClient(logger);
+const db: PostgresClient = createPostgresClient(logger);
 
 export const { pool, queryWithRLS, queryWithoutRLS, getClient, checkConnection, closePool } = db;
 
