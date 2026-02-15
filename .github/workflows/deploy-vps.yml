@@ -69,7 +69,7 @@ on:
 
 concurrency:
   group: deploy-${{ github.event.inputs.environment || 'staging' }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
