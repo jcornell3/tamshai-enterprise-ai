@@ -153,7 +153,6 @@ services:
     build:
       context: ../../keycloak
       dockerfile: Dockerfile.dev
-    image: tamshai-dev-keycloak:dev
     container_name: tamshai-dev-keycloak
     restart: unless-stopped
     environment:
@@ -221,7 +220,6 @@ services:
     build:
       context: ../..
       dockerfile: services/mcp-gateway/Dockerfile
-    image: mcp-gateway:latest
     container_name: tamshai-dev-mcp-gateway
     environment:
       NODE_ENV: development
@@ -273,7 +271,6 @@ services:
     build:
       context: ../..
       dockerfile: services/mcp-ui/Dockerfile
-    image: mcp-ui:latest
     container_name: tamshai-dev-mcp-ui
     environment:
       NODE_ENV: development
@@ -964,7 +961,9 @@ services:
   # - Groups and role assignments (C-Suite, All-Employees)
   # Phoenix principle: All configuration is idempotent and recreatable from code.
   keycloak-sync:
-    image: tamshai-dev-keycloak:dev
+    build:
+      context: ../../keycloak
+      dockerfile: Dockerfile.dev
     container_name: tamshai-dev-keycloak-sync
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?KEYCLOAK_ADMIN is required}
