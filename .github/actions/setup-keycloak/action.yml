@@ -12,7 +12,7 @@ inputs:
   keycloak-version:
     description: 'Keycloak version to use'
     required: false
-    default: '26.0'
+    default: '26.0.7'
   wait-timeout:
     description: 'Maximum wait time in seconds for Keycloak to start'
     required: false

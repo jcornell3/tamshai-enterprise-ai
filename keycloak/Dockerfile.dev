@@ -10,7 +10,7 @@
 #   changes made after container creation. By copying the file into the image,
 #   we ensure `docker compose build --no-cache` always includes the latest config.
 
-FROM quay.io/keycloak/keycloak:24.0
+FROM quay.io/keycloak/keycloak:26.0.7
 
 # Install jq and curl for realm sync scripts (Authorization Services configuration)
 # Download as static binaries (ADD supports URLs, works with minimal base images)
