@@ -216,7 +216,7 @@ router.post('/export', requireHRRole, async (req: Request, res: Response) => {
  * Download a completed GDPR export
  */
 router.get('/export/:exportId/download', requireHRRole, (req: Request, res: Response) => {
-  const { exportId } = req.params;
+  const { exportId } = req.params as Record<string, string>;
   const exportRecord = gdprExports.get(exportId);
 
   if (!exportRecord) {
@@ -324,7 +324,7 @@ router.post('/erase', requireHRRole, async (req: Request, res: Response) => {
  */
 router.post('/erase/:erasureId/confirm', requireHRRole, async (req: Request, res: Response) => {
   const userContext = (req as Request & { userContext?: UserContext }).userContext!;
-  const { erasureId } = req.params;
+  const { erasureId } = req.params as Record<string, string>;
   const { confirmed } = req.body;
 
   const erasureRecord = erasures.get(erasureId);
@@ -395,7 +395,7 @@ router.post('/erase/:erasureId/confirm', requireHRRole, async (req: Request, res
  * Get erasure status
  */
 router.get('/erase/:erasureId', requireHRRole, (req: Request, res: Response) => {
-  const { erasureId } = req.params;
+  const { erasureId } = req.params as Record<string, string>;
   const erasureRecord = erasures.get(erasureId);
 
   if (!erasureRecord) {
@@ -523,7 +523,7 @@ router.post('/breach', requireHRRole, async (req: Request, res: Response) => {
  * Get breach details
  */
 router.get('/breach/:breachId', requireHRRole, (req: Request, res: Response) => {
-  const { breachId } = req.params;
+  const { breachId } = req.params as Record<string, string>;
   const breachRecord = breaches.get(breachId);
 
   if (!breachRecord) {

@@ -49,7 +49,7 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
    * Handles human-in-the-loop confirmations for write operations
    */
   router.post('/confirm/:confirmationId', async (req: Request, res: Response) => {
-    const { confirmationId } = req.params;
+    const { confirmationId } = req.params as Record<string, string>;
     const { approved } = req.body;
     const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
     const requestId = req.headers['x-request-id'] as string;

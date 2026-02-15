@@ -63,7 +63,8 @@ function createTestAdminRoutes() {
   });
 
   router.post('/snapshots/:snapshotId/rollback', (req: express.Request, res: express.Response) => {
-    const snapshot = testSnapshots.get(req.params.snapshotId);
+    const { snapshotId } = req.params as Record<string, string>;
+    const snapshot = testSnapshots.get(snapshotId);
     if (!snapshot) {
       return res.status(404).json({ status: 'error', code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found' });
     }
@@ -71,20 +72,23 @@ function createTestAdminRoutes() {
   });
 
   router.delete('/snapshots/:snapshotId', (req: express.Request, res: express.Response) => {
-    const snapshot = testSnapshots.get(req.params.snapshotId);
+    const { snapshotId } = req.params as Record<string, string>;
+    const snapshot = testSnapshots.get(snapshotId);
     if (!snapshot) {
       return res.status(404).json({ status: 'error', code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found' });
     }
-    testSnapshots.delete(req.params.snapshotId);
-    res.json({ status: 'success', message: `Snapshot ${req.params.snapshotId} deleted` });
+    testSnapshots.delete(snapshotId);
+    res.json({ status: 'success', message: `Snapshot ${snapshotId} deleted` });
   });
 
   router.post('/seed/:scenario', (req: express.Request, res: express.Response) => {
-    res.json({ status: 'success', message: `Seeded: ${req.params.scenario}`, scenario: req.params.scenario, timestamp: new Date().toISOString() });
+    const { scenario } = req.params as Record<string, string>;
+    res.json({ status: 'success', message: `Seeded: ${scenario}`, scenario, timestamp: new Date().toISOString() });
   });
 
   router.post('/clear/:domain', (req: express.Request, res: express.Response) => {
-    res.json({ status: 'success', message: `Cleared: ${req.params.domain}`, domain: req.params.domain, timestamp: new Date().toISOString() });
+    const { domain } = req.params as Record<string, string>;
+    res.json({ status: 'success', message: `Cleared: ${domain}`, domain, timestamp: new Date().toISOString() });
   });
 
   return router;

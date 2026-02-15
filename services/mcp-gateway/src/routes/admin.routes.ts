@@ -355,7 +355,7 @@ router.post('/snapshots', async (req: Request, res: Response) => {
  * Rollback database to a previous snapshot
  */
 router.post('/snapshots/:snapshotId/rollback', async (req: Request, res: Response) => {
-  const { snapshotId } = req.params;
+  const { snapshotId } = req.params as Record<string, string>;
 
   logger.info('Rolling back to snapshot', { snapshotId: sanitizeForLog(snapshotId) });
 
@@ -431,7 +431,7 @@ router.get('/snapshots', async (req: Request, res: Response) => {
  * Delete a specific snapshot
  */
 router.delete('/snapshots/:snapshotId', async (req: Request, res: Response) => {
-  const { snapshotId } = req.params;
+  const { snapshotId } = req.params as Record<string, string>;
 
   const snapshot = snapshots.get(snapshotId);
   if (!snapshot) {
@@ -470,7 +470,7 @@ router.delete('/snapshots/:snapshotId', async (req: Request, res: Response) => {
  * Seed test data for a specific scenario
  */
 router.post('/seed/:scenario', async (req: Request, res: Response) => {
-  const { scenario } = req.params;
+  const { scenario } = req.params as Record<string, string>;
 
   logger.info('Seeding data for scenario', { scenario: sanitizeForLog(scenario) });
 
@@ -489,7 +489,7 @@ router.post('/seed/:scenario', async (req: Request, res: Response) => {
  * Clear test data for a specific domain
  */
 router.post('/clear/:domain', async (req: Request, res: Response) => {
-  const { domain } = req.params;
+  const { domain } = req.params as Record<string, string>;
 
   logger.info('Clearing data for domain', { domain: sanitizeForLog(domain) });
 

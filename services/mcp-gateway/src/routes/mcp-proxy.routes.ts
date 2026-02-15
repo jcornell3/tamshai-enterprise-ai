@@ -55,7 +55,7 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
   router.get('/mcp/:serverName/:toolName', async (req: Request, res: Response) => {
     const requestId = req.headers['x-request-id'] as string;
     const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-    const { serverName, toolName } = req.params;
+    const { serverName, toolName } = req.params as Record<string, string>;
 
     // SECURITY: Validate toolName to prevent SSRF/path traversal
     if (!isValidToolName(toolName)) {
@@ -183,7 +183,7 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
   router.post('/mcp/:serverName/:toolName', async (req: Request, res: Response) => {
     const requestId = req.headers['x-request-id'] as string;
     const userContext: UserContext = (req as AuthenticatedRequest).userContext!;
-    const { serverName, toolName } = req.params;
+    const { serverName, toolName } = req.params as Record<string, string>;
     const body = req.body;
 
     // SECURITY: Validate toolName to prevent SSRF/path traversal
