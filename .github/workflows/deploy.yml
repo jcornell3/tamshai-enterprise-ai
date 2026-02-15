@@ -126,6 +126,7 @@ jobs:
         # 1. apk upgrade runs fresh and applies latest security patches
         # 2. Latest node:20-alpine base image is pulled
         env:
+          COMPOSE_PROJECT_NAME: tamshai-ci
           # Required env vars for docker-compose.yml parsing
           ELASTIC_PASSWORD: ${{ secrets.ELASTIC_PASSWORD }}
           TAMSHAI_DB_PASSWORD: ci_scan_value
@@ -182,7 +183,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'mcp-gateway:latest'
+          image-ref: 'tamshai-ci-mcp-gateway'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -198,7 +199,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
 
           # Run Grype with config file (ignores fixed CVEs listed in .grype.yaml)
-          grype mcp-gateway:latest --config .grype.yaml --fail-on high -o sarif > grype-results.sarif || {
+          grype tamshai-ci-mcp-gateway --config .grype.yaml --fail-on high -o sarif > grype-results.sarif || {
             echo "Grype found vulnerabilities above threshold"
             cat grype-results.sarif | jq '.runs[].results[] | {ruleId: .ruleId, message: .message.text}' 2>/dev/null || true
             exit 1
