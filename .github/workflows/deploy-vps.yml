@@ -391,6 +391,12 @@ jobs:
           # Build images on VPS (no container registry configured yet)
           # Change to docker compose directory (paths in docker-compose.yml are relative to compose file)
           cd infrastructure/docker
+
+          # Limit parallel builds to prevent OOM on VPS.
+          # Each MCP service runs `npm ci && npm run build` for the shared package;
+          # 9 simultaneous TypeScript compilations exhaust memory and hang.
+          export COMPOSE_PARALLEL_LIMIT=3
+
           if [ "${{ github.event.inputs.build }}" = "true" ]; then
             echo "Force rebuilding with --no-cache..."
             # Stop containers to prevent cache reuse
