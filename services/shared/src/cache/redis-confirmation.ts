@@ -4,8 +4,8 @@
  * Provides a standardized Redis-based confirmation cache for human-in-the-loop
  * approval flows across all MCP services (Architecture v1.4 - Section 5.6).
  *
- * Uses a lazy-loading singleton pattern for the Redis client with service-specific
- * key prefixes to avoid collisions: `pending:{serviceName}:{confirmationId}`
+ * Uses a lazy-loading singleton pattern for the Redis client.
+ * Key format: `pending:{confirmationId}` (matches MCP Gateway's confirmation endpoint)
  *
  * Usage:
  *   import { createRedisConfirmationCache } from '@tamshai/shared';
@@ -97,10 +97,10 @@ function getOrCreateRedisClient(logger: ConfirmationLogger): Redis {
 /**
  * Create a Redis confirmation cache for a specific MCP service.
  *
- * Each service gets its own key prefix (`pending:{serviceName}:{confirmationId}`)
- * but shares the same underlying Redis connection.
+ * Uses a simple key format (`pending:{confirmationId}`) that matches the
+ * MCP Gateway's confirmation endpoint expectations.
  *
- * @param serviceName - Service identifier used in key prefix (e.g., 'hr', 'finance')
+ * @param serviceName - Service identifier for logging purposes (e.g., 'hr', 'finance')
  * @param logger - Logger instance (Winston-compatible)
  * @returns RedisConfirmationCache interface
  */
@@ -109,7 +109,7 @@ export function createRedisConfirmationCache(
   logger: ConfirmationLogger
 ): RedisConfirmationCache {
   function buildKey(confirmationId: string): string {
-    return `pending:${serviceName}:${confirmationId}`;
+    return `pending:${confirmationId}`;
   }
 
   return {

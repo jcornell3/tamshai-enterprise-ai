@@ -16,16 +16,16 @@ const mockQuit = jest.fn().mockResolvedValue('OK');
 jest.mock('@tamshai/shared', () => ({
   createRedisConfirmationCache: (serviceName: string) => ({
     storePendingConfirmation: async (confirmationId: string, data: unknown, ttl = 300) => {
-      await mockSetex(`pending:${serviceName}:${confirmationId}`, ttl, JSON.stringify(data));
+      await mockSetex(`pending:${confirmationId}`, ttl, JSON.stringify(data));
     },
     confirmationExists: async (confirmationId: string) => {
-      const result = await mockExists(`pending:${serviceName}:${confirmationId}`);
+      const result = await mockExists(`pending:${confirmationId}`);
       return result === 1;
     },
     getPendingConfirmation: async (confirmationId: string) => {
-      const data = await mockGet(`pending:${serviceName}:${confirmationId}`);
+      const data = await mockGet(`pending:${confirmationId}`);
       if (data) {
-        await mockDel(`pending:${serviceName}:${confirmationId}`);
+        await mockDel(`pending:${confirmationId}`);
         return JSON.parse(data);
       }
       return null;
@@ -98,7 +98,7 @@ describe('Redis Utility', () => {
       await storePendingConfirmation(confirmationId, data);
 
       expect(mockSetex).toHaveBeenCalledWith(
-        `pending:hr:${confirmationId}`,
+        `pending:${confirmationId}`,
         300,
         JSON.stringify(data)
       );
@@ -117,7 +117,7 @@ describe('Redis Utility', () => {
       await storePendingConfirmation(confirmationId, data, customTtl);
 
       expect(mockSetex).toHaveBeenCalledWith(
-        `pending:hr:${confirmationId}`,
+        `pending:${confirmationId}`,
         customTtl,
         JSON.stringify(data)
       );
@@ -130,7 +130,7 @@ describe('Redis Utility', () => {
       await storePendingConfirmation(confirmationId, data);
 
       const callArgs = mockSetex.mock.calls[0];
-      expect(callArgs[0]).toBe('pending:hr:test-id-123');
+      expect(callArgs[0]).toBe('pending:test-id-123');
     });
 
     it('serializes data to JSON', async () => {
@@ -195,7 +195,7 @@ describe('Redis Utility', () => {
       const result = await confirmationExists(confirmationId);
 
       expect(result).toBe(true);
-      expect(mockExists).toHaveBeenCalledWith(`pending:hr:${confirmationId}`);
+      expect(mockExists).toHaveBeenCalledWith(`pending:${confirmationId}`);
     });
 
     it('returns false when confirmation does not exist', async () => {
@@ -205,7 +205,7 @@ describe('Redis Utility', () => {
       const result = await confirmationExists(confirmationId);
 
       expect(result).toBe(false);
-      expect(mockExists).toHaveBeenCalledWith(`pending:hr:${confirmationId}`);
+      expect(mockExists).toHaveBeenCalledWith(`pending:${confirmationId}`);
     });
 
     it('uses service-specific key prefix', async () => {
@@ -214,7 +214,7 @@ describe('Redis Utility', () => {
       const confirmationId = 'test-id-456';
       await confirmationExists(confirmationId);
 
-      expect(mockExists).toHaveBeenCalledWith('pending:hr:test-id-456');
+      expect(mockExists).toHaveBeenCalledWith('pending:test-id-456');
     });
   });
 
@@ -226,8 +226,8 @@ describe('Redis Utility', () => {
       const result = await getPendingConfirmation('conf-123');
 
       expect(result).toEqual(data);
-      expect(mockGet).toHaveBeenCalledWith('pending:hr:conf-123');
-      expect(mockDel).toHaveBeenCalledWith('pending:hr:conf-123');
+      expect(mockGet).toHaveBeenCalledWith('pending:conf-123');
+      expect(mockDel).toHaveBeenCalledWith('pending:conf-123');
     });
 
     it('returns null for non-existent confirmation', async () => {
@@ -253,7 +253,7 @@ describe('Redis Utility', () => {
       const existsKey = mockExists.mock.calls[0][0];
 
       expect(storeKey).toBe(existsKey);
-      expect(storeKey).toBe('pending:hr:test-uuid-123');
+      expect(storeKey).toBe('pending:test-uuid-123');
     });
   });
 
@@ -304,7 +304,7 @@ describe('Redis Utility', () => {
       await storePendingConfirmation(confirmationId, data, 0);
 
       expect(mockSetex).toHaveBeenCalledWith(
-        'pending:hr:id-123',
+        'pending:id-123',
         0,
         expect.any(String)
       );
@@ -318,7 +318,7 @@ describe('Redis Utility', () => {
       await storePendingConfirmation(confirmationId, data, largeTtl);
 
       expect(mockSetex).toHaveBeenCalledWith(
-        'pending:hr:id-123',
+        'pending:id-123',
         largeTtl,
         expect.any(String)
       );

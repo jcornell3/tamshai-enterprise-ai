@@ -44,7 +44,7 @@ export async function deletePendingConfirmation(confirmationId: string): Promise
   // getPendingConfirmation already deletes, but this is called separately in finance.
   // We need to just delete the key without retrieving.
   const client = cache.getRedisClient();
-  const key = `pending:finance:${confirmationId}`;
+  const key = `pending:${confirmationId}`;
   try {
     await client.del(key);
     logger.info('Deleted pending confirmation', { confirmationId });
