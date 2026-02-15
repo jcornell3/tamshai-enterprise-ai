@@ -336,6 +336,12 @@ jobs:
         run: |
           docker compose build mcp-gateway
 
+      - name: Build shared package
+        working-directory: services/shared
+        run: |
+          npm ci
+          npm run build
+
       - name: Install dependencies
         working-directory: ./services/mcp-gateway
         run: npm ci

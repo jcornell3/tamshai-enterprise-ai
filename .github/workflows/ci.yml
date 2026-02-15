@@ -1152,7 +1152,7 @@ jobs:
         env:
           MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
           KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
-          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
+          # KEYCLOAK_ADMIN_PASSWORD omitted - falls back to 'admin' matching setup-keycloak action
           CI: true
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
