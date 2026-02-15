@@ -1,0 +1,50 @@
+# Incremental Deployment: MCP UI Service
+#
+# Uses reusable workflow for deployment logic.
+# Triggers on changes to services/mcp-ui/
+
+name: Deploy MCP UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/mcp-ui/**'
+      - '.github/workflows/deploy-mcp-ui.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: 'staging'
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-mcp-ui-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-mcp-service.yml
+    with:
+      service-name: mcp-ui
+      health-check-port: '3118'
+      environment: ${{ github.event.inputs.environment || 'staging' }}
+      rollback: ${{ github.event.inputs.rollback == 'true' }}
+    secrets:
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_SSH_USER: ${{ secrets.VPS_SSH_USER }}

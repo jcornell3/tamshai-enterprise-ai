@@ -26,10 +26,21 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.specify/**'
+    paths:
+      # Infrastructure (docker-compose, Dockerfiles, Caddy, Kong, DB init, Vault)
+      - 'infrastructure/**'
+      # Keycloak realm exports and sync scripts
+      - 'keycloak/**'
+      # Sample data
+      - 'sample-data/**'
+      # Shared library (all services depend on this)
+      - 'services/shared/**'
+      # Web client apps (no individual deploy workflows)
+      - 'clients/web/**'
+      # Deployment and infra scripts
+      - 'scripts/**'
+      # This workflow itself
+      - '.github/workflows/deploy-vps.yml'
 
   release:
     types: [published]
