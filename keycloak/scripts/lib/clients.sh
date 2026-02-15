@@ -265,6 +265,27 @@ get_web_portal_client_json() {
 EOF
 }
 
+# Generate JSON for mcp-ui client (confidential, service account for generative UI)
+get_mcp_ui_client_json() {
+    cat <<EOF
+{
+    "clientId": "mcp-ui",
+    "name": "MCP UI Service",
+    "description": "Backend service for Generative UI - confidential client for service-to-service auth",
+    "enabled": true,
+    "publicClient": false,
+    "standardFlowEnabled": false,
+    "directAccessGrantsEnabled": false,
+    "serviceAccountsEnabled": true,
+    "protocol": "openid-connect",
+    "redirectUris": [],
+    "webOrigins": [],
+    "fullScopeAllowed": false,
+    "defaultClientScopes": ["openid", "profile", "email", "roles"]
+}
+EOF
+}
+
 # Generate JSON for mcp-hr-service client (confidential, service account)
 get_mcp_hr_service_client_json() {
     cat <<EOF
@@ -332,6 +353,60 @@ sync_mcp_gateway_client() {
             log_warn "  Failed to set client secret via update"
         }
     fi
+}
+
+# Sync mcp-ui client (confidential, service account for generative UI)
+sync_mcp_ui_client() {
+    log_info "Syncing mcp-ui client..."
+
+    local client_secret="${MCP_UI_CLIENT_SECRET:-}"
+
+    local client_json
+    client_json=$(get_mcp_ui_client_json)
+    create_or_update_client "mcp-ui" "$client_json"
+
+    # Set client secret if provided
+    local uuid
+    uuid=$(get_client_uuid "mcp-ui")
+    if [ -n "$uuid" ] && [ -n "$client_secret" ]; then
+        log_info "  Setting client secret..."
+        _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
+            log_warn "  Failed to set client secret via update"
+        }
+    fi
+
+    # Add mcp-gateway audience mapper so mcp-ui tokens are accepted by the gateway
+    if [ -n "$uuid" ]; then
+        log_info "  Adding mcp-gateway audience mapper..."
+        _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+            -s name="mcp-gateway-audience" \
+            -s protocol="openid-connect" \
+            -s protocolMapper="oidc-audience-mapper" \
+            -s consentRequired=false \
+            -s 'config."included.client.audience"="mcp-gateway"' \
+            -s 'config."id.token.claim"="true"' \
+            -s 'config."access.token.claim"="true"' 2>/dev/null || {
+            log_info "    Audience mapper already exists"
+        }
+
+        # Add hardcoded realm roles for generative UI (read access to all departments)
+        log_info "  Adding hardcoded realm roles mapper..."
+        _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+            -s name="hardcoded-realm-roles" \
+            -s protocol="openid-connect" \
+            -s protocolMapper="oidc-hardcoded-claim-mapper" \
+            -s consentRequired=false \
+            -s 'config."claim.name"="realm_access"' \
+            -s 'config."claim.value"="{\"roles\":[\"executive\",\"hr-read\",\"finance-read\",\"sales-read\",\"support-read\",\"payroll-read\"]}"' \
+            -s 'config."id.token.claim"="true"' \
+            -s 'config."access.token.claim"="true"' \
+            -s 'config."userinfo.token.claim"="true"' \
+            -s 'config."jsonType.label"="JSON"' 2>/dev/null || {
+            log_info "    Realm roles mapper already exists"
+        }
+    fi
+
+    log_info "  mcp-ui client configured"
 }
 
 # Sync mcp-hr-service client with service account roles
