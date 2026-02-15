@@ -16,8 +16,8 @@
 #   - MCP Support:   3104
 #   - MCP Journey:   3105
 #   - MCP Payroll:   3106
-#   - MCP Tax:       3117
-#   - MCP UI:        3118
+#   - MCP Tax:       3107
+#   - MCP UI:        3108
 #   - Web Portal:    4000
 #   - Web HR:        4001
 #   - Web Finance:   4002
@@ -575,7 +575,7 @@ services:
       VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
-      VITE_MCP_UI_URL: http://mcp-ui:3118
+      VITE_MCP_UI_URL: http://mcp-ui:3108
     ports:
       - "${PORT_WEB_PORTAL:?PORT_WEB_PORTAL is required}:80"
     depends_on:
@@ -667,7 +667,7 @@ services:
       VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
-      VITE_MCP_UI_URL: http://mcp-ui:3118
+      VITE_MCP_UI_URL: http://mcp-ui:3108
     ports:
       - "${PORT_WEB_SALES:?PORT_WEB_SALES is required}:80"
     depends_on:
@@ -700,7 +700,7 @@ services:
       VITE_KEYCLOAK_CLIENT_ID: web-portal
       VITE_API_GATEWAY_URL: http://kong:8000
       VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
-      VITE_MCP_UI_URL: http://mcp-ui:3118
+      VITE_MCP_UI_URL: http://mcp-ui:3108
     ports:
       - "${PORT_WEB_SUPPORT:?PORT_WEB_SUPPORT is required}:80"
     depends_on:

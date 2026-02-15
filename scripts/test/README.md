@@ -42,7 +42,7 @@ docker ps --format "table {{.Names}}\t{{.Ports}}\t{{.Status}}" | grep tamshai-de
 | **MCP Support** | tamshai-dev-mcp-support | 3104 | **3104** |
 | **MCP Journey** | tamshai-dev-mcp-journey | 3105 | **3105** |
 | **MCP Payroll** | tamshai-dev-mcp-payroll | 3106 | **3106** |
-| **MCP Tax** | tamshai-dev-mcp-tax | 3117 | **3117** |
+| **MCP Tax** | tamshai-dev-mcp-tax | 3107 | **3107** |
 | **PostgreSQL** | tamshai-dev-postgres | 5432 | **5433** |
 | **Redis** | tamshai-dev-redis | 6379 | **6380** |
 | **Caddy (HTTPS)** | tamshai-dev-caddy | 443 | **443** |

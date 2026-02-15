@@ -24,8 +24,8 @@ Audit of files with hardcoded `localhost:` port numbers that should use GitHub v
 | MCP Support | 3104 | DEV_MCP_SUPPORT | 3104 |
 | MCP Journey | 3105 | DEV_MCP_JOURNEY | 3105 |
 | MCP Payroll | 3106 | DEV_MCP_PAYROLL | 3106 |
-| MCP Tax | 3107 | DEV_MCP_TAX | 3117 |
-| MCP UI | 3108 | DEV_MCP_UI | 3118 |
+| MCP Tax | 3107 | DEV_MCP_TAX | 3107 |
+| MCP UI | 3108 | DEV_MCP_UI | 3108 |
 | PostgreSQL | 5433 | DEV_POSTGRES | 5433 |
 | MongoDB | 27018 | DEV_MONGODB | 27018 |
 | Redis | 6379 | DEV_REDIS | 6380 |

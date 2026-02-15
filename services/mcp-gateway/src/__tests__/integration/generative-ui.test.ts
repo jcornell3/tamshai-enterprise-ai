@@ -30,7 +30,7 @@ const describeIntegration = isCI ? describe.skip : describe;
 
 // Test configuration
 const CONFIG = {
-  mcpUiUrl: process.env.MCP_UI_URL || 'http://127.0.0.1:3118',
+  mcpUiUrl: process.env.MCP_UI_URL || 'http://127.0.0.1:3108',
   mcpGatewayUrl: process.env.MCP_GATEWAY_URL || 'http://127.0.0.1:3100',
 };
 

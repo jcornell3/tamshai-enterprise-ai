@@ -52,8 +52,8 @@ $portVariables = @{
     "port_mcp_support"         = @{ name = "${environment}_MCP_SUPPORT"; default = "3104" }
     "port_mcp_journey"         = @{ name = "${environment}_MCP_JOURNEY"; default = "3105" }
     "port_mcp_payroll"         = @{ name = "${environment}_MCP_PAYROLL"; default = "3106" }
-    "port_mcp_tax"             = @{ name = "${environment}_MCP_TAX"; default = "3117" }
-    "port_mcp_ui"              = @{ name = "${environment}_MCP_UI"; default = "3118" }
+    "port_mcp_tax"             = @{ name = "${environment}_MCP_TAX"; default = "3107" }
+    "port_mcp_ui"              = @{ name = "${environment}_MCP_UI"; default = "3108" }
 
     # Web Apps
     "port_web_portal"          = @{ name = "${environment}_WEB_PORTAL"; default = "4000" }

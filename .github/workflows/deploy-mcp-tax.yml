@@ -41,7 +41,7 @@ jobs:
     uses: ./.github/workflows/deploy-mcp-service.yml
     with:
       service-name: mcp-tax
-      health-check-port: '3117'
+      health-check-port: '3107'
       environment: ${{ github.event.inputs.environment || 'staging' }}
       rollback: ${{ github.event.inputs.rollback == 'true' }}
     secrets:

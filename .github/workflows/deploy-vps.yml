@@ -308,14 +308,14 @@ jobs:
           ensure PORT_KONG_PROXY 8100
           ensure PORT_KONG_ADMIN 8101
           ensure PORT_MCP_GATEWAY 3100
-          ensure PORT_MCP_UI 3118
+          ensure PORT_MCP_UI 3108
           ensure PORT_MCP_HR 3101
           ensure PORT_MCP_FINANCE 3102
           ensure PORT_MCP_SALES 3103
           ensure PORT_MCP_SUPPORT 3104
           ensure PORT_MCP_JOURNEY 3105
           ensure PORT_MCP_PAYROLL 3106
-          ensure PORT_MCP_TAX 3117
+          ensure PORT_MCP_TAX 3107
           ensure PORT_WEB_PORTAL 4000
           ensure PORT_WEB_HR 4001
           ensure PORT_WEB_FINANCE 4002

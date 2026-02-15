@@ -874,6 +874,8 @@ sysctl vm.max_map_count
 | MCP Support | 3104 | Support MCP |
 | MCP Journey | 3105 | Project History Agent |
 | MCP Payroll | 3106 | Payroll MCP |
+| MCP Tax | 3107 | Tax MCP |
+| MCP UI | 3108 | Generative UI Components |
 | Web Payroll | 4005 | Payroll Web App |
 | PostgreSQL | 5433 | Relational DB |
 | MongoDB | 27018 | Document DB |
@@ -1545,11 +1547,11 @@ docker compose exec redis redis-cli KEYS "revoked:*"
 After completing expense reports v1.5, begin Phase 3.2 - Tax Module implementation using TDD:
 1. Write failing tests (RED phase)
 2. Implement minimal code (GREEN phase)
-3. MCP Tax server (port 3107)
+3. MCP Tax server (port 3107, container: mcp-tax)
 4. Database schema and sample data
 
 ---
 
-*Last Updated: February 10, 2026*
+*Last Updated: February 15, 2026*
 *Architecture Version: 1.5 (Generative UI + Expense Reports)*
-*Document Version: 3.3 (Phase C.5 Generative UI Complete)*
+*Document Version: 3.4 (CI Workflow Optimization + Port Alignment)*
