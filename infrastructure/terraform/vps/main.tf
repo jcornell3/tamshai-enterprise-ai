@@ -346,12 +346,12 @@ resource "null_resource" "update_github_stage_secrets" {
   count = var.auto_update_github_secrets ? 1 : 0
 
   triggers = {
-    redis_hash    = sha256(random_password.redis_password.result)
-    elastic_hash  = sha256(random_password.elastic_password.result)
-    vault_hash    = sha256(random_password.vault_dev_root_token.result)
-    mcp_int_hash  = sha256(random_password.mcp_internal_secret.result)
-    mcp_ui_hash   = sha256(random_password.mcp_ui_client_secret.result)
-    e2e_api_hash  = sha256(random_password.e2e_admin_api_key.result)
+    redis_hash   = sha256(random_password.redis_password.result)
+    elastic_hash = sha256(random_password.elastic_password.result)
+    vault_hash   = sha256(random_password.vault_dev_root_token.result)
+    mcp_int_hash = sha256(random_password.mcp_internal_secret.result)
+    mcp_ui_hash  = sha256(random_password.mcp_ui_client_secret.result)
+    e2e_api_hash = sha256(random_password.e2e_admin_api_key.result)
   }
 
   provisioner "local-exec" {
