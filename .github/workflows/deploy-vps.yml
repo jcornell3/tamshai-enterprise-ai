@@ -271,7 +271,7 @@ jobs:
           MCP_UI_CLIENT_SECRET: ${{ secrets.MCP_UI_CLIENT_SECRET }}
           E2E_ADMIN_API_KEY: ${{ secrets.E2E_ADMIN_API_KEY }}
         run: |
-          SSH_CMD="ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
 
           # Build a list of var=value pairs to ensure exist in .env
           # Only appends if the variable is not already present
@@ -333,7 +333,7 @@ jobs:
           echo "   Branch: $DEPLOY_BRANCH"
           echo "   Build: $BUILD_FLAG"
 
-          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
+          ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'DEPLOY_SCRIPT'
           set -e
           set +H  # Disable history expansion to handle passwords with special characters like !
 
@@ -599,7 +599,7 @@ jobs:
             exit 1
           fi
 
-          ssh -o ConnectTimeout=30 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'CONFIGURE_USER_SCRIPT'
+          ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST << 'CONFIGURE_USER_SCRIPT'
           set -e
           set +H  # Disable history expansion for passwords with special characters
 
