@@ -391,11 +391,19 @@ jobs:
       - name: Terraform Init & Plan (Keycloak)
         id: plan
         env:
+          TF_VAR_keycloak_url: http://localhost:${{ vars.DEV_KEYCLOAK }}
+          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           TF_VAR_test_user_password: ${{ secrets.DEV_USER_PASSWORD }}
+          TF_VAR_mcp_gateway_client_secret: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
+          TF_VAR_mcp_integration_runner_secret: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
         run: |
           terraform -chdir=./infrastructure/terraform/keycloak init -input=false -backend=false
           terraform -chdir=./infrastructure/terraform/keycloak validate
-          terraform -chdir=./infrastructure/terraform/keycloak plan -input=false -no-color -var-file=environments/ci.tfvars -out=keycloak.tfplan
+          terraform -chdir=./infrastructure/terraform/keycloak plan -input=false -no-color \
+            -var-file=environments/ci.tfvars \
+            -var='valid_redirect_uris=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}/*"]' \
+            -var='web_origins=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}"]' \
+            -out=keycloak.tfplan
           terraform -chdir=./infrastructure/terraform/keycloak show -no-color keycloak.tfplan > keycloak-plan.txt
 
       - name: Upload plan

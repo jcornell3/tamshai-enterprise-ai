@@ -298,6 +298,20 @@ jobs:
           export $(cat .env | grep -v '^#' | xargs)
 
           # =========================================================================
+          # Ensure newer PORT_ variables exist in .env (may be missing from older VPS)
+          # These were added in Payroll/Tax/UI phases and may not exist on VPS yet
+          # docker compose --env-file reads .env directly, so exported vars aren't enough
+          # =========================================================================
+          grep -q '^PORT_MCP_PAYROLL=' .env || echo 'PORT_MCP_PAYROLL=3106' >> .env
+          grep -q '^PORT_MCP_TAX=' .env || echo 'PORT_MCP_TAX=3117' >> .env
+          grep -q '^PORT_MCP_UI=' .env || echo 'PORT_MCP_UI=3118' >> .env
+          grep -q '^PORT_WEB_PAYROLL=' .env || echo 'PORT_WEB_PAYROLL=4005' >> .env
+          grep -q '^PORT_WEB_TAX=' .env || echo 'PORT_WEB_TAX=4006' >> .env
+          grep -q '^PORT_WEB_CUSTOMER_SUPPORT=' .env || echo 'PORT_WEB_CUSTOMER_SUPPORT=4007' >> .env
+          # Reload with any additions
+          export $(cat .env | grep -v '^#' | xargs)
+
+          # =========================================================================
           # PHOENIX: Substitute secrets in realm-export-stage.json
           # This ensures test-user.journey has correct credentials after fresh deploy
           # Placeholders: __TEST_USER_PASSWORD__, __TEST_USER_TOTP_SECRET__
