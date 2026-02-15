@@ -11,7 +11,7 @@ variable "environment" {
 variable "project_root" {
   description = "Absolute path to project root"
   type        = string
-  default     = "C:/Users/jcorn/Tamshai-AI-Playground"
+  default     = "C:/Users/jcorn/tamshai-enterprise-ai"
 }
 
 variable "docker_compose_dir" {
