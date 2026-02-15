@@ -1,4 +1,4 @@
-# Tamshai Enterprise AI - VPS Deployment Workflow (Stage)
+# Tamshai Enterprise AI - VPS/Stage Deployment Workflow
 #
 # This workflow deploys changes to the VPS without manual SSH access.
 # It uses SSH keys stored in GitHub Secrets to connect and deploy.
