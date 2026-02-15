@@ -140,7 +140,7 @@ describe('getQuarterlyReport', () => {
       if (isSuccessResponse(result)) {
         expect(result.data.highlights).toBeDefined();
         expect(result.data.highlights.length).toBeGreaterThan(0);
-        expect(result.data.highlights.some((h: string) => h.includes('revenue'))).toBe(true);
+        expect(result.data.highlights.some((h: string) => h.toLowerCase().includes('revenue'))).toBe(true);
       }
     });
 

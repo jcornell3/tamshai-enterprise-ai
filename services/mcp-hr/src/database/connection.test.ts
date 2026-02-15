@@ -27,6 +27,12 @@ const mockPool = {
 
 // Use regular functions (not jest.fn) so clearAllMocks doesn't wipe implementations
 jest.mock('@tamshai/shared', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  })),
   createPostgresClient: () => ({
     pool: mockPool,
     queryWithRLS: async (userContext: any, queryText: string, values?: any[]) => {

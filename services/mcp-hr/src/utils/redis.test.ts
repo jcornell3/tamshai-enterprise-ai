@@ -12,8 +12,14 @@ const mockDel = jest.fn().mockResolvedValue(1);
 const mockPing = jest.fn().mockResolvedValue('PONG');
 const mockQuit = jest.fn().mockResolvedValue('OK');
 
-// Mock @tamshai/shared's createRedisConfirmationCache
+// Mock @tamshai/shared's createRedisConfirmationCache and createLogger
 jest.mock('@tamshai/shared', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  })),
   createRedisConfirmationCache: (serviceName: string) => ({
     storePendingConfirmation: async (confirmationId: string, data: unknown, ttl = 300) => {
       await mockSetex(`pending:${confirmationId}`, ttl, JSON.stringify(data));
