@@ -1092,7 +1092,9 @@ No shared mock factories for MCP responses, user contexts, or test data.
 
 **E2E parallel workers**: Not yet measurable (no TOTP-based tests ran in this CI run — E2E tests completed in 4s, meaning only API/smoke tests ran).
 
-**Integration Tests**: Failed due to pre-existing Keycloak token exchange issue (`Client not allowed to exchange`), unrelated to P0 changes.
+**Integration Tests**: Failed due to Keycloak version mismatch introduced by P0 item 4.2. The consolidation changed the integration tests from Keycloak 24.0 (inline `docker run`) to Keycloak 26.0 (via `setup-keycloak` action). The Terraform provider (mrparkers/keycloak ~4.4.0) and token exchange configuration are not compatible with Keycloak 26. Fix: reverted integration tests to `keycloak-version: '24.0'` while keeping E2E/perf tests on 26.0 (they use realm import, not Terraform/token-exchange).
+
+**Deploy MCP HR**: Failed with "No such image: tamshai/mcp-hr:rollback" because `deploy-mcp-service.yml` referenced hardcoded image names (`tamshai/$SERVICE_NAME`) that no longer exist after commit faad8b78 removed `image:` tags from docker-compose.yml. Docker Compose now auto-generates image names from `COMPOSE_PROJECT_NAME`. Fix: rewrote deploy workflow to use `docker compose exec` for health checks and `docker compose images` to discover actual image names.
 
 ### Actual Line Count Analysis
 
@@ -1129,6 +1131,14 @@ After consolidating Redis to `@tamshai/shared`, the HR redis.test.ts was still m
 **3. CI/CD pipeline dependency changes**
 
 Adding the `build-shared` job required updating `needs:` arrays in 5 downstream jobs. Each downstream job also needed a `download-artifact` step placed before any step that references `@tamshai/shared`.
+
+**4. Keycloak version mismatch in integration tests**
+
+The `setup-keycloak` composite action defaults to Keycloak 26.0, but the integration tests relied on Keycloak 24.0 (the version used in the previous inline `docker run` setup). Keycloak 26 has breaking changes: `admin-fine-grained-authz` feature handling changed, and the Terraform provider `mrparkers/keycloak ~4.4.0` doesn't fully support Keycloak 26's token exchange configuration. The fix was to explicitly pin `keycloak-version: '24.0'` for integration tests while keeping E2E/perf tests on 26.0. The setup-keycloak action was also updated to set both old (`KEYCLOAK_ADMIN`) and new (`KC_BOOTSTRAP_ADMIN_USERNAME`) env vars for cross-version compatibility.
+
+**5. Deploy workflow image naming mismatch**
+
+The `deploy-mcp-service.yml` referenced images as `tamshai/$SERVICE_NAME:latest` (e.g., `tamshai/mcp-hr:latest`), but Docker Compose auto-generates image names from `COMPOSE_PROJECT_NAME` (e.g., `tamshai-vps-mcp-hr`). This mismatch existed since commit faad8b78 removed hardcoded `image:` tags. The deploy workflow was rewritten to use `docker compose exec` for health checks (avoids container naming issues) and `docker compose images` to discover actual image names for rollback tagging.
 
 ---
 

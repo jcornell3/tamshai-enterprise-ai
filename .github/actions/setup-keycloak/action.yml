@@ -70,7 +70,10 @@ runs:
 
         # Build docker run command
         DOCKER_ARGS="-d --name keycloak -p ${{ inputs.keycloak-port }}:8080"
-        # pragma: allowlist secret (KC_BOOTSTRAP_ADMIN_PASSWORD is dev/CI only)
+        # Set admin credentials for both Keycloak 24 (KEYCLOAK_ADMIN) and 26+ (KC_BOOTSTRAP_ADMIN)
+        # pragma: allowlist secret (admin credentials are dev/CI only)
+        DOCKER_ARGS="$DOCKER_ARGS -e KEYCLOAK_ADMIN=admin"
+        DOCKER_ARGS="$DOCKER_ARGS -e KEYCLOAK_ADMIN_PASSWORD=${{ inputs.admin-password }}"
         DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_USERNAME=admin"
         DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_PASSWORD=${{ inputs.admin-password }}"
 

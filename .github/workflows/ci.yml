@@ -577,7 +577,7 @@ jobs:
         uses: ./.github/actions/setup-keycloak
         with:
           keycloak-port: ${{ vars.DEV_KEYCLOAK }}
-          keycloak-version: '26.0'
+          keycloak-version: '24.0'
           import-realm: 'false'
           admin-password: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           http-relative-path: ''

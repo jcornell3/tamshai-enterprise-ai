@@ -79,10 +79,20 @@ jobs:
           # Fix git ownership check
           git config --global --add safe.directory /opt/tamshai
 
+          # Get the actual image name used by docker compose for this service
+          cd infrastructure/docker
+          IMAGE_NAME=\$(docker compose --env-file ../../.env images $SERVICE_NAME --format '{{.Repository}}' 2>/dev/null | head -1)
+          cd /opt/tamshai
+
           # Tag current version for rollback (only if image exists)
-          docker images -q tamshai/$SERVICE_NAME:latest | grep -q . && \
-            docker tag tamshai/$SERVICE_NAME:latest tamshai/$SERVICE_NAME:rollback || \
+          HAS_ROLLBACK=false
+          if [ -n "\$IMAGE_NAME" ] && docker images -q "\$IMAGE_NAME" 2>/dev/null | grep -q .; then
+            docker tag "\$IMAGE_NAME:latest" "\$IMAGE_NAME:rollback"
+            echo "Tagged \$IMAGE_NAME:latest as rollback"
+            HAS_ROLLBACK=true
+          else
             echo "No existing image to tag for rollback"
+          fi
 
           # Pull latest code
           git update-ref -d refs/remotes/origin/main 2>/dev/null || true
@@ -100,10 +110,10 @@ jobs:
           echo "Deploying $SERVICE_NAME (no dependency restart)..."
           docker compose --env-file ../../.env up -d --no-deps $SERVICE_NAME
 
-          # Health check with timeout
+          # Health check with timeout (use docker compose exec to avoid container name issues)
           echo "Waiting for health check..."
           for i in \$(seq 1 30); do
-            if docker exec tamshai-$SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
+            if docker compose --env-file ../../.env exec -T $SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
               echo "$SERVICE_NAME is healthy"
               exit 0
             fi
@@ -111,18 +121,26 @@ jobs:
             sleep 1
           done
 
-          # Health check failed - rollback
+          # Health check failed - rollback if possible
           echo "Health check failed after 30 seconds"
-          echo "Rolling back to previous version..."
-          docker tag tamshai/$SERVICE_NAME:rollback tamshai/$SERVICE_NAME:latest
-          docker compose --env-file ../../.env up -d --no-deps $SERVICE_NAME
 
-          # Verify rollback succeeded
-          sleep 5
-          if docker exec tamshai-$SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
-            echo "Rollback successful"
+          # Re-read image name after rebuild
+          IMAGE_NAME=\$(docker compose --env-file ../../.env images $SERVICE_NAME --format '{{.Repository}}' 2>/dev/null | head -1)
+
+          if [ "\$HAS_ROLLBACK" = "true" ] && [ -n "\$IMAGE_NAME" ]; then
+            echo "Rolling back to previous version..."
+            docker tag "\$IMAGE_NAME:rollback" "\$IMAGE_NAME:latest"
+            docker compose --env-file ../../.env up -d --no-deps $SERVICE_NAME
+
+            # Verify rollback succeeded
+            sleep 5
+            if docker compose --env-file ../../.env exec -T $SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
+              echo "Rollback successful"
+            else
+              echo "Rollback failed - manual intervention required"
+            fi
           else
-            echo "Rollback failed - manual intervention required"
+            echo "No rollback image available - manual intervention required"
           fi
 
           exit 1
@@ -143,8 +161,16 @@ jobs:
 
           echo "Rolling back $SERVICE_NAME..."
 
+          # Get the actual image name used by docker compose
+          IMAGE_NAME=\$(docker compose --env-file ../../.env images $SERVICE_NAME --format '{{.Repository}}' 2>/dev/null | head -1)
+
+          if [ -z "\$IMAGE_NAME" ]; then
+            echo "Cannot determine image name for $SERVICE_NAME"
+            exit 1
+          fi
+
           # Restore rollback tag
-          docker tag tamshai/$SERVICE_NAME:rollback tamshai/$SERVICE_NAME:latest
+          docker tag "\$IMAGE_NAME:rollback" "\$IMAGE_NAME:latest"
 
           # Redeploy with rollback version
           docker compose --env-file ../../.env up -d --no-deps $SERVICE_NAME
@@ -152,7 +178,7 @@ jobs:
           # Health check
           echo "Verifying rollback..."
           for i in \$(seq 1 30); do
-            if docker exec tamshai-$SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
+            if docker compose --env-file ../../.env exec -T $SERVICE_NAME wget -q -O- http://localhost:$HEALTH_PORT/health 2>/dev/null | grep -q '"healthy"'; then
               echo "Rollback successful"
               exit 0
             fi
