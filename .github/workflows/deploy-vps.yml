@@ -494,31 +494,47 @@ jobs:
           if [ "${{ env.RESEED_DATA }}" = "true" ]; then
             echo "=== Re-seeding sample data (clean reload) ==="
 
-            echo "  [1/5] Stopping MCP services..."
-            docker stop tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support || true
+            echo "  [1/7] Stopping MCP services..."
+            docker stop tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support tamshai-dev-mcp-payroll tamshai-dev-mcp-tax || true
 
-            echo "  [2/5] Reloading HR data (PostgreSQL)..."
+            echo "  [2/7] Reloading HR data (PostgreSQL)..."
             docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_hr;" && \
             docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_hr OWNER tamshai;" && \
             docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_hr < sample-data/hr-data.sql && \
               echo "  [OK] HR database dropped and reloaded" || \
               echo "  [ERROR] HR data reload failed"
 
-            echo "  [3/5] Reloading Finance data (PostgreSQL)..."
+            echo "  [3/7] Reloading Finance data (PostgreSQL)..."
             docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
             docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
             docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql && \
               echo "  [OK] Finance database dropped and reloaded" || \
               echo "  [ERROR] Finance data reload failed"
 
-            echo "  [4/5] Reloading Sales data (MongoDB)..."
+            echo "  [4/7] Reloading Payroll data (PostgreSQL)..."
+            docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_payroll;" && \
+            docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_payroll OWNER tamshai;" && \
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_payroll -f /docker-entrypoint-initdb.d/04-payroll-schema.sql && \
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_payroll -f /docker-entrypoint-initdb.d/05-payroll-data.sql && \
+              echo "  [OK] Payroll database dropped and reloaded" || \
+              echo "  [ERROR] Payroll data reload failed"
+
+            echo "  [5/7] Reloading Tax data (PostgreSQL)..."
+            docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_tax;" && \
+            docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_tax OWNER tamshai;" && \
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_tax -f /docker-entrypoint-initdb.d/06-tax-schema.sql && \
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_tax -f /docker-entrypoint-initdb.d/07-tax-data.sql && \
+              echo "  [OK] Tax database dropped and reloaded" || \
+              echo "  [ERROR] Tax data reload failed"
+
+            echo "  [6/7] Reloading Sales data (MongoDB)..."
             # Get MongoDB password from environment
             MONGODB_PASSWORD=$(grep '^MONGODB_PASSWORD=' .env | cut -d= -f2)
             docker exec -i tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js && \
               echo "  [OK] Sales data reloaded (MongoDB script handles drop/recreate)" || \
               echo "  [ERROR] Sales data reload failed"
 
-            echo "  [5/5] Reloading Support data (Elasticsearch)..."
+            echo "  [7/7] Reloading Support data (Elasticsearch)..."
             # Delete existing indexes
             docker exec tamshai-dev-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
             # Bulk load fresh data
@@ -528,7 +544,7 @@ jobs:
               echo "  [ERROR] Support data reload failed"
 
             echo "=== Restarting MCP services ==="
-            docker start tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support
+            docker start tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support tamshai-dev-mcp-payroll tamshai-dev-mcp-tax
             docker restart tamshai-dev-mcp-gateway
             sleep 10
 
@@ -537,6 +553,10 @@ jobs:
             docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" || true
             echo "  Finance budgets (FY2025):"
             docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" || true
+            echo "  Payroll employees:"
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_payroll -t -c "SELECT COUNT(*) FROM payroll.employees;" || true
+            echo "  Tax filings:"
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_tax -t -c "SELECT COUNT(*) FROM tax.tax_filings;" || true
             echo "  Sales deals:"
             docker exec tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin tamshai_sales --quiet --eval "db.deals.countDocuments()" || true
             echo "  Support tickets:"
