@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@tamshai/shared": "file:../shared",
-    "axios": "^1.6.2",
+    "axios": "^1.13.5",
     "dotenv": "^16.3.1",
     "express": "^4.21.2",
     "winston": "^3.11.0",
