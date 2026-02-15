@@ -1068,7 +1068,67 @@ No shared mock factories for MCP responses, user contexts, or test data.
 - Performance-tests: Setup Keycloak=37s, shared build=7s, total=99s
 - Gateway-lint shared build=6s, MCP-HR shared build=5s
 
-**After metrics**: Pending — requires push to main and CI run completion.
+**After Metrics** (CI run 22031657387, commit d4892634):
+
+| Job | Step | Before (s) | After (s) | Delta |
+|-----|------|-----------|----------|-------|
+| Build Shared Package | Build shared | N/A | 5 | New job |
+| Build Shared Package | Upload artifact | N/A | 6 | New job |
+| Gateway - Node 20 | Download shared artifact | N/A | 3 | Replaces build |
+| Gateway - Node 20 | (no "Build shared" step) | 6 | 0 | -6s |
+| MCP HR - Node 20 | Download shared artifact | N/A | 3 | Replaces build |
+| MCP HR - Node 20 | (no "Build shared" step) | 5 | 0 | -5s |
+| Integration Tests | Setup Keycloak | 36 | 32 | -4s |
+| Integration Tests | Download shared artifact | N/A | 3 | Replaces build |
+| Integration Tests | (no "Build shared" step) | 4 | 0 | -4s |
+| E2E Tests | Setup Keycloak | 36 | 37 | +1s |
+| E2E Tests | Download shared artifact | N/A | 3 | Replaces build |
+| E2E Tests | (no "Build shared" step) | 6 | 0 | -6s |
+| Performance Tests | Setup Keycloak | 37 | 37 | 0s |
+| Performance Tests | Download shared artifact | N/A | 2 | Replaces build |
+| Performance Tests | (no "Build shared" step) | 7 | 0 | -7s |
+
+**Net shared package build savings**: (6+5+4+6+7) - (5+6+3+3+3+3+2) = 28 - 25 = **3s net** (modest savings due to artifact upload/download overhead, but the real value is build consistency and CI code deduplication).
+
+**E2E parallel workers**: Not yet measurable (no TOTP-based tests ran in this CI run — E2E tests completed in 4s, meaning only API/smoke tests ran).
+
+**Integration Tests**: Failed due to pre-existing Keycloak token exchange issue (`Client not allowed to exchange`), unrelated to P0 changes.
+
+### Actual Line Count Analysis
+
+| Item | Before (lines) | After (wrappers) | Shared (new) | Net Change | Notes |
+|------|---------------|-----------------|-------------|-----------|-------|
+| 1.1 Error handlers (6 services) | 1,130 | 989 | 331 | +190 | Added 22 new error codes, createErrorResponse factory |
+| 1.2 Redis confirmation (6 services) | 506 | 336 | 232 | +62 | Added error handling, lazy loading, service-prefixed keys |
+| 1.3 Database connections (4 services) | 554 | 162 | 196 | -196 | Genuine reduction; wrappers are thin |
+| 3.1 useAIQuery hook (4 apps) | 2,015 | 1,113 | 208 | -694 | 4 of 7 apps refactored |
+| **Total** | **4,205** | **2,600** | **967** | **-638** | |
+
+**Honest assessment**: The initial plan estimated ~3,590 lines removable in services and ~2,500 lines in clients. The actual net reduction is ~638 lines. However, the primary value is **consolidation** (single source of truth for error codes, Redis patterns, database connections, and AI query logic) rather than raw line count reduction. The wrappers are larger than expected due to TypeScript TS2742 portability issues requiring verbose type annotations.
+
+### Refactoring Issues Encountered
+
+The consolidation to `@tamshai/shared` revealed several cross-package TypeScript issues that required multiple fix iterations:
+
+**1. TS2742 "Inferred type cannot be named" (3 iterations to fix)**
+
+When a service re-exports a function from `@tamshai/shared`, TypeScript infers the return/parameter types from shared's copy of `@types/pg`. Since each service has its own `@types/pg` installation (different node_modules path), TypeScript refuses to emit types referencing `@tamshai/shared/node_modules/@types/pg`.
+
+- **Attempt 1**: Added `PostgresClient` type annotation to `db` variable. Failed — destructured exports still infer inner types (`Pool`, `PoolClient`) from shared's copy.
+- **Attempt 2**: Used `any` type annotations on all 4 problematic exports. Fixed TS2742 but broke `queryWithRLS<T>()` generic calls with TS2347 ("Untyped function calls may not accept type arguments").
+- **Attempt 3 (final)**: Imported `Pool`, `PoolClient`, `QueryResult`, `QueryResultRow` from the service's own `pg` package and wrote explicit type annotations for each export. This gives TypeScript named types it can reference from the service's own type context.
+
+**Root cause**: npm's flat node_modules doesn't deduplicate `@types/pg` across `@tamshai/shared` and the consuming service. This is a known TypeScript limitation with monorepo-style packages that share types.
+
+**Permanent fix**: Migrate to npm workspaces or pnpm, which hoist types to a single location.
+
+**2. Redis test mock target change**
+
+After consolidating Redis to `@tamshai/shared`, the HR redis.test.ts was still mocking `ioredis` directly. Since `redis.ts` now delegates to `@tamshai/shared`'s `createRedisConfirmationCache`, the tests needed to mock `@tamshai/shared` instead. Additionally, all key expectations changed from `pending:{id}` to `pending:hr:{id}` due to the new service-prefixed key format.
+
+**3. CI/CD pipeline dependency changes**
+
+Adding the `build-shared` job required updating `needs:` arrays in 5 downstream jobs. Each downstream job also needed a `download-artifact` step placed before any step that references `@tamshai/shared`.
 
 ---
 
