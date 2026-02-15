@@ -9,7 +9,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "typescript": "^5.3.2"
+    "typescript": "^5.9.3"
   },
   "author": "Tamshai Corp",
   "license": "UNLICENSED",
