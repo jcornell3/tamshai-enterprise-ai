@@ -303,23 +303,48 @@ export class MarkdownParser {
     text = text.replace(/^[-*+]\s+/gm, '');
     text = text.replace(/^\d+\.\s+/gm, '');
 
-    // Remove HTML tags and comments for text extraction (not security sanitization).
-    // Use loop to handle nested/overlapping cases that single-pass regex misses.
-    let prev = '';
-    while (prev !== text) {
-      prev = text;
-      // Remove script tags with content
-      text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-      // Remove all HTML tags
-      text = text.replace(/<[^>]+>/g, '');
-      // Remove HTML comments
-      text = text.replace(/<!--[\s\S]*?-->/g, '');
-    }
+    // Remove HTML tags and comments using character-level parsing (not regex).
+    // This avoids CodeQL js/bad-tag-filter and js/incomplete-multi-character-sanitization alerts.
+    text = MarkdownParser.stripHtmlTags(text);
 
     // Collapse multiple newlines and trim
     text = text.replace(/\n{3,}/g, '\n\n').trim();
 
     return text;
+  }
+
+  /**
+   * Strip HTML tags and comments using character-level parsing.
+   * Handles script tags, HTML comments, and regular tags without regex,
+   * avoiding CodeQL js/bad-tag-filter alerts.
+   */
+  private static stripHtmlTags(input: string): string {
+    const out: string[] = [];
+    let i = 0;
+    while (i < input.length) {
+      if (input[i] === '<') {
+        // Check for HTML comment <!-- ... -->
+        if (input.startsWith('<!--', i)) {
+          const end = input.indexOf('-->', i + 4);
+          i = end === -1 ? input.length : end + 3;
+          continue;
+        }
+        // Check for <script ...>...</script>
+        if (input.slice(i, i + 7).toLowerCase() === '<script') {
+          const closeTag = '</script>';
+          const end = input.toLowerCase().indexOf(closeTag, i + 7);
+          i = end === -1 ? input.length : end + closeTag.length;
+          continue;
+        }
+        // Skip any HTML tag < ... >
+        const end = input.indexOf('>', i + 1);
+        i = end === -1 ? input.length : end + 1;
+      } else {
+        out.push(input[i]);
+        i++;
+      }
+    }
+    return out.join('');
   }
 
   /**
