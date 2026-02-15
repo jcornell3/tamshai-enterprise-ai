@@ -3,6 +3,7 @@ provider "keycloak" {
   username      = var.keycloak_admin_user
   password      = var.keycloak_admin_password
   url           = var.keycloak_url
+  base_path     = ""
   initial_login = false
 
   # For local dev with self-signed certs
