@@ -19,6 +19,17 @@
 import { Client, Pool } from 'pg';
 import axios from 'axios';
 import crypto from 'crypto';
+import {
+  getKeycloakAdminToken,
+  getUserId as sharedGetUserId,
+  getUser as sharedGetUser,
+  getUserCredentials as sharedGetUserCredentials,
+  updateUserRequiredActions as sharedUpdateUserRequiredActions,
+  prepareTestUsers as sharedPrepareTestUsers,
+  restoreTestUsers as sharedRestoreTestUsers,
+  type KeycloakAdminConfig,
+  type SavedUserState,
+} from '../../../../../tests/shared/auth/keycloak-admin';
 
 // Test environment configuration
 process.env.NODE_ENV = 'test';
@@ -77,7 +88,7 @@ let adminPoolFinanceReset: Pool | null = null;  // For fixture resets
 let keycloakAdminToken: string | null = null;
 
 // Storage for user state to restore after tests
-const savedUserState: Record<string, { userId: string; requiredActions: string[]; hasOtpCredential: boolean }> = {};
+const savedUserState: Record<string, SavedUserState> = {};
 
 // Test usernames that need TOTP handling
 const TEST_USERNAMES = [
@@ -287,54 +298,25 @@ export const TEST_USERS = {
 };
 
 // ============================================================================
-// Keycloak TOTP Management Functions
+// Keycloak TOTP Management Functions (delegated to shared/auth/keycloak-admin)
 // ============================================================================
 
-interface KeycloakCredential {
-  type: string;
-  id: string;
+const keycloakAdminConfig: KeycloakAdminConfig = {
+  url: KEYCLOAK_CONFIG.url,
+  realm: KEYCLOAK_CONFIG.realm,
+};
+
+// Local wrappers for backward compatibility with module-level keycloakAdminToken
+async function getUserId(username: string): Promise<string | null> {
+  return sharedGetUserId(keycloakAdminToken!, keycloakAdminConfig, username);
 }
 
-interface KeycloakUser {
-  id: string;
-  username: string;
-  requiredActions: string[];
+async function getUser(userId: string) {
+  return sharedGetUser(keycloakAdminToken!, keycloakAdminConfig, userId);
 }
 
-/**
- * Get admin token from Keycloak master realm.
- * Prefers client credentials (KEYCLOAK_ADMIN_CLIENT_SECRET) over ROPC.
- */
-async function getKeycloakAdminToken(): Promise<string> {
-  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
-
-  if (clientSecret) {
-    const response = await axios.post(
-      `${KEYCLOAK_CONFIG.url}/realms/master/protocol/openid-connect/token`,
-      new URLSearchParams({
-        client_id: 'admin-cli',
-        client_secret: clientSecret,
-        grant_type: 'client_credentials',
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-    return response.data.access_token;
-  }
-
-  if (!KEYCLOAK_CONFIG.adminPassword) {
-    throw new Error('KEYCLOAK_ADMIN_CLIENT_SECRET or KEYCLOAK_ADMIN_PASSWORD environment variable is required');
-  }
-  const response = await axios.post(
-    `${KEYCLOAK_CONFIG.url}/realms/master/protocol/openid-connect/token`,
-    new URLSearchParams({
-      client_id: 'admin-cli',
-      username: 'admin',
-      password: KEYCLOAK_CONFIG.adminPassword,
-      grant_type: 'password',
-    }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-  );
-  return response.data.access_token;
+async function getUserCredentials(userId: string) {
+  return sharedGetUserCredentials(keycloakAdminToken!, keycloakAdminConfig, userId);
 }
 
 /**
@@ -385,201 +367,34 @@ export async function getImpersonatedToken(username: string): Promise<string> {
     return response.data.access_token;
 }
 
-/**
- * Get user ID by username
- */
-async function getUserId(username: string): Promise<string | null> {
-  const response = await axios.get<KeycloakUser[]>(
-    `${KEYCLOAK_CONFIG.url}/admin/realms/${KEYCLOAK_CONFIG.realm}/users`,
-    {
-      params: { username },
-      headers: { Authorization: `Bearer ${keycloakAdminToken}` },
-    }
-  );
-  return response.data[0]?.id || null;
-}
 
 /**
- * Get user details
- */
-async function getUser(userId: string): Promise<KeycloakUser> {
-  const response = await axios.get<KeycloakUser>(
-    `${KEYCLOAK_CONFIG.url}/admin/realms/${KEYCLOAK_CONFIG.realm}/users/${userId}`,
-    { headers: { Authorization: `Bearer ${keycloakAdminToken}` } }
-  );
-  return response.data;
-}
-
-/**
- * Get user's credentials
- */
-async function getUserCredentials(userId: string): Promise<KeycloakCredential[]> {
-  const response = await axios.get<KeycloakCredential[]>(
-    `${KEYCLOAK_CONFIG.url}/admin/realms/${KEYCLOAK_CONFIG.realm}/users/${userId}/credentials`,
-    { headers: { Authorization: `Bearer ${keycloakAdminToken}` } }
-  );
-  return response.data;
-}
-
-/**
- * Update user's required actions
- */
-async function updateUserRequiredActions(userId: string, requiredActions: string[]): Promise<void> {
-  await axios.put(
-    `${KEYCLOAK_CONFIG.url}/admin/realms/${KEYCLOAK_CONFIG.realm}/users/${userId}`,
-    { requiredActions },
-    {
-      headers: {
-        Authorization: `Bearer ${keycloakAdminToken}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-}
-
-/**
- * Prepare a single test user for automated testing
- * @returns Result message for logging
- */
-async function prepareSingleUser(username: string): Promise<string> {
-  const userId = await getUserId(username);
-  if (!userId) {
-    return `⚠️  User ${username} not found, skipping`;
-  }
-
-  const user = await getUser(userId);
-  const currentActions = user.requiredActions || [];
-
-  // Check if user has existing OTP credential
-  const credentials = await getUserCredentials(userId);
-  const hasOtpCredential = credentials.some((c) => c.type === 'otp');
-
-  // Save current state for restoration
-  savedUserState[username] = {
-    userId,
-    requiredActions: [...currentActions],
-    hasOtpCredential,
-  };
-
-  const messages: string[] = [];
-
-  // Remove CONFIGURE_TOTP from required actions if present
-  if (currentActions.includes('CONFIGURE_TOTP')) {
-    const newActions = currentActions.filter((a) => a !== 'CONFIGURE_TOTP');
-    await updateUserRequiredActions(userId, newActions);
-    messages.push(`✅ ${username}: Temporarily removed CONFIGURE_TOTP requirement`);
-  } else {
-    messages.push(`ℹ️  ${username}: No CONFIGURE_TOTP requirement to remove`);
-  }
-
-  if (hasOtpCredential) {
-    messages.push(`📱 ${username}: Has existing OTP credential (will be preserved)`);
-  }
-
-  return messages.join('\n   ');
-}
-
-/**
- * Prepare test users for automated testing (PARALLELIZED)
- *
- * IMPORTANT: We do NOT delete OTP credentials!
- * We only temporarily remove CONFIGURE_TOTP from required actions.
- * Token exchange (via mcp-integration-runner) bypasses OTP requirements.
+ * Prepare test users — delegates to shared keycloak-admin module
  */
 async function prepareTestUsers(): Promise<void> {
   console.log('\n🔐 Preparing test users for automated testing (parallelized)...');
   console.log('   (OTP credentials are preserved - only required actions are modified)\n');
 
-  // Process all users in parallel for faster setup
-  const results = await Promise.all(
-    TEST_USERNAMES.map(async (username) => {
-      try {
-        return await prepareSingleUser(username);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return `❌ Error preparing ${username}: ${message}`;
-      }
-    })
-  );
-
-  // Log all results
-  results.forEach((result) => console.log(`   ${result}`));
+  const result = await sharedPrepareTestUsers(keycloakAdminToken!, keycloakAdminConfig, TEST_USERNAMES);
+  Object.assign(savedUserState, result);
 }
 
 /**
- * Restore a single test user's TOTP requirement
- * @returns Result message for logging
- */
-async function restoreSingleUser(username: string): Promise<string> {
-  const saved = savedUserState[username];
-  if (!saved) {
-    return `⚠️  No saved state for ${username}, skipping`;
-  }
-
-  const { userId } = saved;
-
-  // Check current OTP credential status
-  const currentCredentials = await getUserCredentials(userId);
-  const hasOtpCredential = currentCredentials.some((c) => c.type === 'otp');
-
-  // Get current user state
-  const user = await getUser(userId);
-  const currentActions = user.requiredActions || [];
-
-  if (hasOtpCredential) {
-    // User has OTP credential - they don't need CONFIGURE_TOTP
-    // Remove it if present (they can just use their existing authenticator)
-    if (currentActions.includes('CONFIGURE_TOTP')) {
-      const newActions = currentActions.filter((a) => a !== 'CONFIGURE_TOTP');
-      await updateUserRequiredActions(userId, newActions);
-    }
-    return `✅ ${username}: Has OTP credential, TOTP ready to use`;
-  } else {
-    // User has no OTP credential - add CONFIGURE_TOTP so they're prompted
-    if (!currentActions.includes('CONFIGURE_TOTP')) {
-      const newActions = [...currentActions, 'CONFIGURE_TOTP'];
-      await updateUserRequiredActions(userId, newActions);
-      return `🔒 ${username}: Added CONFIGURE_TOTP (will be prompted on next login)`;
-    } else {
-      return `🔒 ${username}: CONFIGURE_TOTP already required`;
-    }
-  }
-}
-
-/**
- * Restore TOTP requirement for all test users (PARALLELIZED)
- *
- * After QA testing, TOTP should be re-enabled for all users:
- * - If user has OTP credential: No action needed (they can use their authenticator)
- * - If user has no OTP credential: Add CONFIGURE_TOTP (they'll be prompted on next login)
+ * Restore test users — delegates to shared keycloak-admin module
  */
 async function restoreTestUsers(): Promise<void> {
   console.log('\n🔐 Re-enabling TOTP requirement for all test users (parallelized)...');
 
   // Refresh admin token in case it expired during long tests
   try {
-    keycloakAdminToken = await getKeycloakAdminToken();
+    keycloakAdminToken = await getKeycloakAdminToken(keycloakAdminConfig);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('   ❌ Failed to refresh admin token:', message);
     return;
   }
 
-  // Process all users in parallel for faster teardown
-  const results = await Promise.all(
-    TEST_USERNAMES.map(async (username) => {
-      try {
-        return await restoreSingleUser(username);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return `❌ Error restoring ${username}: ${message}`;
-      }
-    })
-  );
-
-  // Log all results
-  results.forEach((result) => console.log(`   ${result}`));
-  console.log('\n   ✅ TOTP requirement restored for all users');
+  await sharedRestoreTestUsers(keycloakAdminToken!, keycloakAdminConfig, TEST_USERNAMES, savedUserState);
 }
 
 // ============================================================================
@@ -748,7 +563,7 @@ async function deleteEphemeralTestUsers(): Promise<void> {
 
   // Refresh admin token in case it expired
   try {
-    keycloakAdminToken = await getKeycloakAdminToken();
+    keycloakAdminToken = await getKeycloakAdminToken(keycloakAdminConfig);
   } catch {
     console.warn('  ⚠️  Could not refresh admin token for cleanup');
     return;
@@ -897,7 +712,7 @@ beforeAll(async () => {
   }
 
   try {
-    keycloakAdminToken = await getKeycloakAdminToken();
+    keycloakAdminToken = await getKeycloakAdminToken(keycloakAdminConfig);
     await prepareTestUsers();
     // T2: Create ephemeral users for token-based integration tests
     await createEphemeralTestUsers();

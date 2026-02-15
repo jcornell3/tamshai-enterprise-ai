@@ -1325,11 +1325,17 @@ CREATE TABLE IF NOT EXISTS finance.expense_items (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Indexes for expense_reports
+-- Indexes for expense_reports (single-column)
 CREATE INDEX IF NOT EXISTS idx_expense_reports_employee ON finance.expense_reports(employee_id);
 CREATE INDEX IF NOT EXISTS idx_expense_reports_department ON finance.expense_reports(department_code);
 CREATE INDEX IF NOT EXISTS idx_expense_reports_status ON finance.expense_reports(status);
 CREATE INDEX IF NOT EXISTS idx_expense_reports_submission_date ON finance.expense_reports(submission_date);
+
+-- Composite indexes for expense_reports (common query patterns)
+CREATE INDEX IF NOT EXISTS idx_expense_reports_employee_status ON finance.expense_reports(employee_id, status);
+CREATE INDEX IF NOT EXISTS idx_expense_reports_dept_status ON finance.expense_reports(department_code, status);
+CREATE INDEX IF NOT EXISTS idx_expense_reports_created_desc ON finance.expense_reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_expense_reports_approved_audit ON finance.expense_reports(approved_by, approved_at);
 
 -- Indexes for expense_items
 CREATE INDEX IF NOT EXISTS idx_expense_items_report ON finance.expense_items(expense_report_id);

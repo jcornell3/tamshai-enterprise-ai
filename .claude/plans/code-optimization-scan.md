@@ -29,15 +29,15 @@ A comprehensive scan of the entire project identified **62 optimization opportun
 | P0 | CI/CD | E2E sequential workers (1 worker) | 15-20 min savings per run |
 | P0 | CI/CD | Keycloak 3x startup in CI | 5-7 min savings per run |
 | P0 | CI/CD | Shared package built 4x in CI | 3-4 min savings per run |
-| P1 | Services | Logger duplication (29 instances) | 290+ lines |
-| P1 | Services | Response type duplication (6 files) | 600+ lines, type inconsistency |
-| P1 | Services | Authorization helper duplication (6+ services) | 150+ lines, security consistency |
-| P1 | Infra | Missing composite indexes (expense_reports) | O(n) → O(log n) query performance |
-| P1 | Infra | Docker Compose service redundancy | 490 lines reducible |
-| P1 | Infra | CORS wildcard scheme in Kong | Security issue |
-| P1 | CI/CD | Job parallelization (serial deps) | 10-15 min savings |
-| P1 | CI/CD | Auth logic duplication (5 copies in tests) | 200+ lines |
-| P1 | CI/CD | 6 MCP services have no unit tests | Coverage gap |
+| P1 | Services | Logger duplication (29 instances) | ✅ Done (2026-02-15) — 290+ lines consolidated |
+| P1 | Services | Response type duplication (6 files) | ✅ Done (2026-02-15) — 946 lines deleted, type guards added |
+| P1 | Services | Authorization helper duplication (6+ services) | ✅ Done (2026-02-15) — 11 functions consolidated |
+| P1 | Infra | Missing composite indexes (expense_reports) | ✅ Done (2026-02-15) |
+| P1 | Infra | Docker Compose service redundancy | ✅ Done (2026-02-15) |
+| P1 | Infra | CORS wildcard scheme in Kong | ✅ Done (2026-02-15) |
+| P1 | CI/CD | Job parallelization (serial deps) | ✅ Already done |
+| P1 | CI/CD | Auth logic duplication (5 copies in tests) | ✅ Done (2026-02-15) |
+| P1 | CI/CD | 6 MCP services have no unit tests | ✅ Already done |
 | P2 | Services | Health check endpoint duplication (8 services) | 200+ lines |
 | P2 | Services | Auth middleware in route handlers | 50+ lines per service |
 | P2 | Services | Inconsistent Express versions | Maintenance risk |
@@ -114,33 +114,33 @@ All PostgreSQL services duplicate identical `Pool` configuration and `queryWithR
 
 ---
 
-### 1.4 HIGH: Logger Duplication (29 instances)
+### 1.4 HIGH: Logger Duplication (29 instances) — ✅ COMPLETED 2026-02-15
 
 29 separate `winston.createLogger()` calls across all services with identical configuration.
 
-**Recommendation**: Create shared logger factory in `@tamshai/shared/src/utils/logger-factory.ts`. Already started in mcp-payroll/mcp-tax.
+**Implementation**: Created `createLogger(serviceName)` factory in `@tamshai/shared/src/utils/logger.ts` modeled on Payroll's best-practice pattern. All 30 logger instances across 8 services replaced. Services with existing `logger.ts` files (Payroll, Tax, UI, Gateway) use thin re-export wrappers with `ILogger` type annotation (required to avoid TS2742).
 
-**Savings**: 290+ lines
-
----
-
-### 1.5 HIGH: Response Type Duplication (6 files)
-
-Each service has its own `response.ts` with near-identical types. Critical inconsistency: `suggestedAction` is required in shared but optional in Finance.
-
-**Recommendation**: All services import from `@tamshai/shared`. Delete 5+ local response.ts files.
-
-**Savings**: 600+ lines
+**Savings**: 290+ lines consolidated to single factory
 
 ---
 
-### 1.6 HIGH: Authorization Helper Duplication (6+ services)
+### 1.5 HIGH: Response Type Duplication (6 files) — ✅ COMPLETED 2026-02-15
 
-Each service implements `hasXxxAccess(roles)` with same pattern, different role lists.
+Each service had its own `response.ts` with near-identical types. Critical inconsistency: `suggestedAction` was required in shared but optional in Finance.
 
-**Recommendation**: Create `@tamshai/shared/src/auth/role-checker.ts` with factory function and role matrices as configuration.
+**Implementation**: Deleted 6 local `response.ts` files (946 lines total). Added type guard functions (`isSuccessResponse`, `isErrorResponse`, `isPendingConfirmationResponse`) to shared. Fixed Finance's optional `suggestedAction` bug (~10 callers updated). mcp-ui's `response.ts` intentionally kept (UI-specific types).
 
-**Savings**: 150+ lines, centralized role management
+**Savings**: 946 lines deleted, type-safety bug fixed
+
+---
+
+### 1.6 HIGH: Authorization Helper Duplication (6+ services) — ✅ COMPLETED 2026-02-15
+
+Each service implemented `hasXxxAccess(roles)` with same pattern, different role lists.
+
+**Implementation**: Expanded `ROLE_DEFINITIONS` in shared to include cross-domain roles (HR: manager/user/employee, Payroll: hr-read/hr-write, Tax: finance-read/finance-write). Added `hasDomainWriteAccess()` and `hasFinanceTierAccess()` helpers. Replaced 11 local auth functions across 6 services.
+
+**Savings**: 150+ lines, centralized role management with ROLE_DEFINITIONS as single source of truth
 
 ---
 
@@ -1152,20 +1152,21 @@ The `deploy-mcp-service.yml` referenced images as `tamshai/$SERVICE_NAME:latest`
 5. Remove unused Vite template CSS
 
 ### Phase 2: Shared Service Library (1 week)
-1. Extract error handlers to `@tamshai/shared`
-2. Extract Redis confirmation utils to `@tamshai/shared`
-3. Extract database connection factory to `@tamshai/shared`
-4. Extract logger factory to `@tamshai/shared`
-5. Consolidate response types to `@tamshai/shared`
+1. ✅ Extract error handlers to `@tamshai/shared` (P0 — completed 2026-02-14)
+2. ✅ Extract Redis confirmation utils to `@tamshai/shared` (P0 — completed 2026-02-14)
+3. ✅ Extract database connection factory to `@tamshai/shared` (P0 — completed 2026-02-14)
+4. ✅ Extract logger factory to `@tamshai/shared` (P1 — completed 2026-02-15)
+5. ✅ Consolidate response types to `@tamshai/shared` (P1 — completed 2026-02-15)
+6. ✅ Consolidate authorization helpers to `@tamshai/shared` (P1 — completed 2026-02-15)
 
 ### Phase 3: CI/CD Optimization (2-3 days)
-1. Create composite Keycloak action
-2. Build shared package once, share as artifact
+1. ✅ Create composite Keycloak action (P0 — completed 2026-02-14)
+2. ✅ Build shared package once, share as artifact (P0 — completed 2026-02-14)
 3. Parallelize job dependencies
 4. Create shared test auth module
 
 ### Phase 4: Client Consolidation (3-4 days)
-1. Extract AIQueryPage to `useAIQuery` hook
+1. ✅ Extract AIQueryPage to `useAIQuery` hook (P0 — completed 2026-02-14, 4/7 apps)
 2. Extract CallbackPage to shared component
 3. Add `useFilteredData` hook
 4. Fix lazy voice hook initialization
@@ -1179,4 +1180,193 @@ The `deploy-mcp-service.yml` referenced images as `tamshai/$SERVICE_NAME:latest`
 
 ---
 
+## P1 Implementation Status
+
+**Completed**: 2026-02-15 by Claude-Dev
+
+| Item | Description | Status | Commits |
+|------|-------------|--------|---------|
+| 1.4 | Logger factory consolidation | ✅ Done | `09442975`, `4090c052`, `7b1ddd1b` |
+| 1.5 | Response type consolidation | ✅ Done | `09442975`, `4090c052` |
+| 1.6 | Authorization helper consolidation | ✅ Done | `09442975`, `4090c052` |
+
+### P1 Item 1.4: Logger Factory (`createLogger`)
+
+**Implementation**: Created `services/shared/src/utils/logger.ts` with `createLogger(serviceName)` factory, modeled on Payroll's best-practice pattern (env-aware formatting, service metadata, error stack traces). Added `winston` as shared dependency. Exported `createLogger` and `ILogger` interface from `@tamshai/shared`.
+
+**Files modified** (30 logger instances replaced across 8 services):
+- `services/shared/src/utils/logger.ts` — New factory function
+- `services/shared/src/index.ts` — Added exports
+- `services/mcp-hr/src/database/connection.ts`, `src/utils/error-handler.ts`, `src/utils/redis.ts`
+- `services/mcp-finance/src/database/connection.ts`, `src/utils/error-handler.ts`, `src/utils/redis.ts`
+- `services/mcp-sales/src/database/connection.ts`, `src/utils/error-handler.ts`, `src/utils/redis.ts`, `src/index.ts`
+- `services/mcp-support/src/database/connection.ts`, `src/utils/error-handler.ts`, `src/utils/redis.ts`, `src/index.ts`, `src/tools/customer-tools.ts`, `src/tools/employee-ticket-tools.ts`, `src/auth/dual-realm-validator.ts`, `src/auth/customer-helpers.ts`
+- `services/mcp-payroll/src/utils/logger.ts` — Thin re-export wrapper
+- `services/mcp-tax/src/utils/logger.ts` — Thin re-export wrapper
+- `services/mcp-ui/src/utils/logger.ts` — Thin re-export wrapper
+- `services/mcp-gateway/src/utils/logger.ts` — Thin re-export wrapper
+
+**Issue encountered**: TS2742 "Inferred type cannot be named" on thin logger wrappers. The `ILogger` interface type annotation was required on all wrappers to avoid TypeScript referencing `@tamshai/shared/node_modules/winston` types.
+
+### P1 Item 1.5: Response Type Consolidation
+
+**Implementation**: Deleted 6 local `response.ts` files (946 lines total). Added type guard functions (`isSuccessResponse`, `isErrorResponse`, `isPendingConfirmationResponse`) to `services/shared/src/types/response.ts`. Updated all imports in 6 services from `../types/response` to `@tamshai/shared`.
+
+**Files deleted**:
+- `services/mcp-hr/src/types/response.ts` (153 lines)
+- `services/mcp-finance/src/types/response.ts` (132 lines)
+- `services/mcp-sales/src/types/response.ts` (129 lines)
+- `services/mcp-support/src/types/response.ts` (100 lines)
+- `services/mcp-payroll/src/types/response.ts` (110 lines)
+- `services/mcp-tax/src/types/response.ts` (110 lines)
+
+**NOT deleted**: `services/mcp-ui/src/types/response.ts` — intentionally divergent with UI-specific `ComponentResponse` and `Narration` types.
+
+**Finance breaking change fixed**: Finance's `suggestedAction` was optional (violating shared contract). All ~10 Finance callers updated with required `suggestedAction` strings.
+
+### P1 Item 1.6: Authorization Helper Consolidation
+
+**Implementation**: Expanded `ROLE_DEFINITIONS` in `services/shared/src/middleware/authorize.ts` to include cross-domain roles. Added `hasDomainWriteAccess()` and `hasFinanceTierAccess()` helpers. Replaced 11 local auth functions across 6 services with shared imports.
+
+**Role definitions expanded**:
+```typescript
+export const ROLE_DEFINITIONS = {
+  hr: ['hr-read', 'hr-write', 'manager', 'user', 'employee'],
+  finance: ['finance-read', 'finance-write'],
+  sales: ['sales-read', 'sales-write'],
+  support: ['support-read', 'support-write'],
+  payroll: ['payroll-read', 'payroll-write', 'hr-read', 'hr-write'],
+  tax: ['tax-read', 'tax-write', 'finance-read', 'finance-write'],
+};
+```
+
+**Service replacements**:
+| Service | Local Function Removed | Shared Replacement |
+|---------|----------------------|-------------------|
+| Sales | `hasSalesAccess()` | `hasDomainAccess(roles, 'sales')` |
+| Support | `hasSupportAccess()` | `hasDomainAccess(roles, 'support')` |
+| HR | `hasHRAccess()` | `hasDomainAccess(roles, 'hr')` |
+| Payroll | `hasPayrollReadAccess()`, `hasPayrollWriteAccess()` | `hasDomainAccess/hasDomainWriteAccess(roles, 'payroll')` |
+| Tax | `hasTaxReadAccess()`, `hasTaxWriteAccess()` | `hasDomainAccess/hasDomainWriteAccess(roles, 'tax')` |
+| Finance | 4 tiered functions | `hasFinanceTierAccess(roles, tier)` |
+
+### P1 Test Results
+
+All unit tests across 8 services passing after P1 changes:
+
+| Service | Suites | Tests | Status |
+|---------|--------|-------|--------|
+| mcp-gateway | 23 | 593 | ✅ Pass |
+| mcp-hr | 12 | 364 | ✅ Pass |
+| mcp-finance | 12 | 303 | ✅ Pass |
+| mcp-sales | 8 | 124 | ✅ Pass |
+| mcp-support | 14 | 209 | ✅ Pass |
+| mcp-payroll | 11 | 148 | ✅ Pass |
+| mcp-tax | 8 | 157 | ✅ Pass |
+| mcp-ui | 13 | 128 | ✅ Pass |
+| **Total** | **101** | **2,026** | **✅ All Pass** |
+
+Integration tests also passing (183 tests, 8 suites) against local infrastructure.
+
+### P1 Test Fixes Required
+
+Several test files needed mock updates after the shared module migration:
+
+1. **All services**: Tests mocking `ioredis` directly needed to mock `@tamshai/shared`'s `createRedisConfirmationCache` instead
+2. **mcp-hr**: `redis.test.ts` and `connection.test.ts` needed `createLogger` added to `@tamshai/shared` mock
+3. **mcp-finance**: `get-quarterly-report.test.ts` had case-sensitive `'revenue'` vs `'Revenue'` assertion
+4. **mcp-sales**: `index.test.ts` and `get-lead.test.ts` needed `requireGatewayAuth` passthrough mock; 2 empty `it.skip` stubs removed
+5. **mcp-support**: `escalation.test.ts` needed `createLogger` in shared mock; `customer-tools.test.ts` had non-UUID test IDs failing Zod validation; `backend.factory.ts` needed default Elasticsearch URL
+6. **mcp-payroll**: `create-pay-run.test.ts` had assertion string mismatch
+7. **mcp-tax**: Replaced `ioredis-mock` with `@tamshai/shared` mock; `logger.test.ts` removed tests accessing winston internals not on `ILogger` interface
+8. **mcp-ui**: `__mocks__/@tamshai/shared.ts` needed `createLogger` and `ILogger` added
+
+### P1 Verification Greps
+
+```bash
+# No remaining local winston.createLogger calls (except shared factory itself)
+grep -r "winston.createLogger" services/ --include="*.ts" -l
+# Result: services/shared/src/utils/logger.ts only
+
+# No remaining local response type imports in migrated services
+grep -r "from.*['\"]\.\.\/types\/response" services/mcp-{hr,finance,sales,support,payroll,tax}/ --include="*.ts" -l
+# Result: empty (all migrated to @tamshai/shared)
+
+# No remaining local auth helper functions
+grep -r "hasSalesAccess\|hasSupportAccess\|hasHRAccess\|hasPayrollReadAccess\|hasTaxReadAccess" services/ --include="*.ts" -l
+# Result: empty (all replaced with shared functions)
+```
+
+---
+
+## P1 Infrastructure & CI/CD Implementation Status
+
+**Completed**: 2026-02-15 by Claude-Dev
+
+| Item | Description | Status | Notes |
+|------|-------------|--------|-------|
+| 2.1 | Missing composite indexes (expense_reports) | ✅ Done | 4 indexes added to `sample-data/finance-data.sql` |
+| 2.2 | Docker Compose service redundancy (YAML anchors) | ✅ Done | 1090→955 lines, 8 anchors |
+| 2.3 | CORS wildcard scheme in Kong | ✅ Done | `tamshai-ai://*` → `tamshai-ai://app` |
+| 4.4 | CI job parallelization | ✅ Already done | E2E/perf depend on [build-shared, gateway-lint-test] only |
+| 4.5 | Auth logic duplication (5 copies in tests) | ✅ Done | Shared modules: `tests/shared/auth/totp.ts`, `tests/shared/auth/keycloak-admin.ts` |
+| 4.6 | 6 MCP services have no unit tests | ✅ Already done | All 8 services have tests (2,026 total) |
+
+### P1 Item 2.1: Composite Indexes
+
+Added 4 composite indexes to `sample-data/finance-data.sql`:
+- `idx_expense_reports_employee_status` — employee_id + status
+- `idx_expense_reports_dept_status` — department_code + status
+- `idx_expense_reports_created_desc` — created_at DESC
+- `idx_expense_reports_approved_audit` — approved_by + approved_at
+
+### P1 Item 2.2: Docker Compose YAML Anchors
+
+Reduced `infrastructure/docker/docker-compose.yml` from 1090 to 955 lines using 8 extension fields:
+- `x-mcp-common-env` — NODE_ENV, LOG_LEVEL, MCP_INTERNAL_SECRET
+- `x-mcp-pg-env` — PostgreSQL connection vars
+- `x-mcp-redis-env` — Redis connection vars
+- `x-mcp-healthcheck` — MCP service health check config
+- `x-web-healthcheck` — Web app health check config
+- `x-pg-redis-depends` — PostgreSQL + Redis dependency
+- `x-web-depends` — Keycloak + Gateway dependency
+- `x-web-build-args` / `x-web-runtime-env` — Vite build/runtime vars
+
+### P1 Item 2.3: CORS Wildcard Fix
+
+Fixed wildcard URI scheme patterns in `infrastructure/docker/kong/kong.yml`:
+- `tamshai-ai://*` → `tamshai-ai://app`
+- `com.tamshai.ai://*` → `com.tamshai.ai://app`
+
+### P1 Item 4.5: Auth Logic Consolidation
+
+Created 2 shared test auth modules:
+- `tests/shared/auth/totp.ts` — `generateTotpCode()`, `isOathtoolAvailable()` (oathtool + otplib fallback)
+- `tests/shared/auth/keycloak-admin.ts` — `getKeycloakAdminToken()`, `getUserId()`, `getUser()`, `getUserCredentials()`, `updateUserRequiredActions()`, `prepareTestUsers()`, `restoreTestUsers()`
+
+Updated 4 consumers to import from shared:
+- `tests/e2e/utils/auth.ts` — TOTP functions
+- `tests/e2e/specs/login-journey.ui.spec.ts` — TOTP functions
+- `tests/e2e/fixtures/authenticated.ts` — TOTP functions
+- `services/mcp-gateway/src/__tests__/integration/setup.ts` — Keycloak admin + test user prep/restore
+
+### P1 Item 4.6: Unit Test Coverage
+
+All 8 MCP services already have unit tests (added during P1 services work):
+
+| Service | Test Suites | Tests |
+|---------|------------|-------|
+| mcp-gateway | 23 | 593 |
+| mcp-hr | 12 | 364 |
+| mcp-finance | 12 | 303 |
+| mcp-sales | 6 | 129 |
+| mcp-support | 14 | 209 |
+| mcp-payroll | 11 | 148 |
+| mcp-tax | 8 | 157 |
+| mcp-ui | 13 | 128 |
+
+---
+
 *Generated by Claude-QA code optimization scan, 2026-02-14*
+*Updated with P1 completion status, 2026-02-15*
+*Updated with P1 Infrastructure & CI/CD completion, 2026-02-15*

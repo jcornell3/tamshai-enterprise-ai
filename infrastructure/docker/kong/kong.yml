@@ -132,9 +132,9 @@ plugins:
         - https://payroll.tamshai.local
         - https://tax.tamshai.local
         - https://customer-support.tamshai.local
-        # Desktop/mobile app schemes
-        - tamshai-ai://*
-        - com.tamshai.ai://*
+        # Desktop/mobile app schemes (explicit app origins, not wildcards)
+        - tamshai-ai://app
+        - com.tamshai.ai://app
       methods:
         - GET
         - POST

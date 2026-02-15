@@ -20,6 +20,7 @@
 import { test as base, Page, BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { generateTotpCode } from '../../shared/auth/totp';
 
 // Environment configuration
 const ENV = process.env.TEST_ENV || 'dev';
@@ -119,9 +120,7 @@ async function performLogin(
       });
 
       if (otpInput) {
-        // Generate TOTP code (simplified - in real impl would use oathtool/otplib)
-        const { authenticator } = await import('otplib');
-        const code = authenticator.generate(totpSecret);
+        const code = generateTotpCode(totpSecret);
         await page.fill('#otp, input[name="otp"]', code);
         await page.click('button[type="submit"]');
       }

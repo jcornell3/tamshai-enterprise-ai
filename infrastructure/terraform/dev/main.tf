@@ -588,13 +588,12 @@ resource "null_resource" "keycloak_set_passwords" {
         # Build password JSON once (same for all corporate users)
         CORP_PASSWORD_JSON=$(jq -n --arg pass "$DEV_USER_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
 
-        CORP_COUNT=0
-        for row in $(echo "$ALL_USERS" | jq -r '.[] | @base64'); do
-          USERNAME=$(echo "$row" | base64 -d | jq -r '.username')
-          USERID=$(echo "$row" | base64 -d | jq -r '.id')
+        # Extract user IDs directly with jq (avoids Git Bash base64 compatibility warnings)
+        CORP_USERIDS=$(echo "$ALL_USERS" | jq -r '[.[] | select(.username == "test-user.journey" | not)] | .[].id')
 
-          # Skip test-user.journey (uses TEST_USER_PASSWORD)
-          if [ "$USERNAME" != "test-user.journey" ] && [ -n "$USERID" ]; then
+        CORP_COUNT=0
+        for USERID in $CORP_USERIDS; do
+          if [ -n "$USERID" ]; then
             HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X PUT \
               "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-corp/users/$USERID/reset-password" \
               -H "Authorization: Bearer $TOKEN" \
@@ -687,50 +686,69 @@ resource "null_resource" "keycloak_set_totp" {
 
       echo "User ID: $USER_ID"
 
-      # Delete existing OTP credentials
-      echo "Checking existing OTP credentials..."
-      EXISTING_CREDS=$(curl -s "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
-        -H "Authorization: Bearer $TOKEN")
+      # Delete existing OTP credentials via database (cleaner than REST + regex parsing)
+      echo "Removing existing OTP credentials..."
+      docker exec tamshai-dev-postgres psql -U keycloak -d keycloak -qtA \
+        -c "DELETE FROM credential WHERE user_id = '$USER_ID' AND type = 'otp';"
 
-      for CRED_ID in $(echo "$EXISTING_CREDS" | grep -o '"id":"[^"]*"[^}]*"type":"otp"' | grep -o '"id":"[^"]*' | cut -d'"' -f4); do
-        echo "Deleting existing OTP credential: $CRED_ID"
-        curl -s -X DELETE "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials/$CRED_ID" \
-          -H "Authorization: Bearer $TOKEN"
-      done
-
-      # Create new OTP credential with the known secret
+      # Create OTP credential via direct database insert
+      # Keycloak 24 Admin REST API has no POST endpoint for /users/{id}/credentials
       echo "Creating OTP credential with secret: $${TEST_USER_TOTP_SECRET_RAW:0:4}****"
 
-      CREDENTIAL_JSON=$(cat <<EOF
-{
-  "type": "otp",
-  "userLabel": "Terraform Provisioned",
-  "secretData": "{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}",
-  "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
-}
-EOF
-)
+      CREATED_MS=$(($(date +%s) * 1000))
 
-      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X POST \
-        "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "$CREDENTIAL_JSON")
+      if docker exec tamshai-dev-postgres psql -U keycloak -d keycloak -qtA -c "
+        INSERT INTO credential (id, user_id, type, user_label, secret_data, credential_data, priority, created_date)
+        VALUES (
+          gen_random_uuid()::text,
+          '$USER_ID',
+          'otp',
+          'Terraform Provisioned',
+          '{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}',
+          '{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}',
+          10,
+          $CREATED_MS
+        );
+      "; then
+        echo "✓ OTP credential inserted into database"
 
-      if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-        echo "✓ OTP credential created successfully (HTTP $HTTP_CODE)"
+        # Restart Keycloak to pick up the new credential (JPA cache bypass)
+        echo "⏳ Restarting Keycloak to apply credential change..."
+        docker restart tamshai-dev-keycloak > /dev/null 2>&1
+
+        # Wait for Keycloak to be ready again
+        for i in $(seq 1 60); do
+          if docker exec tamshai-dev-keycloak bash -c 'exec 3<>/dev/tcp/localhost/8080' 2>/dev/null; then
+            echo "✓ Keycloak restarted and healthy"
+            break
+          fi
+          if [ "$i" = "60" ]; then
+            echo "WARNING: Keycloak restart health check timed out (credential still valid in DB)"
+          fi
+          sleep 1
+        done
       else
-        echo "WARNING: Direct credential creation returned HTTP $HTTP_CODE"
-        echo "TOTP may need to be auto-captured by E2E tests"
+        echo "INFO: TOTP credential could not be provisioned via database"
+        echo "      E2E tests will auto-capture TOTP during first login"
       fi
 
-      # Clear required actions to prevent TOTP setup prompt
+      # Clear required actions to prevent TOTP setup prompt (get fresh token after restart)
       echo "Clearing required actions..."
-      curl -s -X PUT \
-        "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-corp/users/$USER_ID" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{"requiredActions":[]}' > /dev/null
+      TOKEN_RESPONSE2=$(curl -s -X POST "http://localhost:${local.ports.keycloak}/auth/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        --data-urlencode "password=$KC_ADMIN_PASSWORD" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli")
+      TOKEN2=$(echo "$TOKEN_RESPONSE2" | jq -r '.access_token // empty')
+
+      if [ -n "$TOKEN2" ]; then
+        curl -s -X PUT \
+          "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-corp/users/$USER_ID" \
+          -H "Authorization: Bearer $TOKEN2" \
+          -H "Content-Type: application/json" \
+          -d '{"requiredActions":[]}' > /dev/null
+      fi
 
       echo "TOTP configuration complete!"
     EOT

@@ -10,10 +10,12 @@
  */
 
 import { Page, Browser, BrowserContext } from '@playwright/test';
-import { execSync } from 'child_process';
-import { authenticator } from 'otplib';
 import * as fs from 'fs';
 import * as path from 'path';
+import { generateTotpCode } from '../../shared/auth/totp';
+
+// Re-export for consumers that import from this module
+export { generateTotpCode } from '../../shared/auth/totp';
 
 const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 
@@ -41,34 +43,6 @@ export function loadTotpSecret(username: string, environment: string): string | 
     // Ignore
   }
   return null;
-}
-
-function isOathtoolAvailable(): boolean {
-  try {
-    execSync('oathtool --version', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function generateTotpCode(secret: string): string {
-  if (!secret) throw new Error('TOTP secret required');
-
-  if (isOathtoolAvailable()) {
-    try {
-      return execSync('oathtool "$TOTP_SECRET"', {
-        encoding: 'utf-8',
-        env: { ...process.env, TOTP_SECRET: secret },
-        shell: '/bin/bash',
-      }).trim();
-    } catch {
-      // Fall through to otplib
-    }
-  }
-
-  authenticator.options = { digits: 6, step: 30, algorithm: 'sha1' };
-  return authenticator.generate(secret);
 }
 
 /**

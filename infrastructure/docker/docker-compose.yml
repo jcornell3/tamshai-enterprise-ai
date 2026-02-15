@@ -40,6 +40,72 @@
 
 name: ${COMPOSE_PROJECT_NAME:-tamshai-dev}
 
+# =============================================================================
+# YAML ANCHORS (shared configuration fragments)
+# =============================================================================
+
+# Common MCP service environment variables
+x-mcp-common-env: &mcp-common-env
+  NODE_ENV: development
+  LOG_LEVEL: info
+  MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
+
+# PostgreSQL connection variables (HR, Finance, Payroll, Tax)
+x-mcp-pg-env: &mcp-pg-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_USER: tamshai
+  POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:?TAMSHAI_DB_PASSWORD is required}
+
+# Redis connection variables (all MCP services)
+x-mcp-redis-env: &mcp-redis-env
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+
+# MCP service healthcheck (test command set per-service with PORT variable)
+x-mcp-healthcheck: &mcp-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+# Web app healthcheck (identical across all web apps)
+x-web-healthcheck: &web-healthcheck
+  test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+  interval: 30s
+  timeout: 3s
+  retries: 3
+
+# depends_on: PostgreSQL + Redis (HR, Finance, Payroll, Tax)
+x-pg-redis-depends: &pg-redis-depends
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+# depends_on: Keycloak + MCP Gateway (all web apps)
+x-web-depends: &web-depends
+  keycloak:
+    condition: service_healthy
+  mcp-gateway:
+    condition: service_started
+
+# Common Vite build args for web apps
+x-web-build-args: &web-build-args
+  VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
+  VITE_KEYCLOAK_CLIENT_ID: web-portal
+  VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
+  VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
+  # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
+  VITE_MCP_UI_URL: ""
+
+# Common web app runtime environment
+x-web-runtime-env: &web-runtime-env
+  VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
+  VITE_KEYCLOAK_CLIENT_ID: web-portal
+  VITE_API_GATEWAY_URL: http://kong:8000
+  VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+
 services:
   # =============================================================================
   # TOKEN REVOCATION CACHE (Redis)
@@ -222,7 +288,7 @@ services:
       dockerfile: services/mcp-gateway/Dockerfile
     container_name: tamshai-dev-mcp-gateway
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-redis-env]
       PORT: ${PORT_MCP_GATEWAY:?PORT_MCP_GATEWAY is required}
       # v1.4: JWT validation
       # KEYCLOAK_URL: Used for container-to-container communication (includes /auth prefix)
@@ -236,10 +302,6 @@ services:
       KEYCLOAK_CLIENT_ID: mcp-gateway
       # v1.4: Claude API
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
-      # v1.4: Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       # MCP server URLs (using GitHub variables for ports)
       MCP_HR_URL: http://mcp-hr:${PORT_MCP_HR}
       MCP_FINANCE_URL: http://mcp-finance:${PORT_MCP_FINANCE}
@@ -247,13 +309,10 @@ services:
       MCP_SUPPORT_URL: http://mcp-support:${PORT_MCP_SUPPORT}
       MCP_PAYROLL_URL: http://mcp-payroll:${PORT_MCP_PAYROLL}
       MCP_TAX_URL: http://mcp-tax:${PORT_MCP_TAX}
-      LOG_LEVEL: info
       # CORS: Caddy HTTPS port for dev environment origin (from DEV_CADDY_HTTPS GitHub variable)
       CADDY_HTTPS_PORT: ${PORT_CADDY_HTTPS}
       # v1.4: Admin API key for E2E snapshot/restore
       ADMIN_API_KEY: ${E2E_ADMIN_API_KEY:?E2E_ADMIN_API_KEY is required}
-      # v1.5: Internal HMAC secret for MCP server authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_GATEWAY}:${PORT_MCP_GATEWAY}"
     depends_on:
@@ -273,17 +332,14 @@ services:
       dockerfile: services/mcp-ui/Dockerfile
     container_name: tamshai-dev-mcp-ui
     environment:
-      NODE_ENV: development
+      <<: *mcp-common-env
       PORT: ${PORT_MCP_UI:?PORT_MCP_UI is required}
       MCP_GATEWAY_URL: http://mcp-gateway:${PORT_MCP_GATEWAY}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
       # Keycloak service account for calling MCP Gateway
       KEYCLOAK_URL: http://keycloak:8080/auth
       KEYCLOAK_REALM: tamshai-corp
       MCP_UI_CLIENT_ID: mcp-ui
       MCP_UI_CLIENT_SECRET: ${MCP_UI_CLIENT_SECRET:?MCP_UI_CLIENT_SECRET is required}
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_UI}:${PORT_MCP_UI}"
     depends_on:
@@ -293,9 +349,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_UI}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -305,23 +359,10 @@ services:
       dockerfile: services/mcp-hr/Dockerfile
     container_name: tamshai-dev-mcp-hr
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-pg-env, *mcp-redis-env]
       PORT: ${PORT_MCP_HR:?PORT_MCP_HR is required}
-      # v1.4: PostgreSQL connection
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
       POSTGRES_DB: tamshai_hr
-      POSTGRES_USER: tamshai
-      POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:?TAMSHAI_DB_PASSWORD is required}
-      # v1.4: Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
       # Phoenix self-healing identity reconciliation
-      # Keycloak is configured with /auth prefix (KC_HTTP_RELATIVE_PATH=/auth)
       ENVIRONMENT: ${ENVIRONMENT:-dev}
       KEYCLOAK_URL: http://keycloak:8080/auth
       KEYCLOAK_REALM: tamshai-corp
@@ -334,15 +375,10 @@ services:
     ports:
       - "${PORT_MCP_HR}:${PORT_MCP_HR}"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      <<: *pg-redis-depends
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_HR}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -352,33 +388,16 @@ services:
       dockerfile: services/mcp-finance/Dockerfile
     container_name: tamshai-dev-mcp-finance
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-pg-env, *mcp-redis-env]
       PORT: ${PORT_MCP_FINANCE:?PORT_MCP_FINANCE is required}
-      # v1.4: PostgreSQL connection
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
       POSTGRES_DB: tamshai_finance
-      POSTGRES_USER: tamshai
-      POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:?TAMSHAI_DB_PASSWORD is required}
-      # v1.4: Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_FINANCE}:${PORT_MCP_FINANCE}"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      <<: *pg-redis-depends
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_FINANCE}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -388,18 +407,11 @@ services:
       dockerfile: services/mcp-sales/Dockerfile
     container_name: tamshai-dev-mcp-sales
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-redis-env]
       PORT: ${PORT_MCP_SALES:?PORT_MCP_SALES is required}
       # v1.4: MongoDB connection
       MONGODB_URI: mongodb://tamshai:${MONGODB_PASSWORD:?MONGODB_PASSWORD is required}@mongodb:27017
       MONGODB_DB: tamshai_sales
-      # v1.4: Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_SALES}:${PORT_MCP_SALES}"
     depends_on:
@@ -409,9 +421,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_SALES}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -421,7 +431,7 @@ services:
       dockerfile: services/mcp-support/Dockerfile
     container_name: tamshai-dev-mcp-support
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-redis-env]
       PORT: ${PORT_MCP_SUPPORT:?PORT_MCP_SUPPORT is required}
       # Backend selection: elasticsearch (dev/stage) or mongodb (prod)
       SUPPORT_DATA_BACKEND: elasticsearch
@@ -430,13 +440,6 @@ services:
       # v1.4: MongoDB connection (for SLA tools - tickets stored in MongoDB)
       MONGODB_URI: mongodb://tamshai:${MONGODB_PASSWORD:?MONGODB_PASSWORD is required}@mongodb:27017
       MONGODB_DB: tamshai_support
-      # v1.4: Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_SUPPORT}:${PORT_MCP_SUPPORT}"
     depends_on:
@@ -448,9 +451,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_SUPPORT}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -461,15 +462,9 @@ services:
     container_name: tamshai-dev-mcp-journey
     restart: unless-stopped
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-redis-env]
       PORT: ${PORT_MCP_JOURNEY:?PORT_MCP_JOURNEY is required}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_JOURNEY}:${PORT_MCP_JOURNEY}"
     depends_on:
@@ -477,9 +472,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_JOURNEY}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -489,33 +482,16 @@ services:
       dockerfile: services/mcp-payroll/Dockerfile
     container_name: tamshai-dev-mcp-payroll
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-pg-env, *mcp-redis-env]
       PORT: ${PORT_MCP_PAYROLL:?PORT_MCP_PAYROLL is required}
-      # PostgreSQL connection
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
       POSTGRES_DB: tamshai_payroll
-      POSTGRES_USER: tamshai
-      POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:?TAMSHAI_DB_PASSWORD is required}
-      # Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_PAYROLL}:${PORT_MCP_PAYROLL}"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      <<: *pg-redis-depends
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_PAYROLL}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -525,33 +501,16 @@ services:
       dockerfile: services/mcp-tax/Dockerfile
     container_name: tamshai-dev-mcp-tax
     environment:
-      NODE_ENV: development
+      <<: [*mcp-common-env, *mcp-pg-env, *mcp-redis-env]
       PORT: ${PORT_MCP_TAX:?PORT_MCP_TAX is required}
-      # PostgreSQL connection
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
       POSTGRES_DB: tamshai_tax
-      POSTGRES_USER: tamshai
-      POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:?TAMSHAI_DB_PASSWORD is required}
-      # Redis for confirmations
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      LOG_LEVEL: info
-      # v1.5: Internal HMAC secret for gateway authentication
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
     ports:
       - "${PORT_MCP_TAX}:${PORT_MCP_TAX}"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      <<: *pg-redis-depends
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT_MCP_TAX}/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      <<: *mcp-healthcheck
     networks:
       - tamshai-network
 
@@ -563,31 +522,17 @@ services:
       context: ../../clients/web
       dockerfile: apps/portal/Dockerfile
       args:
-        VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-        VITE_KEYCLOAK_CLIENT_ID: web-portal
-        VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
-        VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
-        # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
-        VITE_MCP_UI_URL: ""
+        <<: *web-build-args
     container_name: tamshai-dev-web-portal
     environment:
-      VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: web-portal
-      VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      <<: *web-runtime-env
       VITE_MCP_UI_URL: http://mcp-ui:3108
     ports:
       - "${PORT_WEB_PORTAL:?PORT_WEB_PORTAL is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -596,25 +541,14 @@ services:
       context: ../../clients/web
       dockerfile: apps/hr/Dockerfile
       args:
-        VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-        VITE_KEYCLOAK_CLIENT_ID: web-portal
-        VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
-        VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
-        # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
-        VITE_MCP_UI_URL: ""
+        <<: *web-build-args
     container_name: tamshai-dev-web-hr
     ports:
       - "${PORT_WEB_HR:?PORT_WEB_HR is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -623,30 +557,16 @@ services:
       context: ../../clients/web
       dockerfile: apps/finance/Dockerfile
       args:
-        VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-        VITE_KEYCLOAK_CLIENT_ID: web-portal
-        VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
-        VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
-        # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
-        VITE_MCP_UI_URL: ""
+        <<: *web-build-args
     container_name: tamshai-dev-web-finance
     environment:
-      VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: web-portal
-      VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      <<: *web-runtime-env
     ports:
       - "${PORT_WEB_FINANCE:?PORT_WEB_FINANCE is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -655,31 +575,17 @@ services:
       context: ../../clients/web
       dockerfile: apps/sales/Dockerfile
       args:
-        VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-        VITE_KEYCLOAK_CLIENT_ID: web-portal
-        VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
-        VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
-        # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
-        VITE_MCP_UI_URL: ""
+        <<: *web-build-args
     container_name: tamshai-dev-web-sales
     environment:
-      VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: web-portal
-      VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      <<: *web-runtime-env
       VITE_MCP_UI_URL: http://mcp-ui:3108
     ports:
       - "${PORT_WEB_SALES:?PORT_WEB_SALES is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -688,31 +594,17 @@ services:
       context: ../../clients/web
       dockerfile: apps/support/Dockerfile
       args:
-        VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-        VITE_KEYCLOAK_CLIENT_ID: web-portal
-        VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
-        VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
-        # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
-        VITE_MCP_UI_URL: ""
+        <<: *web-build-args
     container_name: tamshai-dev-web-support
     environment:
-      VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: web-portal
-      VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      <<: *web-runtime-env
       VITE_MCP_UI_URL: http://mcp-ui:3108
     ports:
       - "${PORT_WEB_SUPPORT:?PORT_WEB_SUPPORT is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -722,22 +614,13 @@ services:
       dockerfile: apps/payroll/Dockerfile
     container_name: tamshai-dev-web-payroll
     environment:
-      VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: web-portal
-      VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      <<: *web-runtime-env
     ports:
       - "${PORT_WEB_PAYROLL:?PORT_WEB_PAYROLL is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -757,15 +640,9 @@ services:
     ports:
       - "${PORT_WEB_CUSTOMER_SUPPORT:?PORT_WEB_CUSTOMER_SUPPORT is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -780,10 +657,7 @@ services:
     ports:
       - "${PORT_WEBSITE:?PORT_WEBSITE is required}:80"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
@@ -793,22 +667,13 @@ services:
       dockerfile: apps/tax/Dockerfile
     container_name: tamshai-dev-web-tax
     environment:
-      VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
-      VITE_KEYCLOAK_CLIENT_ID: web-portal
-      VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      <<: *web-runtime-env
     ports:
       - "${PORT_WEB_TAX:?PORT_WEB_TAX is required}:80"
     depends_on:
-      keycloak:
-        condition: service_healthy
-      mcp-gateway:
-        condition: service_started
+      <<: *web-depends
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+      <<: *web-healthcheck
     networks:
       - tamshai-network
 
