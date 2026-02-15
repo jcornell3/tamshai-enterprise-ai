@@ -77,7 +77,20 @@ elif [ "$ENV" = "stage" ] || [ "$ENV" = "prod" ]; then
     docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" \
         "$CONTAINER" /tmp/$SYNC_SCRIPT "$ENV"
 else
-    docker exec "$CONTAINER" /tmp/$SYNC_SCRIPT "$ENV"
+    # Dev environment: source .env to get client secrets
+    # These are required by sync functions (MCP_GATEWAY_CLIENT_SECRET:?, etc.)
+    ENV_FILE="$SCRIPT_DIR/../../infrastructure/docker/.env"
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source <(grep -v '^#' "$ENV_FILE" | grep -v '^$')
+        set +a
+    fi
+    docker exec \
+        -e MCP_UI_CLIENT_SECRET="${MCP_UI_CLIENT_SECRET:-}" \
+        -e MCP_GATEWAY_CLIENT_SECRET="${MCP_GATEWAY_CLIENT_SECRET:-}" \
+        -e MCP_HR_SERVICE_CLIENT_SECRET="${MCP_HR_SERVICE_CLIENT_SECRET:-}" \
+        "$CONTAINER" /tmp/$SYNC_SCRIPT "$ENV"
 fi
 
 echo ""
