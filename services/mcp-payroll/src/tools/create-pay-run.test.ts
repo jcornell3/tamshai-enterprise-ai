@@ -54,7 +54,7 @@ describe('createPayRun', () => {
     if (result.status === 'pending_confirmation') {
       expect(result.confirmationId).toBeDefined();
       expect(result.message).toContain('$9,369.23');
-      expect(result.message).toContain('2 ');
+      expect(result.message).toContain('Employees: 2');
       expect(redis.storePendingConfirmation).toHaveBeenCalledTimes(1);
     }
   });

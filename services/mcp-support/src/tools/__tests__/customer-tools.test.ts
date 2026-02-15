@@ -729,8 +729,9 @@ describe('customer-tools', () => {
   });
 
   describe('customerTransferLead', () => {
+    const targetUserId = '00000000-0000-4000-a000-000000000001';
     const existingBasicContact = {
-      keycloak_user_id: 'target-user-id',
+      keycloak_user_id: targetUserId,
       organization_id: 'org-acme',
       email: 'target@acme.com',
       first_name: 'Target',
@@ -741,7 +742,7 @@ describe('customer-tools', () => {
     it('should create pending confirmation for valid transfer', async () => {
       mockFindOne.mockResolvedValue(existingBasicContact);
 
-      const input = { newLeadUserId: 'target-user-id' };
+      const input = { newLeadUserId: targetUserId };
       const result = await customerTransferLead(input, leadCustomerContext);
 
       expect(result.status).toBe('pending_confirmation');
@@ -749,7 +750,7 @@ describe('customer-tools', () => {
     });
 
     it('should deny access for basic customer', async () => {
-      const input = { newLeadUserId: 'target-user-id' };
+      const input = { newLeadUserId: targetUserId };
       const result = await customerTransferLead(input, basicCustomerContext);
 
       expect(result.status).toBe('error');
@@ -761,7 +762,7 @@ describe('customer-tools', () => {
     it('should reject transfer to non-existent contact', async () => {
       mockFindOne.mockResolvedValue(null);
 
-      const input = { newLeadUserId: 'nonexistent-id' };
+      const input = { newLeadUserId: '00000000-0000-4000-a000-000000000099' };
       const result = await customerTransferLead(input, leadCustomerContext);
 
       expect(result.status).toBe('error');
@@ -774,7 +775,7 @@ describe('customer-tools', () => {
       const existingLead = { ...existingBasicContact, role: 'lead' };
       mockFindOne.mockResolvedValue(existingLead);
 
-      const input = { newLeadUserId: 'target-user-id' };
+      const input = { newLeadUserId: targetUserId };
       const result = await customerTransferLead(input, leadCustomerContext);
 
       expect(result.status).toBe('error');
@@ -786,7 +787,7 @@ describe('customer-tools', () => {
     it('should handle database error', async () => {
       mockGetCollection.mockRejectedValue(new Error('DB error'));
 
-      const input = { newLeadUserId: 'target-user-id' };
+      const input = { newLeadUserId: targetUserId };
       const result = await customerTransferLead(input, leadCustomerContext);
 
       expect(result.status).toBe('error');
@@ -798,7 +799,7 @@ describe('customer-tools', () => {
     it('should handle non-Error database error', async () => {
       mockGetCollection.mockRejectedValue({ code: 500 });
 
-      const input = { newLeadUserId: 'target-user-id' };
+      const input = { newLeadUserId: targetUserId };
       const result = await customerTransferLead(input, leadCustomerContext);
 
       expect(result.status).toBe('error');

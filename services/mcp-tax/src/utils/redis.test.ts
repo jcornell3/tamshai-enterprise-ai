@@ -3,7 +3,6 @@
  *
  * Tests for Redis client and pending confirmation functions.
  */
-import ioredis from 'ioredis-mock';
 import {
   getRedisClient,
   storePendingConfirmation,
@@ -11,9 +10,6 @@ import {
   checkRedisConnection,
   closeRedis,
 } from './redis';
-
-// Mock ioredis with ioredis-mock
-jest.mock('ioredis', () => ioredis);
 
 jest.mock('./logger', () => ({
   logger: {
@@ -23,6 +19,64 @@ jest.mock('./logger', () => ({
     error: jest.fn(),
   },
 }));
+
+// Mock @tamshai/shared to provide createRedisConfirmationCache backed by ioredis-mock.
+// Uses globalThis to share the mock Redis client between the hoisted mock factory
+// and the test code, since jest.mock is hoisted above all variable declarations.
+jest.mock('@tamshai/shared', () => {
+  const actual = jest.requireActual('@tamshai/shared');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const RedisMock = require('ioredis-mock');
+  (globalThis as any).__mockRedisClient = new RedisMock();
+  (globalThis as any).__RedisMock = RedisMock;
+
+  return {
+    ...actual,
+    createRedisConfirmationCache: (serviceName: string, _logger: unknown) => {
+      const buildKey = (id: string) => `pending:${serviceName}:${id}`;
+      const getClient = () => (globalThis as any).__mockRedisClient;
+
+      return {
+        async storePendingConfirmation(
+          confirmationId: string,
+          data: Record<string, unknown>,
+          ttlSeconds = 300
+        ): Promise<void> {
+          await getClient().setex(buildKey(confirmationId), ttlSeconds, JSON.stringify(data));
+        },
+
+        async getPendingConfirmation(
+          confirmationId: string
+        ): Promise<Record<string, unknown> | null> {
+          const key = buildKey(confirmationId);
+          const raw = await getClient().get(key);
+          if (!raw) return null;
+          await getClient().del(key);
+          return JSON.parse(raw);
+        },
+
+        async confirmationExists(confirmationId: string): Promise<boolean> {
+          const exists = await getClient().exists(buildKey(confirmationId));
+          return exists === 1;
+        },
+
+        async checkRedisConnection(): Promise<boolean> {
+          const result = await getClient().ping();
+          return result === 'PONG';
+        },
+
+        async closeRedis(): Promise<void> {
+          // Reset mock client to simulate a fresh connection
+          (globalThis as any).__mockRedisClient = new (globalThis as any).__RedisMock();
+        },
+
+        getRedisClient() {
+          return getClient();
+        },
+      };
+    },
+  };
+});
 
 describe('getRedisClient', () => {
   beforeEach(async () => {

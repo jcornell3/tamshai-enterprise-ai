@@ -19,10 +19,41 @@ const mockRedisInstance = {
   on: mockOn,
 };
 
-// Mock ioredis before importing
-jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => mockRedisInstance);
-});
+// Track whether getRedisClient has been called (to test closeRedis without init)
+let redisInitialized = false;
+
+// Mock @tamshai/shared before importing
+jest.mock('@tamshai/shared', () => ({
+  createRedisConfirmationCache: jest.fn(() => ({
+    storePendingConfirmation: async (confirmationId: string, data: unknown, ttl = 300) => {
+      await mockSetex(`pending:payroll:${confirmationId}`, ttl, JSON.stringify(data));
+    },
+    getPendingConfirmation: async (confirmationId: string) => {
+      const raw = await mockGet(`pending:payroll:${confirmationId}`);
+      if (!raw) return null;
+      await mockDel(`pending:payroll:${confirmationId}`);
+      return JSON.parse(raw);
+    },
+    confirmationExists: jest.fn(),
+    checkRedisConnection: async () => {
+      try {
+        const result = await mockPing();
+        return result === 'PONG';
+      } catch {
+        return false;
+      }
+    },
+    closeRedis: async () => {
+      if (redisInitialized) {
+        await mockQuit();
+      }
+    },
+    getRedisClient: () => {
+      redisInitialized = true;
+      return mockRedisInstance;
+    },
+  })),
+}));
 
 // Mock logger
 jest.mock('./logger', () => ({
@@ -34,22 +65,32 @@ jest.mock('./logger', () => ({
   },
 }));
 
-// Need to reset modules to clear the cached redis instance
+import {
+  getRedisClient,
+  storePendingConfirmation,
+  getPendingConfirmation,
+  checkRedisConnection,
+  closeRedis,
+} from './redis';
+
 beforeEach(() => {
-  jest.resetModules();
-  jest.clearAllMocks();
+  mockSetex.mockReset();
+  mockGet.mockReset();
+  mockDel.mockReset();
+  mockPing.mockReset();
+  mockQuit.mockReset();
+  mockOn.mockReset();
+  redisInitialized = false;
 });
 
 describe('Redis Utility Module', () => {
   describe('getRedisClient', () => {
-    it('should return a Redis client instance', async () => {
-      const { getRedisClient } = await import('./redis');
+    it('should return a Redis client instance', () => {
       const client = getRedisClient();
       expect(client).toBeDefined();
     });
 
-    it('should return the same instance on subsequent calls', async () => {
-      const { getRedisClient } = await import('./redis');
+    it('should return the same instance on subsequent calls', () => {
       const client1 = getRedisClient();
       const client2 = getRedisClient();
       expect(client1).toBe(client2);
@@ -59,7 +100,6 @@ describe('Redis Utility Module', () => {
   describe('storePendingConfirmation', () => {
     it('should store confirmation with default TTL', async () => {
       mockSetex.mockResolvedValue('OK');
-      const { storePendingConfirmation } = await import('./redis');
 
       const confirmationId = 'test-confirmation-123';
       const data = {
@@ -79,7 +119,6 @@ describe('Redis Utility Module', () => {
 
     it('should store confirmation with custom TTL', async () => {
       mockSetex.mockResolvedValue('OK');
-      const { storePendingConfirmation } = await import('./redis');
 
       const confirmationId = 'test-confirmation-456';
       const data = { action: 'process_payroll' };
@@ -96,7 +135,6 @@ describe('Redis Utility Module', () => {
 
     it('should handle complex data objects', async () => {
       mockSetex.mockResolvedValue('OK');
-      const { storePendingConfirmation } = await import('./redis');
 
       const confirmationId = 'complex-123';
       const data = {
@@ -133,7 +171,6 @@ describe('Redis Utility Module', () => {
       mockGet.mockResolvedValue(JSON.stringify(storedData));
       mockDel.mockResolvedValue(1);
 
-      const { getPendingConfirmation } = await import('./redis');
       const result = await getPendingConfirmation('existing-confirmation');
 
       expect(result).toEqual(storedData);
@@ -144,7 +181,6 @@ describe('Redis Utility Module', () => {
     it('should return null when confirmation not found', async () => {
       mockGet.mockResolvedValue(null);
 
-      const { getPendingConfirmation } = await import('./redis');
       const result = await getPendingConfirmation('non-existing-confirmation');
 
       expect(result).toBeNull();
@@ -164,7 +200,6 @@ describe('Redis Utility Module', () => {
       mockGet.mockResolvedValue(JSON.stringify(storedData));
       mockDel.mockResolvedValue(1);
 
-      const { getPendingConfirmation } = await import('./redis');
       const result = await getPendingConfirmation('complex-data');
 
       expect(result).toEqual(storedData);
@@ -175,7 +210,6 @@ describe('Redis Utility Module', () => {
     it('should return true when ping succeeds', async () => {
       mockPing.mockResolvedValue('PONG');
 
-      const { checkRedisConnection } = await import('./redis');
       const result = await checkRedisConnection();
 
       expect(result).toBe(true);
@@ -185,7 +219,6 @@ describe('Redis Utility Module', () => {
     it('should return false when ping returns unexpected value', async () => {
       mockPing.mockResolvedValue('NOT_PONG');
 
-      const { checkRedisConnection } = await import('./redis');
       const result = await checkRedisConnection();
 
       expect(result).toBe(false);
@@ -194,7 +227,6 @@ describe('Redis Utility Module', () => {
     it('should return false when ping fails', async () => {
       mockPing.mockRejectedValue(new Error('Connection refused'));
 
-      const { checkRedisConnection } = await import('./redis');
       const result = await checkRedisConnection();
 
       expect(result).toBe(false);
@@ -205,7 +237,6 @@ describe('Redis Utility Module', () => {
     it('should close the Redis connection', async () => {
       mockQuit.mockResolvedValue('OK');
 
-      const { getRedisClient, closeRedis } = await import('./redis');
       // First get a client to ensure it exists
       getRedisClient();
 
@@ -215,15 +246,11 @@ describe('Redis Utility Module', () => {
     });
 
     it('should do nothing if redis is not initialized', async () => {
-      // Reset modules to get fresh state without initialized redis
-      jest.resetModules();
-
-      const { closeRedis } = await import('./redis');
       // Don't call getRedisClient first
 
       await closeRedis();
 
-      // quit should not be called since redis was null
+      // quit should not be called since redis was not initialized
       expect(mockQuit).not.toHaveBeenCalled();
     });
   });

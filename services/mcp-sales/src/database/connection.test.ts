@@ -4,12 +4,25 @@
  * Tests for database connection, collection access, and role-based filtering.
  */
 
+// Set MONGODB_URL before any imports (connection.ts throws if not set)
+process.env.MONGODB_URL = 'mongodb://localhost:27017/tamshai_sales_test';
+
 // Create mock functions at the top level
 const mockConnect = jest.fn();
 const mockDb = jest.fn();
 const mockClose = jest.fn();
 const mockCollection = jest.fn();
 const mockCommand = jest.fn();
+
+// Mock @tamshai/shared before importing the module
+jest.mock('@tamshai/shared', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  })),
+}));
 
 // Mock MongoClient before importing the module
 jest.mock('mongodb', () => {
@@ -222,16 +235,5 @@ describe('MongoDB Connection - Integration Style Tests', () => {
     });
   });
 
-  describe('getCollection', () => {
-    // These tests require consistent module state with mocks
-    // Skip for unit tests - covered by integration tests
-
-    it.skip('should return a collection object (integration test)', async () => {
-      // Covered by tests/integration/mcp-tools.test.ts
-    });
-
-    it.skip('should return collection with expected methods (integration test)', async () => {
-      // Covered by tests/integration/mcp-tools.test.ts
-    });
-  });
+  // getCollection: Covered by tests/integration/mcp-tools.test.ts
 });

@@ -6,6 +6,51 @@
 import request from 'supertest';
 import { ObjectId } from 'mongodb';
 
+// Mock @tamshai/shared before importing app - requireGatewayAuth must be a passthrough
+// NOTE: Use plain functions (not jest.fn()) for functions that must survive resetMocks: true
+jest.mock('@tamshai/shared', () => ({
+  createLogger: () => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  }),
+  requireGatewayAuth: () => (req: any, res: any, next: any) => next(),
+  createSuccessResponse: (data: any, metadata?: any) => ({
+    status: 'success',
+    data,
+    ...(metadata && { metadata }),
+  }),
+  createErrorResponse: (code: string, message: string, suggestedAction?: string, details?: any) => ({
+    status: 'error',
+    code,
+    message,
+    suggestedAction,
+    ...(details && { details }),
+  }),
+  createPendingConfirmationResponse: (confirmationId: string, message: string, confirmationData?: any) => ({
+    status: 'pending_confirmation',
+    confirmationId,
+    message,
+    confirmationData,
+  }),
+  hasDomainAccess: (roles: string[], domain: string) => {
+    return roles.some((r: string) => r === `${domain}-read` || r === `${domain}-write` || r === 'executive');
+  },
+  hasDomainWriteAccess: (roles: string[], domain: string) => {
+    return roles.some((r: string) => r === `${domain}-write` || r === 'executive');
+  },
+  ErrorCode: {
+    INTERNAL_ERROR: 'INTERNAL_ERROR',
+    DATABASE_ERROR: 'DATABASE_ERROR',
+    INSUFFICIENT_PERMISSIONS: 'INSUFFICIENT_PERMISSIONS',
+    INVALID_INPUT: 'INVALID_INPUT',
+    OPPORTUNITY_NOT_FOUND: 'OPPORTUNITY_NOT_FOUND',
+    CUSTOMER_NOT_FOUND: 'CUSTOMER_NOT_FOUND',
+    CANNOT_DELETE_WON_OPPORTUNITY: 'CANNOT_DELETE_WON_OPPORTUNITY',
+  },
+}));
+
 // Mock dependencies before importing app
 jest.mock('../database/connection', () => ({
   checkConnection: jest.fn(),

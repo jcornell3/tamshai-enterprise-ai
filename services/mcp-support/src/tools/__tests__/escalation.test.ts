@@ -6,9 +6,19 @@
 import request from 'supertest';
 
 // Mock gateway auth middleware to pass through in tests
-jest.mock('@tamshai/shared', () => ({
-  requireGatewayAuth: () => (req: any, res: any, next: any) => next(),
-}));
+jest.mock('@tamshai/shared', () => {
+  const actual = jest.requireActual('@tamshai/shared');
+  return {
+    ...actual,
+    requireGatewayAuth: () => (req: any, res: any, next: any) => next(),
+    createLogger: () => ({
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    }),
+  };
+});
 
 // Mock dependencies before importing app
 jest.mock('../../database/connection', () => ({

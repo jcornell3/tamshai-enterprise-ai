@@ -1,36 +1,72 @@
 /**
  * Redis Utility Unit Tests
  *
- * Tests for pending confirmation storage and retrieval.
+ * Tests that the thin wrapper correctly delegates to @tamshai/shared
+ * createRedisConfirmationCache with service name 'sales'.
  */
 
 // Create mock functions
-const mockSetex = jest.fn();
-const mockExists = jest.fn();
-const mockQuit = jest.fn();
-const mockOn = jest.fn();
+const mockSetex = jest.fn().mockResolvedValue('OK');
+const mockExists = jest.fn().mockResolvedValue(1);
+const mockGet = jest.fn();
+const mockDel = jest.fn().mockResolvedValue(1);
+const mockPing = jest.fn().mockResolvedValue('PONG');
+const mockQuit = jest.fn().mockResolvedValue('OK');
 
-// Mock ioredis before importing
-jest.mock('ioredis', () => {
-  return jest.fn().mockImplementation(() => ({
-    setex: mockSetex,
-    exists: mockExists,
-    quit: mockQuit,
-    on: mockOn,
-  }));
-});
+// Mock @tamshai/shared's createRedisConfirmationCache and createLogger
+jest.mock('@tamshai/shared', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  })),
+  createRedisConfirmationCache: (serviceName: string) => ({
+    storePendingConfirmation: async (confirmationId: string, data: unknown, ttl = 300) => {
+      await mockSetex(`pending:${confirmationId}`, ttl, JSON.stringify(data));
+    },
+    confirmationExists: async (confirmationId: string) => {
+      const result = await mockExists(`pending:${confirmationId}`);
+      return result === 1;
+    },
+    getPendingConfirmation: async (confirmationId: string) => {
+      const data = await mockGet(`pending:${confirmationId}`);
+      if (data) {
+        await mockDel(`pending:${confirmationId}`);
+        return JSON.parse(data);
+      }
+      return null;
+    },
+    checkRedisConnection: async () => {
+      const result = await mockPing();
+      return result === 'PONG';
+    },
+    closeRedis: async () => {
+      await mockQuit();
+    },
+    getRedisClient: () => ({
+      setex: mockSetex,
+      exists: mockExists,
+      get: mockGet,
+      del: mockDel,
+      ping: mockPing,
+      quit: mockQuit,
+    }),
+  }),
+}));
 
 import { storePendingConfirmation, confirmationExists, closeRedis } from './redis';
 
 describe('Redis Utility Module', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSetex.mockResolvedValue('OK');
+    mockExists.mockResolvedValue(1);
+    mockQuit.mockResolvedValue('OK');
   });
 
   describe('storePendingConfirmation', () => {
     it('should store confirmation with default TTL', async () => {
-      mockSetex.mockResolvedValue('OK');
-
       const confirmationId = 'test-confirmation-123';
       const data = {
         action: 'delete_opportunity',
@@ -48,8 +84,6 @@ describe('Redis Utility Module', () => {
     });
 
     it('should store confirmation with custom TTL', async () => {
-      mockSetex.mockResolvedValue('OK');
-
       const confirmationId = 'test-confirmation-456';
       const data = { action: 'close_opportunity' };
       const customTTL = 600;
@@ -70,12 +104,10 @@ describe('Redis Utility Module', () => {
       const data = { action: 'delete_customer' };
 
       await expect(storePendingConfirmation(confirmationId, data))
-        .rejects.toThrow('Failed to store confirmation');
+        .rejects.toThrow('Redis connection failed');
     });
 
     it('should handle complex data objects', async () => {
-      mockSetex.mockResolvedValue('OK');
-
       const confirmationId = 'complex-123';
       const data = {
         action: 'delete_opportunity',
@@ -121,19 +153,15 @@ describe('Redis Utility Module', () => {
       expect(result).toBe(false);
     });
 
-    it('should return false when Redis check fails', async () => {
+    it('should propagate errors from Redis', async () => {
       mockExists.mockRejectedValue(new Error('Connection timeout'));
 
-      const result = await confirmationExists('failed-check');
-
-      expect(result).toBe(false);
+      await expect(confirmationExists('failed-check')).rejects.toThrow('Connection timeout');
     });
   });
 
   describe('closeRedis', () => {
     it('should close the Redis connection', async () => {
-      mockQuit.mockResolvedValue('OK');
-
       await closeRedis();
 
       expect(mockQuit).toHaveBeenCalled();
