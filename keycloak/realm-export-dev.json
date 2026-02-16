@@ -371,6 +371,7 @@
       }
     },
     {
+      "id": "e2e00001-0000-0000-0000-000000000001",
       "username": "test-user.journey",
       "email": "test-user@tamshai.local",
       "emailVerified": true,

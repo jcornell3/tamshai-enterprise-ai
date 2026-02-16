@@ -1,9 +1,12 @@
 /**
- * Playwright Global Setup - TOTP Provisioning
+ * Playwright Global Setup - TOTP Verification & Cache
  *
- * Ensures test-user.journey has TOTP configured with the known secret from
- * TEST_USER_TOTP_SECRET before any E2E tests run. Uses the Keycloak Admin API
- * + Partial Import to provision the credential.
+ * Verifies test-user.journey exists with TOTP configured and writes the
+ * Base32-encoded secret to a cache file for oathtool/otplib to generate codes.
+ *
+ * IMPORTANT: This setup does NOT create or modify the test-user.journey account.
+ * The user must already exist in Keycloak with TOTP configured. This preserves
+ * the stable Keycloak user ID that the HR database references.
  *
  * TEST_USER_TOTP_SECRET can be provided in either format:
  *   - Base32-encoded (A-Z, 2-7, =) — e.g. from `echo -n "$RAW" | base32`
@@ -11,14 +14,11 @@
  *
  * When TEST_USER_TOTP_SECRET is set (CI/CD or local with env var):
  *   - Auto-detects whether the value is Base32 or raw
- *   - Stores the RAW secret in Keycloak's secretData.value
+ *   - Verifies test-user.journey exists in Keycloak (fails if not found)
  *   - Writes the Base32 value to .totp-secrets/ cache file for oathtool/otplib
- *   - Deletes and recreates test-user.journey with known TOTP secret
- *   - Reassigns groups (All-Employees, C-Suite)
- *   - Removes CONFIGURE_TOTP required action
  *
  * When TEST_USER_TOTP_SECRET is NOT set:
- *   - Does nothing (tests fall back to auto-capture + cached file)
+ *   - Throws an error (credentials required for E2E tests)
  */
 
 import * as https from 'https';
@@ -213,16 +213,13 @@ async function jsonRequest(
 }
 
 /**
- * Provision TOTP for test-user.journey using Keycloak Partial Import API.
+ * Verify test-user.journey exists in Keycloak.
  *
- * Strategy: delete existing user → recreate with known TOTP secret → reassign groups.
- * This is the same approach used by keycloak/scripts/reset-test-user-totp.py.
+ * IMPORTANT: This function does NOT create, modify, or delete the user.
+ * The user must already exist in Keycloak with TOTP configured.
+ * This preserves the stable Keycloak user ID that the HR database references.
  */
-async function provisionTotp(
-  keycloakUrl: string,
-  totpSecret: string,
-  userPassword: string
-): Promise<void> {
+async function verifyUserExists(keycloakUrl: string): Promise<void> {
   const adminClientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
   const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
 
@@ -246,144 +243,62 @@ async function provisionTotp(
 
   const auth = { Authorization: `Bearer ${tokenRes.data.access_token}` };
 
-  // 2. Delete existing user if present
-  // Always recreate to guarantee the TOTP secret matches the env var.
-  // We can't read the existing OTP secret back from the Admin API, so we can't
-  // verify it matches. A previous auto-capture may have set a different secret.
+  // 2. Verify user exists (DO NOT delete or recreate)
   const usersRes = await jsonRequest(
     `${keycloakUrl}/admin/realms/${REALM}/users?username=test-user.journey&exact=true`,
     { headers: auth }
   );
 
-  if (usersRes.data?.length > 0) {
-    const userId = usersRes.data[0].id;
-    console.log('[globalSetup] Deleting test-user.journey to recreate with known TOTP...');
-    const deleteRes = await jsonRequest(`${keycloakUrl}/admin/realms/${REALM}/users/${userId}`, {
-      method: 'DELETE',
-      headers: auth,
-    });
-    if (deleteRes.status !== 204 && deleteRes.status !== 200) {
-      console.warn(`[globalSetup] DELETE returned HTTP ${deleteRes.status} — proceeding with OVERWRITE`);
-    }
-    // Brief delay to let Keycloak flush the deletion
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-
-  // 3. Create user with TOTP via Partial Import
-  // Keycloak stores OTP credentials with JSON-encoded secretData and credentialData.
-  // secretData.value is stored as-is; Keycloak uses value.getBytes(UTF-8) as HMAC key.
-  // We store the env var string directly, then compute the matching Base32 for otplib.
-  const importData = {
-    ifResourceExists: 'OVERWRITE',
-    users: [
-      {
-        username: 'test-user.journey',
-        email: 'test-user@tamshai.com',
-        firstName: 'Test',
-        lastName: 'Journey',
-        enabled: true,
-        emailVerified: true,
-        attributes: {
-          department: ['Testing'],
-          employeeId: ['TEST001'],
-          title: ['Journey Test Account'],
-        },
-        credentials: [
-          { type: 'password', value: userPassword, temporary: false },
-          {
-            type: 'otp',
-            userLabel: 'E2E Test Authenticator',
-            secretData: JSON.stringify({ value: totpSecret }),
-            credentialData: JSON.stringify({
-              subType: 'totp',
-              digits: 6,
-              period: 30,
-              algorithm: 'HmacSHA1',
-              counter: 0,
-            }),
-          },
-        ],
-      },
-    ],
-  };
-
-  const importRes = await jsonRequest(
-    `${keycloakUrl}/admin/realms/${REALM}/partialImport`,
-    { method: 'POST', headers: auth, body: importData }
-  );
-
-  const added = importRes.data?.added ?? 0;
-  const overwritten = importRes.data?.overwritten ?? 0;
-  if (importRes.status !== 200 || (added === 0 && overwritten === 0)) {
+  if (!usersRes.data?.length) {
     throw new Error(
-      `Partial Import failed (HTTP ${importRes.status}): ${JSON.stringify(importRes.data)}`
+      'test-user.journey not found in Keycloak. ' +
+      'The user must be pre-provisioned in realm-export-dev.json or via sync-realm.sh. ' +
+      'Run: ./keycloak/scripts/docker-sync-realm.sh dev'
     );
   }
 
-  console.log('[globalSetup] User created with known TOTP secret');
+  const user = usersRes.data[0];
+  console.log(`[globalSetup] Verified test-user.journey exists (id: ${user.id})`);
 
-  // 4. Get the newly created user ID
-  const newUsersRes = await jsonRequest(
-    `${keycloakUrl}/admin/realms/${REALM}/users?username=test-user.journey&exact=true`,
+  // 3. Verify TOTP credential exists (read-only check)
+  const credentialsRes = await jsonRequest(
+    `${keycloakUrl}/admin/realms/${REALM}/users/${user.id}/credentials`,
     { headers: auth }
   );
 
-  if (!newUsersRes.data?.length) {
-    throw new Error('User not found after Partial Import');
+  const credentials = Array.isArray(credentialsRes.data) ? credentialsRes.data : [];
+  const hasTotp = credentials.some((c: any) => c.type === 'otp');
+
+  if (!hasTotp) {
+    throw new Error(
+      'test-user.journey exists but has no TOTP credential configured. ' +
+      'Re-provision the user via realm-export-dev.json or manually add TOTP. ' +
+      'The TOTP secret must match TEST_USER_TOTP_SECRET.'
+    );
   }
 
-  const newUserId = newUsersRes.data[0].id;
-
-  // 5. Remove CONFIGURE_TOTP from required actions (Partial Import may add it)
-  await jsonRequest(`${keycloakUrl}/admin/realms/${REALM}/users/${newUserId}`, {
-    method: 'PUT',
-    headers: auth,
-    body: { requiredActions: [] },
-  });
-
-  // 6. Reassign groups (All-Employees + C-Suite, matching realm-export-dev.json)
-  const groupsRes = await jsonRequest(
-    `${keycloakUrl}/admin/realms/${REALM}/groups`,
-    { headers: auth }
-  );
-
-  const groups = Array.isArray(groupsRes.data) ? groupsRes.data : [];
-  const targetGroups = ['All-Employees', 'C-Suite'];
-
-  for (const groupName of targetGroups) {
-    const group = groups.find((g: any) => g.name === groupName);
-    if (group) {
-      await jsonRequest(
-        `${keycloakUrl}/admin/realms/${REALM}/users/${newUserId}/groups/${group.id}`,
-        { method: 'PUT', headers: auth, body: {} }
-      );
-      console.log(`[globalSetup] Assigned to ${groupName} group`);
-    }
-  }
-
-  console.log('[globalSetup] TOTP provisioning complete');
+  console.log('[globalSetup] TOTP credential verified');
 }
 
 /**
  * Playwright globalSetup entry point
  *
+ * Verifies test-user.journey exists with TOTP, then writes the secret to cache.
+ *
  * Handles TEST_USER_TOTP_SECRET in either format:
  *
  * If Base32 (e.g. "PA3GCULJJJVG2Y3MG42WS4BQIJSFMSDF"):
- *   - Decodes to raw for Keycloak secretData.value
  *   - Writes Base32 directly to cache file (no re-encoding)
  *
  * If raw (e.g. "x6aQiJjmcl75ip0BdVHe"):
- *   - Stores raw directly in Keycloak secretData.value
  *   - Base32-encodes for cache file (bridge for oathtool/otplib)
  */
 export default async function globalSetup(): Promise<void> {
   const totpSecret = process.env.TEST_USER_TOTP_SECRET;
-  const password = process.env.TEST_USER_PASSWORD;
 
-  if (!totpSecret || !password) {
+  if (!totpSecret) {
     throw new Error(
-      '[globalSetup] TEST_USER_TOTP_SECRET or TEST_USER_PASSWORD not set.\n' +
+      '[globalSetup] TEST_USER_TOTP_SECRET not set.\n' +
       'Run: eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)\n' +
       'Or populate tests/e2e/.env (see .env.example)'
     );
@@ -419,22 +334,21 @@ export default async function globalSetup(): Promise<void> {
   }
 
   console.log(
-    `[globalSetup] Ensuring TOTP for test-user.journey (${ENV}, secret: [REDACTED])`
+    `[globalSetup] Verifying test-user.journey exists (${ENV})`
   );
 
   try {
-    // Store the RAW secret in Keycloak (Keycloak uses raw UTF-8 bytes as HMAC key)
-    await provisionTotp(keycloakUrl, rawSecret, password);
+    // Verify user exists (read-only - no modification)
+    await verifyUserExists(keycloakUrl);
 
     // Write the Base32 value to the cache file for oathtool/otplib
     const username = process.env.TEST_USERNAME || 'test-user.journey';
     saveTotpSecretToCache(username, ENV, base32Secret);
     console.log(`[globalSetup] Cache file written with Base32 value`);
   } catch (error: any) {
-    // Credentials were explicitly provided — provisioning MUST succeed
-    console.error(`[globalSetup] TOTP provisioning failed: ${error.message}`);
+    console.error(`[globalSetup] Verification failed: ${error.message}`);
     throw new Error(
-      `TOTP provisioning failed for test-user.journey. ` +
+      `User verification failed for test-user.journey. ` +
       `Keycloak may be unreachable at ${keycloakUrl}. ` +
       `Original error: ${error.message}`
     );

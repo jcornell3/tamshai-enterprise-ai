@@ -343,6 +343,16 @@ INSERT INTO hr.employees (id, employee_id, employee_number, first_name, last_nam
 ON CONFLICT (employee_number) DO NOTHING;
 
 -- =============================================================================
+-- E2E TEST USER (Links Keycloak test-user.journey to HR database)
+-- This employee record enables org chart and other HR queries for E2E tests.
+-- The keycloak_user_id MUST match the fixed ID in realm-export-dev.json.
+-- =============================================================================
+INSERT INTO hr.employees (id, employee_id, employee_number, first_name, last_name, email, work_email, phone, department_id, manager_id, title, grade, hire_date, salary, bonus_target_pct, location, is_manager, keycloak_user_id) VALUES
+    -- test-user.journey - Reports directly to CEO (Eve Thompson), member of C-Suite group
+    ('e2e00001-0000-0000-0000-000000000001', 'TEST001', 'TEST001', 'Test', 'User', 'test-user@tamshai.local', 'test-user@tamshai.local', '+1-555-000-0001', 'd1000000-0000-0000-0000-000000000001', 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b', 'Journey Test Account', 'L5', '2024-01-01', 0.00, 0, 'Remote', false, 'e2e00001-0000-0000-0000-000000000001')
+ON CONFLICT (employee_number) DO UPDATE SET keycloak_user_id = EXCLUDED.keycloak_user_id;
+
+-- =============================================================================
 -- PERFORMANCE REVIEWS (CONFIDENTIAL - HR and Manager access only)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS hr.performance_reviews (
