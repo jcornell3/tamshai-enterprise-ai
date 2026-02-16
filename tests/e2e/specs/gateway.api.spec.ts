@@ -7,9 +7,14 @@ import { test, expect, APIRequestContext } from '@playwright/test';
  * Requires running services: Keycloak, MCP Gateway, Redis
  */
 
-const KEYCLOAK_PORT = process.env.PORT_KEYCLOAK || '8180';
-const KEYCLOAK_URL = process.env.KEYCLOAK_URL || `http://localhost:${KEYCLOAK_PORT}/auth`;
-const MCP_GATEWAY_PORT = process.env.PORT_MCP_GATEWAY || '3100';
+const KEYCLOAK_PORT = process.env.PORT_KEYCLOAK;
+// Use 127.0.0.1 for Keycloak to avoid Playwright connection-pool contamination.
+// Playwright pools HTTP keep-alive connections by hostname; when Keycloak (port 8180)
+// and the Gateway (port 3100) both resolve to "localhost", a stale Keycloak connection
+// can poison subsequent Gateway requests (ECONNRESET). Using 127.0.0.1 for Keycloak
+// gives each service its own connection pool.
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL || `http://127.0.0.1:${KEYCLOAK_PORT}/auth`;
+const MCP_GATEWAY_PORT = process.env.PORT_MCP_GATEWAY;
 const GATEWAY_URL = process.env.MCP_GATEWAY_URL || `http://localhost:${MCP_GATEWAY_PORT}`;
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tamshai-corp';
 // Token exchange client: mcp-integration-runner (preferred) or mcp-gateway (fallback)
@@ -21,7 +26,10 @@ const INTEGRATION_CLIENT_SECRET = process.env.MCP_INTEGRATION_RUNNER_SECRET
   || '';
 
 if (!INTEGRATION_CLIENT_SECRET) {
-  console.warn('WARNING: MCP_INTEGRATION_RUNNER_SECRET (or MCP_GATEWAY_CLIENT_SECRET) not set - authenticated tests will be skipped');
+  throw new Error(
+    'MCP_INTEGRATION_RUNNER_SECRET (or MCP_GATEWAY_CLIENT_SECRET) not set.\n' +
+    'Run: eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)'
+  );
 }
 
 // Test user credentials (from Keycloak setup)
@@ -52,43 +60,41 @@ const TEST_USERS = {
 async function getAccessToken(
   request: APIRequestContext,
   username: string,
-): Promise<string | null> {
-  if (!INTEGRATION_CLIENT_SECRET) return null;
+): Promise<string> {
+  const tokenUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
 
-  try {
-    const tokenUrl = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/token`;
+  // Step 1: Get service account token via client_credentials
+  const svcResponse = await request.post(tokenUrl, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    data: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: INTEGRATION_CLIENT_ID,
+      client_secret: INTEGRATION_CLIENT_SECRET,
+    }).toString(),
+  });
 
-    // Step 1: Get service account token via client_credentials
-    const svcResponse = await request.post(tokenUrl, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: INTEGRATION_CLIENT_ID,
-        client_secret: INTEGRATION_CLIENT_SECRET,
-      }).toString(),
-    });
-
-    if (!svcResponse.ok()) return null;
-    const svcToken = (await svcResponse.json()).access_token;
-
-    // Step 2: Exchange for user token via token-exchange
-    const exchangeResponse = await request.post(tokenUrl, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      data: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-        client_id: INTEGRATION_CLIENT_ID,
-        client_secret: INTEGRATION_CLIENT_SECRET,
-        subject_token: svcToken,
-        requested_subject: username,
-        audience: 'mcp-gateway',
-      }).toString(),
-    });
-
-    if (!exchangeResponse.ok()) return null;
-    return (await exchangeResponse.json()).access_token;
-  } catch {
-    return null;
+  if (!svcResponse.ok()) {
+    throw new Error(`Client credentials grant failed (HTTP ${svcResponse.status()})`);
   }
+  const svcToken = (await svcResponse.json()).access_token;
+
+  // Step 2: Exchange for user token via token-exchange
+  const exchangeResponse = await request.post(tokenUrl, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    data: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      client_id: INTEGRATION_CLIENT_ID,
+      client_secret: INTEGRATION_CLIENT_SECRET,
+      subject_token: svcToken,
+      requested_subject: username,
+      audience: 'mcp-gateway',
+    }).toString(),
+  });
+
+  if (!exchangeResponse.ok()) {
+    throw new Error(`Token exchange failed for ${username} (HTTP ${exchangeResponse.status()})`);
+  }
+  return (await exchangeResponse.json()).access_token;
 }
 
 test.describe('Health Endpoints', () => {
@@ -129,11 +135,6 @@ test.describe('Authentication', () => {
   test('GET /api/user with valid token returns user info', async ({ request }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
 
-    if (!token) {
-      test.skip();
-      return;
-    }
-
     const response = await request.get(`${GATEWAY_URL}/api/user`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -167,11 +168,6 @@ test.describe('AI Query Endpoint', () => {
     // This would require a valid token - skip if no auth
     const token = await getAccessToken(request, TEST_USERS.hr.username);
 
-    if (!token) {
-      test.skip();
-      return;
-    }
-
     const response = await request.post(`${GATEWAY_URL}/api/ai/query`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -190,11 +186,6 @@ test.describe('SSE Streaming Endpoint', () => {
 
   test('GET /api/query without query param returns 400', async ({ request }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
-
-    if (!token) {
-      test.skip();
-      return;
-    }
 
     const response = await request.get(`${GATEWAY_URL}/api/query`, {
       headers: {
@@ -223,11 +214,6 @@ test.describe('MCP Tool Proxy Endpoint', () => {
   test('GET /api/mcp/invalid/tool returns 404', async ({ request }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
 
-    if (!token) {
-      test.skip();
-      return;
-    }
-
     const response = await request.get(`${GATEWAY_URL}/api/mcp/invalid/tool`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -240,11 +226,6 @@ test.describe('MCP Tool Proxy Endpoint', () => {
     request,
   }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
-
-    if (!token) {
-      test.skip();
-      return;
-    }
 
     const response = await request.get(
       `${GATEWAY_URL}/api/mcp/hr/../etc/passwd`,
@@ -274,11 +255,6 @@ test.describe('Confirmation Endpoint', () => {
     request,
   }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
-
-    if (!token) {
-      test.skip();
-      return;
-    }
 
     const response = await request.post(
       `${GATEWAY_URL}/api/confirm/non-existent-id`,
@@ -326,11 +302,6 @@ test.describe('RBAC Authorization', () => {
   test('HR user can only see own budget from finance MCP server', async ({ request }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
 
-    if (!token) {
-      test.skip();
-      return;
-    }
-
     // Managers can access list_budgets but only see their own department budget
     const response = await request.get(
       `${GATEWAY_URL}/api/mcp/finance/list_budgets`,
@@ -346,11 +317,6 @@ test.describe('RBAC Authorization', () => {
 
   test('Executive user can access all MCP servers', async ({ request }) => {
     const token = await getAccessToken(request, TEST_USERS.executive.username);
-
-    if (!token) {
-      test.skip();
-      return;
-    }
 
     // Executive should have access to HR
     const hrResponse = await request.get(

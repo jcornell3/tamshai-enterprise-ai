@@ -75,7 +75,6 @@ test.describe('Support Detail Pages', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${SUPPORT_URL}/`);
     authCreatedAt = Date.now();
@@ -86,7 +85,6 @@ test.describe('Support Detail Pages', () => {
   });
 
   test.beforeEach(async () => {
-    if (!authenticatedContext) return;
     if (Date.now() - authCreatedAt > 3 * 60 * 1000) {
       await warmUpContext(authenticatedContext, `${SUPPORT_URL}/`);
       authCreatedAt = Date.now();
@@ -95,7 +93,6 @@ test.describe('Support Detail Pages', () => {
 
   test.describe('Ticket Detail Page', () => {
     test('navigates from tickets list to ticket detail', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -113,7 +110,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays ticket title and badges', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -140,7 +136,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays ticket description', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -163,7 +158,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays comments section', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -186,7 +180,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays comment form with textarea and submit button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -209,7 +202,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('back link returns to tickets list', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -233,7 +225,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays metadata with category and dates', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -258,7 +249,6 @@ test.describe('Support Detail Pages', () => {
 
   test.describe('Article Detail Page', () => {
     test('navigates from knowledge base to article detail', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -275,7 +265,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays breadcrumb navigation', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -296,7 +285,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays article title and content', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -317,7 +305,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays category badge', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -334,7 +321,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays tags as pills when present', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -357,7 +343,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('displays feedback section with thumbs up/down', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -379,7 +364,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('related articles sidebar is visible', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -399,7 +383,6 @@ test.describe('Support Detail Pages', () => {
     });
 
     test('back to Knowledge Base link works', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {

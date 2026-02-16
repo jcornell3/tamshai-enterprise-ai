@@ -42,7 +42,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
     authCreatedAt = Date.now();
@@ -57,7 +56,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
   // Proactively refresh auth tokens before they expire.
   // Access tokens have a 5-minute lifetime; re-warm after 3 minutes.
   test.beforeEach(async () => {
-    if (!authenticatedContext) return;
     if (Date.now() - authCreatedAt > 3 * 60 * 1000) {
       await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
       authCreatedAt = Date.now();
@@ -71,7 +69,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
 
   test.describe('Bulk Action Toolbar State', () => {
     test('bulk action menu is disabled when no rows are selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -83,7 +80,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('bulk action menu enables when rows are selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -96,7 +92,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('bulk action menu disables when all rows are deselected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -111,7 +106,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('shows correct selected count in toolbar', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -126,7 +120,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
 
   test.describe('Row Selection Behavior', () => {
     test('individual row checkboxes toggle selection', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -143,7 +136,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('header checkbox selects all visible rows', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -157,7 +149,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('header checkbox deselects all when all are selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -183,7 +174,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     }
 
     test('approve action is available for pending invoices', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         const rowCount = await gotoPendingInvoices(page);
@@ -196,7 +186,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('shows confirmation dialog before bulk approval', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         const rowCount = await gotoPendingInvoices(page);
@@ -212,7 +201,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('canceling confirmation does not modify data', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         const rowCount = await gotoPendingInvoices(page);
@@ -229,7 +217,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('confirming approval updates invoice statuses', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         const rowCount = await gotoPendingInvoices(page);
@@ -279,7 +266,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     }
 
     test('reject action is available for pending invoices', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         const rowCount = await gotoPendingInvoices(page);
@@ -292,7 +278,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('rejection requires reason input', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         const rowCount = await gotoPendingInvoices(page);
@@ -311,7 +296,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
 
   test.describe('Bulk Export Flow', () => {
     test('export action is available for any selection', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -324,7 +308,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('export downloads file for selected invoices', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -342,7 +325,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
 
   test.describe('Accessibility', () => {
     test('bulk action toolbar has proper ARIA attributes', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);
@@ -357,7 +339,6 @@ test.describe('Finance Invoice Bulk Operations', () => {
     });
 
     test('selected row count is announced to screen readers', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(INVOICES_URL);

@@ -124,7 +124,7 @@ jobs:
           echo "MCP_GATEWAY_CLIENT_SECRET=${MCP_GATEWAY_CLIENT_SECRET}" >> .env
           echo "MCP_HR_SERVICE_CLIENT_SECRET=${MCP_HR_SERVICE_CLIENT_SECRET}" >> .env
           echo "MCP_UI_CLIENT_SECRET=${MCP_UI_CLIENT_SECRET:-mcp-ui-secret}" >> .env
-          echo "MCP_INTEGRATION_RUNNER_SECRET=" >> .env
+          echo "MCP_INTEGRATION_RUNNER_SECRET=${MCP_INTEGRATION_RUNNER_SECRET}" >> .env
           echo "GEMINI_API_KEY=" >> .env
           echo "DEV_USER_PASSWORD=${DEV_USER_PASSWORD}" >> .env
           echo "TEST_USER_PASSWORD=${TEST_USER_PASSWORD}" >> .env
@@ -132,6 +132,7 @@ jobs:
         env:
           MCP_GATEWAY_CLIENT_SECRET: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
           MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
+          MCP_INTEGRATION_RUNNER_SECRET: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
           DEV_USER_PASSWORD: ${{ secrets.DEV_USER_PASSWORD }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           CUSTOMER_USER_PASSWORD: ${{ secrets.CUSTOMER_USER_PASSWORD }}
@@ -242,9 +243,7 @@ jobs:
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
           CUSTOMER_USER_PASSWORD: ${{ secrets.CUSTOMER_USER_PASSWORD }}
-          KEYCLOAK_URL: https://www.tamshai.local:8443/auth
-          PORT_CADDY_HTTPS: "8443"
-          PORT_MCP_GATEWAY: "3100"
+          MCP_INTEGRATION_RUNNER_SECRET: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
 
       # -----------------------------------------------------------------------
       # 11. Upload Playwright report (always, even on failure)

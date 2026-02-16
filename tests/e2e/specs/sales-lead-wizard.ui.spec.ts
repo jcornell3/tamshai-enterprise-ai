@@ -52,7 +52,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/sales/`);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/sales/leads`);
@@ -62,7 +61,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
   // Proactively refresh auth tokens before they expire.
   // Access tokens have a 5-minute lifetime; re-warm after 3 minutes.
   test.beforeEach(async () => {
-    if (!authenticatedContext) return;
     if (Date.now() - authCreatedAt > 3 * 60 * 1000) {
       await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/sales/`);
       authCreatedAt = Date.now();
@@ -75,7 +73,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Wizard Initialization', () => {
     test('wizard opens on first step (Lead Selection)', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -92,7 +89,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('shows correct total step count', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -106,7 +102,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('Previous button is hidden on first step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -119,7 +114,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('Next button shows upcoming step name', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -134,7 +128,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Breadcrumb Navigation', () => {
     test('breadcrumbs are visible', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001?showBreadcrumbs=true`);
@@ -147,7 +140,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('current step is highlighted in breadcrumbs', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001?showBreadcrumbs=true`);
@@ -161,7 +153,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('future steps are disabled in breadcrumbs', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001?showBreadcrumbs=true`);
@@ -175,7 +166,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('can navigate back to completed steps via breadcrumbs', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001?showBreadcrumbs=true`);
@@ -199,7 +189,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Step Navigation', () => {
     test('Next button advances to next step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -215,7 +204,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('Previous button goes back to previous step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -234,7 +222,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('navigating back preserves entered data', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -261,7 +248,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Step Validation', () => {
     test('blocks navigation when required fields are empty', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -287,7 +273,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('clears validation errors when field is corrected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -312,7 +297,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('allows going back without validation', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -335,7 +319,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Final Step & Submission', () => {
     test('final step shows Submit button instead of Next', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -354,7 +337,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('shows loading state during submission', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -380,7 +362,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('successful submission closes wizard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -418,7 +399,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Cancel Flow', () => {
     test('Cancel button is visible on all steps', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -436,7 +416,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('Cancel closes wizard without saving', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -460,7 +439,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
 
   test.describe('Accessibility', () => {
     test('wizard has proper dialog role and label', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -474,7 +452,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('step content has live region for updates', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001`);
@@ -488,7 +465,6 @@ test.describe('Sales Lead Conversion Wizard', () => {
     });
 
     test('breadcrumb navigation has proper ARIA attributes', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/leads/convert/690000000000000000000001?showBreadcrumbs=true`);

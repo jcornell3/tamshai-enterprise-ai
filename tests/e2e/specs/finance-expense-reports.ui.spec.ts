@@ -34,7 +34,6 @@ let authenticatedContext: BrowserContext | null = null;
 
 test.describe('Finance Expense Reports Page', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
   });
@@ -45,7 +44,6 @@ test.describe('Finance Expense Reports Page', () => {
 
   test.describe('Page Load', () => {
     test('displays expense reports page with heading', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -60,7 +58,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('displays stats cards', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -89,7 +86,6 @@ test.describe('Finance Expense Reports Page', () => {
 
   test.describe('Filters', () => {
     test('status filter has expected options', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -118,7 +114,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('department filter works', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -139,7 +134,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('date range filters are present', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -161,7 +155,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('amount range filters are present', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -183,7 +176,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('clear filters resets all filters', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -212,7 +204,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('filtering to impossible criteria shows no results', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -256,7 +247,6 @@ test.describe('Finance Expense Reports Page', () => {
 
   test.describe('Table Rendering', () => {
     test('displays expense report table with correct columns', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -284,7 +274,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('table displays report rows', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -315,7 +304,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('status badges render with correct styling', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -344,7 +332,6 @@ test.describe('Finance Expense Reports Page', () => {
 
   test.describe('Row Expansion', () => {
     test('clicking expand button shows expense line items', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -371,7 +358,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('expanded row shows expense item details', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -410,7 +396,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('expense category badges render', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -445,7 +430,6 @@ test.describe('Finance Expense Reports Page', () => {
 
   test.describe('Action Buttons', () => {
     test('approve button visible for SUBMITTED reports with write role', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -484,7 +468,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('reject button triggers rejection reason dialog', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -532,7 +515,6 @@ test.describe('Finance Expense Reports Page', () => {
     });
 
     test('reimburse button visible for APPROVED reports', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -569,7 +551,6 @@ test.describe('Finance Expense Reports Page', () => {
 
   test.describe('Truncation Warning', () => {
     test('truncation warning element exists when data exceeds limit', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {

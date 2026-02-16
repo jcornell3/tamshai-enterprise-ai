@@ -28,7 +28,6 @@ let authenticatedContext: BrowserContext | null = null;
 
 test.describe('Cross-App Executive Journey', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     // Warm up the portal first
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/`);
@@ -40,7 +39,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Portal Navigation', () => {
     test('portal loads and shows available apps', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -63,7 +61,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('HR App', () => {
     test('navigates to HR app and loads employee directory', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -85,7 +82,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Finance App', () => {
     test('navigates to Finance app and shows dashboard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       // Need to warm up Finance app to get its OIDC tokens
       await warmUpContext(authenticatedContext!, `${BASE_URLS[ENV]}/finance/`);
@@ -95,14 +91,18 @@ test.describe('Cross-App Executive Journey', () => {
         await page.goto(`${BASE_URLS[ENV]}/finance/`);
         await page.waitForLoadState('networkidle');
 
-        // Finance app should render (dashboard, invoices, or any finance content)
-        const hasFinanceContent = await page.locator('h1, h2').first().isVisible({ timeout: 15000 }).catch(() => false);
-        expect(hasFinanceContent).toBe(true);
+        // Wait for either app content or an error to appear
+        await page.locator('h1, h2, [role="alert"], .alert, .error').first().waitFor({ timeout: 15000 }).catch(() => {});
 
+        // Fail fast with the actual error message if the app shows an error
+        const errorEl = page.locator('[role="alert"], .alert-danger, .alert-error, .error-message');
+        const errorText = await errorEl.first().textContent().catch(() => null);
+        expect(errorText, `Finance app returned an error: ${errorText}`).toBeNull();
+
+        // Finance app should render dashboard content
         const pageText = await page.textContent('body') || '';
-        // Finance content keywords (check header text or any finance-related content)
-        const hasFinanceKeywords = pageText.match(/invoice|budget|finance|revenue|expense|dashboard|application/i);
-        expect(hasFinanceKeywords).toBeTruthy();
+        const hasFinanceKeywords = pageText.match(/invoice|budget|finance|revenue|expense|dashboard/i);
+        expect(hasFinanceKeywords, `Finance app did not render expected content. Page text: ${pageText.substring(0, 200)}`).toBeTruthy();
       } finally {
         await page.close();
       }
@@ -111,7 +111,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Sales App', () => {
     test('navigates to Sales app and shows dashboard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       await warmUpContext(authenticatedContext!, `${BASE_URLS[ENV]}/sales/`);
       const page = await authenticatedContext!.newPage();
@@ -120,12 +119,15 @@ test.describe('Cross-App Executive Journey', () => {
         await page.goto(`${BASE_URLS[ENV]}/sales/`);
         await page.waitForLoadState('networkidle');
 
-        const hasSalesContent = await page.locator('h1, h2').first().isVisible({ timeout: 15000 }).catch(() => false);
-        expect(hasSalesContent).toBe(true);
+        await page.locator('h1, h2, [role="alert"], .alert, .error').first().waitFor({ timeout: 15000 }).catch(() => {});
 
-        const pageText = await page.textContent('body');
-        const hasSalesKeywords = pageText?.match(/sales|pipeline|leads|forecast|customer|dashboard/i);
-        expect(hasSalesKeywords).toBeTruthy();
+        const errorEl = page.locator('[role="alert"], .alert-danger, .alert-error, .error-message');
+        const errorText = await errorEl.first().textContent().catch(() => null);
+        expect(errorText, `Sales app returned an error: ${errorText}`).toBeNull();
+
+        const pageText = await page.textContent('body') || '';
+        const hasSalesKeywords = pageText.match(/sales|pipeline|leads|forecast|customer|dashboard/i);
+        expect(hasSalesKeywords, `Sales app did not render expected content. Page text: ${pageText.substring(0, 200)}`).toBeTruthy();
       } finally {
         await page.close();
       }
@@ -134,7 +136,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Support App', () => {
     test('navigates to Support app and shows dashboard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       await warmUpContext(authenticatedContext!, `${BASE_URLS[ENV]}/support/`);
       const page = await authenticatedContext!.newPage();
@@ -143,12 +144,15 @@ test.describe('Cross-App Executive Journey', () => {
         await page.goto(`${BASE_URLS[ENV]}/support/`);
         await page.waitForLoadState('networkidle');
 
-        const hasSupportContent = await page.locator('h1, h2').first().isVisible({ timeout: 15000 }).catch(() => false);
-        expect(hasSupportContent).toBe(true);
+        await page.locator('h1, h2, [role="alert"], .alert, .error').first().waitFor({ timeout: 15000 }).catch(() => {});
 
-        const pageText = await page.textContent('body');
-        const hasSupportKeywords = pageText?.match(/ticket|support|sla|knowledge|agent|dashboard/i);
-        expect(hasSupportKeywords).toBeTruthy();
+        const errorEl = page.locator('[role="alert"], .alert-danger, .alert-error, .error-message');
+        const errorText = await errorEl.first().textContent().catch(() => null);
+        expect(errorText, `Support app returned an error: ${errorText}`).toBeNull();
+
+        const pageText = await page.textContent('body') || '';
+        const hasSupportKeywords = pageText.match(/ticket|support|sla|knowledge|agent|dashboard/i);
+        expect(hasSupportKeywords, `Support app did not render expected content. Page text: ${pageText.substring(0, 200)}`).toBeTruthy();
       } finally {
         await page.close();
       }
@@ -157,7 +161,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Payroll App', () => {
     test('navigates to Payroll app and loads dashboard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       await warmUpContext(authenticatedContext!, `${BASE_URLS[ENV]}/payroll/`);
       const page = await authenticatedContext!.newPage();
@@ -178,7 +181,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Tax App', () => {
     test('navigates to Tax app and loads dashboard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       await warmUpContext(authenticatedContext!, `${BASE_URLS[ENV]}/tax/`);
       const page = await authenticatedContext!.newPage();
@@ -199,7 +201,6 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('User Context Consistency', () => {
     test('each app shows correct user display name', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       const apps = [
         { name: 'HR', url: `${BASE_URLS[ENV]}/hr/` },
@@ -215,12 +216,17 @@ test.describe('Cross-App Executive Journey', () => {
           await page.goto(app.url);
           await page.waitForLoadState('networkidle');
 
-          // Wait for content to render
-          await page.locator('h1, h2').first().waitFor({ timeout: 15000 }).catch(() => {});
+          // Wait for content or error to render
+          await page.locator('h1, h2, [role="alert"], .alert, .error').first().waitFor({ timeout: 15000 }).catch(() => {});
+
+          // Fail fast with actual error message
+          const errorEl = page.locator('[role="alert"], .alert-danger, .alert-error, .error-message');
+          const errorText = await errorEl.first().textContent().catch(() => null);
+          expect(errorText, `${app.name} app returned an error: ${errorText}`).toBeNull();
 
           // Page should have content (not blank)
           const bodyText = await page.textContent('body');
-          expect(bodyText?.length).toBeGreaterThan(50);
+          expect(bodyText?.length, `${app.name} app rendered blank page`).toBeGreaterThan(50);
         } finally {
           await page.close();
         }
@@ -228,7 +234,6 @@ test.describe('Cross-App Executive Journey', () => {
     });
 
     test('each app shows role-appropriate navigation', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
 
       // Verify HR has department-level nav items
       await warmUpContext(authenticatedContext!, `${BASE_URLS[ENV]}/hr/`);
@@ -238,10 +243,18 @@ test.describe('Cross-App Executive Journey', () => {
         await hrPage.goto(`${BASE_URLS[ENV]}/hr/`);
         await hrPage.waitForLoadState('networkidle');
 
+        // Wait for content or error to render
+        await hrPage.locator('h1, h2, nav, aside, [role="alert"]').first().waitFor({ timeout: 15000 }).catch(() => {});
+
+        // Fail fast with actual error message
+        const errorEl = hrPage.locator('[role="alert"], .alert-danger, .alert-error, .error-message');
+        const errorText = await errorEl.first().textContent().catch(() => null);
+        expect(errorText, `HR app returned an error: ${errorText}`).toBeNull();
+
         // HR should have nav links (sidebar or top nav)
         const navLinks = hrPage.locator('nav a, aside a, [role="navigation"] a');
         const linkCount = await navLinks.count();
-        expect(linkCount).toBeGreaterThan(0);
+        expect(linkCount, 'HR app should have navigation links').toBeGreaterThan(0);
       } finally {
         await hrPage.close();
       }

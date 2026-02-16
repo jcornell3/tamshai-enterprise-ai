@@ -2,17 +2,37 @@ import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
-// Load environment variables from infrastructure .env (ports, secrets)
-// then local .env (test-specific overrides). Later calls don't overwrite existing vars.
-dotenv.config({ path: path.resolve(__dirname, '../../infrastructure/docker/.env'), quiet: true });
+// Load environment variables:
+// 1. Local tests/e2e/.env (test secrets — TOTP, passwords, client secrets)
+// 2. Infrastructure .env (port variables for Docker Compose services)
+// Later calls don't overwrite existing vars, so local .env takes precedence.
 dotenv.config({ quiet: true });
+dotenv.config({ path: path.resolve(__dirname, '../../infrastructure/docker/.env'), quiet: true });
+
+// Validate required test secrets are present.
+// These must come from tests/e2e/.env or direct env vars (e.g. CI secrets).
+// Missing secrets indicate a configuration bug — hard-fail, don't silently skip.
+const REQUIRED_SECRETS = [
+  'TEST_USER_PASSWORD',
+  'TEST_USER_TOTP_SECRET',
+  'CUSTOMER_USER_PASSWORD',
+  'MCP_INTEGRATION_RUNNER_SECRET',
+];
+const missing = REQUIRED_SECRETS.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  throw new Error(
+    `Missing required E2E secrets: ${missing.join(', ')}\n` +
+    `Run: eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)\n` +
+    `Or populate tests/e2e/.env (see .env.example)`
+  );
+}
 
 // Determine environment from TEST_ENV
 const testEnv = process.env.TEST_ENV || 'dev';
 
 // Port configuration from environment (set by Terraform in .env)
-const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS || '8443';
-const PORT_MCP_GATEWAY = process.env.PORT_MCP_GATEWAY || '3100';
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+const PORT_MCP_GATEWAY = process.env.PORT_MCP_GATEWAY;
 
 // Base URLs per environment
 const envConfig: Record<string, { baseURL: string; ignoreHTTPSErrors: boolean }> = {
@@ -84,12 +104,4 @@ export default defineConfig({
       // Employee specs share TOTP — sequential within this worker
     },
   ],
-
-  // Only start web server for dev environment (not for stage/prod/CI)
-  webServer: process.env.CI || testEnv !== 'dev' ? undefined : {
-    command: 'cd ../../infrastructure/docker && docker compose up -d mcp-gateway',
-    url: `http://localhost:${PORT_MCP_GATEWAY}/health`,
-    reuseExistingServer: true,
-    timeout: 120000,
-  },
 });

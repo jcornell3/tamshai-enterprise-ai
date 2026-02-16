@@ -48,7 +48,6 @@ test.describe('HR Time-Off Request Wizard', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/hr/`);
     authCreatedAt = Date.now();
@@ -62,7 +61,6 @@ test.describe('HR Time-Off Request Wizard', () => {
   // Proactively refresh auth tokens before they expire.
   // Access tokens have a 5-minute lifetime; re-warm after 4 minutes.
   test.beforeEach(async () => {
-    if (!authenticatedContext) return;
     if (Date.now() - authCreatedAt > 4 * 60 * 1000) {
       await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/hr/`);
       authCreatedAt = Date.now();
@@ -75,7 +73,6 @@ test.describe('HR Time-Off Request Wizard', () => {
 
   test.describe('Wizard Initialization', () => {
     test('opens wizard when Request Time Off button is clicked', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -91,7 +88,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('wizard starts at Select Type step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -106,7 +102,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('has 4 steps: Select Type, Select Dates, Conflict Check, Review', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -120,7 +115,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('closes wizard on Escape key', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -136,7 +130,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('closes wizard on Cancel button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -154,7 +147,6 @@ test.describe('HR Time-Off Request Wizard', () => {
 
   test.describe('Step 1: Select Type', () => {
     test('displays available time-off types with balances', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -171,7 +163,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('shows balance progress bar for each type', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -188,7 +179,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('selecting a type highlights it', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -207,7 +197,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('disables types with zero balance', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -225,7 +214,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('validates type selection before proceeding', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -244,7 +232,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('proceeds to Select Dates step when type is selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -267,7 +254,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
       await page.goto(HR_TIME_OFF_URL);
       await page.click('[data-testid="request-time-off-button"]');
@@ -283,14 +269,12 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('shows selected type info banner', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const infoBanner = page.locator('.bg-primary-50');
       await expect(infoBanner).toBeVisible();
       await expect(infoBanner).toContainText('days available');
     });
 
     test('displays start and end date inputs', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const startDate = page.locator('#start-date');
       const endDate = page.locator('#end-date');
 
@@ -299,7 +283,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('displays half-day checkboxes', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const halfDayStart = page.locator('#half-day-start');
       const halfDayEnd = page.locator('#half-day-end');
 
@@ -308,7 +291,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('calculates and displays total days', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Fill in dates
       await page.fill('#start-date', '2026-03-02');
       await page.fill('#end-date', '2026-03-06');
@@ -320,7 +302,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('adjusts total for half-day selections', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Fill in dates
       await page.fill('#start-date', '2026-03-02');
       await page.fill('#end-date', '2026-03-06');
@@ -334,7 +315,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('shows warning when request exceeds balance', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Fill in a long date range that likely exceeds balance
       await page.fill('#start-date', '2026-03-01');
       await page.fill('#end-date', '2026-04-30'); // ~40+ business days
@@ -346,7 +326,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('validates dates are required', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Clear dates if prefilled
       await page.fill('#start-date', '');
       await page.fill('#end-date', '');
@@ -358,7 +337,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('validates end date after start date', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await page.fill('#start-date', '2026-03-10');
       await page.fill('#end-date', '2026-03-05'); // Before start
 
@@ -370,7 +348,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('allows adding optional notes', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const notes = page.locator('#notes');
       await expect(notes).toBeVisible();
 
@@ -379,7 +356,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('proceeds to Conflict Check step with valid dates', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await page.fill('#start-date', '2026-03-02');
       await page.fill('#end-date', '2026-03-06');
 
@@ -390,7 +366,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('can navigate back to Select Type step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await goToPreviousStep(page);
 
       await expectWizardStepActive(page, 'Select Type');
@@ -402,7 +377,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
       await page.goto(HR_TIME_OFF_URL);
       await page.click('[data-testid="request-time-off-button"]');
@@ -421,13 +395,11 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('displays conflict check heading', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const heading = page.locator('h4:has-text("Conflict Check")');
       await expect(heading).toBeVisible();
     });
 
     test('shows success message when no conflicts exist', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // For a fresh database, no conflicts expected
       const successMessage = page.locator('.bg-success-50');
       // May or may not be visible depending on existing data
@@ -438,7 +410,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('shows existing requests list if any exist', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const existingRequestsList = page.locator('[data-testid="existing-requests-list"]');
       // List may or may not be visible depending on test data
       const count = await existingRequestsList.count();
@@ -446,7 +417,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('proceeds to Review step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await goToNextStep(page);
 
       await expectWizardStepActive(page, 'Review');
@@ -454,7 +424,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('can navigate back to Select Dates step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await goToPreviousStep(page);
 
       await expectWizardStepActive(page, 'Select Dates');
@@ -466,7 +435,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
       await page.goto(HR_TIME_OFF_URL);
       await page.click('[data-testid="request-time-off-button"]');
@@ -487,39 +455,33 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('displays request summary', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const summary = page.locator('.bg-secondary-50');
       await expect(summary).toBeVisible();
     });
 
     test('shows type in summary', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const typeRow = page.locator('text=Type:');
       await expect(typeRow).toBeVisible();
     });
 
     test('shows date range in summary', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const datesRow = page.locator('text=Dates:');
       await expect(datesRow).toBeVisible();
     });
 
     test('shows duration in summary', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const durationRow = page.locator('text=Duration:');
       await expect(durationRow).toBeVisible();
       await expect(page.locator('.bg-secondary-50')).toContainText('days');
     });
 
     test('shows notes in summary when provided', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const notesRow = page.locator('text=Notes:');
       await expect(notesRow).toBeVisible();
       await expect(page.locator('.bg-secondary-50')).toContainText('Test request notes');
     });
 
     test('shows manager info when available', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const managerInfo = page.locator('.bg-primary-50:has-text("will review")');
       // Manager may or may not be present depending on employee data
       const count = await managerInfo.count();
@@ -527,12 +489,10 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('shows Submit Request button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await expectSubmitButtonVisible(page);
     });
 
     test('submitting shows processing state', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await submitWizard(page);
 
       // Brief processing state
@@ -540,7 +500,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('successful submission closes wizard', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await submitWizard(page);
 
       // Wait for completion or error
@@ -558,7 +517,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('can navigate back to Conflict Check step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       await goToPreviousStep(page);
 
       await expectWizardStepActive(page, 'Conflict Check');
@@ -568,7 +526,6 @@ test.describe('HR Time-Off Request Wizard', () => {
 
   test.describe('Full Wizard Flow', () => {
     test('complete time-off request flow end-to-end', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -607,7 +564,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('preserves data when navigating backward', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -643,7 +599,6 @@ test.describe('HR Time-Off Request Wizard', () => {
 
   test.describe('Accessibility', () => {
     test('wizard has proper dialog role', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -657,7 +612,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('dialog has aria-labelledby', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);
@@ -671,7 +625,6 @@ test.describe('HR Time-Off Request Wizard', () => {
     });
 
     test('form inputs have proper labels', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(HR_TIME_OFF_URL);

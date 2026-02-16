@@ -21,16 +21,18 @@ const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 
 export const ENV = process.env.TEST_ENV || 'dev';
 
+const portSuffix = process.env.PORT_CADDY_HTTPS && process.env.PORT_CADDY_HTTPS !== '443' ? `:${process.env.PORT_CADDY_HTTPS}` : '';
+
 export const BASE_URLS: Record<string, string> = {
-  dev: `https://www.tamshai.local:${process.env.PORT_CADDY_HTTPS || '8443'}`,
+  dev: `https://www.tamshai.local${portSuffix}`,
   stage: 'https://www.tamshai.com',
   prod: 'https://app.tamshai.com',
 };
 
 export const TEST_USER = {
   username: process.env.TEST_USERNAME || 'test-user.journey',
-  password: process.env.TEST_USER_PASSWORD || '',
-  totpSecret: process.env.TEST_USER_TOTP_SECRET || '',
+  password: process.env.TEST_USER_PASSWORD!,    // Validated in playwright.config.ts
+  totpSecret: process.env.TEST_USER_TOTP_SECRET!, // Validated in playwright.config.ts
 };
 
 export function loadTotpSecret(username: string, environment: string): string | null {

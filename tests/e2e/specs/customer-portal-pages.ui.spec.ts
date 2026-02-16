@@ -16,13 +16,15 @@ import { test, expect, Page, BrowserContext } from '@playwright/test';
 
 const ENV = process.env.TEST_ENV || 'dev';
 
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+
 const BASE_URLS: Record<string, { customerPortal: string }> = {
-  dev: { customerPortal: 'https://customers.tamshai.local:8443' },
+  dev: { customerPortal: `https://customers.tamshai.local:${PORT_CADDY_HTTPS}` },
   stage: { customerPortal: 'https://customers.tamshai.com' },
   prod: { customerPortal: 'https://customers.tamshai.com' },
 };
 
-const CUSTOMER_PASSWORD = process.env.CUSTOMER_USER_PASSWORD || '';
+const CUSTOMER_PASSWORD = process.env.CUSTOMER_USER_PASSWORD!; // Validated in playwright.config.ts
 
 const TEST_CUSTOMER = {
   username: process.env.TEST_CUSTOMER_USERNAME || 'jane.smith@acme.com',
@@ -55,26 +57,19 @@ let authenticatedContext: BrowserContext | null = null;
 
 test.describe('Customer Portal Pages', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_CUSTOMER.password) return;
-
     const context = await browser.newContext({
       ignoreHTTPSErrors: ENV === 'dev',
     });
     const page = await context.newPage();
 
-    try {
-      await page.goto(PORTAL_URL);
-      await waitForKeycloakLogin(page);
-      await completeKeycloakLogin(page, TEST_CUSTOMER.username, TEST_CUSTOMER.password);
-      await page.waitForLoadState('networkidle', { timeout: 30000 });
+    await page.goto(PORTAL_URL);
+    await waitForKeycloakLogin(page);
+    await completeKeycloakLogin(page, TEST_CUSTOMER.username, TEST_CUSTOMER.password);
+    await page.waitForLoadState('networkidle', { timeout: 30000 });
 
-      // Verify we landed on the portal
-      const welcomeText = page.locator('h1:has-text("Welcome"), h2:has-text("Welcome"), a:has-text("Dashboard")');
-      await expect(welcomeText.first()).toBeVisible({ timeout: 30000 });
-    } catch {
-      await context.close();
-      return;
-    }
+    // Verify we landed on the portal
+    const welcomeText = page.locator('h1:has-text("Welcome"), h2:has-text("Welcome"), a:has-text("Dashboard")');
+    await expect(welcomeText.first()).toBeVisible({ timeout: 30000 });
 
     // Capture session for reuse
     const sessionData = await page.evaluate(() => {
@@ -110,7 +105,6 @@ test.describe('Customer Portal Pages', () => {
 
   test.describe('New Ticket Page', () => {
     test('loads with Create New Support Ticket heading', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -124,7 +118,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('form fields render (title, category, description, priority)', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -150,7 +143,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('category options display as radio grid', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -171,7 +163,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('form validation shows errors for empty required fields', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -193,7 +184,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('character count shows for description', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -215,7 +205,6 @@ test.describe('Customer Portal Pages', () => {
 
   test.describe('Ticket Detail Page', () => {
     test('navigates from tickets list to ticket detail', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -240,7 +229,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('displays status and priority badges', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -274,7 +262,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('displays comments section', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -311,7 +298,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('comment form available for non-closed tickets', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -350,7 +336,6 @@ test.describe('Customer Portal Pages', () => {
 
   test.describe('Settings Page', () => {
     test('loads with Settings heading', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -364,7 +349,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('profile section shows user info', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -387,7 +371,6 @@ test.describe('Customer Portal Pages', () => {
     });
 
     test('notification preferences section visible', async () => {
-      test.skip(!authenticatedContext, 'No customer credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {

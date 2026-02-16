@@ -374,13 +374,11 @@ export default async function globalSetup(): Promise<void> {
   const password = process.env.TEST_USER_PASSWORD;
 
   if (!totpSecret || !password) {
-    console.log(
-      '[globalSetup] TEST_USER_TOTP_SECRET or TEST_USER_PASSWORD not set — skipping TOTP provisioning'
+    throw new Error(
+      '[globalSetup] TEST_USER_TOTP_SECRET or TEST_USER_PASSWORD not set.\n' +
+      'Run: eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)\n' +
+      'Or populate tests/e2e/.env (see .env.example)'
     );
-    console.log(
-      '[globalSetup] Tests will use auto-capture + cached file for TOTP'
-    );
-    return;
   }
 
   // Allow CI or custom environments to override the Keycloak URL via env var.

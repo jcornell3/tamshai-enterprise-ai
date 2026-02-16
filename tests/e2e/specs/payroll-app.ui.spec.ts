@@ -34,14 +34,12 @@ let authenticatedContext: BrowserContext | null = null;
 
 test.describe('Payroll App E2E Tests', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${PAYROLL_URL}/`);
   });
 
   test.describe('Dashboard', () => {
     test('displays payroll dashboard with metrics', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -65,7 +63,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays quick action buttons', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -88,7 +85,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('Pay Runs', () => {
     test('displays pay runs list', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -111,7 +107,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays new pay run button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -128,7 +123,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('Pay Stubs', () => {
     test('displays pay stubs list', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -142,7 +136,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays YTD summary', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -160,7 +153,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('Direct Deposit', () => {
     test('displays direct deposit settings', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -174,7 +166,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays add account button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -190,7 +181,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('1099 Contractors', () => {
     test('displays contractors list', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -204,7 +194,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays generate 1099s button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -220,7 +209,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('Benefits', () => {
     test('displays benefits page with heading', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -235,7 +223,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('shows benefit cards or empty state', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -255,7 +242,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('benefit cards show contribution amounts or empty state', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -285,7 +271,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('1099 Contractors (Extended)', () => {
     test('status filter dropdown works', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -308,7 +293,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('year filter dropdown works', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -331,7 +315,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('table shows contractor rows with expected columns', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -360,7 +343,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('active/inactive status badges render', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -385,7 +367,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('Tax Withholdings', () => {
     test('displays tax withholdings page with heading', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -400,7 +381,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays Federal W-4 section or no-withholding message', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -426,7 +406,6 @@ test.describe('Payroll App E2E Tests', () => {
     });
 
     test('displays State Tax section or valid no-data state', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -456,7 +435,6 @@ test.describe('Payroll App E2E Tests', () => {
 
   test.describe('Navigation', () => {
     test('can navigate between payroll sections via sidebar', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -481,7 +459,6 @@ test.describe('Payroll App E2E Tests', () => {
 
 test.describe('Payroll User Journeys', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     if (!authenticatedContext) {
       authenticatedContext = await createAuthenticatedContext(browser);
       await warmUpContext(authenticatedContext, `${PAYROLL_URL}/`);
@@ -494,7 +471,6 @@ test.describe('Payroll User Journeys', () => {
   });
 
   test('Scenario: Employee views their pay stub', async () => {
-    test.skip(!authenticatedContext, 'No test credentials configured');
     const page = await authenticatedContext!.newPage();
 
     try {
@@ -518,7 +494,6 @@ test.describe('Payroll User Journeys', () => {
   });
 
   test('Scenario: Admin creates a new pay run', async () => {
-    test.skip(!authenticatedContext, 'No test credentials configured');
     const page = await authenticatedContext!.newPage();
 
     try {

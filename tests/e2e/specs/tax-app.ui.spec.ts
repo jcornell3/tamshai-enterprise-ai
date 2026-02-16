@@ -44,7 +44,6 @@ test.describe('Tax App E2E Tests', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     ctx = await createAuthenticatedContext(browser);
     await warmUpContext(ctx, `${TAX_URL}/`);
     authCreatedAt = Date.now();
@@ -66,7 +65,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('Dashboard', () => {
     test('displays tax dashboard with compliance status', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -86,7 +84,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays compliance status badge', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -103,7 +100,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays upcoming deadlines section', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -119,7 +115,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays state tax breakdown', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -135,7 +130,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('Sales Tax Rates', () => {
     test('displays sales tax rates table', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -152,7 +146,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays state filter or search', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -169,7 +162,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('Quarterly Estimates', () => {
     test('displays quarterly estimates list', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -187,7 +179,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays due dates for estimates', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -201,7 +192,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays payment status for estimates', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -223,7 +213,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('Annual Filings', () => {
     test('displays annual filings list', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -240,7 +229,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays filing types (1099, W-2, etc)', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -260,7 +248,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays filing status', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -280,7 +267,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays confirmation numbers for filed returns', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -302,7 +288,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('State Registrations', () => {
     test('displays state registrations list', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -319,7 +304,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays registration types', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -338,7 +322,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays registration status', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -357,7 +340,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays filing frequency', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -378,7 +360,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('Audit Log', () => {
     test('displays audit log entries', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -395,7 +376,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays action types', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -414,7 +394,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays entity types', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -435,7 +414,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('AI Query', () => {
     test('displays AI query interface', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -449,7 +427,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays query input textarea', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -464,7 +441,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays submit button', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -479,7 +455,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays example queries', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -497,7 +472,6 @@ test.describe('Tax App E2E Tests', () => {
 
   test.describe('Navigation', () => {
     test('can navigate between tax sections via sidebar', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -524,7 +498,6 @@ test.describe('Tax App E2E Tests', () => {
     });
 
     test('displays sign out button', async () => {
-      test.skip(!ctx, 'No test credentials configured');
       const page = await ctx!.newPage();
 
       try {
@@ -546,7 +519,6 @@ let sharedJourneyContext: BrowserContext | null = null;
 
 test.describe('Tax User Journeys', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     if (!sharedJourneyContext) {
       sharedJourneyContext = await createAuthenticatedContext(browser);
       await warmUpContext(sharedJourneyContext, `${TAX_URL}/`);
@@ -558,7 +530,6 @@ test.describe('Tax User Journeys', () => {
   });
 
   test('Scenario: Finance user reviews quarterly tax estimates', async () => {
-    test.skip(!sharedJourneyContext, 'No test credentials configured');
     const page = await sharedJourneyContext!.newPage();
 
     try {
@@ -575,7 +546,6 @@ test.describe('Tax User Journeys', () => {
   });
 
   test('Scenario: Tax accountant checks annual filings status', async () => {
-    test.skip(!sharedJourneyContext, 'No test credentials configured');
     const page = await sharedJourneyContext!.newPage();
 
     try {
@@ -595,7 +565,6 @@ test.describe('Tax User Journeys', () => {
   });
 
   test('Scenario: Compliance officer reviews audit log', async () => {
-    test.skip(!sharedJourneyContext, 'No test credentials configured');
     const page = await sharedJourneyContext!.newPage();
 
     try {
@@ -612,7 +581,6 @@ test.describe('Tax User Journeys', () => {
   });
 
   test('Scenario: User asks AI about sales tax rates', async () => {
-    test.skip(!sharedJourneyContext, 'No test credentials configured');
     const page = await sharedJourneyContext!.newPage();
 
     try {
@@ -633,7 +601,6 @@ test.describe('Tax User Journeys', () => {
   });
 
   test('Scenario: User views state tax registration details', async () => {
-    test.skip(!sharedJourneyContext, 'No test credentials configured');
     const page = await sharedJourneyContext!.newPage();
 
     try {

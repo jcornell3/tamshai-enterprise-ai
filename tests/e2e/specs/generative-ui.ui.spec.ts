@@ -37,7 +37,6 @@ test.describe('Generative UI - Display Directives', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
@@ -48,7 +47,6 @@ test.describe('Generative UI - Display Directives', () => {
   });
 
   test('OrgChartComponent renders on "Show me my org chart" query', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Comprehensive error logging to diagnose blank page
     const consoleMessages: Array<{type: string, text: string}> = [];
@@ -158,7 +156,6 @@ test.describe('Generative UI - Display Directives', () => {
   });
 
   test('ApprovalsQueue renders on "Show pending approvals" query', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -205,7 +202,6 @@ test.describe('Generative UI - Display Directives', () => {
   });
 
   test('Invalid directive displays error message', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -248,7 +244,6 @@ test.describe('Generative UI - Component Interactions', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
@@ -259,7 +254,6 @@ test.describe('Generative UI - Component Interactions', () => {
   });
 
   test('Click employee in org chart triggers callback/navigation', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate directly to Org Chart page (not via AI query)
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -300,7 +294,6 @@ test.describe('Generative UI - Component Interactions', () => {
   });
 
   test('Approve/Reject actions in ApprovalsQueue trigger callbacks', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to Finance app for expense approvals
     await sharedPage.goto(`${BASE_URLS[ENV]}/finance/`);
@@ -389,7 +382,6 @@ test.describe('Generative UI - Voice Features', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
@@ -400,7 +392,6 @@ test.describe('Generative UI - Voice Features', () => {
   });
 
   test('Voice toggle button is visible when browser supports speech', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -434,7 +425,6 @@ test.describe('Generative UI - Voice Features', () => {
   });
 
   test('Voice input button triggers speech recognition when clicked', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -483,7 +473,6 @@ test.describe('Generative UI - Loading and Error States', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
@@ -494,7 +483,6 @@ test.describe('Generative UI - Loading and Error States', () => {
   });
 
   test('Loading state displays during data fetch', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -530,7 +518,6 @@ test.describe('Generative UI - Loading and Error States', () => {
   });
 
   test('Error handling for failed MCP calls', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -573,7 +560,6 @@ test.describe('Generative UI - Loading and Error States', () => {
   });
 
   test('Skeleton loader displays during component data loading', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate directly to Org Chart page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -612,7 +598,6 @@ test.describe('Generative UI - ComponentRenderer', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
@@ -623,7 +608,6 @@ test.describe('Generative UI - ComponentRenderer', () => {
   });
 
   test('ComponentRenderer has accessibility attributes', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to a page with generative UI components
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -680,7 +664,6 @@ test.describe('Generative UI - ComponentRenderer', () => {
   });
 
   test('UnknownComponentFallback displays for unknown component types', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // This test would require injecting a malformed component response
     // For now, we verify the fallback pattern exists by checking the component code
@@ -700,7 +683,6 @@ test.describe('Generative UI - SSE Streaming', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
@@ -711,7 +693,6 @@ test.describe('Generative UI - SSE Streaming', () => {
   });
 
   test('SSE query streams response chunks progressively', async () => {
-    if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
     // Navigate to HR app AI Query page
     await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);

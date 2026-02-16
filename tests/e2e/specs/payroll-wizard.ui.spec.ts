@@ -47,7 +47,6 @@ test.describe('Payroll Run Wizard', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/payroll/`);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -61,7 +60,6 @@ test.describe('Payroll Run Wizard', () => {
   // Proactively refresh auth tokens before they expire.
   // Access tokens have a 5-minute lifetime; re-warm after 4 minutes.
   test.beforeEach(async () => {
-    if (!authenticatedContext) return;
     if (Date.now() - authCreatedAt > 3 * 60 * 1000) {
       await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/payroll/`);
       authCreatedAt = Date.now();
@@ -70,7 +68,6 @@ test.describe('Payroll Run Wizard', () => {
 
   test.describe('Wizard Flow', () => {
     test('wizard starts at Pay Period step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -84,7 +81,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('has 4 steps: Pay Period, Earnings, Deductions, Review', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -97,7 +93,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('breadcrumbs show all steps', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new?showBreadcrumbs=true`);
@@ -115,7 +110,6 @@ test.describe('Payroll Run Wizard', () => {
 
   test.describe('Step 1: Pay Period Selection', () => {
     test('shows pay period date range selection', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -132,7 +126,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('validates pay period dates before proceeding', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -154,7 +147,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('proceeds to Earnings step with valid dates', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -176,7 +168,6 @@ test.describe('Payroll Run Wizard', () => {
 
   test.describe('Step 2: Earnings Review', () => {
     test('displays employee earnings or no-data fallback', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -197,7 +188,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('shows gross pay or no-data warning on earnings step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -225,7 +215,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('allows editing individual earnings when data available', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -257,7 +246,6 @@ test.describe('Payroll Run Wizard', () => {
 
   test.describe('Step 3: Deductions & Taxes', () => {
     test('shows tax withholding calculations', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -281,7 +269,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('displays Federal, State, and FICA taxes', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -304,7 +291,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('shows total net pay calculation', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -327,7 +313,6 @@ test.describe('Payroll Run Wizard', () => {
 
   test.describe('Step 4: Review & Submit', () => {
     test('shows summary of payroll run', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -352,7 +337,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('displays Submit button on final step', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -372,7 +356,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('submit shows confirmation before processing', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -398,7 +381,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('successful submission shows processing state', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -426,7 +408,6 @@ test.describe('Payroll Run Wizard', () => {
 
   test.describe('Pre-flight Validation (Gusto Pattern)', () => {
     test('shows warning for employees with missing tax info', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/pay-runs/new`);
@@ -452,7 +433,6 @@ test.describe('Payroll Run Wizard', () => {
     });
 
     test('blocks submission for critical errors', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         // Navigate to a pay run with known issues

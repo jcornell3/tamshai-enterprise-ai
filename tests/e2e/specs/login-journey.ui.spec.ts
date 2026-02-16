@@ -21,11 +21,13 @@ import { generateTotpCode } from '../../shared/auth/totp';
 // Environment configuration
 const ENV = process.env.TEST_ENV || 'dev';
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tamshai-corp';
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+
 const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
-    site: 'https://www.tamshai.local:8443',      // Static marketing site
-    app: 'https://www.tamshai.local:8443/app',   // Portal SPA
-    keycloak: 'https://www.tamshai.local:8443/auth',
+    site: `https://www.tamshai.local:${PORT_CADDY_HTTPS}`,      // Static marketing site
+    app: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/app`,   // Portal SPA
+    keycloak: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth`,
   },
   stage: {
     site: 'https://www.tamshai.com',        // Static marketing site
@@ -51,10 +53,10 @@ const TOTP_SECRETS_DIR = path.join(__dirname, '..', '.totp-secrets');
 const TEST_USER = {
   username: process.env.TEST_USERNAME || 'test-user.journey',
   // Password from GitHub Secret TEST_USER_PASSWORD (env var: TEST_USER_PASSWORD)
-  password: process.env.TEST_USER_PASSWORD || '',
+  password: process.env.TEST_USER_PASSWORD!, // Validated in playwright.config.ts
   // TOTP secret must be BASE32-encoded (not raw) - used with oathtool/otplib
   // From GitHub Secret TEST_USER_TOTP_SECRET (env var: TEST_USER_TOTP_SECRET)
-  totpSecret: process.env.TEST_USER_TOTP_SECRET || '',
+  totpSecret: process.env.TEST_USER_TOTP_SECRET!, // Validated in playwright.config.ts
 };
 
 /**
@@ -301,11 +303,6 @@ test.describe('Employee Login Journey', () => {
   }) => {
     const urls = BASE_URLS[ENV];
 
-    // Skip if no credentials configured
-    if (!TEST_USER.password) {
-      test.skip(true, 'No test credentials configured');
-    }
-
     // Navigate to portal — auto-redirects to Keycloak SSO
     await page.goto(`${urls.app}/`);
 
@@ -355,22 +352,34 @@ test.describe('Employee Login Journey', () => {
       console.log('TOTP authentication completed');
     }
 
-    // Wait for redirect back to portal - check for portal content instead of strict URL
-    // The portal may take time to fully load after OAuth redirect
+    // Wait for redirect back to portal after OIDC callback
     await page.waitForLoadState('networkidle', { timeout: 30000 });
 
     // Verify we're on the portal by checking for portal-specific content
     // The portal shows "Available Applications" heading when logged in
     const portalHeading = page.locator('h2:has-text("Available Applications")');
-    await expect(portalHeading).toBeVisible({ timeout: 30000 });
+    try {
+      await expect(portalHeading).toBeVisible({ timeout: 30000 });
+    } catch {
+      // Collect diagnostics before failing
+      const currentUrl = page.url();
+      const errorText = await page.locator('[role="alert"], .alert-danger, .alert-error, .error-message').first().textContent().catch(() => null);
+      const bodyText = await page.textContent('body').catch(() => '(page closed)');
+      const snippet = (bodyText || '').substring(0, 300);
+      throw new Error(
+        errorText
+          ? `Portal returned an error: ${errorText} (URL: ${currentUrl})`
+          : `Portal heading "Available Applications" not found. URL: ${currentUrl}. Page: ${snippet}`
+      );
+    }
 
     // Verify user info is displayed
     const userDisplay = page.locator(`text=${TEST_USER.username}`);
     await expect(userDisplay).toBeVisible({ timeout: 10000 });
 
     // Check that the page has loaded correctly (not a blank page)
-    const pageContent = await page.textContent('body');
-    expect(pageContent?.length).toBeGreaterThan(100);
+    const pageContent = await page.textContent('body') || '';
+    expect(pageContent.length).toBeGreaterThan(100);
 
     console.log(`Login journey completed successfully for ${TEST_USER.username}`);
   });

@@ -19,15 +19,17 @@ import { test, expect, Page } from '@playwright/test';
 const ENV = process.env.TEST_ENV || 'dev';
 const KEYCLOAK_CUSTOMER_REALM = process.env.KEYCLOAK_CUSTOMER_REALM || 'tamshai-customers';
 
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+
 const BASE_URLS: Record<string, {
   homepage: string;
   customerPortal: string;
   keycloak: string;
 }> = {
   dev: {
-    homepage: 'https://www.tamshai.local:8443',
-    customerPortal: 'https://customers.tamshai.local:8443',
-    keycloak: 'https://www.tamshai.local:8443/auth',
+    homepage: `https://www.tamshai.local:${PORT_CADDY_HTTPS}`,
+    customerPortal: `https://customers.tamshai.local:${PORT_CADDY_HTTPS}`,
+    keycloak: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth`,
   },
   stage: {
     homepage: 'https://www.tamshai.com',
@@ -43,7 +45,7 @@ const BASE_URLS: Record<string, {
 
 // Customer test password from environment variable (GitHub Secret: CUSTOMER_USER_PASSWORD)
 // No fallback — must be set via read-github-secrets.sh --e2e
-const CUSTOMER_PASSWORD = process.env.CUSTOMER_USER_PASSWORD || '';
+const CUSTOMER_PASSWORD = process.env.CUSTOMER_USER_PASSWORD!; // Validated in playwright.config.ts
 
 // Test customer credentials from realm-export-customers-dev.json
 // Lead customer from Acme Corporation
@@ -140,11 +142,6 @@ test.describe('Customer Login Journey', () => {
 
   test('should complete full login journey for lead customer', async ({ page }) => {
     const urls = BASE_URLS[ENV];
-
-    // Skip if no credentials configured
-    if (!TEST_LEAD_CUSTOMER.password) {
-      test.skip(true, 'No test credentials configured');
-    }
 
     // Navigate to customer portal
     await page.goto(urls.customerPortal);

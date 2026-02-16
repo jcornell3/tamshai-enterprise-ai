@@ -31,7 +31,6 @@ test.describe('Support Ticket Escalation Flow', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/support/`);
     authCreatedAt = Date.now();
@@ -45,7 +44,6 @@ test.describe('Support Ticket Escalation Flow', () => {
   // Access tokens have a 5-minute lifetime; re-warm after 3 minutes
   // to inject fresh sessionStorage tokens into subsequent pages.
   test.beforeEach(async () => {
-    if (!authenticatedContext) return;
     if (Date.now() - authCreatedAt > 3 * 60 * 1000) {
       await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/support/`);
       authCreatedAt = Date.now();
@@ -54,7 +52,6 @@ test.describe('Support Ticket Escalation Flow', () => {
 
   test.describe('Escalation Modal Opening', () => {
     test('displays SLA page with tickets table', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -74,7 +71,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('escalate button opens modal for ticket row', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -102,7 +98,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('modal displays ticket information', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -132,7 +127,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('modal shows SLA countdown context', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -160,7 +154,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('modal closes on Cancel button', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -187,7 +180,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('modal closes on Escape key', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -218,7 +210,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -240,7 +231,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('displays Tier 2 and Management options', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const tier2Button = page.locator('[data-testid="level-tier2"]');
       const managementButton = page.locator('[data-testid="level-management"]');
 
@@ -252,7 +242,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('Tier 2 is selected by default', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const tier2Button = page.locator('[data-testid="level-tier2"]');
 
       // Should have selected class
@@ -260,7 +249,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('clicking Management deselects Tier 2', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const tier2Button = page.locator('[data-testid="level-tier2"]');
       const managementButton = page.locator('[data-testid="level-management"]');
 
@@ -274,7 +262,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('Tier 2 selection shows target agent list', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const tier2Button = page.locator('[data-testid="level-tier2"]');
       await tier2Button.click();
 
@@ -284,7 +271,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('Management selection hides target agent list', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const managementButton = page.locator('[data-testid="level-management"]');
       await managementButton.click();
 
@@ -298,7 +284,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -323,7 +308,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('displays available escalation targets', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Look for target buttons or "No available agents" message
       const targetButtons = page.locator('[data-testid^="target-"]');
       const noAgentsMessage = page.locator('text=No available agents');
@@ -336,7 +320,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('clicking a target selects it', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const targetButtons = page.locator('[data-testid^="target-"]');
 
       if (await targetButtons.count() === 0) {
@@ -352,7 +335,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('target shows agent details (name, role, workload)', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const targetButtons = page.locator('[data-testid^="target-"]');
 
       if (await targetButtons.count() === 0) {
@@ -368,7 +350,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('first available target is auto-selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const targetButtons = page.locator('[data-testid^="target-"]');
 
       if (await targetButtons.count() === 0) {
@@ -387,7 +368,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -409,13 +389,11 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('displays reason dropdown', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const reasonSelect = page.locator('#reason');
       await expect(reasonSelect).toBeVisible();
     });
 
     test('reason dropdown has all escalation reasons', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const reasonSelect = page.locator('#reason');
 
       // Check for key reason options
@@ -430,7 +408,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('selecting a reason updates the dropdown', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const reasonSelect = page.locator('#reason');
 
       await reasonSelect.selectOption('technical_expertise');
@@ -439,7 +416,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('auto-selects SLA breach reason for breached tickets', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // For breached tickets, reason should auto-select to 'sla_breach'
       // This depends on the ticket state - check the current value
       const reasonSelect = page.locator('#reason');
@@ -454,7 +430,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -476,19 +451,16 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('displays notes textarea', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const notesTextarea = page.locator('#notes');
       await expect(notesTextarea).toBeVisible();
     });
 
     test('notes textarea has placeholder text', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const notesTextarea = page.locator('#notes');
       await expect(notesTextarea).toHaveAttribute('placeholder', 'Provide context for the escalation...');
     });
 
     test('can enter notes text', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const notesTextarea = page.locator('#notes');
 
       await notesTextarea.fill('Customer has been waiting for 3 days. Urgently needs resolution.');
@@ -497,7 +469,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('notes are optional (label indicates optional)', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const notesLabel = page.locator('label[for="notes"]');
       await expect(notesLabel).toContainText('optional');
     });
@@ -507,7 +478,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -529,7 +499,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('shows validation error when reason not selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Clear reason selection if auto-selected
       const reasonSelect = page.locator('#reason');
       await reasonSelect.selectOption('');
@@ -544,7 +513,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('validation error clears when reason is selected', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Clear reason and trigger validation
       const reasonSelect = page.locator('#reason');
       await reasonSelect.selectOption('');
@@ -565,7 +533,6 @@ test.describe('Support Ticket Escalation Flow', () => {
 
   test.describe('Breach Warning Display', () => {
     test('shows breach warning for breached SLA tickets', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -601,7 +568,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -623,14 +589,12 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('Escalate button is visible', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const submitButton = page.locator('button:has-text("Escalate Ticket")');
       await expect(submitButton).toBeVisible();
       await expect(submitButton).toHaveClass(/btn-warning/);
     });
 
     test('submitting shows loading state', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Fill required fields
       const reasonSelect = page.locator('#reason');
       await reasonSelect.selectOption('technical_expertise');
@@ -650,7 +614,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('successful submission closes modal', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Fill required fields
       const reasonSelect = page.locator('#reason');
       await reasonSelect.selectOption('technical_expertise');
@@ -685,7 +648,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('displays error message on API failure', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // This test validates error handling when API returns an error
       // Fill required fields
       const reasonSelect = page.locator('#reason');
@@ -709,7 +671,6 @@ test.describe('Support Ticket Escalation Flow', () => {
 
   test.describe('Full Escalation Flow', () => {
     test('complete Tier 2 escalation end-to-end', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -753,7 +714,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('complete Management escalation end-to-end', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -795,7 +755,6 @@ test.describe('Support Ticket Escalation Flow', () => {
 
   test.describe('SLA Page Filters', () => {
     test('status filter changes displayed tickets', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -819,7 +778,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('tier filter changes displayed tickets', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
       try {
         await page.goto(SLA_PAGE_URL);
@@ -847,7 +805,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     let page: Page;
 
     test.beforeEach(async () => {
-      if (!authenticatedContext) return;
       page = await authenticatedContext!.newPage();
 
       await page.goto(SLA_PAGE_URL);
@@ -869,19 +826,16 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('modal has proper dialog role', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const dialog = page.locator('[role="dialog"]');
       await expect(dialog).toBeVisible();
     });
 
     test('modal has aria-labelledby', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const dialog = page.locator('[role="dialog"]');
       await expect(dialog).toHaveAttribute('aria-labelledby', 'escalation-modal-title');
     });
 
     test('form inputs have proper labels', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // Reason select has label
       const reasonLabel = page.locator('label[for="reason"]');
       await expect(reasonLabel).toBeVisible();
@@ -894,7 +848,6 @@ test.describe('Support Ticket Escalation Flow', () => {
     });
 
     test('focus is set to reason select on modal open', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       // The reason select should be focused
       const focusedElement = page.locator('#reason:focus');
 

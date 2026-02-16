@@ -42,7 +42,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     let sharedPage: Page;
 
     test.beforeAll(async ({ browser }) => {
-      if (!TEST_USER.password) return;
       sharedContext = await createAuthenticatedContext(browser);
       await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
       sharedPage = await sharedContext.newPage();
@@ -53,7 +52,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('OrgChartPage - displays organization chart', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       // Navigate directly to HR app
       await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -75,7 +73,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('TimeOffPage - displays time off management', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -92,7 +89,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('TimeOffPage - can open request modal', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -109,7 +105,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('EmployeeProfilePage - displays employee profile', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       // Navigate to Employee Directory (the default HR page)
       await sharedPage.goto(`${BASE_URLS[ENV]}/hr/`);
@@ -150,7 +145,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     let sharedPage: Page;
 
     test.beforeAll(async ({ browser }) => {
-      if (!TEST_USER.password) return;
       sharedContext = await createAuthenticatedContext(browser);
       await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/finance/`);
       sharedPage = await sharedContext.newPage();
@@ -161,7 +155,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('ARRDashboardPage - displays ARR metrics', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/finance/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -179,7 +172,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('ARRDashboardPage - displays movement table', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/finance/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -193,7 +185,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('ARRDashboardPage - displays cohort analysis', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/finance/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -212,7 +203,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     let sharedPage: Page;
 
     test.beforeAll(async ({ browser }) => {
-      if (!TEST_USER.password) return;
       sharedContext = await createAuthenticatedContext(browser);
       await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/sales/`);
       sharedPage = await sharedContext.newPage();
@@ -223,7 +213,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('LeadsPage - displays lead list', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/sales/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -240,7 +229,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('LeadsPage - has filtering controls', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/sales/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -255,7 +243,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('ForecastingPage - displays forecast summary', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/sales/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -272,7 +259,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('ForecastingPage - has period selector', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/sales/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -291,7 +277,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     let sharedPage: Page;
 
     test.beforeAll(async ({ browser }) => {
-      if (!TEST_USER.password) return;
       sharedContext = await createAuthenticatedContext(browser);
       await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/support/`);
       sharedPage = await sharedContext.newPage();
@@ -302,7 +287,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('SLAPage - displays SLA compliance', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/support/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -319,7 +303,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('SLAPage - displays tier breakdown', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/support/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -335,7 +318,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('SLAPage - displays at-risk tickets', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/support/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -351,7 +333,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('AgentMetricsPage - displays agent performance', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/support/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -368,7 +349,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('AgentMetricsPage - displays agent leaderboard', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/support/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -382,7 +362,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
     });
 
     test('AgentMetricsPage - has period selector', async () => {
-      if (!TEST_USER.password) test.skip(true, 'No test credentials configured');
 
       await sharedPage.goto(`${BASE_URLS[ENV]}/support/`);
       await sharedPage.waitForLoadState('networkidle');
@@ -399,11 +378,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
 
 test.describe('Cross-App Navigation', () => {
   test('can navigate between apps via portal', async ({ browser }) => {
-    // Skip if no credentials
-    if (!TEST_USER.password) {
-      test.skip(true, 'No test credentials configured');
-    }
-
     // Use createAuthenticatedContext to ensure TOTP window guard
     const context = await createAuthenticatedContext(browser);
     await warmUpContext(context, `${BASE_URLS[ENV]}/app/`);

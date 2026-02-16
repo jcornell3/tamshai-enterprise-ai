@@ -32,7 +32,6 @@ let authenticatedContext: BrowserContext | null = null;
 
 test.describe('Finance Budgets Page', () => {
   test.beforeAll(async ({ browser }) => {
-    if (!TEST_USER.password) return;
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
   });
@@ -43,7 +42,6 @@ test.describe('Finance Budgets Page', () => {
 
   test.describe('Page Load', () => {
     test('displays budgets page with heading', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -58,7 +56,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('displays stats cards', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -86,7 +83,6 @@ test.describe('Finance Budgets Page', () => {
 
   test.describe('Filters', () => {
     test('fiscal year filter has expected options', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -109,7 +105,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('status filter has expected options', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -137,7 +132,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('category filter is present', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -158,7 +152,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('department filter is present', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -179,7 +172,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('clear filters resets all filters', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -210,7 +202,6 @@ test.describe('Finance Budgets Page', () => {
 
   test.describe('Table Rendering', () => {
     test('displays budget table with correct columns', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -238,7 +229,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('table displays budget rows', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -266,7 +256,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('utilization bars render with color coding', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -298,7 +287,6 @@ test.describe('Finance Budgets Page', () => {
 
   test.describe('Department Detail Modal', () => {
     test('clicking department link opens detail modal', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -334,7 +322,6 @@ test.describe('Finance Budgets Page', () => {
 
   test.describe('Action Buttons', () => {
     test('approve button visible for PENDING_APPROVAL budgets with write role', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -375,7 +362,6 @@ test.describe('Finance Budgets Page', () => {
     });
 
     test('reject button triggers rejection reason dialog', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
@@ -429,7 +415,6 @@ test.describe('Finance Budgets Page', () => {
 
   test.describe('Empty State', () => {
     test('no results shown when filtered to impossible criteria', async () => {
-      test.skip(!authenticatedContext, 'No test credentials configured');
       const page = await authenticatedContext!.newPage();
 
       try {
