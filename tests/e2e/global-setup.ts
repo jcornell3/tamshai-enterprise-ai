@@ -5,12 +5,17 @@
  * TEST_USER_TOTP_SECRET before any E2E tests run. Uses the Keycloak Admin API
  * + Partial Import to provision the credential.
  *
+ * TEST_USER_TOTP_SECRET can be provided in either format:
+ *   - Base32-encoded (A-Z, 2-7, =) — e.g. from `echo -n "$RAW" | base32`
+ *   - Raw plaintext — the string Keycloak stores in secretData.value
+ *
  * When TEST_USER_TOTP_SECRET is set (CI/CD or local with env var):
+ *   - Auto-detects whether the value is Base32 or raw
+ *   - Stores the RAW secret in Keycloak's secretData.value
+ *   - Writes the Base32 value to .totp-secrets/ cache file for oathtool/otplib
  *   - Deletes and recreates test-user.journey with known TOTP secret
  *   - Reassigns groups (All-Employees, C-Suite)
  *   - Removes CONFIGURE_TOTP required action
- *   - Writes Base32-encoded bridge value to .totp-secrets/ cache file
- *   - Tests read the cache file (not raw env var) for TOTP code generation
  *
  * When TEST_USER_TOTP_SECRET is NOT set:
  *   - Does nothing (tests fall back to auto-capture + cached file)
@@ -24,8 +29,10 @@ import * as path from 'path';
 const ENV = process.env.TEST_ENV || 'dev';
 const REALM = 'tamshai-corp';
 
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+
 const KEYCLOAK_URLS: Record<string, string> = {
-  dev: 'https://www.tamshai.local:8443/auth',
+  dev: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth`,
   stage: 'https://www.tamshai.com/auth',
   prod: 'https://keycloak-fn44nd7wba-uc.a.run.app/auth',
 };
@@ -81,6 +88,40 @@ function base32Encode(buffer: Buffer): string {
   }
 
   return result;
+}
+
+/**
+ * Check if a string is valid Base32 (RFC 4648: A-Z, 2-7, optional = padding).
+ * Returns false for raw secrets that contain lowercase letters, digits 0/1/8/9, or
+ * other characters outside the Base32 alphabet.
+ */
+function isBase32(value: string): boolean {
+  return /^[A-Z2-7]+=*$/.test(value) && value.length >= 8;
+}
+
+/**
+ * RFC 4648 Base32 decoder (A-Z, 2-7 alphabet).
+ * Returns the decoded bytes as a UTF-8 string.
+ */
+function base32Decode(encoded: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const stripped = encoded.replace(/=+$/, '');
+  const bytes: number[] = [];
+  let bits = 0;
+  let value = 0;
+
+  for (const char of stripped) {
+    const idx = alphabet.indexOf(char);
+    if (idx === -1) throw new Error(`Invalid Base32 character: ${char}`);
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((value >>> bits) & 0xff);
+    }
+  }
+
+  return Buffer.from(bytes).toString('utf-8');
 }
 
 /**
@@ -318,12 +359,15 @@ async function provisionTotp(
 /**
  * Playwright globalSetup entry point
  *
- * Encoding bridge for TOTP:
- * - Stores totpSecret (env var) directly in Keycloak's secretData.value
- * - Keycloak uses value.getBytes(UTF-8) as HMAC key
- * - Computes Base32(Buffer.from(totpSecret, 'utf8')) and saves to cache file
- * - Test reads cache file → authenticator.generate(cached) → Base32.decode → same UTF-8 bytes
- * - This means the TOTP codes match regardless of what string the env var contains
+ * Handles TEST_USER_TOTP_SECRET in either format:
+ *
+ * If Base32 (e.g. "PA3GCULJJJVG2Y3MG42WS4BQIJSFMSDF"):
+ *   - Decodes to raw for Keycloak secretData.value
+ *   - Writes Base32 directly to cache file (no re-encoding)
+ *
+ * If raw (e.g. "x6aQiJjmcl75ip0BdVHe"):
+ *   - Stores raw directly in Keycloak secretData.value
+ *   - Base32-encodes for cache file (bridge for oathtool/otplib)
  */
 export default async function globalSetup(): Promise<void> {
   const totpSecret = process.env.TEST_USER_TOTP_SECRET;
@@ -348,23 +392,38 @@ export default async function globalSetup(): Promise<void> {
     return;
   }
 
+  // Detect format: Base32-encoded or raw plaintext
+  // Base32 alphabet is A-Z, 2-7 with = padding — raw secrets typically
+  // contain lowercase letters, digits 0/1/8/9, or special characters.
+  let rawSecret: string;
+  let base32Secret: string;
+
+  if (isBase32(totpSecret)) {
+    base32Secret = totpSecret;
+    rawSecret = base32Decode(totpSecret);
+    console.log(
+      `[globalSetup] Detected Base32 TEST_USER_TOTP_SECRET — decoded to raw for Keycloak`
+    );
+  } else {
+    rawSecret = totpSecret;
+    base32Secret = base32Encode(Buffer.from(totpSecret, 'utf-8'));
+    console.log(
+      `[globalSetup] Detected raw TEST_USER_TOTP_SECRET — encoded to Base32 for cache`
+    );
+  }
+
   console.log(
     `[globalSetup] Ensuring TOTP for test-user.journey (${ENV}, secret: [REDACTED])`
   );
 
   try {
-    await provisionTotp(keycloakUrl, totpSecret, password);
+    // Store the RAW secret in Keycloak (Keycloak uses raw UTF-8 bytes as HMAC key)
+    await provisionTotp(keycloakUrl, rawSecret, password);
 
-    // Write the Base32-encoded UTF-8 bytes to the cache file.
-    // This bridges the encoding gap between Keycloak and otplib:
-    //   Keycloak HMAC key = totpSecret.getBytes(UTF-8)
-    //   otplib HMAC key   = Base32.decode(cacheValue)
-    // By setting cacheValue = Base32.encode(totpSecret as UTF-8 bytes),
-    // Base32.decode(cacheValue) === totpSecret.getBytes(UTF-8) → codes match.
+    // Write the Base32 value to the cache file for oathtool/otplib
     const username = process.env.TEST_USERNAME || 'test-user.journey';
-    const base32ForOtplib = base32Encode(Buffer.from(totpSecret, 'utf-8'));
-    saveTotpSecretToCache(username, ENV, base32ForOtplib);
-    console.log(`[globalSetup] Base32 bridge: [REDACTED] → [REDACTED]`);
+    saveTotpSecretToCache(username, ENV, base32Secret);
+    console.log(`[globalSetup] Cache file written with Base32 value`);
   } catch (error: any) {
     // Credentials were explicitly provided — provisioning MUST succeed
     console.error(`[globalSetup] TOTP provisioning failed: ${error.message}`);
