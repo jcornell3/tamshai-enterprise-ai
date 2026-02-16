@@ -296,18 +296,69 @@ EOF
     fi
 
     # Step 5: Read-Modify-Write - Bind policy to impersonate permission
-    log_info "  Binding policy to impersonate permission (read-modify-write)..."
+    _bind_policy_to_permission "$rm_client_uuid" "$impersonate_perm_id" "$policy_id" "impersonate" || return 1
 
-    # READ: Get current permission state (from scope endpoint to match where we write)
+    # Step 6: Bind policy to token-exchange permission for mcp-gateway client
+    # Token exchange requires BOTH:
+    #   - user-impersonated permission (step 5) - allows impersonating users
+    #   - token-exchange permission on target client - allows exchange TO that audience
+    log_info "  Looking up mcp-gateway client for token-exchange permission..."
+    local mcp_gateway_uuid
+    mcp_gateway_uuid=$(get_client_uuid "mcp-gateway")
+
+    if [ -z "$mcp_gateway_uuid" ]; then
+        log_warn "  mcp-gateway client not found, skipping token-exchange permission"
+    else
+        log_info "  mcp-gateway UUID: $mcp_gateway_uuid"
+
+        # Find the token-exchange.permission.client.<mcp-gateway-uuid> permission
+        local token_exchange_perm_name="token-exchange.permission.client.${mcp_gateway_uuid}"
+        log_info "  Looking for permission: $token_exchange_perm_name"
+
+        local token_exchange_perm
+        token_exchange_perm=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/permission?name=${token_exchange_perm_name}&first=0&max=1")
+        local token_exchange_perm_id
+        token_exchange_perm_id=$(echo "$token_exchange_perm" | jq -r '.[0].id // empty')
+
+        if [ -z "$token_exchange_perm_id" ]; then
+            log_warn "  Token exchange permission not found for mcp-gateway"
+            log_warn "  This may indicate mcp-gateway client permissions are not enabled"
+        else
+            log_info "  Token exchange permission ID: $token_exchange_perm_id"
+            _bind_policy_to_permission "$rm_client_uuid" "$token_exchange_perm_id" "$policy_id" "token-exchange" || return 1
+        fi
+    fi
+
+    log_info "  Token exchange permissions configured successfully"
+}
+
+# Helper function to bind a policy to a permission (idempotent read-modify-write)
+# Arguments:
+#   $1 - realm-management client UUID
+#   $2 - Permission ID
+#   $3 - Policy ID to bind
+#   $4 - Permission name (for logging)
+# Returns: 0 on success, 1 on failure
+_bind_policy_to_permission() {
+    local rm_client_uuid="$1"
+    local perm_id="$2"
+    local policy_id="$3"
+    local perm_name="$4"
+
+    log_info "  Binding policy to ${perm_name} permission (read-modify-write)..."
+
+    # READ: Get current permission state
     local current_perm
-    current_perm=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/permission/scope/${impersonate_perm_id}")
+    current_perm=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/permission/scope/${perm_id}")
 
-    # Check if policy is already bound
-    local existing_policies
-    existing_policies=$(echo "$current_perm" | jq -r '.policies // [] | .[]')
+    # Check if policy is already bound via associatedPolicies endpoint
+    local associated_policies
+    associated_policies=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/policy/${perm_id}/associatedPolicies")
+    local already_bound
+    already_bound=$(echo "$associated_policies" | jq -r --arg pid "$policy_id" '.[] | select(.id == $pid) | .id')
 
-    if echo "$existing_policies" | grep -q "^${policy_id}$"; then
-        log_info "  Policy already bound to impersonate permission"
+    if [ -n "$already_bound" ]; then
+        log_info "  Policy already bound to ${perm_name} permission"
         return 0
     fi
 
@@ -322,34 +373,32 @@ EOF
     ')
 
     # WRITE: Send complete modified object back
-    rest_api_call PUT "clients/${rm_client_uuid}/authz/resource-server/permission/scope/${impersonate_perm_id}" "$modified_perm" > /dev/null
+    rest_api_call PUT "clients/${rm_client_uuid}/authz/resource-server/permission/scope/${perm_id}" "$modified_perm" > /dev/null
 
     # Check HTTP status
     if [ "$LAST_HTTP_STATUS" != "200" ] && [ "$LAST_HTTP_STATUS" != "201" ] && [ "$LAST_HTTP_STATUS" != "204" ]; then
-        log_error "  Failed to update permission (HTTP $LAST_HTTP_STATUS)"
+        log_error "  Failed to update ${perm_name} permission (HTTP $LAST_HTTP_STATUS)"
         return 1
     fi
 
-    log_info "  Permission updated (HTTP $LAST_HTTP_STATUS)"
+    log_info "  ${perm_name} permission updated (HTTP $LAST_HTTP_STATUS)"
 
-    # Step 6: Verify the binding persisted using associatedPolicies endpoint
-    # NOTE: The GET /permission/{id} response does NOT include 'policies' in the body.
-    # Policies are stored as relationships and must be queried via /associatedPolicies.
-    log_info "  Verifying policy binding persisted..."
+    # Verify the binding persisted
+    log_info "  Verifying ${perm_name} policy binding persisted..."
     sleep 1
 
     local verify_policies
-    verify_policies=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/policy/${impersonate_perm_id}/associatedPolicies")
+    verify_policies=$(rest_api_call GET "clients/${rm_client_uuid}/authz/resource-server/policy/${perm_id}/associatedPolicies")
 
     local policy_count
     policy_count=$(echo "$verify_policies" | jq 'length // 0')
 
     if [ "$policy_count" = "0" ] || [ "$policy_count" = "null" ]; then
-        log_error "  Policy binding did NOT persist"
+        log_error "  ${perm_name} policy binding did NOT persist"
         echo "$verify_policies" | jq '.' >&2
         return 1
     fi
 
-    log_info "  Policy binding verified ($policy_count associated policies)"
-    log_info "  Token exchange permissions configured successfully"
+    log_info "  ${perm_name} policy binding verified ($policy_count associated policies)"
+    return 0
 }
