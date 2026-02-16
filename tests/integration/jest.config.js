@@ -2,9 +2,10 @@ const path = require('path');
 const fs = require('fs');
 
 // Load .env from Terraform-generated file (REQUIRED for local dev)
+// NOTE: override: false ensures pre-existing env vars (e.g., from read-github-secrets.sh) take precedence
 const envPath = path.resolve(__dirname, '../../infrastructure/docker/.env');
 if (fs.existsSync(envPath)) {
-  require('dotenv').config({ path: envPath, override: true });
+  require('dotenv').config({ path: envPath, override: false });
 } else if (process.env.CI !== 'true') {
   console.error('ERROR: infrastructure/docker/.env not found.');
   console.error('Run: cd infrastructure/terraform/dev && terraform apply -var-file=dev.tfvars');

@@ -66,6 +66,10 @@ const config = {
     clientId: process.env.KEYCLOAK_CLIENT_ID,
     jwksUri: process.env.JWKS_URI || undefined,
     issuer: process.env.KEYCLOAK_ISSUER || undefined,
+    /** Additional valid issuers (comma-separated) for Split Horizon DNS */
+    additionalIssuers: process.env.KEYCLOAK_ADDITIONAL_ISSUERS
+      ? process.env.KEYCLOAK_ADDITIONAL_ISSUERS.split(',').map(s => s.trim()).filter(Boolean)
+      : undefined,
   },
   claude: {
     apiKey: process.env.CLAUDE_API_KEY || '',
@@ -127,6 +131,8 @@ const jwtValidator = new JWTValidator(
     jwksUri: config.keycloak.jwksUri || `${config.keycloak.url!}/realms/${config.keycloak.realm!}/protocol/openid-connect/certs`,
     issuer: config.keycloak.issuer || `${config.keycloak.url!}/realms/${config.keycloak.realm!}`,
     clientId: config.keycloak.clientId!,
+    // Split Horizon DNS: Accept tokens from localhost (integration tests) and www.tamshai.local (dev/browser)
+    additionalIssuers: config.keycloak.additionalIssuers,
   },
   logger
 );

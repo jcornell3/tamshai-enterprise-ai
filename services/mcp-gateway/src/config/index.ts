@@ -36,6 +36,8 @@ export interface GatewayConfig {
     clientId: string | undefined;
     jwksUri?: string;
     issuer?: string;
+    /** Additional valid issuers (comma-separated) for Split Horizon DNS */
+    additionalIssuers?: string[];
   };
   claude: {
     apiKey: string;
@@ -72,6 +74,9 @@ export function loadConfig(): GatewayConfig {
       clientId: process.env.KEYCLOAK_CLIENT_ID,
       jwksUri: process.env.JWKS_URI || undefined,
       issuer: process.env.KEYCLOAK_ISSUER || undefined,
+      additionalIssuers: process.env.KEYCLOAK_ADDITIONAL_ISSUERS
+        ? process.env.KEYCLOAK_ADDITIONAL_ISSUERS.split(',').map(s => s.trim()).filter(Boolean)
+        : undefined,
     },
     claude: {
       apiKey: process.env.CLAUDE_API_KEY || '',
@@ -125,6 +130,9 @@ export async function loadConfigAsync(): Promise<GatewayConfig> {
       clientId: process.env.KEYCLOAK_CLIENT_ID,
       jwksUri: process.env.JWKS_URI || undefined,
       issuer: process.env.KEYCLOAK_ISSUER || undefined,
+      additionalIssuers: process.env.KEYCLOAK_ADDITIONAL_ISSUERS
+        ? process.env.KEYCLOAK_ADDITIONAL_ISSUERS.split(',').map(s => s.trim()).filter(Boolean)
+        : undefined,
     },
     claude: {
       apiKey: claudeApiKey || '',

@@ -1148,6 +1148,8 @@ jobs:
           CI: true
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
+          CUSTOMER_USER_PASSWORD: ${{ secrets.CUSTOMER_USER_PASSWORD }}
+          MCP_INTEGRATION_RUNNER_SECRET: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4

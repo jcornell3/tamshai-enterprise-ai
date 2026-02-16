@@ -15,6 +15,8 @@ export interface JWTValidatorConfig {
   issuer: string;
   clientId: string;
   algorithms?: jwt.Algorithm[];
+  /** Additional valid issuers for Split Horizon DNS (e.g., localhost for integration tests) */
+  additionalIssuers?: string[];
 }
 
 /**
@@ -92,6 +94,18 @@ export class JWTValidator {
       const normalized = normalizeIssuer(this.config.issuer);
       if (normalized !== this.config.issuer) {
         validIssuers.push(normalized);
+      }
+    }
+    // Add additional issuers (for Split Horizon DNS - e.g., localhost for integration tests)
+    if (this.config.additionalIssuers) {
+      for (const issuer of this.config.additionalIssuers) {
+        if (issuer && !validIssuers.includes(issuer)) {
+          validIssuers.push(issuer);
+          const normalized = normalizeIssuer(issuer);
+          if (normalized !== issuer && !validIssuers.includes(normalized)) {
+            validIssuers.push(normalized);
+          }
+        }
       }
     }
 

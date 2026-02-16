@@ -297,6 +297,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080/auth
       # KEYCLOAK_ISSUER: Must match the "iss" claim in JWT tokens (what clients see via Caddy)
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth/realms/tamshai-corp}
+      # KEYCLOAK_ADDITIONAL_ISSUERS: Split Horizon DNS - accept tokens from localhost (integration tests)
+      KEYCLOAK_ADDITIONAL_ISSUERS: http://localhost:${PORT_KEYCLOAK}/auth/realms/tamshai-corp,http://127.0.0.1:${PORT_KEYCLOAK}/auth/realms/tamshai-corp
       # JWKS_URI: Internal container URL to fetch public keys (includes /auth prefix)
       JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp
