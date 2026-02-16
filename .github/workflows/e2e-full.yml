@@ -8,15 +8,13 @@
 # The main CI workflow (ci.yml) only runs --project=api with minimal infra.
 # This workflow resolves the ~380 skipped browser tests that require full infra.
 #
-# Trigger: push to main, manual dispatch
+# Trigger: manual dispatch only
 # Runtime: ~10-15 minutes
 # =============================================================================
 
 name: Full E2E Tests
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -88,7 +86,7 @@ jobs:
           NODE_ENV=dev
 
           # Ports (8443 matches KC_HOSTNAME_URL hardcoded in docker-compose.yml)
-          PORT_CADDY_HTTP=8080
+          PORT_CADDY_HTTP=8880
           PORT_CADDY_HTTPS=8443
           PORT_KEYCLOAK=8180
           PORT_KONG_PROXY=8100
