@@ -312,9 +312,9 @@ sync_audience_mapper() {
     add_audience_mapper_to_client "tamshai-flutter-client"
 }
 
-# Sync the subject (sub) claim mapper on all web clients
+# Sync the subject (sub) claim mapper on all clients that need user identification
 sync_sub_claim_mapper() {
-    log_info "Syncing subject (sub) claim mapper on all web clients..."
+    log_info "Syncing subject (sub) claim mapper on all clients..."
 
     # Add mapper to web-portal (used by production Cloud Run apps)
     add_sub_claim_mapper_to_client "web-portal"
@@ -324,6 +324,10 @@ sync_sub_claim_mapper() {
 
     # Add mapper to Flutter client for mobile/desktop apps
     add_sub_claim_mapper_to_client "tamshai-flutter-client"
+
+    # Add mapper to mcp-integration-runner (for token exchange in integration tests)
+    # Without this, exchanged tokens don't have the 'sub' claim and userId becomes empty
+    add_sub_claim_mapper_to_client "mcp-integration-runner"
 }
 
 # Sync client role mappers on web-portal
