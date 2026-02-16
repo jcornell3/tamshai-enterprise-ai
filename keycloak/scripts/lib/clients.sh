@@ -549,21 +549,21 @@ _post_sync_hr_service() {
 _post_sync_integration_runner() {
     local client_id="$1"
 
-    # Set client secret from environment or generate one
+    # Set client secret from environment — REQUIRED
     local client_secret="${MCP_INTEGRATION_RUNNER_SECRET:-}"
+    if [ -z "$client_secret" ]; then
+        log_error "MCP_INTEGRATION_RUNNER_SECRET is not set. Cannot configure mcp-integration-runner client."
+        return 1
+    fi
+
     local uuid
     uuid=$(get_client_uuid "$client_id")
 
     if [ -n "$uuid" ]; then
-        if [ -n "$client_secret" ]; then
-            log_info "  Setting client secret from MCP_INTEGRATION_RUNNER_SECRET..."
-            _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
-                log_warn "  Failed to set client secret via update"
-            }
-        else
-            log_info "  No MCP_INTEGRATION_RUNNER_SECRET set -- using Keycloak-generated secret"
-            log_info "  To set a specific secret: export MCP_INTEGRATION_RUNNER_SECRET=<secret>"
-        fi
+        log_info "  Setting client secret from MCP_INTEGRATION_RUNNER_SECRET..."
+        _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
+            log_warn "  Failed to set client secret via update"
+        }
 
         # Grant the 'impersonate' role to the service account for token exchange
         log_info "  Assigning 'impersonate' role to service account..."

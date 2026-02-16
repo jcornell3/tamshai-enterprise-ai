@@ -54,7 +54,7 @@ export function generateTotpCode(secret: string): string {
   // Try oathtool first (local development)
   if (isOathtoolAvailable()) {
     try {
-      const totpCode = execSync('oathtool "$TOTP_SECRET"', {
+      const totpCode = execSync('oathtool --totp --base32 "$TOTP_SECRET"', {
         encoding: 'utf-8',
         env: { ...process.env, TOTP_SECRET: secret },
         shell: '/bin/bash',

@@ -26,11 +26,13 @@ import { generateTotpCode } from '../../shared/auth/totp';
 const ENV = process.env.TEST_ENV || 'dev';
 const STORAGE_STATE_PATH = path.join(__dirname, '..', '.auth', `${ENV}-storage.json`);
 
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+
 const BASE_URLS: Record<string, { site: string; app: string; keycloak: string }> = {
   dev: {
-    site: 'https://www.tamshai.local:8443',
-    app: 'https://www.tamshai.local:8443/app',
-    keycloak: 'https://www.tamshai.local:8443/auth',
+    site: `https://www.tamshai.local:${PORT_CADDY_HTTPS}`,
+    app: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/app`,
+    keycloak: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth`,
   },
   stage: {
     site: 'https://www.tamshai.com',

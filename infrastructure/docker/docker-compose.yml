@@ -230,7 +230,7 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is required}
       # Hostname configuration for reverse proxy (Caddy)
       # KC_HOSTNAME_URL sets the full issuer URL in tokens - must match what clients see
-      KC_HOSTNAME_URL: https://www.tamshai.local:8443/auth
+      KC_HOSTNAME_URL: https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -296,7 +296,7 @@ services:
       # KEYCLOAK_URL: Used for container-to-container communication (includes /auth prefix)
       KEYCLOAK_URL: http://keycloak:8080/auth
       # KEYCLOAK_ISSUER: Must match the "iss" claim in JWT tokens (what clients see via Caddy)
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai.local:8443/auth/realms/tamshai-corp}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://www.tamshai.local:${PORT_CADDY_HTTPS}/auth/realms/tamshai-corp}
       # JWKS_URI: Internal container URL to fetch public keys (includes /auth prefix)
       JWKS_URI: http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
       KEYCLOAK_REALM: tamshai-corp
@@ -857,6 +857,9 @@ services:
       MCP_GATEWAY_CLIENT_SECRET: ${MCP_GATEWAY_CLIENT_SECRET:?MCP_GATEWAY_CLIENT_SECRET is required}
       # mcp-hr-service client secret (required for identity-sync authentication)
       MCP_HR_SERVICE_CLIENT_SECRET: ${MCP_HR_SERVICE_CLIENT_SECRET:?MCP_HR_SERVICE_CLIENT_SECRET is required}
+      # mcp-integration-runner client secret (for token exchange in E2E tests)
+      # Validated in clients.sh — optional here so docker compose doesn't block all commands
+      MCP_INTEGRATION_RUNNER_SECRET: ${MCP_INTEGRATION_RUNNER_SECRET:-}
       # Test user passwords from GitHub secrets (environment-specific)
       DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
       STAGE_USER_PASSWORD: ${STAGE_USER_PASSWORD:-}

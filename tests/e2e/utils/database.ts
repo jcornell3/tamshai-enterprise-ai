@@ -17,8 +17,10 @@ import path from 'path';
 // Environment configuration
 const ENV = process.env.TEST_ENV || 'dev';
 
+const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
+
 const API_BASE_URLS: Record<string, string> = {
-  dev: 'https://www.tamshai.local:8443/api/admin',
+  dev: `https://www.tamshai.local:${PORT_CADDY_HTTPS}/api/admin`,
   stage: 'https://www.tamshai.com/api/admin',
   prod: 'https://app.tamshai.com/api/admin',
 };
