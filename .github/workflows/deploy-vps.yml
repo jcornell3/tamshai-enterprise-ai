@@ -404,27 +404,40 @@ jobs:
           cd infrastructure/docker
 
           # Limit parallel operations to prevent OOM on VPS (8GB RAM).
-          # COMPOSE_PARALLEL_LIMIT controls `docker compose up` parallelism.
-          # --jobs flag controls `docker compose build` parallelism.
-          # Without --jobs, all 22 images build simultaneously, each running
+          # COMPOSE_PARALLEL_LIMIT limits both build and up parallelism.
+          # Without this, all 21 images build simultaneously, each running
           # npm ci + tsc, exhausting memory and causing ETIMEDOUT failures.
           export COMPOSE_PARALLEL_LIMIT=3
 
+          COMPOSE="docker compose --env-file ../../.env"
+          NOCACHE=""
           if [ "${{ github.event.inputs.build }}" = "true" ]; then
             echo "Force rebuilding with --no-cache..."
-            # Stop containers to prevent cache reuse
-            docker compose --env-file ../../.env down
-            # Remove web app images to force complete rebuild
+            $COMPOSE down
             docker rmi -f web-finance:latest web-sales:latest web-portal:latest 2>/dev/null || true
-            # Build without cache, max 3 parallel builds
-            docker compose --env-file ../../.env build --no-cache --jobs 3
-            # Start containers (max 3 starting in parallel)
-            docker compose --env-file ../../.env up -d
-          else
-            # Normal deployment: build then start (separate steps to control parallelism)
-            docker compose --env-file ../../.env build --jobs 3
-            docker compose --env-file ../../.env up -d
+            NOCACHE="--no-cache"
           fi
+
+          # Build in batches of 3 to prevent OOM on 8GB VPS.
+          # Each service runs npm ci + tsc during build; 21 simultaneous
+          # builds exhaust memory. Batching keeps peak RAM under control.
+          echo "=== Building images in batches of 3 ==="
+          BATCH1="mcp-gateway mcp-hr mcp-finance"
+          BATCH2="mcp-sales mcp-support mcp-journey"
+          BATCH3="mcp-payroll mcp-tax mcp-ui"
+          BATCH4="web-portal web-hr web-finance"
+          BATCH5="web-sales web-support web-payroll"
+          BATCH6="web-tax web-customer-support tamshai-website"
+          BATCH7="identity-sync keycloak keycloak-sync"
+
+          for i in 1 2 3 4 5 6 7; do
+            eval "BATCH=\$BATCH$i"
+            echo "  Building batch $i: $BATCH"
+            $COMPOSE build $NOCACHE $BATCH
+          done
+
+          echo "=== Starting services ==="
+          $COMPOSE up -d
 
           # Always restart Kong to reload declarative config
           # (Docker doesn't restart Kong when only the mounted config file changes)
