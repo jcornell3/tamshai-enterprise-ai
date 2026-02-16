@@ -148,7 +148,9 @@ jobs:
             cd infrastructure/docker && \
             docker compose --env-file ../../.env down --remove-orphans || true && \
             if [ '$FRESH_START' = 'true' ]; then docker compose --env-file ../../.env down -v || true; fi && \
-            if [ '$REBUILD' = 'true' ]; then docker image prune -f && docker compose --env-file ../../.env build --no-cache; fi && \
+            export COMPOSE_PARALLEL_LIMIT=3 && \
+            if [ '$REBUILD' = 'true' ]; then docker image prune -f && docker compose --env-file ../../.env build --no-cache --jobs 3; fi && \
+            docker compose --env-file ../../.env build --jobs 3 && \
             docker compose --env-file ../../.env up -d"
 
       - name: Wait for services

@@ -403,9 +403,11 @@ jobs:
           # Change to docker compose directory (paths in docker-compose.yml are relative to compose file)
           cd infrastructure/docker
 
-          # Limit parallel builds to prevent OOM on VPS.
-          # Each MCP service runs `npm ci && npm run build` for the shared package;
-          # 9 simultaneous TypeScript compilations exhaust memory and hang.
+          # Limit parallel operations to prevent OOM on VPS (8GB RAM).
+          # COMPOSE_PARALLEL_LIMIT controls `docker compose up` parallelism.
+          # --jobs flag controls `docker compose build` parallelism.
+          # Without --jobs, all 22 images build simultaneously, each running
+          # npm ci + tsc, exhausting memory and causing ETIMEDOUT failures.
           export COMPOSE_PARALLEL_LIMIT=3
 
           if [ "${{ github.event.inputs.build }}" = "true" ]; then
@@ -414,13 +416,14 @@ jobs:
             docker compose --env-file ../../.env down
             # Remove web app images to force complete rebuild
             docker rmi -f web-finance:latest web-sales:latest web-portal:latest 2>/dev/null || true
-            # Build without cache
-            docker compose --env-file ../../.env build --no-cache
-            # Start containers
+            # Build without cache, max 3 parallel builds
+            docker compose --env-file ../../.env build --no-cache --jobs 3
+            # Start containers (max 3 starting in parallel)
             docker compose --env-file ../../.env up -d
           else
-            # Normal deployment with build
-            docker compose --env-file ../../.env up -d --build
+            # Normal deployment: build then start (separate steps to control parallelism)
+            docker compose --env-file ../../.env build --jobs 3
+            docker compose --env-file ../../.env up -d
           fi
 
           # Always restart Kong to reload declarative config
