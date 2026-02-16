@@ -22,7 +22,7 @@ const missing = REQUIRED_SECRETS.filter(k => !process.env[k]);
 if (missing.length > 0) {
   throw new Error(
     `Missing required E2E secrets: ${missing.join(', ')}\n` +
-    `Run: eval $(./scripts/secrets/read-github-secrets.sh --e2e --env)\n` +
+    `Run: eval $(./scripts/secrets/read-github-secrets.sh --all --env)\n` +
     `Or populate tests/e2e/.env (see .env.example)`
   );
 }

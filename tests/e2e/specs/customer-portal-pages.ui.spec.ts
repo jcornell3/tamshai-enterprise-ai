@@ -211,7 +211,7 @@ test.describe('Customer Portal Pages', () => {
         await page.goto(`${PORTAL_URL}/tickets`);
         await page.waitForLoadState('networkidle');
 
-        const ticketLink = page.locator('a[href*="/tickets/"]').first();
+        const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
           test.skip(true, 'No tickets available for this customer');
@@ -235,7 +235,7 @@ test.describe('Customer Portal Pages', () => {
         await page.goto(`${PORTAL_URL}/tickets`);
         await page.waitForLoadState('networkidle');
 
-        const ticketLink = page.locator('a[href*="/tickets/"]').first();
+        const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
           test.skip(true, 'No tickets available for this customer');
@@ -268,7 +268,8 @@ test.describe('Customer Portal Pages', () => {
         await page.goto(`${PORTAL_URL}/tickets`);
         await page.waitForLoadState('networkidle');
 
-        const ticketLink = page.locator('a[href*="/tickets/"]').first();
+        // Match ticket detail links (e.g., /tickets/TICKET-123) but NOT /tickets/new
+        const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
           test.skip(true, 'No tickets available for this customer');
@@ -304,7 +305,7 @@ test.describe('Customer Portal Pages', () => {
         await page.goto(`${PORTAL_URL}/tickets`);
         await page.waitForLoadState('networkidle');
 
-        const ticketLink = page.locator('a[href*="/tickets/"]').first();
+        const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
           test.skip(true, 'No tickets available for this customer');

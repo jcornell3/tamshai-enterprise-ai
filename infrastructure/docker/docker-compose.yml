@@ -652,7 +652,8 @@ services:
       VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-customers
       VITE_KEYCLOAK_CLIENT_ID: customer-portal
       VITE_API_GATEWAY_URL: http://kong:8000
-      VITE_MCP_GATEWAY_URL: http://mcp-gateway:3100
+      # Empty string = use relative paths (Caddy proxies /api/* to MCP Gateway)
+      VITE_MCP_GATEWAY_URL: ""
     ports:
       - "${PORT_WEB_CUSTOMER_SUPPORT:?PORT_WEB_CUSTOMER_SUPPORT is required}:80"
     depends_on:
