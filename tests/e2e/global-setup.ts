@@ -258,10 +258,15 @@ async function provisionTotp(
   if (usersRes.data?.length > 0) {
     const userId = usersRes.data[0].id;
     console.log('[globalSetup] Deleting test-user.journey to recreate with known TOTP...');
-    await jsonRequest(`${keycloakUrl}/admin/realms/${REALM}/users/${userId}`, {
+    const deleteRes = await jsonRequest(`${keycloakUrl}/admin/realms/${REALM}/users/${userId}`, {
       method: 'DELETE',
       headers: auth,
     });
+    if (deleteRes.status !== 204 && deleteRes.status !== 200) {
+      console.warn(`[globalSetup] DELETE returned HTTP ${deleteRes.status} — proceeding with OVERWRITE`);
+    }
+    // Brief delay to let Keycloak flush the deletion
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   // 3. Create user with TOTP via Partial Import
@@ -269,6 +274,7 @@ async function provisionTotp(
   // secretData.value is stored as-is; Keycloak uses value.getBytes(UTF-8) as HMAC key.
   // We store the env var string directly, then compute the matching Base32 for otplib.
   const importData = {
+    ifResourceExists: 'OVERWRITE',
     users: [
       {
         username: 'test-user.journey',
@@ -306,7 +312,9 @@ async function provisionTotp(
     { method: 'POST', headers: auth, body: importData }
   );
 
-  if (importRes.status !== 200 || !(importRes.data?.added > 0)) {
+  const added = importRes.data?.added ?? 0;
+  const overwritten = importRes.data?.overwritten ?? 0;
+  if (importRes.status !== 200 || (added === 0 && overwritten === 0)) {
     throw new Error(
       `Partial Import failed (HTTP ${importRes.status}): ${JSON.stringify(importRes.data)}`
     );
