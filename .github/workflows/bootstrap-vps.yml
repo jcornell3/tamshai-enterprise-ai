@@ -80,8 +80,8 @@ jobs:
           TAMSHAI_DB_PASSWORD: ${{ secrets.TAMSHAI_DB_PASSWORD }}
           MONGODB_PASSWORD: ${{ secrets.MONGODB_PASSWORD }}
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
-          MCP_GATEWAY_CLIENT_SECRET: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
-          MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ secrets.STAGE_MCP_GATEWAY_CLIENT_SECRET }}
+          MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.STAGE_MCP_HR_SERVICE_CLIENT_SECRET }}
           USER_PASSWORD: ${{ secrets.STAGE_USER_PASSWORD }}
         run: |
           echo "Creating .env file on VPS..."

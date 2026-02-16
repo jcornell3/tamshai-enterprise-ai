@@ -49,6 +49,7 @@ email = "admin@example-domain.com"
 # Required secrets (set via TF_VAR_* or GitHub Actions):
 #   TF_VAR_claude_api_key_stage          - Anthropic Claude API key for STAGE (separate from dev!)
 #   TF_VAR_hcloud_token                  - Hetzner Cloud API token
+#   TF_VAR_mcp_gateway_client_secret     - MCP Gateway Keycloak client secret (from STAGE_MCP_GATEWAY_CLIENT_SECRET)
 #   TF_VAR_mcp_hr_service_client_secret  - Identity sync service account secret
 #
 # IMPORTANT: Use a SEPARATE Claude API key for stage vs dev!

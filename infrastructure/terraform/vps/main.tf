@@ -131,6 +131,12 @@ variable "allowed_ssh_ips" {
   default     = [] # No SSH by default - fully automated
 }
 
+variable "mcp_gateway_client_secret" {
+  description = "Client secret for MCP Gateway Keycloak client (from GitHub Secrets)"
+  type        = string
+  sensitive   = true
+}
+
 variable "mcp_hr_service_client_secret" {
   description = "Client secret for MCP HR Service (identity sync)"
   type        = string
@@ -218,11 +224,6 @@ resource "random_password" "minio_password" {
 
 resource "random_password" "jwt_secret" {
   length  = 64
-  special = false
-}
-
-resource "random_password" "mcp_gateway_client_secret" {
-  length  = 32
   special = false
 }
 
@@ -504,7 +505,7 @@ locals {
     minio_password               = random_password.minio_password.result
     jwt_secret                   = random_password.jwt_secret.result
     root_password                = random_password.root_password.result
-    mcp_gateway_client_secret    = random_password.mcp_gateway_client_secret.result
+    mcp_gateway_client_secret    = var.mcp_gateway_client_secret
     mcp_hr_service_client_secret = local.mcp_hr_service_secret
     stage_user_password          = local.stage_user_password_resolved
     test_user_password           = local.test_user_password
@@ -555,8 +556,8 @@ output "root_password" {
 }
 
 output "mcp_gateway_client_secret" {
-  description = "MCP Gateway Keycloak client secret (P5: auto-generated, unique per environment)"
-  value       = random_password.mcp_gateway_client_secret.result
+  description = "MCP Gateway Keycloak client secret (from GitHub Secrets, not auto-generated)"
+  value       = var.mcp_gateway_client_secret
   sensitive   = true
 }
 
