@@ -233,24 +233,6 @@ export interface EscalationTarget {
 }
 
 /**
- * API response wrapper
+ * API response wrapper - re-exported from shared @tamshai/ui package
  */
-export interface APIResponse<T> {
-  status: 'success' | 'error' | 'pending_confirmation';
-  data?: T;
-  confirmationId?: string;
-  message?: string;
-  metadata?: {
-    hasMore?: boolean;
-    returnedCount?: number;
-    totalEstimate?: string;
-    nextCursor?: string;
-    hint?: string;
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-  error?: string;
-  code?: string;
-  suggestedAction?: string;
-}
+export type { APIResponse } from '@tamshai/ui';

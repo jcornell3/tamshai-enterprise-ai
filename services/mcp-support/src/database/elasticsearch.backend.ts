@@ -14,6 +14,7 @@ import {
   SearchKnowledgeBaseParams,
   SearchResult,
 } from './types';
+import { encodeGenericCursor, decodeGenericCursor } from '@tamshai/shared';
 
 /**
  * Cursor structure for Elasticsearch search_after pagination
@@ -22,24 +23,8 @@ interface ElasticsearchCursor {
   sort: any[]; // Elasticsearch sort values
 }
 
-/**
- * Encode cursor for client transport
- */
-function encodeCursor(cursor: ElasticsearchCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString('base64');
-}
-
-/**
- * Decode cursor from client request
- */
-function decodeCursor(encoded: string): ElasticsearchCursor | null {
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    return JSON.parse(decoded) as ElasticsearchCursor;
-  } catch {
-    return null;
-  }
-}
+const encodeCursor = (cursor: ElasticsearchCursor) => encodeGenericCursor(cursor);
+const decodeCursor = (encoded: string) => decodeGenericCursor<ElasticsearchCursor>(encoded);
 
 /**
  * Elasticsearch backend implementation

@@ -17,6 +17,8 @@ import {
   createSuccessResponse,
   createErrorResponse,
   PaginationMetadata,
+  encodeGenericCursor,
+  decodeGenericCursor,
 } from '@tamshai/shared';
 import { withErrorHandling, handleDatabaseError } from '../utils/error-handler';
 import { TimeOffRequest } from './list-time-off-requests';
@@ -29,18 +31,8 @@ interface TeamRequestCursor {
   id: string;
 }
 
-function encodeCursor(cursor: TeamRequestCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString('base64');
-}
-
-function decodeCursor(encoded: string): TeamRequestCursor | null {
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    return JSON.parse(decoded) as TeamRequestCursor;
-  } catch {
-    return null;
-  }
-}
+const encodeCursor = (cursor: TeamRequestCursor) => encodeGenericCursor(cursor);
+const decodeCursor = (encoded: string) => decodeGenericCursor<TeamRequestCursor>(encoded);
 
 /**
  * Input schema for list_team_time_off_requests tool

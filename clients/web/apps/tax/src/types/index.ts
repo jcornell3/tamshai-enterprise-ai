@@ -147,17 +147,6 @@ export interface QuarterlyFilingExport {
   generatedBy: string;
 }
 
-// API Response Types
-export interface TaxApiResponse<T> {
-  status: 'success' | 'error' | 'pending_confirmation';
-  data?: T;
-  metadata?: {
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-  code?: string;
-  message?: string;
-  suggestedAction?: string;
-  confirmationId?: string;
-}
+// API Response Types - aliased from shared @tamshai/ui package
+import type { APIResponse } from '@tamshai/ui';
+export type TaxApiResponse<T> = APIResponse<T>;

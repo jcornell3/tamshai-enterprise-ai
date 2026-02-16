@@ -24,6 +24,8 @@ import {
   MCPToolResponse,
   createSuccessResponse,
   PaginationMetadata,
+  encodeGenericCursor,
+  decodeGenericCursor,
 } from '@tamshai/shared';
 import {
   handleDatabaseError,
@@ -40,24 +42,8 @@ interface PaginationCursor {
   id: string;
 }
 
-/**
- * Encode cursor for client transport
- */
-function encodeCursor(cursor: PaginationCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString('base64');
-}
-
-/**
- * Decode cursor from client request
- */
-function decodeCursor(encoded: string): PaginationCursor | null {
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    return JSON.parse(decoded) as PaginationCursor;
-  } catch {
-    return null;
-  }
-}
+const encodeCursor = (cursor: PaginationCursor) => encodeGenericCursor(cursor);
+const decodeCursor = (encoded: string) => decodeGenericCursor<PaginationCursor>(encoded);
 
 /**
  * Input schema for list_expense_reports tool

@@ -61,3 +61,10 @@ export { useVoiceOutput } from './hooks/useVoiceOutput';
 // AI Query Hook (v1.5 - Shared across all domain apps)
 export { useAIQuery } from './hooks/useAIQuery';
 export type { UseAIQueryOptions, UseAIQueryReturn } from './hooks/useAIQuery';
+
+// OIDC Callback Page (v1.5 - Shared across all domain apps)
+export { CallbackPage } from './components/CallbackPage/CallbackPage';
+export type { CallbackPageProps } from './components/CallbackPage/CallbackPage';
+
+// Shared Types
+export type { APIResponse } from './types/api';

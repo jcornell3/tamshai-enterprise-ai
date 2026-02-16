@@ -147,6 +147,26 @@ export function decodeCursor(encoded: string): PaginationCursor | null {
 }
 
 /**
+ * Generic cursor encoding/decoding utilities
+ *
+ * These accept any cursor shape, allowing each service to define
+ * its own cursor interface while reusing the base64 JSON serialization.
+ * The typed PaginationCursor variants above are preserved for backward compatibility.
+ */
+export function encodeGenericCursor<T>(cursor: T): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64');
+}
+
+export function decodeGenericCursor<T>(encoded: string): T | null {
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+    return JSON.parse(decoded) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Type guard to check if response is a success response
  */
 export function isSuccessResponse<T>(

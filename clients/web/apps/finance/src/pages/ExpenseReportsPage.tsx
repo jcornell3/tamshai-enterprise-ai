@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
+import type { APIResponse } from '@tamshai/ui';
 import type { ExpenseReport, Expense } from '../types';
 
 /**
@@ -17,18 +18,6 @@ import type { ExpenseReport, Expense } from '../types';
  * - Receipt links
  * - Truncation warnings
  */
-
-interface APIResponse<T> {
-  status: 'success' | 'error' | 'pending_confirmation';
-  data?: T;
-  confirmationId?: string;
-  message?: string;
-  metadata?: {
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-}
 
 export function ExpenseReportsPage() {
   const queryClient = useQueryClient();

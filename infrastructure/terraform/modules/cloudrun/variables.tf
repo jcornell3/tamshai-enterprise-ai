@@ -81,11 +81,6 @@ variable "claude_api_key_secret" {
   type        = string
 }
 
-variable "keycloak_admin_user_secret" {
-  description = "Secret Manager secret name for Keycloak admin username"
-  type        = string
-}
-
 variable "keycloak_admin_password_secret" {
   description = "Secret Manager secret name for Keycloak admin password"
   type        = string

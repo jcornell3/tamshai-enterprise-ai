@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning, DataTable, ConfirmDialog } from '@tamshai/ui';
-import type { ColumnDef, BulkAction } from '@tamshai/ui';
+import type { ColumnDef, BulkAction, APIResponse } from '@tamshai/ui';
 import type { Invoice } from '../types';
 
 /**
@@ -17,18 +17,6 @@ import type { Invoice } from '../types';
  * - Truncation warnings
  * - Invoice detail modal with line items
  */
-
-interface APIResponse<T> {
-  status: 'success' | 'error' | 'pending_confirmation';
-  data?: T;
-  confirmationId?: string;
-  message?: string;
-  metadata?: {
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-}
 
 export function InvoicesPage() {
   const queryClient = useQueryClient();

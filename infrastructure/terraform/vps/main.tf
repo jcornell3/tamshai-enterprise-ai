@@ -380,6 +380,18 @@ resource "null_resource" "update_github_stage_secrets" {
 }
 
 # =============================================================================
+# DATA SOURCES - Validate external resources exist before use
+# =============================================================================
+
+# Validate the Ubuntu image exists in Hetzner Cloud before provisioning.
+# This catches typos or deprecated image names at plan time rather than apply time.
+data "hcloud_image" "ubuntu" {
+  name              = "ubuntu-24.04"
+  with_architecture = "x86"
+  most_recent       = true
+}
+
+# =============================================================================
 # HETZNER RESOURCES
 # =============================================================================
 
@@ -393,7 +405,7 @@ resource "hcloud_server" "tamshai" {
   name        = "tamshai-${var.environment}"
   server_type = var.vps_size
   location    = var.region
-  image       = "ubuntu-24.04"
+  image       = data.hcloud_image.ubuntu.id
 
   ssh_keys = [hcloud_ssh_key.deploy.id]
 

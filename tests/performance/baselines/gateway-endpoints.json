@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "MCP Gateway performance baselines for regression detection",
+  "measured": "2026-02-03",
+  "environment": "dev-docker",
+  "tool": "k6 v0.55.0",
+  "endpoints": {
+    "/health": {
+      "method": "GET",
+      "p50_ms": 1.5,
+      "p95_ms": 5.0,
+      "p99_ms": 10.0,
+      "max_ms": 50.0,
+      "threshold_p95_ms": 50,
+      "auth_required": false
+    },
+    "/api/health": {
+      "method": "GET",
+      "p50_ms": 1.5,
+      "p95_ms": 5.0,
+      "p99_ms": 10.0,
+      "max_ms": 50.0,
+      "threshold_p95_ms": 100,
+      "auth_required": false
+    },
+    "/api-docs.json": {
+      "method": "GET",
+      "p50_ms": 2.0,
+      "p95_ms": 5.0,
+      "p99_ms": 15.0,
+      "max_ms": 50.0,
+      "threshold_p95_ms": 150,
+      "auth_required": false,
+      "response_size_bytes": 25000,
+      "compressed_size_bytes": 6000
+    },
+    "/api/user": {
+      "method": "GET",
+      "p50_ms": 3.0,
+      "p95_ms": 10.0,
+      "p99_ms": 25.0,
+      "max_ms": 100.0,
+      "threshold_p95_ms": 200,
+      "auth_required": true
+    },
+    "/api/mcp/tools": {
+      "method": "GET",
+      "p50_ms": 5.0,
+      "p95_ms": 15.0,
+      "p99_ms": 30.0,
+      "max_ms": 100.0,
+      "threshold_p95_ms": 400,
+      "auth_required": true
+    }
+  },
+  "aggregate": {
+    "p50_ms": 1.84,
+    "p95_ms": 4.84,
+    "p99_ms": 10.0,
+    "max_ms": 106.93,
+    "throughput_rps": 109.96,
+    "error_rate_percent": 0.0,
+    "total_requests": 66081,
+    "vus_peak": 50,
+    "duration_minutes": 10
+  },
+  "services_memory_mib": {
+    "mcp-gateway": 48.08,
+    "mcp-support": 46.59,
+    "mcp-hr": 34.71,
+    "mcp-finance": 31.73,
+    "mcp-tax": 31.07,
+    "mcp-payroll": 29.97,
+    "mcp-sales": 29.46,
+    "mcp-journey": 25.05
+  },
+  "regression_thresholds": {
+    "p95_degradation_percent": 25,
+    "p99_degradation_percent": 50,
+    "throughput_degradation_percent": 20,
+    "error_rate_max_percent": 1.0,
+    "memory_increase_max_percent": 30
+  }
+}

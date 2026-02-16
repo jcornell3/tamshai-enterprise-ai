@@ -16,6 +16,8 @@ import {
   MCPToolResponse,
   createSuccessResponse,
   PaginationMetadata,
+  encodeGenericCursor,
+  decodeGenericCursor,
 } from '@tamshai/shared';
 import { withErrorHandling, handleDatabaseError } from '../utils/error-handler';
 
@@ -47,18 +49,8 @@ interface RequestCursor {
   id: string;
 }
 
-function encodeCursor(cursor: RequestCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString('base64');
-}
-
-function decodeCursor(encoded: string): RequestCursor | null {
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    return JSON.parse(decoded) as RequestCursor;
-  } catch {
-    return null;
-  }
-}
+const encodeCursor = (cursor: RequestCursor) => encodeGenericCursor(cursor);
+const decodeCursor = (encoded: string) => decodeGenericCursor<RequestCursor>(encoded);
 
 /**
  * Input schema for list_time_off_requests tool

@@ -60,6 +60,27 @@ output "prod_user_password" {
   sensitive   = true
 }
 
+# Secret Names (for Cloud Run secret references)
+output "claude_api_key_secret_name" {
+  description = "Secret Manager secret name for Claude API key"
+  value       = google_secret_manager_secret.anthropic_api_key.secret_id
+}
+
+output "keycloak_admin_password_secret_name" {
+  description = "Secret Manager secret name for Keycloak admin password"
+  value       = google_secret_manager_secret.keycloak_admin_password.secret_id
+}
+
+output "keycloak_db_password_secret_name" {
+  description = "Secret Manager secret name for Keycloak DB password"
+  value       = google_secret_manager_secret.keycloak_db_password.secret_id
+}
+
+output "mongodb_uri_secret_name" {
+  description = "Secret Manager secret name for MongoDB URI (empty if not enabled)"
+  value       = var.enable_mongodb_uri_access ? data.google_secret_manager_secret.mongodb_uri[0].secret_id : ""
+}
+
 # Provisioning Job Outputs
 output "provision_job_name" {
   description = "Name of the user provisioning Cloud Run job"

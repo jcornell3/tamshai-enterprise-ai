@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { TruncationWarning } from '@tamshai/ui';
+import type { APIResponse } from '@tamshai/ui';
 import type { DashboardMetrics, Budget, Invoice } from '../types';
 
 /**
@@ -15,16 +16,6 @@ import type { DashboardMetrics, Budget, Invoice } from '../types';
  * - RBAC-aware approve actions (finance-write only)
  * - v1.4 truncation warnings
  */
-
-interface APIResponse<T> {
-  status: 'success' | 'error';
-  data: T;
-  metadata?: {
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-}
 
 export function DashboardPage() {
   const navigate = useNavigate();

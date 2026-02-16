@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth, canModifyFinance, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, TruncationWarning } from '@tamshai/ui';
+import type { APIResponse } from '@tamshai/ui';
 import type { Budget } from '../types';
 
 /**
@@ -15,18 +16,6 @@ import type { Budget } from '../types';
  * - Status badges with colors
  * - Truncation warnings
  */
-
-interface APIResponse<T> {
-  status: 'success' | 'error' | 'pending_confirmation';
-  data?: T;
-  confirmationId?: string;
-  message?: string;
-  metadata?: {
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-}
 
 export function BudgetsPage() {
   const queryClient = useQueryClient();

@@ -87,23 +87,6 @@ export interface OrgChartNode {
 }
 
 /**
- * API response wrapper
+ * API response wrapper - re-exported from shared @tamshai/ui package
  */
-export interface APIResponse<T> {
-  status: 'success' | 'error' | 'pending_confirmation';
-  data?: T;
-  confirmationId?: string;
-  message?: string;
-  metadata?: {
-    truncated?: boolean;
-    hasMore?: boolean;
-    nextCursor?: string;
-    returnedCount?: number;
-    totalCount?: string;
-    totalEstimate?: string;
-    warning?: string;
-  };
-  error?: string;
-  code?: string;
-  suggestedAction?: string;
-}
+export type { APIResponse } from '@tamshai/ui';

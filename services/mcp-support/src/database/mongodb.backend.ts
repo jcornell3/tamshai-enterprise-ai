@@ -17,6 +17,7 @@ import {
   SearchKnowledgeBaseParams,
   SearchResult,
 } from './types';
+import { encodeGenericCursor, decodeGenericCursor } from '@tamshai/shared';
 import { getCollection, buildRoleFilter, checkConnection as checkMongoConnection } from './connection';
 
 /**
@@ -35,24 +36,8 @@ interface MongoDBCursor {
   _id: string; // MongoDB ObjectId as string
 }
 
-/**
- * Encode cursor for client transport
- */
-function encodeCursor(cursor: MongoDBCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString('base64');
-}
-
-/**
- * Decode cursor from client request
- */
-function decodeCursor(encoded: string): MongoDBCursor | null {
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    return JSON.parse(decoded) as MongoDBCursor;
-  } catch {
-    return null;
-  }
-}
+const encodeCursor = (cursor: MongoDBCursor) => encodeGenericCursor(cursor);
+const decodeCursor = (encoded: string) => decodeGenericCursor<MongoDBCursor>(encoded);
 
 /**
  * MongoDB backend implementation

@@ -249,12 +249,11 @@ module "cloudrun" {
   mcp_suite_service_account   = module.security.mcp_gateway_service_account_email
   keycloak_service_account    = module.security.keycloak_service_account_email
 
-  # Secrets (use actual Secret Manager names with tamshai-prod- prefix)
+  # Secrets (dynamically resolved from security module outputs)
   # Bug #30: DB password secrets use name_suffix for DR isolation
-  claude_api_key_secret          = "tamshai-prod-claude-api-key"
-  keycloak_admin_user_secret     = "keycloak-admin-user" # Not used - admin username is env var
-  keycloak_admin_password_secret = "tamshai-prod-keycloak-admin-password"
-  keycloak_db_password_secret    = "tamshai-prod-keycloak-db-password${local.name_suffix}"
+  claude_api_key_secret          = module.security.claude_api_key_secret_name
+  keycloak_admin_password_secret = module.security.keycloak_admin_password_secret_name
+  keycloak_db_password_secret    = module.security.keycloak_db_password_secret_name
 
   # Database configuration
   postgres_connection_name = module.database.postgres_connection_name
@@ -267,7 +266,7 @@ module "cloudrun" {
 
   # MongoDB Atlas - use Secret Manager in production
   mongodb_uri        = "" # Not used when mongodb_uri_secret is set
-  mongodb_uri_secret = "tamshai-prod-mongodb-uri"
+  mongodb_uri_secret = module.security.mongodb_uri_secret_name
 
   # Redis (Utility VM internal IP)
   redis_host = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_internal_ip : "10.0.0.10"

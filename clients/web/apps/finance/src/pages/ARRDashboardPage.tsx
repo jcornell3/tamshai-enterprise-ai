@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth, apiConfig } from '@tamshai/auth';
 import { TruncationWarning } from '@tamshai/ui';
+import type { APIResponse } from '@tamshai/ui';
 import type { ARRMetrics, ARRMovement, CustomerCohort, Subscription } from '../types';
 
 /**
@@ -14,16 +15,6 @@ import type { ARRMetrics, ARRMovement, CustomerCohort, Subscription } from '../t
  * - At-risk subscriptions
  * - v1.4 truncation warnings
  */
-
-interface APIResponse<T> {
-  status: 'success' | 'error';
-  data: T;
-  metadata?: {
-    truncated?: boolean;
-    totalCount?: string;
-    warning?: string;
-  };
-}
 
 export function ARRDashboardPage() {
   const { getAccessToken } = useAuth();
