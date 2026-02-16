@@ -103,8 +103,12 @@ Write-Host ""
 # Test 4: Token Acquisition
 Write-Host "Test 4: Keycloak Token Acquisition (alice.chen)" -ForegroundColor Yellow
 try {
-    # VPS staging uses realm-export-dev.json with test users and fixed client secret
-    $clientSecret = "mcp-gateway-secret"
+    # P5: Client secret must be provided via environment variable (Terraform-generated)
+    $clientSecret = $env:MCP_GATEWAY_CLIENT_SECRET
+    if (-not $clientSecret) {
+        Write-Host "  [SKIP] MCP_GATEWAY_CLIENT_SECRET not set" -ForegroundColor Yellow
+        return
+    }
 
     $testPassword = $env:STAGE_USER_PASSWORD
     if (-not $testPassword) {

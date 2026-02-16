@@ -22,14 +22,19 @@
     -Server
   }
 
-  # Keycloak authentication (/auth/*)
-  handle /auth/* {
-    reverse_proxy keycloak:8080
+  # P4: Block Keycloak Admin Console from public internet
+  # Admin access should only be via SSH tunnel or VPN:
+  #   ssh -L 8180:localhost:8180 user@vps  →  http://localhost:8180/admin/
+  handle /admin/* {
+    respond "Forbidden" 403
+  }
+  handle /auth/admin/* {
+    respond "Forbidden" 403
   }
 
-  # Keycloak Admin Console also needs /admin/* routed to Keycloak
-  # (Keycloak 24+ serves some admin resources at /admin/ paths)
-  handle /admin/* {
+  # Keycloak authentication (/auth/*)
+  # Only public OIDC endpoints are proxied (login, token, JWKS, etc.)
+  handle /auth/* {
     reverse_proxy keycloak:8080
   }
 

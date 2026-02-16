@@ -36,10 +36,9 @@ variable "test_user_password" {
 }
 
 variable "mcp_gateway_client_secret" {
-  description = "Client secret for MCP Gateway"
+  description = "Client secret for MCP Gateway (P5: must be set via TF_VAR, no default)"
   type        = string
   sensitive   = true
-  default     = "mcp-gateway-secret"
 }
 
 variable "mcp_hr_service_client_secret" {

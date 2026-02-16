@@ -221,6 +221,11 @@ resource "random_password" "jwt_secret" {
   special = false
 }
 
+resource "random_password" "mcp_gateway_client_secret" {
+  length  = 32
+  special = false
+}
+
 resource "random_password" "mcp_hr_service_secret" {
   length  = 32
   special = false
@@ -499,6 +504,7 @@ locals {
     minio_password               = random_password.minio_password.result
     jwt_secret                   = random_password.jwt_secret.result
     root_password                = random_password.root_password.result
+    mcp_gateway_client_secret    = random_password.mcp_gateway_client_secret.result
     mcp_hr_service_client_secret = local.mcp_hr_service_secret
     stage_user_password          = local.stage_user_password_resolved
     test_user_password           = local.test_user_password
@@ -545,6 +551,12 @@ output "keycloak_admin_password" {
 output "root_password" {
   description = "VPS root password for console access"
   value       = random_password.root_password.result
+  sensitive   = true
+}
+
+output "mcp_gateway_client_secret" {
+  description = "MCP Gateway Keycloak client secret (P5: auto-generated, unique per environment)"
+  value       = random_password.mcp_gateway_client_secret.result
   sensitive   = true
 }
 
