@@ -546,114 +546,120 @@ _post_sync_hr_service() {
 }
 
 # Post-sync for mcp-integration-runner: set secret, assign roles, configure scopes and mappers
+# NOTE: Role assignment and mapper config run regardless of secret availability.
+# This ensures Phoenix rebuild configures everything except the secret, which can be
+# set later when test secrets are loaded (e.g., via read-github-secrets.sh).
 _post_sync_integration_runner() {
     local client_id="$1"
-
-    # Set client secret from environment — REQUIRED
-    local client_secret="${MCP_INTEGRATION_RUNNER_SECRET:-}"
-    if [ -z "$client_secret" ]; then
-        log_error "MCP_INTEGRATION_RUNNER_SECRET is not set. Cannot configure mcp-integration-runner client."
-        return 1
-    fi
 
     local uuid
     uuid=$(get_client_uuid "$client_id")
 
-    if [ -n "$uuid" ]; then
+    if [ -z "$uuid" ]; then
+        log_warn "  mcp-integration-runner client not found, skipping post-sync"
+        return 0
+    fi
+
+    # Set client secret from environment — optional during Phoenix rebuild
+    local client_secret="${MCP_INTEGRATION_RUNNER_SECRET:-}"
+    if [ -n "$client_secret" ]; then
         log_info "  Setting client secret from MCP_INTEGRATION_RUNNER_SECRET..."
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
             log_warn "  Failed to set client secret via update"
         }
+    else
+        log_info "  MCP_INTEGRATION_RUNNER_SECRET not set, skipping secret update (run sync again after loading secrets)"
+    fi
 
-        # Grant the 'impersonate' role to the service account for token exchange
-        log_info "  Assigning 'impersonate' role to service account..."
-        local service_account_id
-        service_account_id=$(_kcadm get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
-        if [ -n "$service_account_id" ]; then
-            local realm_mgmt_uuid
-            realm_mgmt_uuid=$(get_client_uuid "realm-management")
-            if [ -n "$realm_mgmt_uuid" ]; then
-                if _kcadm add-roles -r "$REALM" --uusername "service-account-mcp-integration-runner" --cclientid realm-management --rolename impersonate; then
-                    log_info "    'impersonate' role assigned successfully."
-                else
-                    log_warn "    Could not assign 'impersonate' role (may already be assigned)."
-                fi
+    # Grant the 'impersonation' role to the service account for token exchange
+    # NOTE: The role is named 'impersonation' (not 'impersonate') in realm-management client
+    log_info "  Assigning 'impersonation' role to service account..."
+    local service_account_id
+    service_account_id=$(_kcadm get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+    if [ -n "$service_account_id" ]; then
+        local realm_mgmt_uuid
+        realm_mgmt_uuid=$(get_client_uuid "realm-management")
+        if [ -n "$realm_mgmt_uuid" ]; then
+            if _kcadm add-roles -r "$REALM" --uusername "service-account-mcp-integration-runner" --cclientid realm-management --rolename impersonation; then
+                log_info "    'impersonation' role assigned successfully."
+            else
+                log_warn "    Could not assign 'impersonation' role (may already be assigned)."
             fi
         fi
-
-        # Assign default client scopes for token exchange claims
-        # Without these scopes, exchanged tokens will be missing:
-        # - preferred_username (from 'profile' scope via 'roles' scope mappers)
-        # - realm_access.roles (from 'roles' scope)
-        # - groups (from 'roles' scope)
-        log_info "  Assigning default client scopes for token exchange..."
-
-        # Default scopes (always included in token)
-        local default_scopes=("openid" "roles" "profile" "web-origins")
-        for scope_name in "${default_scopes[@]}"; do
-            # Get scope ID by name (kcadm endpoint requires ID)
-            local scope_id
-            scope_id=$(_kcadm get "client-scopes" -r "$REALM" --fields id,name 2>/dev/null | \
-                grep -B1 "\"$scope_name\"" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
-            if [ -n "$scope_id" ]; then
-                if _kcadm update "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null; then
-                    log_info "    Assigned default scope '$scope_name'"
-                else
-                    log_info "    Default scope '$scope_name' already assigned"
-                fi
-            else
-                log_warn "    Default scope '$scope_name' not found in realm"
-            fi
-        done
-
-        # Optional scopes (included when explicitly requested)
-        local optional_scopes=("email")
-        for scope_name in "${optional_scopes[@]}"; do
-            local scope_id
-            scope_id=$(_kcadm get "client-scopes" -r "$REALM" --fields id,name 2>/dev/null | \
-                grep -B1 "\"$scope_name\"" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
-            if [ -n "$scope_id" ]; then
-                if _kcadm update "clients/$uuid/optional-client-scopes/$scope_id" -r "$REALM" 2>/dev/null; then
-                    log_info "    Assigned optional scope '$scope_name'"
-                else
-                    log_info "    Optional scope '$scope_name' already assigned"
-                fi
-            else
-                log_warn "    Optional scope '$scope_name' not found in realm"
-            fi
-        done
-
-        # Add mcp-gateway audience mapper so exchanged tokens are accepted by the gateway
-        # Without this, the gateway rejects tokens with "jwt audience invalid"
-        log_info "  Adding mcp-gateway audience mapper..."
-        _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
-            -s name="mcp-gateway-audience" \
-            -s protocol="openid-connect" \
-            -s protocolMapper="oidc-audience-mapper" \
-            -s consentRequired=false \
-            -s 'config."included.client.audience"="mcp-gateway"' \
-            -s 'config."id.token.claim"="false"' \
-            -s 'config."access.token.claim"="true"' 2>/dev/null || {
-            log_info "    Audience mapper already exists"
-        }
-
-        # Add explicit username mapper to ensure preferred_username is included
-        # This guarantees the claim exists even if profile scope doesn't handle it for service accounts
-        log_info "  Adding username mapper for token exchange..."
-        _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
-            -s name="username-mapper" \
-            -s protocol="openid-connect" \
-            -s protocolMapper="oidc-usermodel-property-mapper" \
-            -s consentRequired=false \
-            -s 'config."user.attribute"="username"' \
-            -s 'config."claim.name"="preferred_username"' \
-            -s 'config."jsonType.label"="String"' \
-            -s 'config."id.token.claim"="true"' \
-            -s 'config."access.token.claim"="true"' \
-            -s 'config."userinfo.token.claim"="true"' 2>/dev/null || {
-            log_info "    Username mapper already exists"
-        }
     fi
+
+    # Assign default client scopes for token exchange claims
+    # Without these scopes, exchanged tokens will be missing:
+    # - preferred_username (from 'profile' scope via 'roles' scope mappers)
+    # - realm_access.roles (from 'roles' scope)
+    # - groups (from 'roles' scope)
+    log_info "  Assigning default client scopes for token exchange..."
+
+    # Default scopes (always included in token)
+    local default_scopes=("openid" "roles" "profile" "web-origins")
+    for scope_name in "${default_scopes[@]}"; do
+        # Get scope ID by name (kcadm endpoint requires ID)
+        local scope_id
+        scope_id=$(_kcadm get "client-scopes" -r "$REALM" --fields id,name 2>/dev/null | \
+            grep -B1 "\"$scope_name\"" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+        if [ -n "$scope_id" ]; then
+            if _kcadm update "clients/$uuid/default-client-scopes/$scope_id" -r "$REALM" 2>/dev/null; then
+                log_info "    Assigned default scope '$scope_name'"
+            else
+                log_info "    Default scope '$scope_name' already assigned"
+            fi
+        else
+            log_warn "    Default scope '$scope_name' not found in realm"
+        fi
+    done
+
+    # Optional scopes (included when explicitly requested)
+    local optional_scopes=("email")
+    for scope_name in "${optional_scopes[@]}"; do
+        local scope_id
+        scope_id=$(_kcadm get "client-scopes" -r "$REALM" --fields id,name 2>/dev/null | \
+            grep -B1 "\"$scope_name\"" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+        if [ -n "$scope_id" ]; then
+            if _kcadm update "clients/$uuid/optional-client-scopes/$scope_id" -r "$REALM" 2>/dev/null; then
+                log_info "    Assigned optional scope '$scope_name'"
+            else
+                log_info "    Optional scope '$scope_name' already assigned"
+            fi
+        else
+            log_warn "    Optional scope '$scope_name' not found in realm"
+        fi
+    done
+
+    # Add mcp-gateway audience mapper so exchanged tokens are accepted by the gateway
+    # Without this, the gateway rejects tokens with "jwt audience invalid"
+    log_info "  Adding mcp-gateway audience mapper..."
+    _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+        -s name="mcp-gateway-audience" \
+        -s protocol="openid-connect" \
+        -s protocolMapper="oidc-audience-mapper" \
+        -s consentRequired=false \
+        -s 'config."included.client.audience"="mcp-gateway"' \
+        -s 'config."id.token.claim"="false"' \
+        -s 'config."access.token.claim"="true"' 2>/dev/null || {
+        log_info "    Audience mapper already exists"
+    }
+
+    # Add explicit username mapper to ensure preferred_username is included
+    # This guarantees the claim exists even if profile scope doesn't handle it for service accounts
+    log_info "  Adding username mapper for token exchange..."
+    _kcadm create "clients/$uuid/protocol-mappers/models" -r "$REALM" \
+        -s name="username-mapper" \
+        -s protocol="openid-connect" \
+        -s protocolMapper="oidc-usermodel-property-mapper" \
+        -s consentRequired=false \
+        -s 'config."user.attribute"="username"' \
+        -s 'config."claim.name"="preferred_username"' \
+        -s 'config."jsonType.label"="String"' \
+        -s 'config."id.token.claim"="true"' \
+        -s 'config."access.token.claim"="true"' \
+        -s 'config."userinfo.token.claim"="true"' 2>/dev/null || {
+        log_info "    Username mapper already exists"
+    }
 
     log_info "  mcp-integration-runner client configured with token exchange scopes"
 }
