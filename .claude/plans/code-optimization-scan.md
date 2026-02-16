@@ -38,25 +38,25 @@ A comprehensive scan of the entire project identified **62 optimization opportun
 | P1 | CI/CD | Job parallelization (serial deps) | ✅ Already done |
 | P1 | CI/CD | Auth logic duplication (5 copies in tests) | ✅ Done (2026-02-15) |
 | P1 | CI/CD | 6 MCP services have no unit tests | ✅ Already done |
-| P2 | Services | Health check endpoint duplication (8 services) | 200+ lines |
-| P2 | Services | Auth middleware in route handlers | 50+ lines per service |
+| P2 | Services | Health check endpoint duplication (8 services) | ✅ Done (2026-02-15) — createHealthRoutes factory in shared, 7 services migrated |
+| P2 | Services | Auth middleware in route handlers | ✅ Done (2026-02-15) — createDomainAuthMiddleware + finance tier middleware |
 | P2 | Services | Inconsistent Express versions | Maintenance risk |
-| P2 | Infra | Dockerfile duplication (9 identical patterns) | 15-20% faster builds |
-| P2 | Infra | Inefficient RLS LIKE patterns (payroll) | Query performance |
-| P2 | Infra | Over-broad DB permissions (BYPASSRLS) | Security risk |
+| P2 | Infra | Dockerfile duplication (9 identical patterns) | ✅ Done (2026-02-15) — Dockerfile.mcp-service with SERVICE_NAME build arg |
+| P2 | Infra | Inefficient RLS LIKE patterns (payroll) | ✅ Done (2026-02-15) — 44 policies converted to array containment |
+| P2 | Infra | Over-broad DB permissions (BYPASSRLS) | ✅ Done (2026-02-15) — BYPASSRLS removed, GRANT ALL → specific grants |
 | P2 | Infra | RLS policy complexity (expense_reports) | 7 evaluations per row |
-| P2 | Infra | Keycloak realm export bloat | 33KB → 15KB |
-| P2 | Infra | Sync script clients.sh redundancy | 400+ lines |
+| P2 | Infra | Keycloak realm export bloat | ✅ Done (2026-02-15) — 1177→853 lines, sync-managed clients removed |
+| P2 | Infra | Sync script clients.sh redundancy | ✅ Done (2026-02-15) — 7 functions → data-driven associative arrays |
 | P3 | Infra | Terraform hardcoded secret names (GCP-only) | Low-risk maintainability |
 | P2 | Infra | Terraform external PowerShell sources | Platform dependency |
-| P2 | Infra | Script error handling gaps (backup.sh) | Silent failures |
+| P2 | Infra | Script error handling gaps (backup.sh) | ✅ Done (2026-02-15) — error handling added |
 | P2 | Infra | Script logging duplication | Code reuse |
 | P2 | Clients | Missing useMemo in large pages | Re-render performance |
-| P2 | Clients | Voice hook eager initialization | Unnecessary API access |
-| P2 | Clients | Loose `any` typing (5+ pages) | Type safety |
+| P2 | Clients | Voice hook eager initialization | ✅ Done (2026-02-15) — lazy init with enabled option |
+| P2 | Clients | Loose `any` typing (5+ pages) | ✅ Done (2026-02-15) — ComponentAction type replacing any |
 | P2 | CI/CD | E2E test fixture isolation | Flaky test prevention |
-| P2 | CI/CD | Playwright timeout too aggressive (60s) | False negatives |
-| P2 | CI/CD | k6 thresholds too loose (5% errors) | Misleading results |
+| P2 | CI/CD | Playwright timeout too aggressive (60s) | ✅ Done (2026-02-15) — timeout increased |
+| P2 | CI/CD | k6 thresholds too loose (5% errors) | ✅ Done (2026-02-15) — thresholds tightened |
 | P3 | Services | Test fixture/mock duplication | 200+ lines |
 | P3 | Services | Dead code (cursor encoding duplicates) | Cleanup |
 | P3 | Infra | Health check improvements (Docker) | 5-10s faster startup |
