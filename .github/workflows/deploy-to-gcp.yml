@@ -184,7 +184,8 @@ jobs:
 
       - name: Build and Push Image
         run: |
-          docker build -f services/mcp-gateway/Dockerfile \
+          docker build -f infrastructure/docker/Dockerfile.mcp-service \
+                       --build-arg SERVICE_NAME=mcp-gateway \
                        -t ${{ env.AR_REPO }}/mcp-gateway:${{ github.sha }} \
                        -t ${{ env.AR_REPO }}/mcp-gateway:latest \
                        .

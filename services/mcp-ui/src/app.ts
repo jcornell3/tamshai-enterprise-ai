@@ -4,7 +4,7 @@
  * Provides the Generative UI service for rendering AI-driven components.
  */
 import express, { Request, Response, NextFunction } from 'express';
-import { requireGatewayAuth } from '@tamshai/shared';
+import { requireGatewayAuth, createHealthRoutes } from '@tamshai/shared';
 import { displayRouter } from './routes/display';
 import { createAuthServiceFromEnv } from './auth';
 import { setAuthService } from './mcp/mcp-client';
@@ -45,14 +45,7 @@ app.use(express.json());
 // - JWT validation is handled in the display router
 
 // Health endpoint
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'healthy',
-    service: 'mcp-ui',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-  });
-});
+app.use(createHealthRoutes('mcp-ui', []));
 
 // Display API routes
 app.use('/api/display', displayRouter);

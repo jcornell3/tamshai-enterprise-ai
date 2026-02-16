@@ -6,11 +6,10 @@
  */
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
-import { requireGatewayAuth, hasDomainAccess, hasDomainWriteAccess } from '@tamshai/shared';
+import { requireGatewayAuth, createDomainAuthMiddleware, createHealthRoutes } from '@tamshai/shared';
 import { UserContext, checkConnection } from './database/connection';
 import { checkRedisConnection } from './utils/redis';
 import { logger } from './utils/logger';
-import { handleInsufficientPermissions } from './utils/error-handler';
 import {
   listPayRuns,
   ListPayRunsInput,
@@ -55,39 +54,20 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
+// Domain authorization middleware - all /tools/* routes require payroll read access
+app.use('/tools', createDomainAuthMiddleware('payroll'));
+
 // Health check endpoint
-app.get('/health', async (_req: Request, res: Response) => {
-  const dbHealthy = await checkConnection();
-  const redisHealthy = await checkRedisConnection();
-
-  const status = dbHealthy && redisHealthy ? 'healthy' : 'unhealthy';
-  const statusCode = status === 'healthy' ? 200 : 503;
-
-  res.status(statusCode).json({
-    status,
-    service: 'mcp-payroll',
-    version: '1.0.0',
-    checks: {
-      database: dbHealthy ? 'connected' : 'disconnected',
-      redis: redisHealthy ? 'connected' : 'disconnected',
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
+app.use(createHealthRoutes('mcp-payroll', [
+  { name: 'database', check: async () => { try { return await checkConnection(); } catch { return false; } } },
+  { name: 'redis', check: async () => { try { return await checkRedisConnection(); } catch { return false; } } },
+]));
 
 // Tool endpoints
 
 // List Pay Runs
 app.post('/tools/list_pay_runs', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListPayRunsInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('list_pay_runs', ['payroll-read', 'payroll-write', 'executive'])
-    );
-    return;
-  }
-
   const result = await listPayRuns(input, userContext);
   res.json(result);
 });
@@ -95,18 +75,6 @@ app.post('/tools/list_pay_runs', async (req: Request, res: Response) => {
 // List Pay Stubs
 app.post('/tools/list_pay_stubs', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListPayStubsInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('list_pay_stubs', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await listPayStubs(input, userContext);
   res.json(result);
 });
@@ -114,14 +82,6 @@ app.post('/tools/list_pay_stubs', async (req: Request, res: Response) => {
 // Get Pay Stub
 app.post('/tools/get_pay_stub', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & GetPayStubInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('get_pay_stub', ['payroll-read', 'payroll-write', 'executive'])
-    );
-    return;
-  }
-
   const result = await getPayStub(input, userContext);
   res.json(result);
 });
@@ -129,18 +89,6 @@ app.post('/tools/get_pay_stub', async (req: Request, res: Response) => {
 // List Contractors
 app.post('/tools/list_contractors', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & ListContractorsInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('list_contractors', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await listContractors(input, userContext);
   res.json(result);
 });
@@ -148,18 +96,6 @@ app.post('/tools/list_contractors', async (req: Request, res: Response) => {
 // Get Tax Withholdings
 app.post('/tools/get_tax_withholdings', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & GetTaxWithholdingsInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('get_tax_withholdings', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await getTaxWithholdings(input, userContext);
   res.json(result);
 });
@@ -167,18 +103,6 @@ app.post('/tools/get_tax_withholdings', async (req: Request, res: Response) => {
 // Get Benefits
 app.post('/tools/get_benefits', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & GetBenefitsInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('get_benefits', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await getBenefits(input, userContext);
   res.json(result);
 });
@@ -186,18 +110,6 @@ app.post('/tools/get_benefits', async (req: Request, res: Response) => {
 // Get Direct Deposit
 app.post('/tools/get_direct_deposit', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & GetDirectDepositInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('get_direct_deposit', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await getDirectDeposit(input, userContext);
   res.json(result);
 });
@@ -205,18 +117,6 @@ app.post('/tools/get_direct_deposit', async (req: Request, res: Response) => {
 // Get Payroll Summary
 app.post('/tools/get_payroll_summary', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & GetPayrollSummaryInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('get_payroll_summary', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await getPayrollSummary(input, userContext);
   res.json(result);
 });
@@ -224,33 +124,13 @@ app.post('/tools/get_payroll_summary', async (req: Request, res: Response) => {
 // Calculate Earnings
 app.post('/tools/calculate_earnings', async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & CalculateEarningsInput;
-
-  if (!hasDomainAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('calculate_earnings', [
-        'payroll-read',
-        'payroll-write',
-        'executive',
-      ])
-    );
-    return;
-  }
-
   const result = await calculateEarnings(input, userContext);
   res.json(result);
 });
 
-// Create Pay Run
-app.post('/tools/create_pay_run', async (req: Request, res: Response) => {
+// Create Pay Run (requires write access)
+app.post('/tools/create_pay_run', createDomainAuthMiddleware('payroll', 'write'), async (req: Request, res: Response) => {
   const { userContext, ...input } = req.body as { userContext: UserContext } & CreatePayRunInput;
-
-  if (!hasDomainWriteAccess(userContext.roles, 'payroll')) {
-    res.json(
-      handleInsufficientPermissions('create_pay_run', ['payroll-write', 'executive'])
-    );
-    return;
-  }
-
   const result = await createPayRun(input, userContext);
   res.json(result);
 });

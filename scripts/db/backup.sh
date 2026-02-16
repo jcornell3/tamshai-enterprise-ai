@@ -79,15 +79,35 @@ backup_postgres_dev() {
 
         local backup_file="$BACKUP_DIR/postgres/${db}.sql"
 
-        docker exec "$container" pg_dump \
+        if ! docker exec "$container" pg_dump \
             -U tamshai \
             -d "$db" \
             --no-owner \
             --no-privileges \
-            > "$backup_file"
+            > "$backup_file" 2>/dev/null; then
+            log_error "pg_dump failed for database: $db"
+            rm -f "$backup_file"
+            return 1
+        fi
+
+        # Validate dump is not empty
+        if [ ! -s "$backup_file" ]; then
+            log_error "pg_dump produced empty file for database: $db"
+            rm -f "$backup_file"
+            return 1
+        fi
 
         # Compress backup
         gzip "$backup_file"
+
+        # Validate compressed size
+        local size_bytes
+        size_bytes=$(wc -c < "${backup_file}.gz")
+        if [ "$size_bytes" -lt 100 ]; then
+            log_error "Backup suspiciously small (${size_bytes} bytes): ${backup_file}.gz"
+            rm -f "${backup_file}.gz"
+            return 1
+        fi
 
         local size=$(ls -lh "${backup_file}.gz" | awk '{print $5}')
         log_info "  Created: ${backup_file}.gz ($size)"
@@ -95,10 +115,14 @@ backup_postgres_dev() {
 
     # Backup all roles and global objects
     log_info "Backing up roles and global objects..."
-    docker exec "$container" pg_dumpall \
+    if ! docker exec "$container" pg_dumpall \
         -U tamshai \
         --globals-only \
-        > "$BACKUP_DIR/postgres/globals.sql"
+        > "$BACKUP_DIR/postgres/globals.sql" 2>/dev/null; then
+        log_error "pg_dumpall failed for global objects"
+        rm -f "$BACKUP_DIR/postgres/globals.sql"
+        return 1
+    fi
 
     gzip "$BACKUP_DIR/postgres/globals.sql"
 }
@@ -161,10 +185,23 @@ backup_mongodb_dev() {
     log_info "Running mongodump..."
 
     # Use mongodump to backup all databases
-    docker exec "$container" mongodump \
+    if ! docker exec "$container" mongodump \
         --archive \
         --gzip \
-        > "$BACKUP_DIR/mongodb/mongodump.archive.gz"
+        > "$BACKUP_DIR/mongodb/mongodump.archive.gz" 2>/dev/null; then
+        log_error "mongodump failed"
+        rm -f "$BACKUP_DIR/mongodb/mongodump.archive.gz"
+        return 1
+    fi
+
+    # Validate archive is not suspiciously small
+    local size_bytes
+    size_bytes=$(wc -c < "$BACKUP_DIR/mongodb/mongodump.archive.gz")
+    if [ "$size_bytes" -lt 100 ]; then
+        log_error "MongoDB backup suspiciously small (${size_bytes} bytes)"
+        rm -f "$BACKUP_DIR/mongodb/mongodump.archive.gz"
+        return 1
+    fi
 
     local size=$(ls -lh "$BACKUP_DIR/mongodb/mongodump.archive.gz" | awk '{print $5}')
     log_info "Created: $BACKUP_DIR/mongodb/mongodump.archive.gz ($size)"

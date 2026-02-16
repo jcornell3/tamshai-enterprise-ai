@@ -11,16 +11,15 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- =============================================================================
 CREATE SCHEMA IF NOT EXISTS finance;
 
--- Grant permissions to tamshai user (admin/sync operations)
+-- App user: RLS-enforced access
 GRANT USAGE ON SCHEMA finance TO tamshai;
-GRANT ALL ON ALL TABLES IN SCHEMA finance TO tamshai;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
-ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT ALL ON TABLES TO tamshai;
-ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT ALL ON SEQUENCES TO tamshai;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
+ALTER USER tamshai SET row_security = on;
 
--- IMPORTANT: Allow tamshai to bypass Row-Level Security policies
--- Required for identity-sync service account
-ALTER USER tamshai BYPASSRLS;
+-- Set default privileges for future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT USAGE, SELECT ON SEQUENCES TO tamshai;
 
 -- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)
 -- This user does NOT have BYPASSRLS - RLS policies will be enforced
@@ -31,13 +30,12 @@ BEGIN
     END IF;
 END
 $$;
-
--- Grant permissions to tamshai_app (same as tamshai but without BYPASSRLS)
+-- Grant permissions to tamshai_app (RLS-enforced, no DELETE)
 GRANT USAGE ON SCHEMA finance TO tamshai_app;
-GRANT ALL ON ALL TABLES IN SCHEMA finance TO tamshai_app;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA finance TO tamshai_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT ALL ON TABLES TO tamshai_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT ALL ON SEQUENCES TO tamshai_app;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT USAGE, SELECT ON SEQUENCES TO tamshai_app;
 
 -- =============================================================================
 -- ARR METRICS TABLE (SaaS Key Metrics)
@@ -79,15 +77,14 @@ ALTER TABLE finance.arr_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY arr_metrics_finance_access ON finance.arr_metrics
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy: Executive role can see ARR metrics
 CREATE POLICY arr_metrics_executive_access ON finance.arr_metrics
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- =============================================================================
@@ -140,15 +137,14 @@ ALTER TABLE finance.arr_movement ENABLE ROW LEVEL SECURITY;
 CREATE POLICY arr_movement_finance_access ON finance.arr_movement
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy: Executive role can see ARR movement
 CREATE POLICY arr_movement_executive_access ON finance.arr_movement
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- =============================================================================
@@ -987,15 +983,14 @@ ALTER TABLE finance.department_budgets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY budget_finance_access ON finance.department_budgets
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy 2: Executive role can see all budgets
 CREATE POLICY budget_executive_access ON finance.department_budgets
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 3: Department heads can see their own department's budget
@@ -1003,7 +998,7 @@ CREATE POLICY budget_executive_access ON finance.department_budgets
 CREATE POLICY budget_department_access ON finance.department_budgets
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND department = current_setting('app.current_user_department', true)
     );
 
@@ -1011,10 +1006,10 @@ CREATE POLICY budget_department_access ON finance.department_budgets
 CREATE POLICY budget_finance_modify ON finance.department_budgets
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     )
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     );
 
 -- Policy 5: Department heads can submit their department's budgets (v1.5 - Issue #78)
@@ -1022,11 +1017,11 @@ CREATE POLICY budget_finance_modify ON finance.department_budgets
 CREATE POLICY budget_department_submit ON finance.department_budgets
     FOR UPDATE
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND department = current_setting('app.current_user_department', true)
     )
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND department = current_setting('app.current_user_department', true)
     );
 
@@ -1039,22 +1034,21 @@ ALTER TABLE finance.budget_approval_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY budget_history_finance_read ON finance.budget_approval_history
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy 2: Executive role can view all budget approval history
 CREATE POLICY budget_history_executive_access ON finance.budget_approval_history
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 3: Department heads can see their department's budget history
 CREATE POLICY budget_history_department_access ON finance.budget_approval_history
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND EXISTS (
             SELECT 1 FROM finance.department_budgets db
             WHERE db.id = budget_approval_history.budget_id
@@ -1066,14 +1060,14 @@ CREATE POLICY budget_history_department_access ON finance.budget_approval_histor
 CREATE POLICY budget_history_finance_insert ON finance.budget_approval_history
     FOR INSERT
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     );
 
 -- Policy 5: Managers can insert history records (for submissions)
 CREATE POLICY budget_history_manager_insert ON finance.budget_approval_history
     FOR INSERT
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND EXISTS (
             SELECT 1 FROM finance.department_budgets db
             WHERE db.id = budget_approval_history.budget_id
@@ -1090,22 +1084,21 @@ ALTER TABLE finance.invoices ENABLE ROW LEVEL SECURITY;
 CREATE POLICY invoice_finance_access ON finance.invoices
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy 2: Executive role can see all invoices
 CREATE POLICY invoice_executive_access ON finance.invoices
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 3: Department managers can see invoices for their department only
 CREATE POLICY invoice_department_access ON finance.invoices
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND department_code = current_setting('app.current_user_department', true)
     );
 
@@ -1113,10 +1106,10 @@ CREATE POLICY invoice_department_access ON finance.invoices
 CREATE POLICY invoice_finance_modify ON finance.invoices
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     )
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     );
 
 -- -----------------------------------------------------------------------------
@@ -1136,15 +1129,14 @@ CREATE POLICY report_public_access ON finance.financial_reports
 CREATE POLICY report_finance_access ON finance.financial_reports
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy 3: Executive role can see all reports (including confidential)
 CREATE POLICY report_executive_access ON finance.financial_reports
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 4: Report creators can see their own reports
@@ -1158,10 +1150,10 @@ CREATE POLICY report_creator_access ON finance.financial_reports
 CREATE POLICY report_finance_modify ON finance.financial_reports
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     )
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     );
 
 -- -----------------------------------------------------------------------------
@@ -1173,22 +1165,21 @@ ALTER TABLE finance.revenue_summary ENABLE ROW LEVEL SECURITY;
 CREATE POLICY revenue_finance_access ON finance.revenue_summary
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy 2: Executive role can see all revenue data
 CREATE POLICY revenue_executive_access ON finance.revenue_summary
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 3: Sales leadership can see revenue data (read-only)
 CREATE POLICY revenue_sales_access ON finance.revenue_summary
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%sales-read%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['sales-read']
     );
 
 -- -----------------------------------------------------------------------------
@@ -1214,24 +1205,24 @@ CREATE POLICY expense_self_insert ON finance.expenses
 CREATE POLICY expense_finance_read_access ON finance.expenses
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read']
     );
 
 -- Policy 4: Finance role (write) can see and modify all expenses
 CREATE POLICY expense_finance_write_access ON finance.expenses
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     )
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     );
 
 -- Policy 5: Executive role can see all expenses
 CREATE POLICY expense_executive_access ON finance.expenses
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 6: Manager role can see expenses from their department
@@ -1239,7 +1230,7 @@ CREATE POLICY expense_executive_access ON finance.expenses
 CREATE POLICY expense_manager_access ON finance.expenses
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND department_id IN (
             SELECT d.id
             FROM finance.departments d
@@ -1359,22 +1350,21 @@ CREATE POLICY expense_reports_self_access ON finance.expense_reports
 CREATE POLICY expense_reports_finance_read ON finance.expense_reports
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-read', 'finance-write']
     );
 
 -- Policy 3: Executive role can see all expense reports
 CREATE POLICY expense_reports_executive_access ON finance.expense_reports
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- Policy 4: Manager can see their department's expense reports
 CREATE POLICY expense_reports_manager_access ON finance.expense_reports
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%manager%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
         AND department_code = current_setting('app.current_user_department', true)
     );
 
@@ -1397,7 +1387,7 @@ CREATE POLICY expense_reports_self_update ON finance.expense_reports
 CREATE POLICY expense_reports_finance_update ON finance.expense_reports
     FOR UPDATE
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%finance-write%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['finance-write']
     );
 
 -- =============================================================================
@@ -1635,16 +1625,16 @@ ON CONFLICT DO NOTHING;
 -- =============================================================================
 -- GRANTS
 -- =============================================================================
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA finance TO tamshai;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO tamshai;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO tamshai;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO tamshai;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tamshai;
 GRANT EXECUTE ON FUNCTION finance.set_user_context TO tamshai;
 
 -- Grant permissions to tamshai_app for RLS-enforced access
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA finance TO tamshai_app;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA finance TO tamshai_app;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO tamshai_app;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO tamshai_app;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai_app;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO tamshai_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tamshai_app;
 GRANT EXECUTE ON FUNCTION finance.set_user_context TO tamshai_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance TO tamshai_app;

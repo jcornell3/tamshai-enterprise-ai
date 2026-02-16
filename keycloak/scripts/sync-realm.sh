@@ -72,14 +72,8 @@ main() {
     # Cache scope IDs once (avoid repeated API calls)
     cache_scope_ids
 
-    # Sync all clients
-    sync_website_client
-    sync_flutter_client
-    sync_web_portal_client
-    sync_mcp_gateway_client
-    sync_mcp_ui_client
-    sync_integration_runner_client
-    sync_mcp_hr_service_client
+    # Sync all registered clients (data-driven)
+    sync_all_clients
     sync_sample_app_clients
 
     # Sync audience mapper on all web clients

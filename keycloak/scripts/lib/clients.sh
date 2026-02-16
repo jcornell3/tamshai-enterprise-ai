@@ -306,47 +306,117 @@ EOF
 }
 
 # =============================================================================
-# Client Sync Functions
+# Data-Driven Client Sync
 # =============================================================================
 
-# Sync tamshai-website client
-sync_website_client() {
-    log_info "Syncing tamshai-website client..."
+# Map client keys to their Keycloak client IDs and JSON generator function names.
+# Format: CLIENT_IDS[key]=clientId, CLIENT_JSON_FNS[key]=json_function_name
+declare -A CLIENT_IDS=(
+    [website]="tamshai-website"
+    [flutter]="tamshai-flutter-client"
+    [portal]="web-portal"
+    [gateway]="mcp-gateway"
+    [ui]="mcp-ui"
+    [hr_service]="mcp-hr-service"
+    [integration_runner]="mcp-integration-runner"
+)
+
+declare -A CLIENT_JSON_FNS=(
+    [website]="get_tamshai_website_client_json"
+    [flutter]="get_flutter_client_json"
+    [portal]="get_web_portal_client_json"
+    [gateway]="get_mcp_gateway_client_json"
+    [ui]="get_mcp_ui_client_json"
+    [hr_service]="get_mcp_hr_service_client_json"
+    [integration_runner]="get_integration_runner_client_json"
+)
+
+# Sync a single client by key.
+# Arguments:
+#   $1 - Client key (one of: website, flutter, portal, gateway, ui, hr_service, integration_runner)
+# The function looks up the Keycloak client ID and JSON generator from the maps above,
+# then calls create_or_update_client followed by any post-sync hook if defined.
+sync_client() {
+    local client_key="$1"
+    local client_id="${CLIENT_IDS[$client_key]:-}"
+    local json_fn="${CLIENT_JSON_FNS[$client_key]:-}"
+
+    if [ -z "$client_id" ]; then
+        log_error "Unknown client key: $client_key"
+        return 1
+    fi
+
+    if [ -z "$json_fn" ]; then
+        log_error "No JSON generator function for client key: $client_key"
+        return 1
+    fi
+
+    # Check for pre-sync guard (e.g., environment restrictions)
+    local guard_fn="_pre_sync_${client_key}"
+    if type "$guard_fn" &>/dev/null; then
+        if ! "$guard_fn"; then
+            return 0
+        fi
+    fi
+
+    log_info "Syncing ${client_id} client..."
     local client_json
-    client_json=$(get_tamshai_website_client_json)
-   create_or_update_client "tamshai-website" "$client_json"
+    client_json=$("$json_fn")
+    create_or_update_client "$client_id" "$client_json"
+
+    # Run post-sync hook if defined (for secrets, mappers, roles, etc.)
+    local hook_fn="_post_sync_${client_key}"
+    if type "$hook_fn" &>/dev/null; then
+        "$hook_fn" "$client_id"
+    fi
 }
 
-# Sync Flutter client
-sync_flutter_client() {
-    log_info "Syncing tamshai-flutter-client..."
-    local client_json
-    client_json=$(get_flutter_client_json)
-   create_or_update_client "tamshai-flutter-client" "$client_json"
+# Sync all registered clients.
+# Iterates over CLIENT_IDS in a deterministic order and calls sync_client for each.
+sync_all_clients() {
+    # Use explicit order to ensure deterministic sync (bash associative arrays are unordered)
+    local ordered_keys=("website" "flutter" "portal" "gateway" "ui" "integration_runner" "hr_service")
+    for client_key in "${ordered_keys[@]}"; do
+        sync_client "$client_key"
+    done
 }
 
-# Sync web-portal client
-sync_web_portal_client() {
-    log_info "Syncing web-portal client..."
-    local client_json
-    client_json=$(get_web_portal_client_json)
-   create_or_update_client "web-portal" "$client_json"
+# =============================================================================
+# Pre-Sync Guards (environment restrictions)
+# =============================================================================
+
+# P3: Blocked in production -- service account with manage-users/manage-realm
+# roles must not be auto-provisioned in prod (security policy).
+_pre_sync_hr_service() {
+    if [ "${ENV:-dev}" = "prod" ]; then
+        log_warn "Skipping mcp-hr-service client in production (security policy)"
+        return 1
+    fi
+    return 0
 }
 
-# Sync mcp-gateway client
-sync_mcp_gateway_client() {
-    log_info "Syncing mcp-gateway client..."
+# T3: mcp-integration-runner is a test-only client, guarded to dev/ci environments.
+_pre_sync_integration_runner() {
+    if [ "${ENV:-dev}" != "dev" ] && [ "${ENV:-dev}" != "ci" ]; then
+        log_info "Skipping mcp-integration-runner client (test environments only)"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Post-Sync Hooks (secrets, mappers, roles)
+# =============================================================================
+
+# Post-sync for mcp-gateway: set client secret
+_post_sync_gateway() {
+    local client_id="$1"
 
     # Get client secret from environment (fail if not set)
     local client_secret="${MCP_GATEWAY_CLIENT_SECRET:?MCP_GATEWAY_CLIENT_SECRET must be set}"
 
-    local client_json
-    client_json=$(get_mcp_gateway_client_json)
-   create_or_update_client "mcp-gateway" "$client_json"
-
-    # Set client secret
     local uuid
-    uuid=$(get_client_uuid "mcp-gateway")
+    uuid=$(get_client_uuid "$client_id")
     if [ -n "$uuid" ]; then
         log_info "  Setting client secret..."
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
@@ -355,19 +425,15 @@ sync_mcp_gateway_client() {
     fi
 }
 
-# Sync mcp-ui client (confidential, service account for generative UI)
-sync_mcp_ui_client() {
-    log_info "Syncing mcp-ui client..."
-
+# Post-sync for mcp-ui: set secret, add audience mapper, add realm roles mapper
+_post_sync_ui() {
+    local client_id="$1"
     local client_secret="${MCP_UI_CLIENT_SECRET:-}"
 
-    local client_json
-    client_json=$(get_mcp_ui_client_json)
-    create_or_update_client "mcp-ui" "$client_json"
+    local uuid
+    uuid=$(get_client_uuid "$client_id")
 
     # Set client secret if provided
-    local uuid
-    uuid=$(get_client_uuid "mcp-ui")
     if [ -n "$uuid" ] && [ -n "$client_secret" ]; then
         log_info "  Setting client secret..."
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
@@ -409,27 +475,16 @@ sync_mcp_ui_client() {
     log_info "  mcp-ui client configured"
 }
 
-# Sync mcp-hr-service client with service account roles
-# P3: Blocked in production — service account with manage-users/manage-realm
-# roles must not be auto-provisioned in prod (security policy).
-sync_mcp_hr_service_client() {
-    if [ "${ENV:-dev}" = "prod" ]; then
-        log_warn "Skipping mcp-hr-service client in production (security policy)"
-        return 0
-    fi
-
-    log_info "Syncing mcp-hr-service client (identity sync)..."
+# Post-sync for mcp-hr-service: set secret, enable fullScope, add mappers, assign roles
+_post_sync_hr_service() {
+    local client_id="$1"
 
     # Get client secret from environment (fail if not set)
     local client_secret="${MCP_HR_SERVICE_CLIENT_SECRET:?MCP_HR_SERVICE_CLIENT_SECRET must be set}"
 
-    local client_json
-    client_json=$(get_mcp_hr_service_client_json)
-   create_or_update_client "mcp-hr-service" "$client_json"
-
     # Set client secret and fullScopeAllowed explicitly
     local uuid
-    uuid=$(get_client_uuid "mcp-hr-service")
+    uuid=$(get_client_uuid "$client_id")
     if [ -n "$uuid" ]; then
         log_info "  Setting client secret..."
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
@@ -470,58 +525,18 @@ sync_mcp_hr_service_client() {
         local realm_mgmt_uuid
         realm_mgmt_uuid=$(get_client_uuid "realm-management")
         if [ -n "$realm_mgmt_uuid" ]; then
-            # Assign manage-users role
-            log_info "  Assigning manage-users role..."
-            if _kcadm add-roles -r "$REALM" \
-                --uusername "service-account-mcp-hr-service" \
-                --cclientid realm-management \
-                --rolename manage-users; then
-                log_info "    manage-users role assigned"
-            else
-                log_warn "    Could not assign manage-users role (may already be assigned)"
-            fi
-
-            log_info "  Assigning view-users role..."
-            if _kcadm add-roles -r "$REALM" \
-                --uusername "service-account-mcp-hr-service" \
-                --cclientid realm-management \
-                --rolename view-users; then
-                log_info "    view-users role assigned"
-            else
-                log_warn "    Could not assign view-users role (may already be assigned)"
-            fi
-
-            log_info "  Assigning query-users role..."
-            if _kcadm add-roles -r "$REALM" \
-                --uusername "service-account-mcp-hr-service" \
-                --cclientid realm-management \
-                --rolename query-users; then
-                log_info "    query-users role assigned"
-            else
-                log_warn "    Could not assign query-users role (may already be assigned)"
-            fi
-
-            # view-realm is required to read available realm roles before assigning them
-            log_info "  Assigning view-realm role..."
-            if _kcadm add-roles -r "$REALM" \
-                --uusername "service-account-mcp-hr-service" \
-                --cclientid realm-management \
-                --rolename view-realm; then
-                log_info "    view-realm role assigned"
-            else
-                log_warn "    Could not assign view-realm role (may already be assigned)"
-            fi
-
-            # manage-realm is required to assign realm roles to users
-            log_info "  Assigning manage-realm role..."
-            if _kcadm add-roles -r "$REALM" \
-                --uusername "service-account-mcp-hr-service" \
-                --cclientid realm-management \
-                --rolename manage-realm; then
-                log_info "    manage-realm role assigned"
-            else
-                log_warn "    Could not assign manage-realm role (may already be assigned)"
-            fi
+            local roles=("manage-users" "view-users" "query-users" "view-realm" "manage-realm")
+            for rolename in "${roles[@]}"; do
+                log_info "  Assigning $rolename role..."
+                if _kcadm add-roles -r "$REALM" \
+                    --uusername "service-account-mcp-hr-service" \
+                    --cclientid realm-management \
+                    --rolename "$rolename"; then
+                    log_info "    $rolename role assigned"
+                else
+                    log_warn "    Could not assign $rolename role (may already be assigned)"
+                fi
+            done
 
             log_info "  Service account roles assigned"
         fi
@@ -530,107 +545,14 @@ sync_mcp_hr_service_client() {
     log_info "  mcp-hr-service client configured for identity sync"
 }
 
-# Sync sample application clients (hr-app, finance-app, sales-app, support-app)
-sync_sample_app_clients() {
-    log_info "Syncing sample app clients..."
-
-    local apps=("hr-app:4001" "finance-app:4002" "sales-app:4003" "support-app:4004")
-
-    # Determine domain based on environment
-    local domain
-    case "${ENV:-dev}" in
-        dev)
-            domain="tamshai.local"
-            ;;
-        stage)
-            domain="www.tamshai.com"
-            ;;
-        prod)
-            domain="prod.tamshai.com"
-            ;;
-        *)
-            domain="localhost"
-            ;;
-    esac
-
-    for app_port in "${apps[@]}"; do
-        local app="${app_port%%:*}"
-        local port="${app_port##*:}"
-
-        local client_json="{
-            \"clientId\": \"$app\",
-            \"name\": \"Tamshai ${app^} Application\",
-            \"enabled\": true,
-            \"publicClient\": true,
-            \"standardFlowEnabled\": true,
-            \"directAccessGrantsEnabled\": false,
-            \"protocol\": \"openid-connect\",
-            \"redirectUris\": [
-                \"http://localhost:$port/*\",
-                \"https://$domain/$app/*\"
-            ],
-            \"webOrigins\": [
-                \"http://localhost:$port\",
-                \"https://$domain\"
-            ],
-            \"attributes\": {
-                \"pkce.code.challenge.method\": \"S256\"
-            },
-            \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
-        }"
-
-       create_or_update_client "$app" "$client_json"
-    done
-}
-
-# =============================================================================
-# Integration Test Client (T1/T3 — Security Audit Remediation)
-# =============================================================================
-
-# Generate JSON for mcp-integration-runner client (confidential, dev-only)
-# T1: Dedicated test client for integration tests — replaces mcp-gateway usage in tests.
-# T3: Network-gated to localhost only (never internet-accessible).
-get_integration_runner_client_json() {
-    cat <<EOF
-{
-    "clientId": "mcp-integration-runner",
-    "name": "MCP Integration Test Runner",
-    "description": "Confidential client for automated integration tests (dev only)",
-    "enabled": true,
-    "publicClient": false,
-    "standardFlowEnabled": false,
-    "directAccessGrantsEnabled": false,
-    "serviceAccountsEnabled": true,
-    "protocol": "openid-connect",
-    "redirectUris": ["http://localhost/*", "http://127.0.0.1/*"],
-    "webOrigins": ["http://localhost", "http://127.0.0.1"],
-    "fullScopeAllowed": true,
-    "defaultClientScopes": ["openid", "profile", "email", "roles"]
-}
-EOF
-}
-
-# Sync mcp-integration-runner client (dev-only)
-# T1: Creates/updates a dedicated test client so integration tests don't use mcp-gateway.
-# T3: Guarded to dev only — returns early in prod/stage.
-sync_integration_runner_client() {
-    # Only create in dev and CI environments (test-only client)
-    # Production environments (stage, prod) should NOT have this client
-    if [ "${ENV:-dev}" != "dev" ] && [ "${ENV:-dev}" != "ci" ]; then
-        log_info "Skipping mcp-integration-runner client (test environments only)"
-        return 0
-    fi
-
-    log_info "Syncing mcp-integration-runner client (integration tests, ENV=${ENV:-dev})..."
-
-    local client_json
-    client_json=$(get_integration_runner_client_json)
-    create_or_update_client "mcp-integration-runner" "$client_json"
+# Post-sync for mcp-integration-runner: set secret, assign roles, configure scopes and mappers
+_post_sync_integration_runner() {
+    local client_id="$1"
 
     # Set client secret from environment or generate one
     local client_secret="${MCP_INTEGRATION_RUNNER_SECRET:-}"
     local uuid
-    uuid=$(get_client_uuid "mcp-integration-runner")
+    uuid=$(get_client_uuid "$client_id")
 
     if [ -n "$uuid" ]; then
         if [ -n "$client_secret" ]; then
@@ -639,7 +561,7 @@ sync_integration_runner_client() {
                 log_warn "  Failed to set client secret via update"
             }
         else
-            log_info "  No MCP_INTEGRATION_RUNNER_SECRET set — using Keycloak-generated secret"
+            log_info "  No MCP_INTEGRATION_RUNNER_SECRET set -- using Keycloak-generated secret"
             log_info "  To set a specific secret: export MCP_INTEGRATION_RUNNER_SECRET=<secret>"
         fi
 
@@ -735,3 +657,88 @@ sync_integration_runner_client() {
 
     log_info "  mcp-integration-runner client configured with token exchange scopes"
 }
+
+# =============================================================================
+# Sample App Clients (already data-driven)
+# =============================================================================
+
+# Sync sample application clients (hr-app, finance-app, sales-app, support-app)
+sync_sample_app_clients() {
+    log_info "Syncing sample app clients..."
+
+    local apps=("hr-app:4001" "finance-app:4002" "sales-app:4003" "support-app:4004")
+
+    # Determine domain based on environment
+    local domain
+    case "${ENV:-dev}" in
+        dev)
+            domain="tamshai.local"
+            ;;
+        stage)
+            domain="www.tamshai.com"
+            ;;
+        prod)
+            domain="prod.tamshai.com"
+            ;;
+        *)
+            domain="localhost"
+            ;;
+    esac
+
+    for app_port in "${apps[@]}"; do
+        local app="${app_port%%:*}"
+        local port="${app_port##*:}"
+
+        local client_json="{
+            \"clientId\": \"$app\",
+            \"name\": \"Tamshai ${app^} Application\",
+            \"enabled\": true,
+            \"publicClient\": true,
+            \"standardFlowEnabled\": true,
+            \"directAccessGrantsEnabled\": false,
+            \"protocol\": \"openid-connect\",
+            \"redirectUris\": [
+                \"http://localhost:$port/*\",
+                \"https://$domain/$app/*\"
+            ],
+            \"webOrigins\": [
+                \"http://localhost:$port\",
+                \"https://$domain\"
+            ],
+            \"attributes\": {
+                \"pkce.code.challenge.method\": \"S256\"
+            },
+            \"defaultClientScopes\": [\"openid\", \"profile\", \"email\", \"roles\"]
+        }"
+
+       create_or_update_client "$app" "$client_json"
+    done
+}
+
+# =============================================================================
+# Integration Test Client (T1/T3 — Security Audit Remediation)
+# =============================================================================
+
+# Generate JSON for mcp-integration-runner client (confidential, dev-only)
+# T1: Dedicated test client for integration tests — replaces mcp-gateway usage in tests.
+# T3: Network-gated to localhost only (never internet-accessible).
+get_integration_runner_client_json() {
+    cat <<EOF
+{
+    "clientId": "mcp-integration-runner",
+    "name": "MCP Integration Test Runner",
+    "description": "Confidential client for automated integration tests (dev only)",
+    "enabled": true,
+    "publicClient": false,
+    "standardFlowEnabled": false,
+    "directAccessGrantsEnabled": false,
+    "serviceAccountsEnabled": true,
+    "protocol": "openid-connect",
+    "redirectUris": ["http://localhost/*", "http://127.0.0.1/*"],
+    "webOrigins": ["http://localhost", "http://127.0.0.1"],
+    "fullScopeAllowed": true,
+    "defaultClientScopes": ["openid", "profile", "email", "roles"]
+}
+EOF
+}
+

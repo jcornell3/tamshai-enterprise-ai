@@ -48,7 +48,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 3 : 1,
-  timeout: 60000, // 60 seconds per test (login can be slow)
+  timeout: 120_000, // 120s for SSO + streaming flows
+  expect: { timeout: 15_000 },
+  maxFailures: process.env.CI ? 5 : 0, // Stop early in CI after 5 failures
   reporter: [
     ['html', { outputFolder: 'playwright-report' }],
     ['list'],
@@ -57,7 +59,8 @@ export default defineConfig({
   use: {
     baseURL: envConfig[testEnv]?.baseURL || `https://www.tamshai.local:${PORT_CADDY_HTTPS}`,
     ignoreHTTPSErrors: envConfig[testEnv]?.ignoreHTTPSErrors ?? true,
-    trace: 'on-first-retry',
+    navigationTimeout: 45_000,
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },

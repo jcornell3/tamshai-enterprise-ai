@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { SSEQueryClient, ComponentRenderer, useAIQuery } from '@tamshai/ui';
 import { apiConfig } from '@tamshai/auth';
+import type { ComponentAction } from '@tamshai/ui/dist/components/generative/types';
 
 /**
  * Universal AI Query Page with Generative UI Support
@@ -43,7 +44,7 @@ export default function AIQueryPage() {
    * Portal-specific component action handler with approval logic.
    * Handles approve, reject, and drilldown actions across all domains.
    */
-  const handleComponentAction = useCallback(async (action: any) => {
+  const handleComponentAction = useCallback(async (action: ComponentAction) => {
     console.log('Component action:', action);
 
     try {
@@ -58,7 +59,7 @@ export default function AIQueryPage() {
         console.log(`Approving ${approvalType}:`, id);
 
         let mcpEndpoint: string;
-        let requestBody: any;
+        let requestBody: Record<string, unknown>;
 
         if (approvalType === 'budget') {
           mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/approve_budget`;
@@ -122,7 +123,7 @@ export default function AIQueryPage() {
         console.log(`Rejecting ${approvalType}:`, id, 'Reason:', reason);
 
         let mcpEndpoint: string;
-        let requestBody: any;
+        let requestBody: Record<string, unknown>;
 
         if (approvalType === 'budget') {
           mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/reject_budget`;

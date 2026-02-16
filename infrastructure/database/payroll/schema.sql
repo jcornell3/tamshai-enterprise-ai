@@ -7,16 +7,15 @@
 -- Create schema
 CREATE SCHEMA IF NOT EXISTS payroll;
 
--- Grant permissions to tamshai user (admin/sync operations)
+-- App user: RLS-enforced access
 GRANT USAGE ON SCHEMA payroll TO tamshai;
-GRANT ALL ON ALL TABLES IN SCHEMA payroll TO tamshai;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA payroll TO tamshai;
-ALTER DEFAULT PRIVILEGES IN SCHEMA payroll GRANT ALL ON TABLES TO tamshai;
-ALTER DEFAULT PRIVILEGES IN SCHEMA payroll GRANT ALL ON SEQUENCES TO tamshai;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA payroll TO tamshai;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA payroll TO tamshai;
+ALTER USER tamshai SET row_security = on;
 
--- IMPORTANT: Allow tamshai to bypass Row-Level Security policies
--- Required for admin operations and integration tests
-ALTER USER tamshai BYPASSRLS;
+-- Set default privileges for future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA payroll GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA payroll GRANT USAGE, SELECT ON SEQUENCES TO tamshai;
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -239,68 +238,53 @@ ALTER TABLE payroll.contractor_payments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY payroll_admin_policy ON payroll.employees
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-write', 'executive']
     );
 
 CREATE POLICY payroll_admin_pay_runs ON payroll.pay_runs
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
     );
 
 CREATE POLICY payroll_admin_pay_stubs ON payroll.pay_stubs
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
         OR employee_id::text = current_setting('app.current_user_id', true)
     );
 
 CREATE POLICY payroll_admin_tax_withholdings ON payroll.tax_withholdings
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
         OR employee_id::text = current_setting('app.current_user_id', true)
     );
 
 CREATE POLICY payroll_admin_benefit_deductions ON payroll.benefit_deductions
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
         OR employee_id::text = current_setting('app.current_user_id', true)
     );
 
 CREATE POLICY payroll_admin_direct_deposit ON payroll.direct_deposit_accounts
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
         OR employee_id::text = current_setting('app.current_user_id', true)
     );
 
 CREATE POLICY payroll_admin_contractors ON payroll.contractors
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
     );
 
 CREATE POLICY payroll_admin_contractor_payments ON payroll.contractor_payments
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%payroll-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%payroll-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
     );
 
 -- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)

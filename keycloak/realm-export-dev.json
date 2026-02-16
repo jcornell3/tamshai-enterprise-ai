@@ -238,13 +238,6 @@
       "lastName": "Chen",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/HR-Department",
         "/Managers"
@@ -263,13 +256,6 @@
       "lastName": "Martinez",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/Finance-Team",
         "/Managers"
@@ -288,13 +274,6 @@
       "lastName": "Johnson",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/Sales-Managers"
       ],
@@ -312,13 +291,6 @@
       "lastName": "Williams",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/Support-Team",
         "/Managers"
@@ -337,13 +309,6 @@
       "lastName": "Thompson",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/C-Suite"
       ],
@@ -361,13 +326,6 @@
       "lastName": "Davis",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/IT-Team"
       ],
@@ -385,13 +343,6 @@
       "lastName": "Patel",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/Engineering-Managers"
       ],
@@ -409,13 +360,6 @@
       "lastName": "Johnson",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        }
-      ],
       "groups": [
         "/Engineering-Team"
       ],
@@ -438,19 +382,7 @@
         "department": ["Testing"],
         "title": ["Journey Test Account"]
       },
-      "groups": ["/All-Employees", "/C-Suite"],
-      "credentials": [
-        {
-          "type": "password",
-          "value": "SET_VIA_KEYCLOAK_SYNC",
-          "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"REPLACED_BY_SYNC_SCRIPT\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
-        }
-      ]
+      "groups": ["/All-Employees", "/C-Suite"]
     }
   ],
   "clients": [
@@ -612,262 +544,6 @@
         "profile",
         "email",
         "roles"
-      ]
-    },
-    {
-      "clientId": "tamshai-flutter-client",
-      "name": "Tamshai Flutter Application",
-      "description": "Cross-platform Flutter application for AI assistant (Windows, macOS, iOS, Android)",
-      "enabled": true,
-      "publicClient": true,
-      "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "protocol": "openid-connect",
-      "redirectUris": [
-        "http://127.0.0.1:18765/callback",
-        "http://127.0.0.1:18766/callback",
-        "http://127.0.0.1:18767/callback",
-        "http://127.0.0.1:18768/callback",
-        "http://127.0.0.1:18769/callback",
-        "http://localhost:18765/callback",
-        "http://localhost:18766/callback",
-        "http://localhost:18767/callback",
-        "http://localhost:18768/callback",
-        "http://localhost:18769/callback",
-        "com.tamshai.ai://callback",
-        "com.tamshai.unifiedflutter://callback",
-        "tamshaiauth://callback"
-      ],
-      "webOrigins": [
-        "http://localhost",
-        "http://127.0.0.1"
-      ],
-      "attributes": {
-        "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://127.0.0.1:18765/logout##http://127.0.0.1:18766/logout##http://127.0.0.1:18767/logout##http://127.0.0.1:18768/logout##http://127.0.0.1:18769/logout##http://localhost:18765/logout##http://localhost:18766/logout##http://localhost:18767/logout##http://localhost:18768/logout##http://localhost:18769/logout##com.tamshai.ai://logout##com.tamshai.unifiedflutter://logout##tamshaiauth://logout"
-      },
-      "defaultClientScopes": [
-        "openid",
-        "profile",
-        "email",
-        "roles",
-        "web-origins"
-      ],
-      "optionalClientScopes": [
-        "offline_access"
-      ],
-      "protocolMappers": [
-        {
-          "name": "mcp-gateway-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
-    {
-      "clientId": "tamshai-website",
-      "name": "Tamshai Corporate Website",
-      "description": "Corporate website SSO login for employee services",
-      "enabled": true,
-      "publicClient": true,
-      "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "protocol": "openid-connect",
-      "redirectUris": [
-        "http://localhost:8080/employee-services.html",
-        "http://localhost:8080/*",
-        "https://tamshai.local/employee-services.html",
-        "https://tamshai.local/*",
-        "https://www.tamshai.local/employee-services.html",
-        "https://www.tamshai.local/*",
-        "https://tamshai.local:8443/employee-services.html",
-        "https://tamshai.local:8443/*",
-        "https://www.tamshai.local:8443/employee-services.html",
-        "https://www.tamshai.local:8443/*",
-        "https://vps.tamshai.com/employee-services.html",
-        "https://vps.tamshai.com/*",
-        "https://tamshai.com/employee-services.html",
-        "https://tamshai.com/*",
-        "https://www.tamshai.com/employee-services.html",
-        "https://www.tamshai.com/*"
-      ],
-      "webOrigins": [
-        "http://localhost:8080",
-        "https://tamshai.local",
-        "https://www.tamshai.local",
-        "https://tamshai.local:8443",
-        "https://www.tamshai.local:8443",
-        "https://vps.tamshai.com",
-        "https://tamshai.com",
-        "https://www.tamshai.com"
-      ],
-      "attributes": {
-        "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8080/*##https://tamshai.local/*##https://www.tamshai.local/*##https://tamshai.local:8443/*##https://www.tamshai.local:8443/*##https://vps.tamshai.com/*##https://tamshai.com/*##https://www.tamshai.com/*"
-      },
-      "defaultClientScopes": [
-
-        "profile",
-        "email",
-        "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "mcp-gateway-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
-    {
-      "clientId": "web-portal",
-      "name": "Tamshai Web Portal (SPA)",
-      "description": "Browser-based AI assistant portal with SSO",
-      "enabled": true,
-      "publicClient": true,
-      "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "protocol": "openid-connect",
-      "redirectUris": [
-        "http://localhost:4000/*",
-        "http://localhost:4000/callback",
-        "https://www.tamshai.local/app/*",
-        "https://www.tamshai.local:8443/app/*",
-        "https://www.tamshai.com/app/*",
-        "https://prod.tamshai.com/app/*"
-      ],
-      "webOrigins": [
-        "http://localhost:4000",
-        "https://www.tamshai.local",
-        "https://www.tamshai.local:8443",
-        "https://www.tamshai.com",
-        "https://prod.tamshai.com"
-      ],
-      "attributes": {
-        "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4000/*##https://www.tamshai.local/*##https://www.tamshai.local:8443/*##https://www.tamshai.com/*##https://prod.tamshai.com/*"
-      },
-      "defaultClientScopes": [
-        "profile",
-        "email",
-        "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "mcp-gateway-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
-    {
-      "clientId": "mcp-gateway",
-      "name": "MCP Gateway",
-      "description": "Backend service for AI orchestration - confidential client for integration tests",
-      "enabled": true,
-      "publicClient": false,
-      "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
-      "protocol": "openid-connect",
-      "secret": "REPLACED_BY_SYNC_SCRIPT",
-      "redirectUris": [
-        "http://localhost:3100/*",
-        "http://127.0.0.1:3100/*",
-        "https://tamshai.local/*",
-        "https://www.tamshai.local/*",
-        "https://tamshai.local:8443/*",
-        "https://www.tamshai.local:8443/*"
-      ],
-      "webOrigins": ["+"],
-      "fullScopeAllowed": false,
-      "defaultClientScopes": [
-        "openid",
-        "profile",
-        "email",
-        "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "audience-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "true",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
-    {
-      "clientId": "mcp-ui",
-      "name": "MCP UI Service",
-      "description": "Backend service for Generative UI - confidential client for service-to-service auth",
-      "enabled": true,
-      "publicClient": false,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
-      "protocol": "openid-connect",
-      "secret": "REPLACED_BY_SYNC_SCRIPT",
-      "redirectUris": [],
-      "webOrigins": [],
-      "fullScopeAllowed": false,
-      "defaultClientScopes": [
-        "openid",
-        "profile",
-        "email",
-        "roles"
-      ],
-      "protocolMappers": [
-        {
-          "name": "audience-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "mcp-gateway",
-            "id.token.claim": "true",
-            "access.token.claim": "true"
-          }
-        },
-        {
-          "name": "hardcoded-realm-roles",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-hardcoded-claim-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "realm_access",
-            "claim.value": "{\"roles\":[\"executive\",\"hr-read\",\"finance-read\",\"sales-read\",\"support-read\",\"payroll-read\"]}",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "userinfo.token.claim": "true",
-            "jsonType.label": "JSON"
-          }
-        }
       ]
     }
   ],

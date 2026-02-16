@@ -7,16 +7,15 @@
 -- Create schema
 CREATE SCHEMA IF NOT EXISTS tax;
 
--- Grant permissions to tamshai user (admin/sync operations)
+-- App user: RLS-enforced access
 GRANT USAGE ON SCHEMA tax TO tamshai;
-GRANT ALL ON ALL TABLES IN SCHEMA tax TO tamshai;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA tax TO tamshai;
-ALTER DEFAULT PRIVILEGES IN SCHEMA tax GRANT ALL ON TABLES TO tamshai;
-ALTER DEFAULT PRIVILEGES IN SCHEMA tax GRANT ALL ON SEQUENCES TO tamshai;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA tax TO tamshai;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA tax TO tamshai;
+ALTER USER tamshai SET row_security = on;
 
--- IMPORTANT: Allow tamshai to bypass Row-Level Security policies
--- Required for admin operations and integration tests
-ALTER USER tamshai BYPASSRLS;
+-- Set default privileges for future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA tax GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA tax GRANT USAGE, SELECT ON SEQUENCES TO tamshai;
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -159,92 +158,72 @@ CREATE POLICY tax_rates_public_read ON tax.sales_tax_rates
 CREATE POLICY tax_rates_admin_write ON tax.sales_tax_rates
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-write', 'executive']
     );
 
 -- RLS Policy: Quarterly estimates - tax roles can read, tax-write can modify
 CREATE POLICY tax_estimates_read ON tax.quarterly_estimates
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-read', 'tax-write', 'finance-read', 'finance-write', 'executive']
     );
 
 CREATE POLICY tax_estimates_write ON tax.quarterly_estimates
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-write', 'executive']
     );
 
 -- RLS Policy: Annual filings - tax roles can read, tax-write can modify
 CREATE POLICY tax_filings_read ON tax.annual_filings
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%finance-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-read', 'tax-write', 'finance-read', 'finance-write', 'executive']
     );
 
 CREATE POLICY tax_filings_write ON tax.annual_filings
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-write', 'executive']
     );
 
 -- RLS Policy: State registrations - tax roles can read, tax-write can modify
 CREATE POLICY tax_registrations_read ON tax.state_registrations
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-read', 'tax-write', 'executive']
     );
 
 CREATE POLICY tax_registrations_write ON tax.state_registrations
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-write', 'executive']
     );
 
 -- RLS Policy: Audit logs - tax roles can read, system can write
 CREATE POLICY tax_audit_read ON tax.audit_logs
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-read', 'tax-write', 'executive']
     );
 
 CREATE POLICY tax_audit_write ON tax.audit_logs
     FOR INSERT
     WITH CHECK (
-        current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-write', 'executive']
     );
 
 -- RLS Policy: Calendar events - tax roles can read and manage
 CREATE POLICY tax_calendar_read ON tax.calendar_events
     FOR SELECT
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-read%'
-        OR current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-read', 'tax-write', 'executive']
     );
 
 CREATE POLICY tax_calendar_write ON tax.calendar_events
     FOR ALL
     USING (
-        current_setting('app.current_user_roles', true) LIKE '%tax-write%'
-        OR current_setting('app.current_user_roles', true) LIKE '%executive%'
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['tax-write', 'executive']
     );
 
 -- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)

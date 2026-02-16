@@ -231,7 +231,7 @@ Different approaches across services: HR uses global instance, Payroll uses lazy
 
 ## Section 2: Infrastructure
 
-### 2.1 HIGH: Missing Composite Indexes (expense_reports)
+### 2.1 HIGH: Missing Composite Indexes (expense_reports) ✅ Done
 
 Current indexes are single-column only. Missing:
 ```sql
@@ -245,7 +245,7 @@ CREATE INDEX idx_expense_reports_approved_audit ON finance.expense_reports(appro
 
 ---
 
-### 2.2 HIGH: Docker Compose Service Redundancy
+### 2.2 HIGH: Docker Compose Service Redundancy ✅ Done
 
 Lines 302-556 of `docker-compose.yml` contain 8 MCP service definitions with nearly identical structure (environment, healthcheck, depends_on).
 
@@ -265,7 +265,7 @@ x-mcp-service: &mcp-service
 
 ---
 
-### 2.3 HIGH: CORS Wildcard Scheme in Kong
+### 2.3 HIGH: CORS Wildcard Scheme in Kong ✅ Done
 
 `kong.yml` lines 116-150 allow `tamshai-ai://*` which permits any domain on mobile.
 
@@ -962,7 +962,7 @@ The ~3-minute savings claim is validated if:
 
 ---
 
-### 4.4 HIGH: Job Parallelization
+### 4.4 HIGH: Job Parallelization ✅ Already Done
 
 Integration tests block E2E tests, but E2E only needs lint to pass.
 
@@ -975,7 +975,7 @@ Integration tests block E2E tests, but E2E only needs lint to pass.
 
 ---
 
-### 4.5 HIGH: Auth Logic Duplication in Tests (5 copies)
+### 4.5 HIGH: Auth Logic Duplication in Tests (5 copies) ✅ Done
 
 TOTP code generation, token exchange, admin token acquisition duplicated across:
 - `tests/e2e/utils/auth.ts`
@@ -990,7 +990,7 @@ TOTP code generation, token exchange, admin token acquisition duplicated across:
 
 ---
 
-### 4.6 HIGH: 6 MCP Services Have No Unit Tests
+### 4.6 HIGH: 6 MCP Services Have No Unit Tests ✅ Already Done
 
 | Service | Status |
 |---------|--------|
@@ -1146,8 +1146,8 @@ The `deploy-mcp-service.yml` referenced images as `tamshai/$SERVICE_NAME:latest`
 
 ### Phase 1: Quick Wins (1-2 days)
 1. Fix E2E worker config (15 min change → 15-20 min CI savings)
-2. Add missing composite indexes to expense_reports
-3. Fix CORS wildcard scheme in Kong
+2. ✅ Add missing composite indexes to expense_reports (P1 — completed 2026-02-15)
+3. ✅ Fix CORS wildcard scheme in Kong (P1 — completed 2026-02-15)
 4. Fix Playwright timeout config
 5. Remove unused Vite template CSS
 
@@ -1162,8 +1162,8 @@ The `deploy-mcp-service.yml` referenced images as `tamshai/$SERVICE_NAME:latest`
 ### Phase 3: CI/CD Optimization (2-3 days)
 1. ✅ Create composite Keycloak action (P0 — completed 2026-02-14)
 2. ✅ Build shared package once, share as artifact (P0 — completed 2026-02-14)
-3. Parallelize job dependencies
-4. Create shared test auth module
+3. ✅ Parallelize job dependencies (P1 — already done, confirmed 2026-02-15)
+4. ✅ Create shared test auth module (P1 — completed 2026-02-15, `tests/shared/auth/totp.ts` + `keycloak-admin.ts`)
 
 ### Phase 4: Client Consolidation (3-4 days)
 1. ✅ Extract AIQueryPage to `useAIQuery` hook (P0 — completed 2026-02-14, 4/7 apps)
@@ -1172,10 +1172,10 @@ The `deploy-mcp-service.yml` referenced images as `tamshai/$SERVICE_NAME:latest`
 4. Fix lazy voice hook initialization
 
 ### Phase 5: Coverage & Quality (ongoing)
-1. Add unit tests for 6 untested MCP services
+1. ✅ Unit tests for MCP services (P1 — already done, all 8 services have tests, confirmed 2026-02-15)
 2. Create test factories
 3. Fix k6 thresholds and create baselines
-4. Docker Compose YAML anchor refactoring
+4. ✅ Docker Compose YAML anchor refactoring (P1 — completed 2026-02-15, 1090→955 lines)
 5. Dockerfile template consolidation
 
 ---
@@ -1367,6 +1367,433 @@ All 8 MCP services already have unit tests (added during P1 services work):
 
 ---
 
+## P2 Implementation Plan
+
+**Prepared**: 2026-02-15 by Claude-Dev
+**Scope**: 18 items across Services, Infrastructure, Clients, and CI/CD
+**Assessment**: 4 items already resolved, 14 actionable
+
+### P2 Triage Summary
+
+| Item | Description | Verdict | Effort |
+|------|-------------|---------|--------|
+| 1.7 | Auth middleware in route handlers | **Do** — 23+ inline checks → middleware | 2-3 hrs |
+| 1.8 | Health check endpoint duplication | **Do** — 9 services, 2 patterns | 1-2 hrs |
+| 1.9 | Inconsistent Express versions | **Resolved** — All on 4.21.2 (gateway intentionally on 5) | — |
+| 1.10 | Redis client management inconsistency | **Resolved** — All use shared factory | — |
+| 2.4 | Dockerfile duplication (9 services) | **Do** — 65/72 lines identical | 1-2 hrs |
+| 2.5 | Inefficient RLS LIKE patterns | **Do** — 40+ LIKE checks in payroll/tax | 1 hr |
+| 2.6 | Over-broad DB permissions (BYPASSRLS) | **Do** — Security risk, 3 schemas | 2 hrs |
+| 2.7 | RLS policy complexity (expense_reports) | **Defer** — 7 policies is acceptable, consolidation risks regressions | — |
+| 2.8 | Keycloak realm export bloat | **Do** — 33KB → ~20KB | 1 hr |
+| 2.9 | Sync script redundancy (clients.sh) | **Do** — 737 lines → ~300 lines | 1-2 hrs |
+| 2.11 | Terraform external PowerShell sources | **Defer** — Platform-specific but working | — |
+| 2.12 | Script error handling gaps (backup.sh) | **Do** — Silent failures on backup | 30 min |
+| 3.2 | Missing useMemo in large pages | **Resolved** — Already properly uses useMemo | — |
+| 3.3 | Voice hook eager initialization | **Do** — Always initializes microphone API | 1 hr |
+| 3.4 | Loose `any` typing (5+ pages) | **Do** — `action: any` in 4+ AIQueryPages | 30 min |
+| 4.7 | Missing test fixture isolation | **Resolved** — Named fixture reset pattern in place | — |
+| 4.8 | Playwright timeout too aggressive | **Do** — 60s may be tight for SSO + streaming | 15 min |
+| 4.9 | k6 thresholds too loose | **Do** — `errors` counter at 5% in load test | 30 min |
+
+---
+
+### P2 Services
+
+#### 1.7: Authorization Middleware Extraction
+
+**Problem**: `hasDomainAccess()`/`hasDomainWriteAccess()` called inline in every route handler (23+ times across payroll, tax, hr, finance, sales, support). Each handler repeats the same 3-line check-and-403 pattern.
+
+**Current pattern** (repeated per route):
+```typescript
+if (!hasDomainAccess(userContext.roles, 'payroll')) {
+  return res.status(403).json(createErrorResponse('INSUFFICIENT_PERMISSIONS', ...));
+}
+```
+
+**Solution**: Create `createDomainAuthMiddleware(domain, access?)` in `@tamshai/shared` that wraps this pattern as Express middleware.
+
+```typescript
+// @tamshai/shared/src/middleware/domain-auth.ts
+export function createDomainAuthMiddleware(
+  domain: string,
+  access: 'read' | 'write' = 'read',
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const roles = req.body?.userContext?.roles || [];
+    const hasAccess = access === 'write'
+      ? hasDomainWriteAccess(roles, domain)
+      : hasDomainAccess(roles, domain);
+    if (!hasAccess) {
+      return res.status(403).json(createErrorResponse(
+        'INSUFFICIENT_PERMISSIONS',
+        `Requires ${domain}-${access} role`,
+        `User needs ${domain}-${access} or executive role`,
+      ));
+    }
+    next();
+  };
+}
+```
+
+**Files to modify**:
+| Service | File | Inline checks | Replacement |
+|---------|------|---------------|-------------|
+| mcp-payroll | `src/index.ts` | 11 | `app.use('/tools', createDomainAuthMiddleware('payroll'))` + write middleware on write routes |
+| mcp-tax | `src/index.ts` | 7 | `app.use('/tools', createDomainAuthMiddleware('tax'))` |
+| mcp-hr | `src/index.ts` | 5 | `app.use('/tools', createDomainAuthMiddleware('hr'))` |
+| mcp-sales | `src/index.ts` | ~8 | `app.use('/tools', createDomainAuthMiddleware('sales'))` |
+| mcp-support | `src/index.ts` | ~8 | Dual-realm complicates — may need custom middleware |
+| mcp-finance | `src/index.ts` | ~12 | Uses tiered access — `hasFinanceTierAccess` needs per-route config |
+
+**Risk**: Medium — finance and support have non-standard auth patterns. Start with payroll/tax/hr (simple domain check), then handle finance/sales/support.
+
+**Savings**: ~150 lines across 6 services.
+
+---
+
+#### 1.8: Health Check Factory
+
+**Problem**: 9 services implement health check endpoints with 7-50 lines each. Two patterns exist:
+- **DB-only** (HR, Finance, Sales, Support): checks `checkConnection()`
+- **DB + Redis** (Payroll, Tax): checks both with structured response
+
+**Solution**: Create `createHealthRoutes(serviceName, checks)` factory in `@tamshai/shared`.
+
+```typescript
+// @tamshai/shared/src/routes/health.ts
+interface HealthCheck {
+  name: string;
+  check: () => Promise<boolean>;
+}
+
+export function createHealthRoutes(serviceName: string, checks: HealthCheck[]): Router {
+  const router = Router();
+  router.get('/health', async (req, res) => {
+    const results = await Promise.allSettled(
+      checks.map(async (c) => ({ name: c.name, healthy: await c.check() }))
+    );
+    const allHealthy = results.every((r) => r.status === 'fulfilled' && r.value.healthy);
+    res.status(allHealthy ? 200 : 503).json({
+      status: allHealthy ? 'healthy' : 'unhealthy',
+      service: serviceName,
+      checks: Object.fromEntries(results.map((r, i) => [checks[i].name, r.status === 'fulfilled' ? r.value.healthy : false])),
+      timestamp: new Date().toISOString(),
+    });
+  });
+  return router;
+}
+```
+
+**Usage per service**:
+```typescript
+app.use(createHealthRoutes('mcp-payroll', [
+  { name: 'database', check: () => checkConnection() },
+  { name: 'redis', check: () => checkRedisConnection() },
+]));
+```
+
+**Files to modify**: `src/index.ts` in all 8 MCP services (except gateway which has custom logic).
+
+**Savings**: ~200 lines.
+
+---
+
+#### 1.9: Express Version Alignment — ✅ RESOLVED
+
+Explorer confirmed all 8 non-gateway services are on Express `^4.21.2`. The scan listed `^4.18.2` for several services, which was outdated. Gateway intentionally uses Express 5. No action needed.
+
+#### 1.10: Redis Client Management — ✅ RESOLVED
+
+Explorer confirmed all services use identical `createRedisConfirmationCache()` from `@tamshai/shared`. The thin wrapper files (`src/utils/redis.ts`) remain but are just re-exports — acceptable.
+
+---
+
+### P2 Infrastructure
+
+#### 2.4: Dockerfile Template
+
+**Problem**: 9 MCP service Dockerfiles are 72 lines each with 65 identical lines. Only service name and COPY paths differ.
+
+**Solution**: Create shared multi-stage base with build args.
+
+**New file**: `infrastructure/docker/Dockerfile.mcp-base`
+```dockerfile
+ARG SERVICE_NAME
+ARG SERVICE_PATH=services/${SERVICE_NAME}
+
+FROM node:20-alpine AS builder
+RUN apk add --no-cache python3 make g++
+WORKDIR /app
+COPY services/shared/ services/shared/
+RUN cd services/shared && npm ci && npm run build
+COPY ${SERVICE_PATH}/package*.json ${SERVICE_PATH}/
+RUN cd ${SERVICE_PATH} && npm ci
+COPY ${SERVICE_PATH}/ ${SERVICE_PATH}/
+RUN cd ${SERVICE_PATH} && npm run build && npm prune --production
+
+FROM node:20-alpine
+RUN apk upgrade --no-cache && addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -s /bin/sh -D nodejs
+WORKDIR /app
+COPY --from=builder /app/services/shared/dist services/shared/dist
+COPY --from=builder /app/services/shared/package.json services/shared/
+COPY --from=builder /app/services/shared/node_modules services/shared/node_modules
+COPY --from=builder /app/${SERVICE_PATH}/dist ${SERVICE_PATH}/dist
+COPY --from=builder /app/${SERVICE_PATH}/package.json ${SERVICE_PATH}/
+COPY --from=builder /app/${SERVICE_PATH}/node_modules ${SERVICE_PATH}/node_modules
+USER nodejs
+ENV PORT=3100
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD wget -qO- http://localhost:${PORT}/health || exit 1
+CMD ["node", "services/${SERVICE_NAME}/dist/index.js"]
+```
+
+**Service Dockerfiles** become 3 lines:
+```dockerfile
+ARG SERVICE_NAME=mcp-hr
+FROM Dockerfile.mcp-base
+```
+
+Or reference in `docker-compose.yml` build args:
+```yaml
+mcp-hr:
+  build:
+    context: ../../
+    dockerfile: infrastructure/docker/Dockerfile.mcp-base
+    args:
+      SERVICE_NAME: mcp-hr
+```
+
+**Savings**: 9 × 72 = 648 lines → ~50 lines (base) + 9 × 0 (no individual Dockerfiles needed). Net: ~600 lines saved.
+
+**Risk**: Low — all services follow identical build pattern. Test with one service first.
+
+---
+
+#### 2.5: RLS LIKE → Array Containment
+
+**Problem**: 40+ `LIKE '%role-name%'` patterns in payroll and tax schemas. LIKE with leading wildcard prevents index usage.
+
+**Current** (payroll, repeated 9 times):
+```sql
+current_setting('app.current_user_roles') LIKE '%payroll-read%'
+  OR current_setting('app.current_user_roles') LIKE '%payroll-write%'
+  OR current_setting('app.current_user_roles') LIKE '%executive%'
+```
+
+**Solution**: Set roles as array, use `@>` (contains) or `&&` (overlaps):
+```sql
+-- Set roles as array in MCP server:
+SET app.current_user_roles = '{payroll-read,payroll-write}';
+
+-- Policy check:
+string_to_array(current_setting('app.current_user_roles'), ',')
+  && ARRAY['payroll-read', 'payroll-write', 'executive']
+```
+
+**Files to modify**:
+- `infrastructure/database/payroll/schema.sql` — 9 policies
+- `infrastructure/database/tax/schema.sql` — 8 policies
+- `sample-data/finance-data.sql` — existing policies (already use comma-separated roles)
+- MCP servers: Ensure `SET app.current_user_roles` uses comma-separated format (already do)
+
+**Risk**: Medium — must coordinate schema change with MCP server role format. Test with `SET` command format.
+
+---
+
+#### 2.6: Tighten Database Permissions
+
+**Problem**: `tamshai` user has `GRANT ALL` and `BYPASSRLS` across 3 schemas (payroll, tax, finance). This user is used by identity-sync and data seeding, but also by tests that should enforce RLS.
+
+**Solution**:
+1. Remove `BYPASSRLS` from `tamshai` user in all schemas
+2. Create `tamshai_admin` role with `BYPASSRLS` for sync/seed operations only
+3. Replace `GRANT ALL` with specific grants: `SELECT, INSERT, UPDATE` (no DELETE — use soft deletes)
+4. Keep `tamshai_app` user (already exists for RLS-enforced connections)
+
+**Files to modify**:
+- `infrastructure/database/payroll/schema.sql` — lines 11-19
+- `infrastructure/database/tax/schema.sql` — lines 11-19
+- `sample-data/finance-data.sql` — lines 15-23 + duplicate grants at 1638-1650
+
+**Risk**: Medium — must ensure identity-sync and data seeding still work. Test `--reseed` after changes.
+
+---
+
+#### 2.8: Keycloak Realm Export Cleanup
+
+**Problem**: Dev realm export is 33KB (1,177 lines) vs stage at 24KB (810 lines). Extra 367 lines from test user credentials, event history, and client definitions duplicated in sync-realm.sh.
+
+**Solution**:
+1. Remove client definitions from realm-export-dev.json (sync-realm.sh creates them)
+2. Remove test user credential hashes (sync-realm.sh sets passwords)
+3. Keep only: realm settings, roles, groups, client scopes, authentication flows
+
+**Target**: 33KB → ~18-20KB
+
+---
+
+#### 2.9: Sync Script Data-Driven Refactor
+
+**Problem**: `keycloak/scripts/lib/clients.sh` has 7 identical `sync_*_client()` functions (737 lines). Each follows the same pattern: get JSON, call `create_or_update_client`.
+
+**Solution**: Replace 7 functions with 1 parameterized function + client name array:
+
+```bash
+CLIENTS=(website flutter web-portal mcp-gateway mcp-ui mcp-hr-service integration-runner)
+
+sync_all_clients() {
+  for client in "${CLIENTS[@]}"; do
+    log_info "Syncing ${client} client..."
+    local json
+    json=$(get_${client//-/_}_client_json)
+    create_or_update_client "${client}" "${json}"
+  done
+}
+```
+
+**Target**: 737 → ~300 lines (keep JSON generator functions, remove redundant sync wrappers).
+
+---
+
+#### 2.12: Backup Script Error Handling
+
+**Problem**: `scripts/db/backup.sh` silently continues when `pg_dump` fails. Reports success for corrupted/empty backups.
+
+**Fix** (~15 lines changed):
+```bash
+# Add after pg_dump:
+if [ $? -ne 0 ]; then
+  log_error "pg_dump failed for database: $db"
+  rm -f "$backup_file"
+  return 1
+fi
+
+# Add after gzip:
+local size=$(stat -f%z "${backup_file}.gz" 2>/dev/null || stat -c%s "${backup_file}.gz" 2>/dev/null)
+if [ "$size" -lt 100 ]; then
+  log_error "Backup suspiciously small (${size} bytes): ${backup_file}.gz"
+  return 1
+fi
+```
+
+---
+
+### P2 Clients
+
+#### 3.2: Missing useMemo — ✅ RESOLVED
+
+Explorer confirmed `ExpenseReportsPage.tsx` already has 4 `useMemo` calls for filtered data, stats, and department lists. The scan was outdated.
+
+#### 3.3: Voice Hook Lazy Initialization
+
+**Problem**: All 7 AIQueryPage apps call `useVoiceInput()` and `useVoiceOutput()` at component mount, requesting microphone/speaker access even when voice is disabled.
+
+**Solution**: Create lazy wrapper hooks:
+```typescript
+// clients/web/packages/ui/src/hooks/useLazyVoiceInput.ts
+export function useLazyVoiceInput(enabled: boolean, options: VoiceInputOptions) {
+  const [initialized, setInitialized] = useState(false);
+  // Only initialize when enabled is first set to true
+  useEffect(() => {
+    if (enabled && !initialized) setInitialized(true);
+  }, [enabled, initialized]);
+
+  const result = useVoiceInput(initialized ? options : { disabled: true });
+  return initialized ? result : NOOP_VOICE_INPUT;
+}
+```
+
+**Files to modify**: 7 AIQueryPage files across all web apps (hr, finance, sales, support, payroll, tax, portal).
+
+**Risk**: Low — voice is a secondary feature. Test toggle behavior.
+
+---
+
+#### 3.4: ComponentAction Type Definition
+
+**Problem**: `handleComponentAction(action: any)` in 4+ AIQueryPage files, `requestBody: any` in portal.
+
+**Solution**: Define `ComponentAction` interface in `@tamshai/ui` or `@tamshai/shared`:
+```typescript
+export interface ComponentAction {
+  type: 'navigate' | 'drilldown' | 'filter' | 'refresh';
+  target?: string;
+  params?: Record<string, unknown>;
+}
+```
+
+**Files to modify**: 4-7 AIQueryPage files.
+
+---
+
+### P2 CI/CD
+
+#### 4.7: Test Fixture Isolation — ✅ RESOLVED
+
+Explorer confirmed integration tests already use named fixture reset with `beforeEach` hooks (`resetBudgetTestFixtures()`, `resetExpenseReportFixtures()`). Transaction-based isolation is unnecessary given the current approach.
+
+#### 4.8: Playwright Timeout Increase
+
+**Current**: 60s per test, `trace: 'on-first-retry'`
+
+**Fix** (playwright.config.ts):
+```typescript
+timeout: 120_000,           // 120s for SSO + streaming
+trace: 'retain-on-failure', // Keep traces for debugging
+expect: { timeout: 15_000 },
+use: { navigationTimeout: 45_000 },
+```
+
+**File**: `tests/e2e/playwright.config.ts`
+
+---
+
+#### 4.9: k6 Threshold Tightening
+
+**Current issue**: Load test `errors` counter threshold is `rate<0.05` (5% acceptable). Smoke test is `rate<0.01` (1%).
+
+**Fix** (load.js):
+```javascript
+thresholds: {
+  // Tighten error rate
+  'errors': ['rate<0.01'],           // Was: rate<0.05
+  http_req_failed: ['rate<0.005'],   // Was: rate<0.01
+  // Keep duration thresholds as-is (already reasonable)
+}
+```
+
+**File**: `tests/performance/scenarios/load.js`
+
+---
+
+### P2 Execution Order
+
+**Phase A — Quick wins (< 1 hour each)**:
+1. 2.12: Backup script error handling (30 min)
+2. 4.8: Playwright timeout increase (15 min)
+3. 4.9: k6 threshold tightening (30 min)
+4. 3.4: ComponentAction type definition (30 min)
+
+**Phase B — Service consolidation (1-2 hours each)**:
+5. 1.8: Health check factory in shared (1-2 hrs)
+6. 1.7: Authorization middleware extraction (2-3 hrs)
+7. 3.3: Voice hook lazy initialization (1 hr)
+
+**Phase C — Infrastructure (1-2 hours each)**:
+8. 2.4: Dockerfile template (1-2 hrs)
+9. 2.5: RLS LIKE → array containment (1 hr)
+10. 2.6: Tighten DB permissions (2 hrs)
+11. 2.9: Sync script data-driven refactor (1-2 hrs)
+12. 2.8: Keycloak realm export cleanup (1 hr)
+
+**Deferred**:
+- 2.7: RLS policy complexity — acceptable as-is, consolidation risks regressions
+- 2.11: Terraform PowerShell — platform-specific but working, low ROI
+- 1.9, 1.10, 3.2, 4.7: Already resolved
+
+---
+
 *Generated by Claude-QA code optimization scan, 2026-02-14*
 *Updated with P1 completion status, 2026-02-15*
 *Updated with P1 Infrastructure & CI/CD completion, 2026-02-15*
+*Updated with P2 implementation plan, 2026-02-15*

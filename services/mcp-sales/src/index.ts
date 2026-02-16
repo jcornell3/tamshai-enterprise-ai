@@ -15,7 +15,7 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
-import { requireGatewayAuth, createLogger, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, hasDomainAccess, hasDomainWriteAccess } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, createHealthRoutes, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, hasDomainWriteAccess, createDomainAuthMiddleware } from '@tamshai/shared';
 import { UserContext, checkConnection, closeConnection, getCollection, buildRoleFilter } from './database/connection';
 import { handleOpportunityNotFound, handleCustomerNotFound, handleInsufficientPermissions, handleCannotDeleteWonOpportunity, handleDatabaseError, withErrorHandling } from './utils/error-handler';
 import { storePendingConfirmation } from './utils/redis';
@@ -37,21 +37,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Authorization helper - checks if user has Sales access (uses shared utility)
-const hasSalesAccess = (roles: string[]) => hasDomainAccess(roles, 'sales');
+// Domain authorization middleware - all /tools/* routes require sales read access
+app.use('/tools', createDomainAuthMiddleware('sales'));
 
 // =============================================================================
 // HEALTH CHECK
 // =============================================================================
 
-app.get('/health', async (req: Request, res: Response) => {
-  const dbHealthy = await checkConnection();
-  if (!dbHealthy) {
-    res.status(503).json({ status: 'unhealthy', database: 'disconnected', timestamp: new Date().toISOString() });
-    return;
-  }
-  res.json({ status: 'healthy', service: 'mcp-sales', version: '1.4.0', database: 'connected', timestamp: new Date().toISOString() });
-});
+app.use(createHealthRoutes('mcp-sales', [
+  { name: 'database', check: async () => { try { return await checkConnection(); } catch { return false; } } },
+]));
 
 // =============================================================================
 // TOOL: list_opportunities (v1.4 with cursor-based pagination)
@@ -1105,16 +1100,6 @@ app.post('/tools/list_opportunities', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await listOpportunities({ stage, status, limit, cursor }, userContext);
   res.json(result);
@@ -1127,16 +1112,6 @@ app.post('/tools/list_customers', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await listCustomers({ industry, status, minRevenue, maxRevenue, limit, cursor }, userContext);
   res.json(result);
@@ -1149,16 +1124,6 @@ app.post('/tools/get_customer', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await getCustomer({ customerId }, userContext);
   res.json(result);
@@ -1171,16 +1136,6 @@ app.post('/tools/delete_opportunity', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await deleteOpportunity({ opportunityId }, userContext);
   res.json(result);
@@ -1193,16 +1148,6 @@ app.post('/tools/close_opportunity', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await closeOpportunity({ opportunityId, outcome, reason }, userContext);
   res.json(result);
@@ -1215,16 +1160,6 @@ app.post('/tools/delete_customer', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await deleteCustomer({ customerId, reason }, userContext);
   res.json(result);
@@ -1237,16 +1172,6 @@ app.post('/tools/list_leads', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await listLeads({ status, source, minScore, owner, limit, cursor }, userContext);
   res.json(result);
@@ -1259,15 +1184,6 @@ app.post('/tools/get_lead', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await getLead({ leadId }, userContext);
   res.json(result);
@@ -1280,15 +1196,6 @@ app.post('/tools/convert_lead', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await convertLead({ leadId, opportunity, customer }, userContext);
   res.json(result);
@@ -1301,16 +1208,6 @@ app.post('/tools/get_forecast', async (req: Request, res: Response) => {
     return;
   }
 
-  // Authorization check - must have Sales access
-  if (!hasSalesAccess(userContext.roles)) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Sales access (sales-read, sales-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Sales access permissions.',
-    });
-    return;
-  }
 
   const result = await getForecast({ period, owner }, userContext);
   res.json(result);

@@ -13,7 +13,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth, apiConfig } from '@tamshai/auth';
 import { ApprovalCard, ComponentRenderer, useVoiceInput, useVoiceOutput } from '@tamshai/ui';
-import type { ComponentResponse } from '@tamshai/ui/dist/components/generative/types';
+import type { ComponentResponse, ComponentAction } from '@tamshai/ui/dist/components/generative/types';
 
 interface Message {
   id: string;
@@ -46,20 +46,22 @@ export function AIQueryPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentMessageContentRef = useRef<string>('');
 
-  // Voice input hook - captures speech and updates query
+  // Voice input hook - lazy: only initializes when voice is enabled
   const { isListening, transcript, error: voiceInputError, startListening, stopListening } = useVoiceInput({
     language: 'en-US',
     interimResults: false,
+    enabled: voiceEnabled,
     onResult: (recognizedText) => {
       setQuery(recognizedText);
     },
   });
 
-  // Voice output hook - speaks component narration
+  // Voice output hook - lazy: only initializes when voice is enabled
   const { speak, stop: stopSpeaking, isSpeaking } = useVoiceOutput({
     language: 'en-US',
     rate: 1.0,
     pitch: 1.0,
+    enabled: voiceEnabled,
   });
 
   // Update query input when transcript changes
@@ -128,7 +130,7 @@ export function AIQueryPage() {
   /**
    * Handle component actions (navigate, drilldown, etc.)
    */
-  const handleComponentAction = (action: any) => {
+  const handleComponentAction = (action: ComponentAction) => {
     console.log('Component action:', action);
     // TODO: Implement action handling (navigation, drilldowns)
   };

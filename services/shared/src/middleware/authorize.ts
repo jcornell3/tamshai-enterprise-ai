@@ -183,6 +183,101 @@ export function requireWriteAccess(domain: Domain) {
   return requireRole(writeRole);
 }
 
+// =============================================================================
+// DOMAIN AUTH MIDDLEWARE FACTORIES
+// =============================================================================
+
+/**
+ * Express middleware factory that checks domain access from userContext in request body.
+ * Use as route-level middleware to replace inline hasDomainAccess() checks.
+ *
+ * Usage:
+ *   // Apply to all tool routes for a domain (read access)
+ *   app.use('/tools', createDomainAuthMiddleware('payroll'));
+ *
+ *   // Apply to specific write routes
+ *   app.post('/tools/create_pay_run', createDomainAuthMiddleware('payroll', 'write'), handler);
+ *
+ * @param domain - The domain to check access for (hr, finance, sales, support, payroll, tax)
+ * @param access - 'read' (default) or 'write' access level
+ * @returns Express middleware that checks domain authorization
+ */
+export function createDomainAuthMiddleware(
+  domain: Domain,
+  access: 'read' | 'write' = 'read',
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const roles: string[] = req.body?.userContext?.roles || [];
+    const hasAccess = access === 'write'
+      ? hasDomainWriteAccess(roles, domain)
+      : hasDomainAccess(roles, domain);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. Requires ${domain}-${access} role.`,
+        suggestedAction: `User needs ${domain}-${access} or executive role to access this resource.`,
+      });
+    }
+    next();
+  };
+}
+
+/**
+ * Express middleware factory that checks Finance tiered access from userContext in request body.
+ * Finance uses a tiered authorization model where different tools require different access levels.
+ *
+ * Usage:
+ *   // TIER 1: All employees (self-access via RLS)
+ *   app.post('/tools/list_expense_reports', createFinanceTierAuthMiddleware('expenses'), handler);
+ *
+ *   // TIER 2: Managers and above
+ *   app.post('/tools/list_budgets', createFinanceTierAuthMiddleware('budgets'), handler);
+ *
+ *   // TIER 3: Finance personnel only
+ *   app.post('/tools/list_invoices', createFinanceTierAuthMiddleware('dashboard'), handler);
+ *
+ * @param tier - The finance tier to check (expenses, budgets, dashboard, write)
+ * @returns Express middleware that checks finance tier authorization
+ */
+export function createFinanceTierAuthMiddleware(
+  tier: keyof typeof FINANCE_TIERS,
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const roles: string[] = req.body?.userContext?.roles || [];
+
+    if (!hasFinanceTierAccess(roles, tier)) {
+      const tierDescriptions: Record<string, string> = {
+        expenses: 'employee, manager, finance, or executive',
+        budgets: 'employee, manager, finance, or executive',
+        dashboard: 'finance-read, finance-write, or executive',
+        write: 'finance-write or executive',
+      };
+      return res.status(403).json({
+        status: 'error',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        message: `Access denied. This operation requires ${tierDescriptions[tier] || tier} role.`,
+        suggestedAction: 'Contact your administrator to request Finance access permissions.',
+      });
+    }
+    next();
+  };
+}
+
+/**
+ * Express middleware factory that checks Finance write access from userContext in request body.
+ * Shorthand for createDomainAuthMiddleware('finance', 'write').
+ *
+ * Usage:
+ *   app.post('/tools/delete_invoice', createFinanceWriteAuthMiddleware(), handler);
+ *
+ * @returns Express middleware that checks finance write authorization
+ */
+export function createFinanceWriteAuthMiddleware() {
+  return createDomainAuthMiddleware('finance', 'write');
+}
+
 // Legacy compatibility helpers
 export const hasHRAccess = (roles: string[]) => hasDomainAccess(roles, 'hr');
 export const hasFinanceAccess = (roles: string[]) => hasDomainAccess(roles, 'finance');

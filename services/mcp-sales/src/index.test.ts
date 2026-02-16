@@ -41,6 +41,39 @@ jest.mock('@tamshai/shared', () => ({
   hasDomainWriteAccess: (roles: string[], domain: string) => {
     return roles.some((r: string) => r === `${domain}-write` || r === 'executive');
   },
+  createDomainAuthMiddleware: (domain: string) => (req: any, res: any, next: any) => {
+    const roles = req.body?.userContext?.roles || [];
+    const hasAccess = roles.some((r: string) => r === `${domain}-read` || r === `${domain}-write` || r === 'executive');
+    if (!hasAccess) {
+      return res.status(403).json({ status: 'error', code: 'INSUFFICIENT_PERMISSIONS', message: `Access denied. Requires ${domain} roles.` });
+    }
+    next();
+  },
+  createHealthRoutes: jest.fn((serviceName: string, checks: any[]) => {
+    const express = require('express');
+    const router = express.Router();
+    router.get('/health', async (_req: any, res: any) => {
+      const results: Record<string, boolean> = {};
+      let allHealthy = true;
+      for (const c of checks) {
+        try {
+          const healthy = await c.check();
+          results[c.name] = healthy;
+          if (!healthy) allHealthy = false;
+        } catch {
+          results[c.name] = false;
+          allHealthy = false;
+        }
+      }
+      res.status(allHealthy ? 200 : 503).json({
+        status: allHealthy ? 'healthy' : 'unhealthy',
+        service: serviceName,
+        checks: results,
+        timestamp: new Date().toISOString(),
+      });
+    });
+    return router;
+  }),
   ErrorCode: {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
     DATABASE_ERROR: 'DATABASE_ERROR',
@@ -118,7 +151,7 @@ describe('MCP Sales Server', () => {
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('healthy');
       expect(response.body.service).toBe('mcp-sales');
-      expect(response.body.database).toBe('connected');
+      expect(response.body.checks.database).toBe(true);
     });
 
     it('should return unhealthy status when database is disconnected', async () => {
@@ -128,7 +161,7 @@ describe('MCP Sales Server', () => {
 
       expect(response.status).toBe(503);
       expect(response.body.status).toBe('unhealthy');
-      expect(response.body.database).toBe('disconnected');
+      expect(response.body.checks.database).toBe(false);
     });
   });
 
@@ -196,13 +229,13 @@ describe('MCP Sales Server', () => {
   // ===========================================================================
 
   describe('POST /tools/list_opportunities', () => {
-    it('should return 400 when userContext is missing', async () => {
+    it('should return 403 when userContext is missing', async () => {
       const response = await request(app)
         .post('/tools/list_opportunities')
         .send({});
 
-      expect(response.status).toBe(400);
-      expect(response.body.code).toBe('MISSING_USER_CONTEXT');
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe('INSUFFICIENT_PERMISSIONS');
     });
 
     it('should return opportunities list', async () => {
@@ -301,13 +334,13 @@ describe('MCP Sales Server', () => {
   // ===========================================================================
 
   describe('POST /tools/list_customers', () => {
-    it('should return 400 when userContext is missing', async () => {
+    it('should return 403 when userContext is missing', async () => {
       const response = await request(app)
         .post('/tools/list_customers')
         .send({});
 
-      expect(response.status).toBe(400);
-      expect(response.body.code).toBe('MISSING_USER_CONTEXT');
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe('INSUFFICIENT_PERMISSIONS');
     });
 
     it('should return 403 without sales access', async () => {
@@ -374,13 +407,13 @@ describe('MCP Sales Server', () => {
   // ===========================================================================
 
   describe('POST /tools/get_customer', () => {
-    it('should return 400 when userContext is missing', async () => {
+    it('should return 403 when userContext is missing', async () => {
       const response = await request(app)
         .post('/tools/get_customer')
         .send({ customerId: new ObjectId().toString() });
 
-      expect(response.status).toBe(400);
-      expect(response.body.code).toBe('MISSING_USER_CONTEXT');
+      expect(response.status).toBe(403);
+      expect(response.body.code).toBe('INSUFFICIENT_PERMISSIONS');
     });
 
     it('should return customer details', async () => {
@@ -425,12 +458,12 @@ describe('MCP Sales Server', () => {
   // ===========================================================================
 
   describe('POST /tools/delete_opportunity', () => {
-    it('should return 400 when userContext is missing', async () => {
+    it('should return 403 when userContext is missing', async () => {
       const response = await request(app)
         .post('/tools/delete_opportunity')
         .send({ opportunityId: new ObjectId().toString() });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(403);
     });
 
     it('should return 403 without write permission', async () => {

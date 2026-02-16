@@ -34,6 +34,8 @@ export interface UseVoiceInputOptions {
   continuous?: boolean;
   /** Whether to return interim results (default: false) */
   interimResults?: boolean;
+  /** Whether voice input is enabled. When false, skips SpeechRecognition initialization (default: true) */
+  enabled?: boolean;
   /** Callback when speech is recognized */
   onResult?: (transcript: string) => void;
   /** Callback when an error occurs */
@@ -110,6 +112,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
     language = 'en-US',
     continuous = false,
     interimResults = false,
+    enabled = true,
     onResult,
     onError,
     onEnd,
@@ -118,6 +121,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(() => {
+    if (!enabled) return null;
     // Check for browser support on initial render
     const SpeechRecognitionClass = getSpeechRecognition();
     if (!SpeechRecognitionClass) {
@@ -148,8 +152,10 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
   }, [onEnd]);
 
   // Create recognition instance synchronously using useMemo
-  // This ensures the instance is available immediately when the hook renders
+  // Skips initialization when disabled to avoid unnecessary browser API access
   const recognition = useMemo(() => {
+    if (!enabled) return null;
+
     const SpeechRecognitionClass = getSpeechRecognition();
     if (!SpeechRecognitionClass) {
       return null;
@@ -161,7 +167,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}): UseVoiceInput
     instance.interimResults = interimResults;
 
     return instance;
-  }, [language, continuous, interimResults]);
+  }, [language, continuous, interimResults, enabled]);
 
   // Store recognition in a ref for cleanup access
   const recognitionRef = useRef<SpeechRecognition | null>(recognition);

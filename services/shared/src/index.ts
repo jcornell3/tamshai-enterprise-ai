@@ -21,3 +21,4 @@ export * from './resilience';
 export * from './types';
 export * from './errors';
 export * from './utils';
+export { createHealthRoutes, type HealthCheck } from './routes/health';

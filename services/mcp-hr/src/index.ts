@@ -14,7 +14,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import { Queue } from 'bullmq';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { createLogger, requireGatewayAuth, hasDomainAccess, MCPToolResponse } from '@tamshai/shared';
+import { createLogger, requireGatewayAuth, createHealthRoutes, createDomainAuthMiddleware, MCPToolResponse } from '@tamshai/shared';
 import pool, { UserContext, checkConnection, closePool, queryWithRLS } from './database/connection';
 import {
   IdentityService,
@@ -81,26 +81,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // HEALTH CHECK
 // =============================================================================
 
-app.get('/health', async (req: Request, res: Response) => {
-  const dbHealthy = await checkConnection();
-
-  if (!dbHealthy) {
-    res.status(503).json({
-      status: 'unhealthy',
-      database: 'disconnected',
-      timestamp: new Date().toISOString(),
-    });
-    return;
-  }
-
-  res.json({
-    status: 'healthy',
-    service: 'mcp-hr',
-    version: '1.4.0',
-    database: 'connected',
-    timestamp: new Date().toISOString(),
-  });
-});
+app.use(createHealthRoutes('mcp-hr', [
+  { name: 'database', check: async () => { try { return await checkConnection(); } catch { return false; } } },
+]));
 
 // =============================================================================
 // MCP QUERY ENDPOINT
@@ -288,7 +271,7 @@ app.post('/query', async (req: Request, res: Response) => {
 /**
  * Get Employee Tool
  */
-app.post('/tools/get_employee', async (req: Request, res: Response) => {
+app.post('/tools/get_employee', createDomainAuthMiddleware('hr'), async (req: Request, res: Response) => {
   try {
     const { userContext, employeeId } = req.body;
 
@@ -297,17 +280,6 @@ app.post('/tools/get_employee', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
-      });
-      return;
-    }
-
-    // Authorization check - must have HR access
-    if (!hasDomainAccess(userContext.roles, 'hr')) {
-      res.status(403).json({
-        status: 'error',
-        code: 'INSUFFICIENT_PERMISSIONS',
-        message: `Access denied. This operation requires HR access (hr-read, hr-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-        suggestedAction: 'Contact your administrator to request HR access permissions.',
       });
       return;
     }
@@ -327,7 +299,7 @@ app.post('/tools/get_employee', async (req: Request, res: Response) => {
 /**
  * List Employees Tool (v1.4 with truncation detection)
  */
-app.post('/tools/list_employees', async (req: Request, res: Response) => {
+app.post('/tools/list_employees', createDomainAuthMiddleware('hr'), async (req: Request, res: Response) => {
   try {
     const { userContext, department, location, managerId, limit, cursor } = req.body;
 
@@ -336,17 +308,6 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
-      });
-      return;
-    }
-
-    // Authorization check - must have HR access
-    if (!hasDomainAccess(userContext.roles, 'hr')) {
-      res.status(403).json({
-        status: 'error',
-        code: 'INSUFFICIENT_PERMISSIONS',
-        message: `Access denied. This operation requires HR access (hr-read, hr-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-        suggestedAction: 'Contact your administrator to request HR access permissions.',
       });
       return;
     }
@@ -366,7 +327,7 @@ app.post('/tools/list_employees', async (req: Request, res: Response) => {
 /**
  * Get Org Chart Tool
  */
-app.post('/tools/get_org_chart', async (req: Request, res: Response) => {
+app.post('/tools/get_org_chart', createDomainAuthMiddleware('hr'), async (req: Request, res: Response) => {
   try {
     const { userContext, rootEmployeeId, maxDepth } = req.body;
 
@@ -375,17 +336,6 @@ app.post('/tools/get_org_chart', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
-      });
-      return;
-    }
-
-    // Authorization check - must have HR access
-    if (!hasDomainAccess(userContext.roles, 'hr')) {
-      res.status(403).json({
-        status: 'error',
-        code: 'INSUFFICIENT_PERMISSIONS',
-        message: `Access denied. This operation requires HR access (hr-read, hr-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-        suggestedAction: 'Contact your administrator to request HR access permissions.',
       });
       return;
     }
@@ -499,7 +449,7 @@ app.post('/tools/list_team_time_off_requests', async (req: Request, res: Respons
  * Returns time-off requests with status = 'pending' awaiting approval.
  * Used by managers and HR staff to view requests needing action.
  */
-app.post('/tools/get_pending_time_off', async (req: Request, res: Response) => {
+app.post('/tools/get_pending_time_off', createDomainAuthMiddleware('hr'), async (req: Request, res: Response) => {
   try {
     const { userContext, typeCode, limit, cursor } = req.body;
 
@@ -508,17 +458,6 @@ app.post('/tools/get_pending_time_off', async (req: Request, res: Response) => {
         status: 'error',
         code: 'MISSING_USER_CONTEXT',
         message: 'User context is required',
-      });
-      return;
-    }
-
-    // Authorization check - must have HR access or be a manager
-    if (!hasDomainAccess(userContext.roles, 'hr')) {
-      res.status(403).json({
-        status: 'error',
-        code: 'INSUFFICIENT_PERMISSIONS',
-        message: `Access denied. This operation requires HR or manager access. You have: ${userContext.roles.join(', ')}`,
-        suggestedAction: 'Contact your administrator to request appropriate permissions.',
       });
       return;
     }

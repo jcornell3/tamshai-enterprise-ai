@@ -14,7 +14,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { requireGatewayAuth, createLogger, hasDomainAccess, hasDomainWriteAccess, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, createHealthRoutes, hasDomainWriteAccess, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, createDomainAuthMiddleware } from '@tamshai/shared';
 import { storePendingConfirmation } from './utils/redis';
 import { ISupportBackend, UserContext } from './database/types';
 import { createSupportBackend } from './database/backend.factory';
@@ -73,29 +73,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // HEALTH CHECK
 // =============================================================================
 
-app.get('/health', async (req: Request, res: Response) => {
-  const isHealthy = await backend.checkConnection();
-  if (!isHealthy) {
-    res.status(503).json({
-      status: 'unhealthy',
-      service: 'mcp-support',
-      version: '1.4.0',
-      backend: backendType,
-      database: 'disconnected',
-      timestamp: new Date().toISOString(),
-    });
-    return;
-  }
-
-  res.json({
-    status: 'healthy',
-    service: 'mcp-support',
-    version: '1.4.0',
-    backend: backendType,
-    database: 'connected',
-    timestamp: new Date().toISOString(),
-  });
-});
+app.use(createHealthRoutes('mcp-support', [
+  { name: 'database', check: async () => { try { return await backend.checkConnection(); } catch { return false; } } },
+]));
 
 // =============================================================================
 // TOOL: search_tickets (v1.4 with cursor-based pagination)
@@ -1004,23 +984,13 @@ app.post('/query', async (req: Request, res: Response) => {
   res.json({ status: 'success', message: 'MCP Support Server ready', availableTools: ['search_tickets', 'list_tickets', 'search_knowledge_base', 'close_ticket', 'get_escalation_targets', 'escalate_ticket', 'get_sla_summary', 'get_sla_tickets', 'get_agent_metrics'], userRoles: userContext.roles });
 });
 
-app.post('/tools/search_tickets', async (req: Request, res: Response) => {
+app.post('/tools/search_tickets', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, query, status, priority, assignedTo, limit, cursor } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await searchTickets({ query, status, priority, assignedTo, limit, cursor }, userContext);
   res.json(result);
@@ -1040,175 +1010,97 @@ app.post('/tools/list_tickets', async (req: Request, res: Response) => {
   res.json(result);
 });
 
-app.post('/tools/search_knowledge_base', async (req: Request, res: Response) => {
+app.post('/tools/search_knowledge_base', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, query, category, limit, cursor } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await searchKnowledgeBase({ query, category, limit, cursor }, userContext);
   res.json(result);
 });
 
-app.post('/tools/get_knowledge_article', async (req: Request, res: Response) => {
+app.post('/tools/get_knowledge_article', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, articleId } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await getKnowledgeArticle({ articleId }, userContext);
   res.json(result);
 });
 
-app.post('/tools/close_ticket', async (req: Request, res: Response) => {
+app.post('/tools/close_ticket', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, ticketId, resolution } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await closeTicket({ ticketId, resolution }, userContext);
   res.json(result);
 });
 
-app.post('/tools/get_sla_summary', async (req: Request, res: Response) => {
+app.post('/tools/get_sla_summary', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await getSLASummary(userContext);
   res.json(result);
 });
 
-app.post('/tools/get_sla_tickets', async (req: Request, res: Response) => {
+app.post('/tools/get_sla_tickets', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, status, limit } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await getSLATickets({ status, limit }, userContext);
   res.json(result);
 });
 
-app.post('/tools/get_agent_metrics', async (req: Request, res: Response) => {
+app.post('/tools/get_agent_metrics', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, period } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  // Authorization check - must have Support access
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await getAgentMetrics({ period }, userContext);
   res.json(result);
 });
 
-app.post('/tools/get_escalation_targets', async (req: Request, res: Response) => {
+app.post('/tools/get_escalation_targets', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await getEscalationTargets(userContext);
   res.json(result);
 });
 
-app.post('/tools/escalate_ticket', async (req: Request, res: Response) => {
+app.post('/tools/escalate_ticket', createDomainAuthMiddleware('support'), async (req: Request, res: Response) => {
   const { userContext, ticketId, escalation_level, target_id, reason, notes } = req.body;
   if (!userContext?.userId) {
     res.status(400).json({ status: 'error', code: 'MISSING_USER_CONTEXT', message: 'User context is required' });
     return;
   }
 
-  if (!hasDomainAccess(userContext.roles, 'support')) {
-    res.status(403).json({
-      status: 'error',
-      code: 'INSUFFICIENT_PERMISSIONS',
-      message: `Access denied. This operation requires Support access (support-read, support-write, or executive role). You have: ${userContext.roles.join(', ')}`,
-      suggestedAction: 'Contact your administrator to request Support access permissions.',
-    });
-    return;
-  }
 
   const result = await escalateTicket({ ticketId, escalation_level, target_id, reason, notes }, userContext);
   res.json(result);

@@ -63,20 +63,22 @@ export function useAIQuery({ domain }: UseAIQueryOptions): UseAIQueryReturn {
   const [directiveError, setDirectiveError] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
 
-  // Voice input hook
+  // Voice input hook — lazy: only initializes SpeechRecognition when voice is enabled
   const { isListening, transcript, error: voiceInputError, startListening, stopListening } = useVoiceInput({
     language: 'en-US',
     interimResults: false,
+    enabled: voiceEnabled,
     onResult: (recognizedText: string) => {
       setQuery(recognizedText);
     },
   });
 
-  // Voice output hook
+  // Voice output hook — lazy: only initializes speechSynthesis when voice is enabled
   const { speak, stop: stopSpeaking, isSpeaking } = useVoiceOutput({
     language: 'en-US',
     rate: 1.0,
     pitch: 1.0,
+    enabled: voiceEnabled,
   });
 
   // Update query input when transcript changes

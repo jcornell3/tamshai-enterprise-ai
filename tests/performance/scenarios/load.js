@@ -44,7 +44,7 @@ export const options = {
   thresholds: {
     // Overall HTTP performance
     http_req_duration: ['p(95)<500', 'p(99)<1000'],   // P95 < 500ms, P99 < 1s
-    http_req_failed: ['rate<0.01'],                   // Less than 1% HTTP errors
+    http_req_failed: ['rate<0.005'],                   // Less than 0.5% HTTP errors
 
     // Endpoint-specific thresholds
     'health_duration': ['p(95)<100'],                 // Health: 100ms
@@ -56,7 +56,7 @@ export const options = {
     'http_reqs': ['rate>50'],                         // At least 50 req/s
 
     // Custom error tracking
-    'errors': ['rate<0.05'],                          // Less than 5% custom errors
+    'errors': ['rate<0.01'],                          // Less than 1% custom errors
 
     // Check pass rate
     'checks': ['rate>0.95'],                          // 95% of checks must pass

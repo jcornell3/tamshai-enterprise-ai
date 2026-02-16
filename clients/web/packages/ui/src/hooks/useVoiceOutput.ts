@@ -18,6 +18,8 @@ export interface UseVoiceOutputOptions {
   volume?: number;
   /** Voice name to use (will fall back to first available voice if not found) */
   voiceName?: string;
+  /** Whether voice output is enabled. When false, skips speechSynthesis initialization (default: true) */
+  enabled?: boolean;
   /** Callback when speech starts */
   onStart?: () => void;
   /** Callback when speech ends */
@@ -52,6 +54,7 @@ export function useVoiceOutput(options: UseVoiceOutputOptions = {}): UseVoiceOut
     pitch = 1,
     volume = 1,
     voiceName,
+    enabled = true,
     onStart,
     onEnd,
     onError,
@@ -75,8 +78,10 @@ export function useVoiceOutput(options: UseVoiceOutputOptions = {}): UseVoiceOut
     onErrorRef.current = onError;
   }, [onStart, onEnd, onError]);
 
-  // Check for browser support and load voices
+  // Check for browser support and load voices (skipped when disabled)
   useEffect(() => {
+    if (!enabled) return;
+
     if (typeof window === 'undefined' || !window.speechSynthesis) {
       setIsSupported(false);
       setError('Speech synthesis is not supported in this browser');
@@ -102,7 +107,7 @@ export function useVoiceOutput(options: UseVoiceOutputOptions = {}): UseVoiceOut
         window.speechSynthesis.cancel();
       }
     };
-  }, []);
+  }, [enabled]);
 
   const speak = useCallback(
     (text: string) => {

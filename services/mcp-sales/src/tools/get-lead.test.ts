@@ -40,6 +40,20 @@ jest.mock('@tamshai/shared', () => ({
   hasDomainWriteAccess: (roles: string[], domain: string) => {
     return roles.some((r: string) => r === `${domain}-write` || r === 'executive');
   },
+  createDomainAuthMiddleware: (domain: string) => (req: any, res: any, next: any) => {
+    const roles = req.body?.userContext?.roles || [];
+    const hasAccess = roles.some((r: string) => r === `${domain}-read` || r === `${domain}-write` || r === 'executive');
+    if (!hasAccess) {
+      return res.status(403).json({ status: 'error', code: 'INSUFFICIENT_PERMISSIONS', message: `Access denied.` });
+    }
+    next();
+  },
+  createHealthRoutes: () => {
+    const express = require('express');
+    const router = express.Router();
+    router.get('/health', (_req: any, res: any) => res.json({ status: 'healthy' }));
+    return router;
+  },
   ErrorCode: {
     INTERNAL_ERROR: 'INTERNAL_ERROR',
     DATABASE_ERROR: 'DATABASE_ERROR',
@@ -150,8 +164,8 @@ describe('get_lead tool', () => {
       .post('/tools/get_lead')
       .send({ leadId });
 
-    expect(response.status).toBe(400);
-    expect(response.body.code).toBe('MISSING_USER_CONTEXT');
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('INSUFFICIENT_PERMISSIONS');
   });
 });
 
