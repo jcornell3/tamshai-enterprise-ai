@@ -40,11 +40,23 @@ const KEYCLOAK_URLS: Record<string, string> = {
 };
 
 /**
- * Ensure the Keycloak base URL ends with /auth (context path).
- * Idempotent: normalizeKeycloakUrl('.../auth') === '.../auth'
+ * Normalize Keycloak URL for the current environment.
+ *
+ * - CI: Keycloak runs without /auth prefix (matches integration tests)
+ * - Other environments: Adds /auth if not present (dev, stage, prod all use /auth)
+ *
+ * Idempotent: normalizeKeycloakUrl('.../auth') === '.../auth' (non-CI)
  */
 function normalizeKeycloakUrl(url: string): string {
   const stripped = url.replace(/\/+$/, '');
+
+  // In CI, Keycloak runs without /auth prefix (no http-relative-path)
+  if (process.env.CI) {
+    // If URL already has /auth, keep it; otherwise, don't add it
+    return stripped;
+  }
+
+  // Non-CI environments use /auth context path
   return stripped.endsWith('/auth') ? stripped : `${stripped}/auth`;
 }
 

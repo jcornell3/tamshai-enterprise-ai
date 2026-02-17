@@ -1089,6 +1089,7 @@ jobs:
       # Start Keycloak (Required for JWT validation)
       # Use import-realm: false and configure via Terraform to ensure
       # mcp-integration-runner client is created with correct secret
+      # Match integration tests: no path prefix (http-relative-path: '')
       # =========================================================================
       - name: Setup Keycloak
         id: keycloak
@@ -1098,7 +1099,7 @@ jobs:
           keycloak-version: '26.0.7'
           import-realm: 'false'
           admin-password: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
-          http-relative-path: '/auth'
+          http-relative-path: ''
           extra-features: 'token-exchange,admin-fine-grained-authz'
 
       - name: Setup Terraform
@@ -1120,11 +1121,11 @@ jobs:
           terraform init
 
           # Apply Terraform configuration
-          # Use /auth path prefix to match setup-keycloak action
+          # No /auth path prefix - matches integration tests
           echo "Creating Keycloak realm, roles, users, and clients with Terraform..."
           terraform apply -auto-approve \
             -var-file=environments/ci.tfvars \
-            -var='keycloak_url=http://localhost:${{ vars.DEV_KEYCLOAK }}/auth' \
+            -var='keycloak_url=http://localhost:${{ vars.DEV_KEYCLOAK }}' \
             -var='valid_redirect_uris=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}/*"]' \
             -var='web_origins=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}"]'
 
@@ -1135,8 +1136,8 @@ jobs:
 
       - name: Verify Keycloak Configuration
         run: |
-          # Verify tamshai-corp realm was created by Terraform
-          if curl -sf http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp > /dev/null 2>&1; then
+          # Verify tamshai-corp realm was created by Terraform (no /auth prefix)
+          if curl -sf http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp > /dev/null 2>&1; then
             echo "✅ tamshai-corp realm is accessible"
           else
             echo "❌ tamshai-corp realm not found"
@@ -1174,12 +1175,13 @@ jobs:
           PORT: ${{ vars.DEV_MCP_GATEWAY }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
+          # No /auth path prefix - matches integration tests
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_CLIENT_ID: mcp-gateway
           MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
-          KEYCLOAK_ISSUER: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp
-          JWKS_URI: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp/protocol/openid-connect/certs
+          KEYCLOAK_ISSUER: http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp
+          JWKS_URI: http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp/protocol/openid-connect/certs
           TOKEN_REVOCATION_FAIL_OPEN: 'true'
           LOG_LEVEL: warn
           MCP_HR_URL: http://localhost:${{ vars.DEV_MCP_HR }}
@@ -1212,7 +1214,8 @@ jobs:
         run: npm test -- --project=api
         env:
           MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
-          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
+          # No /auth path prefix - matches integration tests
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           PORT_KEYCLOAK: ${{ vars.DEV_KEYCLOAK }}
           PORT_MCP_GATEWAY: ${{ vars.DEV_MCP_GATEWAY }}
