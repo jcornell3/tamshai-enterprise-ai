@@ -317,40 +317,22 @@ resource "local_file" "docker_env" {
     keycloak_db_password = data.external.github_secrets.result.keycloak_db_password
     mongodb_password     = data.external.github_secrets.result.mongodb_password
 
-    # Keycloak (from GitHub secrets, fallback to variable)
-    keycloak_admin = "admin"
-    keycloak_admin_password = coalesce(
-      try(data.external.github_secrets.result.keycloak_admin_password, ""),
-      var.keycloak_admin_password
-    )
+    # Keycloak (from GitHub secrets only - no fallbacks)
+    keycloak_admin          = "admin"
+    keycloak_admin_password = data.external.github_secrets.result.keycloak_admin_password
 
-    # MinIO (from GitHub secrets, fallback to variable)
-    minio_root_user = coalesce(
-      try(data.external.github_secrets.result.minio_root_user, ""),
-      var.minio_root_user
-    )
-    minio_root_password = coalesce(
-      try(data.external.github_secrets.result.minio_root_password, ""),
-      var.minio_root_password
-    )
+    # MinIO (from GitHub secrets only - no fallbacks)
+    minio_root_user     = data.external.github_secrets.result.minio_root_user
+    minio_root_password = data.external.github_secrets.result.minio_root_password
 
     # Redis
     redis_password = data.external.github_secrets.result.redis_password
 
-    # Vault (from GitHub secrets, fallback to dev token)
-    vault_dev_root_token = coalesce(
-      try(data.external.github_secrets.result.vault_root_token, ""),
-      "dev-root-token"
-    )
+    # Vault (from GitHub secrets only - no fallbacks)
+    vault_dev_root_token = data.external.github_secrets.result.vault_root_token
 
-    # MCP Gateway
-    # Use fetched key from GitHub secrets (CLAUDE_API_KEY_DEV), fallback to variable
-    # Note: coalesce fails on all-empty, so we provide "not-set" as final fallback
-    claude_api_key = coalesce(
-      data.external.github_secrets.result.claude_api_key,
-      var.claude_api_key,
-      "not-set"
-    )
+    # MCP Gateway (from GitHub secrets only - no fallbacks)
+    claude_api_key = data.external.github_secrets.result.claude_api_key
 
     # MCP Gateway additional secrets (use try to handle empty values)
     mcp_internal_secret           = try(data.external.github_secrets.result.mcp_internal_secret, "")
@@ -361,13 +343,9 @@ resource "local_file" "docker_env" {
     mcp_hr_service_client_secret  = try(data.external.github_secrets.result.mcp_hr_service_client_secret, "")
     mcp_integration_runner_secret = try(data.external.github_secrets.result.mcp_integration_runner_secret, "")
 
-    # MCP Journey (Project History Agent)
-    # Use fetched key from GitHub secrets, fallback to variable
+    # MCP Journey (Project History Agent) - from GitHub secrets
     # Empty string is valid (disables Gemini features)
-    gemini_api_key = try(
-      coalesce(data.external.github_secrets.result.gemini_api_key, var.gemini_api_key),
-      ""
-    )
+    gemini_api_key = try(data.external.github_secrets.result.gemini_api_key, "")
 
     # Environment
     environment = var.environment

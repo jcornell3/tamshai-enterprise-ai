@@ -98,22 +98,19 @@ WHERE e.status = 'ACTIVE'
 ON CONFLICT (employee_id, type_code, fiscal_year) DO NOTHING;
 
 -- =============================================================================
--- E2E TEST USER (test-user.journey) - Required for Playwright E2E tests
+-- E2E TEST USER (test-user.journey) - Time-off balances
+-- Employee record created in hr-data.sql (UUID: e2e00001-0000-0000-0000-000000000001)
 -- Must match the Keycloak user provisioned by tests/e2e/global-setup.ts
 -- =============================================================================
 
-INSERT INTO hr.employees (id, employee_id, employee_number, first_name, last_name, email, work_email, department, title, status)
-VALUES ('e1000000-0000-0000-0000-000000000e2e', 'TEST001', 'E2E-001', 'Test', 'Journey', 'test-user@tamshai.com', 'test-user@tamshai.com', 'Testing', 'Journey Test Account', 'ACTIVE')
-ON CONFLICT (email) DO NOTHING;
-
 INSERT INTO hr.time_off_balances (employee_id, type_code, fiscal_year, entitlement, used, pending, carryover)
 VALUES
-  ('e1000000-0000-0000-0000-000000000e2e', 'VACATION', 2025, 15.0, 3.0, 0, 0),
-  ('e1000000-0000-0000-0000-000000000e2e', 'SICK', 2025, 6.0, 1.0, 0, 0),
-  ('e1000000-0000-0000-0000-000000000e2e', 'PERSONAL', 2025, 3.0, 0, 0, 0),
-  ('e1000000-0000-0000-0000-000000000e2e', 'VACATION', 2026, 15.0, 3.0, 0, 2.0),
-  ('e1000000-0000-0000-0000-000000000e2e', 'SICK', 2026, 6.0, 1.0, 0, 1.0),
-  ('e1000000-0000-0000-0000-000000000e2e', 'PERSONAL', 2026, 3.0, 0, 0, 1.0)
+  ('e2e00001-0000-0000-0000-000000000001', 'VACATION', 2025, 15.0, 3.0, 0, 0),
+  ('e2e00001-0000-0000-0000-000000000001', 'SICK', 2025, 6.0, 1.0, 0, 0),
+  ('e2e00001-0000-0000-0000-000000000001', 'PERSONAL', 2025, 3.0, 0, 0, 0),
+  ('e2e00001-0000-0000-0000-000000000001', 'VACATION', 2026, 15.0, 3.0, 0, 2.0),
+  ('e2e00001-0000-0000-0000-000000000001', 'SICK', 2026, 6.0, 1.0, 0, 1.0),
+  ('e2e00001-0000-0000-0000-000000000001', 'PERSONAL', 2026, 3.0, 0, 0, 1.0)
 ON CONFLICT (employee_id, type_code, fiscal_year) DO NOTHING;
 
 -- =============================================================================

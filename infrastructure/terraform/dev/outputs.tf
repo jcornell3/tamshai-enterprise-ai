@@ -142,7 +142,7 @@ output "next_steps" {
 
     🔐 Keycloak Credentials:
     ├─ Username: admin
-    └─ Password: ${var.keycloak_admin_password}
+    └─ Password: (from GitHub Secret: DEV_KEYCLOAK_ADMIN_PASSWORD)
 
     📋 Next Steps:
     1. Open browser: ${local.services.caddy.url}
