@@ -1087,12 +1087,68 @@ jobs:
 
       # =========================================================================
       # Start Keycloak (Required for JWT validation)
+      # Use import-realm: false and configure via Terraform to ensure
+      # mcp-integration-runner client is created with correct secret
       # =========================================================================
       - name: Setup Keycloak
         id: keycloak
         uses: ./.github/actions/setup-keycloak
         with:
           keycloak-port: ${{ vars.DEV_KEYCLOAK }}
+          keycloak-version: '26.0.7'
+          import-realm: 'false'
+          admin-password: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
+          http-relative-path: '/auth'
+          extra-features: 'token-exchange,admin-fine-grained-authz'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: Configure Keycloak with Terraform
+        env:
+          TF_VAR_keycloak_admin_password: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
+          TF_VAR_test_user_password: ${{ secrets.TEST_USER_PASSWORD }}
+          TF_VAR_mcp_gateway_client_secret: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
+          TF_VAR_mcp_integration_runner_secret: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
+        working-directory: infrastructure/terraform/keycloak
+        run: |
+          echo "=== Configuring Keycloak with Terraform for E2E Tests ==="
+
+          # Initialize Terraform
+          terraform init
+
+          # Apply Terraform configuration
+          # Use /auth path prefix to match setup-keycloak action
+          echo "Creating Keycloak realm, roles, users, and clients with Terraform..."
+          terraform apply -auto-approve \
+            -var-file=environments/ci.tfvars \
+            -var='keycloak_url=http://localhost:${{ vars.DEV_KEYCLOAK }}/auth' \
+            -var='valid_redirect_uris=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}/*"]' \
+            -var='web_origins=["http://localhost:${{ vars.DEV_MCP_GATEWAY }}"]'
+
+          # Export client secret for E2E tests
+          echo "MCP_GATEWAY_CLIENT_SECRET=$(terraform output -raw mcp_gateway_client_secret)" >> $GITHUB_ENV
+
+          echo "✅ Terraform deployment complete"
+
+      - name: Verify Keycloak Configuration
+        run: |
+          # Verify tamshai-corp realm was created by Terraform
+          if curl -sf http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp > /dev/null 2>&1; then
+            echo "✅ tamshai-corp realm is accessible"
+          else
+            echo "❌ tamshai-corp realm not found"
+            exit 1
+          fi
+
+          if [ -n "$MCP_GATEWAY_CLIENT_SECRET" ]; then
+            echo "✅ Client secret available from Terraform output"
+          else
+            echo "❌ Client secret not set"
+            exit 1
+          fi
 
       # =========================================================================
       # Build and Start MCP Gateway
@@ -1118,9 +1174,10 @@ jobs:
           PORT: ${{ vars.DEV_MCP_GATEWAY }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
+          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_CLIENT_ID: mcp-gateway
+          MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
           KEYCLOAK_ISSUER: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp
           JWKS_URI: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth/realms/tamshai-corp/protocol/openid-connect/certs
           TOKEN_REVOCATION_FAIL_OPEN: 'true'
@@ -1131,6 +1188,18 @@ jobs:
           MCP_SUPPORT_URL: http://localhost:${{ vars.DEV_MCP_SUPPORT }}
           MCP_PAYROLL_URL: http://localhost:${{ vars.DEV_MCP_PAYROLL }}
           MCP_TAX_URL: http://localhost:${{ vars.DEV_MCP_TAX }}
+
+      - name: Wait for MCP Gateway
+        run: |
+          echo "Waiting for MCP Gateway to be ready..."
+          for i in {1..30}; do
+            if curl -sf http://localhost:${{ vars.DEV_MCP_GATEWAY }}/health > /dev/null 2>&1; then
+              echo "MCP Gateway is ready!"
+              break
+            fi
+            echo "Attempt $i/30: Gateway not ready yet..."
+            sleep 2
+          done
 
       - name: Install Playwright
         working-directory: tests/e2e
@@ -1144,12 +1213,15 @@ jobs:
         env:
           MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
           KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}/auth
-          # KEYCLOAK_ADMIN_PASSWORD omitted - falls back to 'admin' matching setup-keycloak action
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
+          PORT_KEYCLOAK: ${{ vars.DEV_KEYCLOAK }}
+          PORT_MCP_GATEWAY: ${{ vars.DEV_MCP_GATEWAY }}
           CI: true
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET: ${{ secrets.TEST_USER_TOTP_SECRET }}
           CUSTOMER_USER_PASSWORD: ${{ secrets.CUSTOMER_USER_PASSWORD }}
           MCP_INTEGRATION_RUNNER_SECRET: ${{ secrets.MCP_INTEGRATION_RUNNER_SECRET }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
