@@ -282,6 +282,7 @@ jobs:
           MCP_INTERNAL_SECRET: ${{ secrets.MCP_INTERNAL_SECRET }}
           MCP_UI_CLIENT_SECRET: ${{ secrets.MCP_UI_CLIENT_SECRET }}
           E2E_ADMIN_API_KEY: ${{ secrets.E2E_ADMIN_API_KEY }}
+          TAMSHAI_APP_PASSWORD: ${{ secrets.STAGE_TAMSHAI_APP_PASSWORD }}
         run: |
           SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
 
@@ -297,6 +298,7 @@ jobs:
           ensure MCP_INTERNAL_SECRET "'"$MCP_INTERNAL_SECRET"'"
           ensure MCP_UI_CLIENT_SECRET "'"$MCP_UI_CLIENT_SECRET"'"
           ensure E2E_ADMIN_API_KEY "'"$E2E_ADMIN_API_KEY"'"
+          ensure TAMSHAI_APP_PASSWORD "'"$TAMSHAI_APP_PASSWORD"'"
           ensure KEYCLOAK_ADMIN admin'
 
           # Port variables (sourced from GitHub repository variables)
