@@ -54,7 +54,7 @@ dev_dependencies:
 
   # Code Generation
   build_runner: ^2.11.1
-  freezed: ^3.0.0
+  freezed: ^3.2.5
   json_serializable: ^6.11.2
 
 # Override broken beta Windows speech plugin with local stub
