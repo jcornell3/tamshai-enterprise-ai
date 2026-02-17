@@ -13,7 +13,8 @@
 #
 # Options:
 #   --dry-run     Show what would be updated without making changes
-#   --env ENV     Target environment prefix (dev, stage, prod) - default: stage
+#   --yes, -y     Auto-confirm (no interactive prompt)
+#   --env ENV     Target environment prefix (dev, stage, prod, shared) - default: stage
 #   --all         Rotate all passwords
 #   --list        List passwords that would be rotated
 #   --verify      Verify current password complexity
@@ -38,6 +39,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Defaults
 DRY_RUN=false
+AUTO_CONFIRM=false
 ENV="stage"
 ACTION=""
 REPO="jcornell3/tamshai-enterprise-ai"
@@ -174,8 +176,15 @@ update_github_secret() {
         local preview="${secret_value:0:4}...${secret_value: -4}"
         log_info "  Preview: $preview"
     else
-        echo -n "$secret_value" | gh secret set "$secret_name" --repo "$REPO"
-        log_info "Updated $secret_name"
+        # Use --body flag to avoid stdin issues with special characters
+        # Also redirect stdin from /dev/null to prevent consuming confirmation input
+        if gh secret set "$secret_name" --repo "$REPO" --body "$secret_value" < /dev/null 2>/dev/null; then
+            log_info "Updated $secret_name"
+        else
+            # Fallback to stdin method with printf for proper escaping
+            printf '%s' "$secret_value" | gh secret set "$secret_name" --repo "$REPO" 2>&1
+            log_info "Updated $secret_name (fallback method)"
+        fi
     fi
 }
 
@@ -247,10 +256,10 @@ verify_passwords() {
 
         if check_secret_exists "$name"; then
             log_info "✓ $name exists"
-            ((exists++))
+            exists=$((exists + 1))
         else
             log_warn "✗ $name MISSING"
-            ((missing++))
+            missing=$((missing + 1))
         fi
     done
 
@@ -282,10 +291,14 @@ rotate_all_passwords() {
         log_warn "⚠️  WARNING: This will rotate ${#passwords[@]} passwords!"
         log_warn "⚠️  Services using these passwords will need to be redeployed."
         echo ""
-        read -p "Are you sure you want to continue? (yes/no): " confirm
-        if [ "$confirm" != "yes" ]; then
-            log_info "Aborted."
-            exit 0
+        if [ "$AUTO_CONFIRM" = false ]; then
+            read -p "Are you sure you want to continue? (yes/no): " confirm
+            if [ "$confirm" != "yes" ]; then
+                log_info "Aborted."
+                exit 0
+            fi
+        else
+            log_info "Auto-confirm enabled, proceeding..."
         fi
     fi
 
@@ -310,10 +323,10 @@ rotate_all_passwords() {
 
         # Update GitHub secret
         if update_github_secret "$name" "$new_password"; then
-            ((updated++))
+            updated=$((updated + 1))
         else
             log_error "Failed to update $name"
-            ((failed++))
+            failed=$((failed + 1))
         fi
     done
 
@@ -346,6 +359,7 @@ show_help() {
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=true; shift ;;
+        --yes|-y) AUTO_CONFIRM=true; shift ;;
         --env) ENV="$2"; shift 2 ;;
         --all) ACTION="rotate"; shift ;;
         --list) ACTION="list"; shift ;;
