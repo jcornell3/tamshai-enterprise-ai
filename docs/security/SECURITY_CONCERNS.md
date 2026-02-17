@@ -31,13 +31,7 @@ This document summarizes the security concerns identified during the security an
 
 **Recommendation:** Update the Keycloak configuration to use strong, randomly generated credentials. These credentials should be stored in a secure location, such as a secret manager.
 
-### 2. Disabling Special Characters in Passwords
-
-**Concern:** The Terraform configuration disables special characters in the randomly generated passwords for various services. This reduces password complexity and makes the passwords more susceptible to brute-force attacks. The reason for this was to avoid issues with Windows escape characters.
-
-**Recommendation:** The recommendation is to use strong, randomly generated passwords with special characters. To avoid issues with Windows escape characters, the passwords should be Base64 encoded in the Terraform configuration and then decoded in the `cloud-init.yaml` file before being used. This has been implemented by enabling special characters in the `random_password` resources in `infrastructure/terraform/vps/main.tf`, Base64 encoding the passwords in the `locals` block, and adding a `runcmd` step in `infrastructure/terraform/vps/cloud-init.yaml` to decode the passwords.
-
-### 3. Storing Private Key in Terraform State and GitHub Secrets
+### 2. Storing Private Key in Terraform State and GitHub Secrets
 
 **Concern:** The Terraform configuration generates an SSH private key for emergency access and stores it in multiple locations:
 1.  **Terraform State:** The `tls_private_key` resource stores the private key in the Terraform state. This is a security risk, as anyone with access to the Terraform state can retrieve the private key.
@@ -121,3 +115,51 @@ ssh root@vps "VAULT_ADDR='https://127.0.0.1:8200' vault status"
 2. **SSH Command** (automation): Execute vault commands over SSH
 
 **Reference:** `docs/security/VAULT_ACCESS.md`
+
+### 3. Disabling Special Characters in Passwords (Previously High)
+
+**Concern:** The Terraform configuration disabled special characters in the randomly generated passwords for various services (`special = false`). This reduced password complexity and made the passwords more susceptible to brute-force attacks.
+
+**Resolution:** A comprehensive fix has been implemented:
+
+1. **Terraform Configuration Updated** (`infrastructure/terraform/vps/main.tf`):
+   - All `random_password` resources now have `special = true`
+   - Passwords are Base64 encoded before passing to cloud-init
+   - Fixed typo: `base6see64encode` → `base64encode`
+
+2. **Cloud-Init Updated** (`infrastructure/terraform/vps/cloud-init.yaml`):
+   - Passwords are Base64 decoded before use
+   - Avoids shell escape issues with special characters
+
+3. **Password Rotation Script Created** (`scripts/secrets/rotate-passwords.sh`):
+   - Generates complex passwords with uppercase, lowercase, digits, and special characters
+   - Updates GitHub Secrets directly (source of truth)
+   - Supports dev, stage, prod, and shared environments
+   - Includes `--dry-run` and `--yes` flags for safe operation
+
+**Usage:**
+```bash
+# List passwords to rotate
+./scripts/secrets/rotate-passwords.sh --env dev --list
+
+# Rotate dev passwords (with confirmation)
+./scripts/secrets/rotate-passwords.sh --env dev --all
+
+# Rotate without interactive prompt
+./scripts/secrets/rotate-passwords.sh --env dev --all --yes
+```
+
+**Dev Passwords Rotated:** 2026-02-17
+- POSTGRES_DEV_PASSWORD
+- TAMSHAI_DB_DEV_PASSWORD
+- TAMSHAI_APP_DEV_PASSWORD
+- KEYCLOAK_DEV_ADMIN_PASSWORD
+- KEYCLOAK_DB_DEV_PASSWORD
+- MONGODB_DEV_PASSWORD
+- REDIS_DEV_PASSWORD
+
+**Next Steps:**
+- Run `./scripts/secrets/rotate-passwords.sh --env stage --all` to rotate stage passwords
+- Run Phoenix rebuild (`terraform destroy && terraform apply`) to apply new passwords
+
+**Reference:** `scripts/secrets/rotate-passwords.sh`
