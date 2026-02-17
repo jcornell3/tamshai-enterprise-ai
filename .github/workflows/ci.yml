@@ -1214,8 +1214,9 @@ jobs:
         run: npm test -- --project=api
         env:
           MCP_GATEWAY_URL: http://localhost:${{ vars.DEV_MCP_GATEWAY }}
-          # No /auth path prefix - matches integration tests
-          KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
+          # Use 127.0.0.1 (not localhost) to match integration tests
+          # This avoids Playwright connection pool contamination issues
+          KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_DEV_ADMIN_PASSWORD }}
           PORT_KEYCLOAK: ${{ vars.DEV_KEYCLOAK }}
           PORT_MCP_GATEWAY: ${{ vars.DEV_MCP_GATEWAY }}
