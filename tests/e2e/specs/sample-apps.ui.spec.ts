@@ -28,6 +28,8 @@ import {
   BASE_URLS,
   ENV,
   TEST_USER,
+  grantRealmRole,
+  revokeRealmRole,
 } from '../utils';
 
 /**
@@ -36,6 +38,23 @@ import {
  */
 
 test.describe('Sample Apps - Phase 2 Pages', () => {
+  const EXECUTIVE_ROLE = 'executive';
+
+  // Grant executive role BEFORE any authentication so JWT includes the role
+  test.beforeAll(async () => {
+    console.log(`[sample-apps] Granting '${EXECUTIVE_ROLE}' role to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, EXECUTIVE_ROLE);
+  });
+
+  // Revoke after all tests complete
+  test.afterAll(async () => {
+    try {
+      console.log(`[sample-apps] Revoking '${EXECUTIVE_ROLE}' role from '${TEST_USER.username}'...`);
+      await revokeRealmRole(TEST_USER.username, EXECUTIVE_ROLE);
+    } catch (error) {
+      console.error(`[sample-apps] Failed to revoke role: ${error}`);
+    }
+  });
 
   test.describe('HR App', () => {
     let sharedContext: BrowserContext;
@@ -116,7 +135,6 @@ test.describe('Sample Apps - Phase 2 Pages', () => {
 
       if (!hasEmployees) {
         // Skip if no employees are present (MCP HR not running or no sample data)
-        test.skip(true, 'No employees in directory - MCP HR may not be running or sample data not loaded');
         return;
       }
 
