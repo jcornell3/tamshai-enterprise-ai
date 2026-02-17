@@ -40,8 +40,8 @@ const SELECTORS = {
   errorContainer: '.bg-danger-50',
   errorMessage: '.text-danger-700',
 
-  // Loading state
-  processingButton: 'button:has-text("Processing")',
+  // Loading state - matches various submitting labels (Processing..., Converting..., Submitting...)
+  processingButton: 'button:has-text("Processing"), button:has-text("Converting"), button:has-text("Submitting")',
 };
 
 /**
