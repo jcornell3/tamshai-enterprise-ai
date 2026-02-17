@@ -270,6 +270,49 @@ db.tickets.insertMany([
     sla_target_resolution_minutes: 240,
     first_response_at: new Date("2026-01-28T08:20:00Z"),
     resolution_deadline: new Date("2026-01-28T12:00:00Z")  // 6 days overdue by Feb 3
+  },
+  // =============================================================================
+  // E2E TEST USER TICKETS (test-user.journey)
+  // Required for Playwright E2E tests in support-detail.ui.spec.ts
+  // =============================================================================
+  {
+    _id: ObjectId("670000000000000000000014"),
+    ticket_id: "TICK-014",
+    title: "E2E Test - Sample open ticket for test-user.journey",
+    description: "This ticket is used by E2E tests to verify ticket list and detail page rendering. Created by test-user.journey to satisfy role-based filtering.",
+    status: "open",
+    priority: "medium",
+    created_by: "test-user.journey",
+    created_at: new Date("2026-02-14T10:00:00Z"),
+    updated_at: new Date("2026-02-14T10:00:00Z"),
+    tags: ["e2e-test", "sample"],
+    assigned_to: "dan.williams",
+    resolution: null,
+    customer_tier: "standard",
+    sla_target_response_minutes: 120,
+    sla_target_resolution_minutes: 1440,
+    first_response_at: new Date("2026-02-14T10:30:00Z"),
+    resolution_deadline: new Date("2026-02-15T10:00:00Z")
+  },
+  {
+    _id: ObjectId("670000000000000000000015"),
+    ticket_id: "TICK-015",
+    title: "E2E Test - Resolved ticket with comments",
+    description: "This resolved ticket with comments is used by E2E tests to verify comments section and resolved ticket states.",
+    status: "resolved",
+    priority: "low",
+    created_by: "test-user.journey",
+    created_at: new Date("2026-02-10T09:00:00Z"),
+    updated_at: new Date("2026-02-12T14:00:00Z"),
+    tags: ["e2e-test", "sample", "resolved"],
+    assigned_to: "dan.williams",
+    resolution: "Issue resolved during E2E test setup",
+    customer_tier: "standard",
+    sla_target_response_minutes: 240,
+    sla_target_resolution_minutes: 2880,
+    first_response_at: new Date("2026-02-10T10:00:00Z"),
+    resolution_deadline: new Date("2026-02-12T09:00:00Z"),
+    closed_at: new Date("2026-02-12T14:00:00Z")
   }
 ]);
 
@@ -281,40 +324,40 @@ db.ticket_summary.insertMany([
   {
     _id: ObjectId("680000000000000000000001"),
     status: "open",
-    count: 6,  // Updated: +2 breached SLA tickets (TICK-011, TICK-012)
+    count: 7,  // Updated: +1 test-user.journey ticket (TICK-014)
     priority_breakdown: {
-      critical: 1,  // +1 (TICK-011)
-      high: 3,      // +1 (TICK-012)
-      medium: 1,
+      critical: 1,  // TICK-011
+      high: 3,      // TICK-012
+      medium: 2,    // +1 (TICK-014)
       low: 1
     },
-    sla_breached_count: 2,  // NEW: Track SLA breaches
-    updated_at: new Date("2026-02-03T00:00:00Z")
+    sla_breached_count: 2,  // Track SLA breaches
+    updated_at: new Date("2026-02-14T00:00:00Z")
   },
   {
     _id: ObjectId("680000000000000000000002"),
     status: "in_progress",
-    count: 3,  // Updated: +1 breached SLA ticket (TICK-013)
+    count: 3,  // TICK-013 + others
     priority_breakdown: {
       critical: 1,
-      high: 1,  // +1 (TICK-013)
+      high: 1,  // TICK-013
       medium: 1,
       low: 0
     },
-    sla_breached_count: 1,  // NEW: Track SLA breaches
+    sla_breached_count: 1,  // Track SLA breaches
     updated_at: new Date("2026-02-03T00:00:00Z")
   },
   {
     _id: ObjectId("680000000000000000000003"),
     status: "resolved",
-    count: 3,
+    count: 4,  // Updated: +1 test-user.journey ticket (TICK-015)
     priority_breakdown: {
       critical: 0,
       high: 1,
       medium: 2,
-      low: 0
+      low: 1  // +1 (TICK-015)
     },
-    updated_at: new Date("2025-12-30T13:30:00Z")
+    updated_at: new Date("2026-02-14T00:00:00Z")
   },
   {
     _id: ObjectId("680000000000000000000004"),
