@@ -84,6 +84,7 @@ jobs:
           MCP_INTERNAL_SECRET=${DEV_MCP_INTERNAL_SECRET}
           MCP_HR_SERVICE_CLIENT_SECRET=${DEV_MCP_HR_SERVICE_CLIENT_SECRET}
           MCP_GATEWAY_CLIENT_SECRET=${DEV_MCP_GATEWAY_CLIENT_SECRET}
+          TAMSHAI_APP_PASSWORD=ci_test_value
 
           # Port Configuration (from GitHub Variables - single source of truth)
           PORT_CADDY_HTTP=${{ vars.DEV_CADDY_HTTP }}

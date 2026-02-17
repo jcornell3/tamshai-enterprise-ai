@@ -147,6 +147,7 @@ jobs:
           MCP_GATEWAY_CLIENT_SECRET: ci_scan_value
           MCP_HR_SERVICE_CLIENT_SECRET: ci_scan_value
           E2E_ADMIN_API_KEY: ci_scan_value
+          TAMSHAI_APP_PASSWORD: ci_scan_value
           # Port Configuration (from GitHub Variables)
           PORT_CADDY_HTTP: ${{ vars.DEV_CADDY_HTTP }}
           PORT_CADDY_HTTPS: ${{ vars.DEV_CADDY_HTTPS }}
@@ -303,6 +304,7 @@ jobs:
           MCP_GATEWAY_CLIENT_SECRET: ci_build_value
           MCP_HR_SERVICE_CLIENT_SECRET: ci_build_value
           E2E_ADMIN_API_KEY: ci_build_value
+          TAMSHAI_APP_PASSWORD: ci_build_value
           # Port Configuration (from GitHub Variables)
           PORT_CADDY_HTTP: ${{ vars.DEV_CADDY_HTTP }}
           PORT_CADDY_HTTPS: ${{ vars.DEV_CADDY_HTTPS }}
