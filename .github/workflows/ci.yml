@@ -1235,14 +1235,15 @@ jobs:
           echo "✅ Service token acquired"
 
           # Step 2: Token exchange for alice.chen
-          echo "Exchanging for alice.chen user token..."
+          # Use audience=mcp-gateway to match integration tests and E2E tests
+          echo "Exchanging for alice.chen user token (audience=mcp-gateway)..."
           EXCHANGE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp/protocol/openid-connect/token \
             -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
             -d "client_id=mcp-integration-runner" \
             -d "client_secret=${MCP_INTEGRATION_RUNNER_SECRET}" \
             -d "subject_token=${SVC_TOKEN}" \
             -d "requested_subject=alice.chen" \
-            -d "scope=openid profile roles")
+            -d "audience=mcp-gateway")
 
           EXCHANGE_HTTP_CODE=$(echo "$EXCHANGE_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
           EXCHANGE_BODY=$(echo "$EXCHANGE_RESPONSE" | grep -v "HTTP_CODE:")
@@ -1251,6 +1252,24 @@ jobs:
             echo "✅ Token exchange successful with curl"
             TOKEN=$(echo "$EXCHANGE_BODY" | jq -r '.access_token')
             echo "Token preview: ${TOKEN:0:50}..."
+
+            # Step 3: Test token against MCP Gateway
+            echo "Testing token against MCP Gateway /api/user..."
+            USER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://localhost:${{ vars.DEV_MCP_GATEWAY }}/api/user \
+              -H "Authorization: Bearer ${TOKEN}")
+            USER_HTTP_CODE=$(echo "$USER_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
+            USER_BODY=$(echo "$USER_RESPONSE" | grep -v "HTTP_CODE:")
+
+            if [ "$USER_HTTP_CODE" = "200" ]; then
+              echo "✅ Gateway accepted token (HTTP 200)"
+              echo "Response: $USER_BODY"
+            else
+              echo "❌ Gateway rejected token (HTTP $USER_HTTP_CODE)"
+              echo "Response: $USER_BODY"
+              echo ""
+              echo "Token exchange works but gateway rejects the token."
+              echo "Check issuer/audience claims vs gateway configuration."
+            fi
           else
             echo "❌ Token exchange failed with HTTP $EXCHANGE_HTTP_CODE"
             echo "Response: $EXCHANGE_BODY"
