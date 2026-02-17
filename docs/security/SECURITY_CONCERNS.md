@@ -158,8 +158,29 @@ ssh root@vps "VAULT_ADDR='https://127.0.0.1:8200' vault status"
 - MONGODB_DEV_PASSWORD
 - REDIS_DEV_PASSWORD
 
+4. **CI Workflow Updated** (`.github/actions/setup-keycloak/action.yml`):
+   - Passwords passed via `env:` block to avoid shell interpolation
+   - Docker args built as bash array instead of string concatenation
+   - Removed `eval` and use array expansion for proper escaping
+   - Handles passwords with shell-dangerous characters (`|`, `&`, `;`, `` ` ``, `$`, etc.)
+
+**CI Fix (2026-02-17):**
+The setup-keycloak action previously failed when passwords contained shell metacharacters:
+```bash
+# Before (broken - | interpreted as pipe):
+DOCKER_ARGS="$DOCKER_ARGS -e KEYCLOAK_ADMIN_PASSWORD=${{ inputs.admin-password }}"
+eval docker run $DOCKER_ARGS ...
+
+# After (fixed - env var + array expansion):
+env:
+  KC_ADMIN_PASSWORD: ${{ inputs.admin-password }}
+run: |
+  DOCKER_ARGS+=(-e "KEYCLOAK_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}")
+  docker run "${DOCKER_ARGS[@]}" ...
+```
+
 **Next Steps:**
 - Run `./scripts/secrets/rotate-passwords.sh --env stage --all` to rotate stage passwords
 - Run Phoenix rebuild (`terraform destroy && terraform apply`) to apply new passwords
 
-**Reference:** `scripts/secrets/rotate-passwords.sh`
+**Reference:** `scripts/secrets/rotate-passwords.sh`, `.github/actions/setup-keycloak/action.yml`

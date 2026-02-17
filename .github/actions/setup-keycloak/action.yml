@@ -51,12 +51,23 @@ runs:
     - name: Start Keycloak container
       id: start
       shell: bash
+      # Pass passwords via env vars to avoid shell escaping issues with special characters
+      # (e.g., passwords containing |, &, ;, ` characters)
+      env:
+        KC_ADMIN_PASSWORD: ${{ inputs.admin-password }}
+        KC_PORT: ${{ inputs.keycloak-port }}
+        KC_VERSION: ${{ inputs.keycloak-version }}
+        KC_REL_PATH: ${{ inputs.http-relative-path }}
+        KC_FEATURES: ${{ inputs.extra-features }}
+        KC_IMPORT_REALM: ${{ inputs.import-realm }}
+        KC_REALM_EXPORT_PATH: ${{ inputs.realm-export-path }}
+        KC_WORKSPACE: ${{ github.workspace }}
       run: |
         # Pull Keycloak image with retry logic (handles intermittent CDN/TLS issues)
         echo "Pulling Keycloak image with retry logic..."
         for i in {1..5}; do
-          echo "Attempt $i: Pulling quay.io/keycloak/keycloak:${{ inputs.keycloak-version }}..."
-          if docker pull quay.io/keycloak/keycloak:${{ inputs.keycloak-version }}; then
+          echo "Attempt $i: Pulling quay.io/keycloak/keycloak:${KC_VERSION}..."
+          if docker pull "quay.io/keycloak/keycloak:${KC_VERSION}"; then
             echo "✅ Image pulled successfully"
             break
           fi
@@ -68,60 +79,60 @@ runs:
           sleep $((i * 10))
         done
 
-        # Build docker run command
-        DOCKER_ARGS="-d --name keycloak -p ${{ inputs.keycloak-port }}:8080"
+        # Build docker run command array (avoids eval and shell escaping issues)
         # Set admin credentials for both Keycloak 24 (KEYCLOAK_ADMIN) and 26+ (KC_BOOTSTRAP_ADMIN)
         # pragma: allowlist secret (admin credentials are dev/CI only)
-        DOCKER_ARGS="$DOCKER_ARGS -e KEYCLOAK_ADMIN=admin"
-        DOCKER_ARGS="$DOCKER_ARGS -e KEYCLOAK_ADMIN_PASSWORD=${{ inputs.admin-password }}"
-        DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_USERNAME=admin"
-        DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_PASSWORD=${{ inputs.admin-password }}"
-
-        # Set hostname to 'localhost' so tokens always use consistent issuer claim
-        # This prevents issuer mismatch when clients use 127.0.0.1 vs localhost
-        DOCKER_ARGS="$DOCKER_ARGS -e KC_HOSTNAME=localhost"
-        DOCKER_ARGS="$DOCKER_ARGS -e KC_HOSTNAME_PORT=${{ inputs.keycloak-port }}"
+        DOCKER_ARGS=(
+          -d
+          --name keycloak
+          -p "${KC_PORT}:8080"
+          -e KEYCLOAK_ADMIN=admin
+          -e "KEYCLOAK_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}"
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin
+          -e "KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}"
+          -e KC_HOSTNAME=localhost
+          -e "KC_HOSTNAME_PORT=${KC_PORT}"
+        )
 
         # Set relative path if provided
-        REL_PATH="${{ inputs.http-relative-path }}"
-        if [ -n "$REL_PATH" ]; then
-          DOCKER_ARGS="$DOCKER_ARGS -e KC_HTTP_RELATIVE_PATH=$REL_PATH"
+        if [ -n "$KC_REL_PATH" ]; then
+          DOCKER_ARGS+=(-e "KC_HTTP_RELATIVE_PATH=${KC_REL_PATH}")
         fi
 
         # Build start command args
-        START_ARGS="start-dev --http-port=8080"
+        START_ARGS=(start-dev --http-port=8080)
 
         # Add realm import if enabled
-        if [ "${{ inputs.import-realm }}" = "true" ]; then
-          DOCKER_ARGS="$DOCKER_ARGS -v ${{ github.workspace }}/${{ inputs.realm-export-path }}:/opt/keycloak/data/import/realm.json"
-          START_ARGS="$START_ARGS --import-realm"
+        if [ "$KC_IMPORT_REALM" = "true" ]; then
+          DOCKER_ARGS+=(-v "${KC_WORKSPACE}/${KC_REALM_EXPORT_PATH}:/opt/keycloak/data/import/realm.json")
+          START_ARGS+=(--import-realm)
         fi
 
         # Add extra features if specified
-        FEATURES="${{ inputs.extra-features }}"
-        if [ -n "$FEATURES" ]; then
-          START_ARGS="$START_ARGS --features=$FEATURES"
+        if [ -n "$KC_FEATURES" ]; then
+          START_ARGS+=("--features=${KC_FEATURES}")
         fi
 
-        # Run Keycloak
-        eval docker run $DOCKER_ARGS quay.io/keycloak/keycloak:${{ inputs.keycloak-version }} $START_ARGS
+        # Run Keycloak using array expansion (properly handles special characters)
+        docker run "${DOCKER_ARGS[@]}" "quay.io/keycloak/keycloak:${KC_VERSION}" "${START_ARGS[@]}"
         echo "Keycloak container started"
 
         # Set outputs - build path prefix from relative path
-        PATH_PREFIX="${{ inputs.http-relative-path }}"
-        echo "keycloak-url=http://localhost:${{ inputs.keycloak-port }}" >> $GITHUB_OUTPUT
-        echo "issuer=http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/tamshai-corp" >> $GITHUB_OUTPUT
-        echo "jwks-uri=http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
+        echo "keycloak-url=http://localhost:${KC_PORT}" >> $GITHUB_OUTPUT
+        echo "issuer=http://localhost:${KC_PORT}${KC_REL_PATH}/realms/tamshai-corp" >> $GITHUB_OUTPUT
+        echo "jwks-uri=http://localhost:${KC_PORT}${KC_REL_PATH}/realms/tamshai-corp/protocol/openid-connect/certs" >> $GITHUB_OUTPUT
 
     - name: Wait for Keycloak
       shell: bash
+      env:
+        KC_PORT: ${{ inputs.keycloak-port }}
+        KC_REL_PATH: ${{ inputs.http-relative-path }}
+        KC_TIMEOUT: ${{ inputs.wait-timeout }}
       run: |
         echo "Waiting for Keycloak to be ready..."
-        PATH_PREFIX="${{ inputs.http-relative-path }}"
-        TIMEOUT=${{ inputs.wait-timeout }}
-        ATTEMPTS=$((TIMEOUT / 5))
+        ATTEMPTS=$((KC_TIMEOUT / 5))
         for i in $(seq 1 $ATTEMPTS); do
-          if curl -sf http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/master > /dev/null 2>&1; then
+          if curl -sf "http://localhost:${KC_PORT}${KC_REL_PATH}/realms/master" > /dev/null 2>&1; then
             echo "Keycloak is ready after $i attempts"
             sleep 5
             exit 0
@@ -129,20 +140,23 @@ runs:
           echo "Attempt $i/$ATTEMPTS: Keycloak not ready yet..."
           sleep 5
         done
-        echo "Keycloak failed to start within $TIMEOUT seconds"
+        echo "Keycloak failed to start within $KC_TIMEOUT seconds"
         docker logs keycloak
         exit 1
 
     - name: Verify Keycloak Realm
       shell: bash
+      env:
+        KC_PORT: ${{ inputs.keycloak-port }}
+        KC_REL_PATH: ${{ inputs.http-relative-path }}
+        KC_IMPORT_REALM: ${{ inputs.import-realm }}
       run: |
-        PATH_PREFIX="${{ inputs.http-relative-path }}"
         # Skip realm verification when not importing (Terraform will create it later)
-        if [ "${{ inputs.import-realm }}" = "false" ]; then
+        if [ "$KC_IMPORT_REALM" = "false" ]; then
           echo "Skipping realm verification (import-realm=false, Terraform will configure)"
           exit 0
         fi
-        REALM_CHECK=$(curl -sf http://localhost:${{ inputs.keycloak-port }}${PATH_PREFIX}/realms/tamshai-corp/.well-known/openid-configuration || echo "FAILED")
+        REALM_CHECK=$(curl -sf "http://localhost:${KC_PORT}${KC_REL_PATH}/realms/tamshai-corp/.well-known/openid-configuration" || echo "FAILED")
         if [[ "$REALM_CHECK" == "FAILED" ]]; then
           echo "ERROR: tamshai-corp realm not found"
           docker logs keycloak | tail -50
