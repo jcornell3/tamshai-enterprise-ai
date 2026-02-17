@@ -29,7 +29,7 @@
   "actionTokenGeneratedByAdminLifespan": 43200,
   "actionTokenGeneratedByUserLifespan": 300,
   "otpPolicyType": "totp",
-  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyAlgorithm": "HmacSHA256",
   "otpPolicyInitialCounter": 0,
   "otpPolicyDigits": 6,
   "otpPolicyLookAheadWindow": 1,
@@ -219,7 +219,7 @@
         {
           "type": "otp",
           "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\"}"
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     }

@@ -684,7 +684,7 @@ resource "null_resource" "keycloak_set_totp" {
           'otp',
           'Terraform Provisioned',
           '{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}',
-          '{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}',
+          '{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\",\"counter\":0}',
           10,
           $CREATED_MS
         );

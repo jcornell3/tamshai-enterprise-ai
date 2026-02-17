@@ -2,7 +2,10 @@
  * Shared TOTP Utilities
  *
  * Provides TOTP code generation for both E2E and integration tests.
- * Prefers system `oathtool` (SHA1) with `otplib` fallback for CI/CD.
+ * Uses otplib with SHA256 algorithm (matching Keycloak HmacSHA256 config).
+ *
+ * Note: Windows oathtool doesn't support --sha256, so we use otplib
+ * which works consistently across all platforms.
  *
  * @example
  * ```typescript
@@ -13,34 +16,42 @@
 
 import { execSync } from 'child_process';
 
-let oathtoolChecked = false;
-let oathtoolAvailable = false;
+let oathtoolSha256Checked = false;
+let oathtoolSha256Available = false;
 
 /**
- * Check if oathtool is available on the system.
+ * Check if oathtool with SHA256 support is available.
+ * Windows oathtool doesn't support --sha256, only Linux/macOS versions do.
  * Result is cached after first check.
  */
-export function isOathtoolAvailable(): boolean {
-  if (oathtoolChecked) return oathtoolAvailable;
-  try {
-    execSync('oathtool --version', { stdio: 'ignore' });
-    oathtoolAvailable = true;
-  } catch {
-    oathtoolAvailable = false;
+export function isOathtoolSha256Available(): boolean {
+  if (oathtoolSha256Checked) return oathtoolSha256Available;
+
+  // Skip on Windows - oathtool.exe doesn't support --sha256
+  if (process.platform === 'win32') {
+    oathtoolSha256Available = false;
+    oathtoolSha256Checked = true;
+    return false;
   }
-  oathtoolChecked = true;
-  return oathtoolAvailable;
+
+  try {
+    // Test if oathtool supports --sha256 (Linux/macOS oath-toolkit)
+    execSync('oathtool --totp --sha256 --base32 JBSWY3DPEHPK3PXP', { stdio: 'ignore' });
+    oathtoolSha256Available = true;
+  } catch {
+    oathtoolSha256Available = false;
+  }
+  oathtoolSha256Checked = true;
+  return oathtoolSha256Available;
 }
 
 /**
  * Generate a 6-digit TOTP code from a Base32-encoded secret.
  *
- * Uses SHA1 algorithm (RFC 6238 standard) matching:
- * - oathtool default
- * - Google Authenticator default
- * - Keycloak TOTP configuration
+ * Uses SHA256 algorithm matching Keycloak's HmacSHA256 OTP policy.
  *
- * Prefers system `oathtool` command, falls back to `otplib` for CI/CD.
+ * On Linux/macOS with oath-toolkit: uses oathtool --sha256
+ * On Windows or CI/CD: uses otplib with sha256 algorithm
  *
  * @param secret - Base32-encoded TOTP secret
  * @returns 6-digit TOTP code
@@ -51,42 +62,43 @@ export function generateTotpCode(secret: string): string {
     throw new Error('TOTP secret is required but not provided');
   }
 
-  // Try oathtool first (local development)
-  if (isOathtoolAvailable()) {
+  // Try oathtool with SHA256 on Linux/macOS (oath-toolkit)
+  if (isOathtoolSha256Available()) {
     try {
-      const totpCode = execSync('oathtool --totp --base32 "$TOTP_SECRET"', {
+      // Use shell-safe approach: pass secret via stdin to avoid shell escaping issues
+      const totpCode = execSync(`echo -n "${secret}" | oathtool --totp --sha256 --base32 -`, {
         encoding: 'utf-8',
-        env: { ...process.env, TOTP_SECRET: secret },
-        shell: '/bin/bash',
+        shell: process.platform === 'win32' ? undefined : '/bin/bash',
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
 
-      if (!/^\d{6}$/.test(totpCode)) {
-        throw new Error(`Invalid TOTP code generated: ${totpCode}`);
+      if (/^\d{6}$/.test(totpCode)) {
+        return totpCode;
       }
-
-      return totpCode;
+      // Invalid output, fall through to otplib
     } catch {
       // Fall through to otplib
     }
   }
 
-  // Fallback to otplib (CI/CD environments)
+  // Use otplib (works on all platforms including Windows and CI/CD)
   try {
-    // Dynamic import to avoid hard dependency — otplib may not be installed in all test packages
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { authenticator } = require('otplib');
     authenticator.options = {
       digits: 6,
       step: 30,
-      algorithm: 'sha1',
+      algorithm: 'sha256',
     };
     return authenticator.generate(secret);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Failed to generate TOTP code: ${message}\n` +
-      `Tried both oathtool and otplib. Secret provided: ${secret.substring(0, 4)}...`
+      `Secret provided: ${secret.substring(0, 4)}...`
     );
   }
 }
+
+// Legacy export for backward compatibility
+export const isOathtoolAvailable = isOathtoolSha256Available;
