@@ -20,6 +20,9 @@ function create_user_and_database() {
             END IF;
         END
         \$\$;
+
+        -- Ensure user does NOT have BYPASSRLS to enforce RLS policies
+        ALTER ROLE $user NOBYPASSRLS;
         
         SELECT 'CREATE DATABASE $database OWNER $user'
         WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$database')\gexec

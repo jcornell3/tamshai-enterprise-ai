@@ -300,19 +300,14 @@ test.describe('OpenAPI Documentation', () => {
 });
 
 test.describe('RBAC Authorization', () => {
-  // TODO: Implement cross-functional self-service access
-  // HR managers should be able to see their own budgets
-  // All HR users should be able to access their own expense reports
-  // This requires adding "employee" or "manager" composite roles with
-  // limited cross-functional access to personal financial data
-  test('HR user cannot access finance MCP server (cross-functional access not yet implemented)', async ({
+  // v1.5 Tiered Access: All employees can access finance MCP server via gateway,
+  // but RLS policies restrict data to their own department/records.
+  test('HR manager sees only HR department budgets (tiered RLS access)', async ({
     request,
   }) => {
     const token = await getAccessToken(request, TEST_USERS.hr.username);
 
-    // Currently HR users don't have finance access - this test documents current behavior
-    // Once cross-functional self-service is implemented, this test should be updated
-    // to verify HR users can see their own (but not others') budget/expense data
+    // v1.5: HR managers can access finance endpoint, but RLS restricts to HR department
     const response = await request.get(
       `${GATEWAY_URL}/api/mcp/finance/list_budgets`,
       {
@@ -322,12 +317,19 @@ test.describe('RBAC Authorization', () => {
       }
     );
 
-    // HR users should get an error for finance endpoints (current behavior)
-    // 403 = Forbidden by gateway RBAC
-    // 500 = MCP server internal error
-    // 503 = MCP server unavailable (not running in CI)
-    // Any of these indicates the access is properly denied
-    expect([403, 500, 503]).toContain(response.status());
+    // HR user should get 200 OK (gateway allows employee/manager access)
+    expect(response.ok()).toBeTruthy();
+
+    const body = await response.json();
+    expect(body.status).toBe('success');
+
+    // RLS should filter to only HR department budgets
+    const budgets = body.data as Array<{ department_code: string }>;
+    expect(budgets.length).toBeGreaterThan(0);
+
+    // All returned budgets should be for HR department only
+    const allHR = budgets.every(b => b.department_code === 'HR');
+    expect(allHR).toBe(true);
   });
 
   test('Executive user can access all MCP servers', async ({ request }) => {

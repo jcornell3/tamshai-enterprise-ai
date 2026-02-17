@@ -157,6 +157,13 @@ export class JWTValidator {
           // Merge and deduplicate roles from both sources
           const allRoles = Array.from(new Set([...realmRoles, ...clientRoles]));
 
+          // Extract departmentId from groups claim (e.g., '/HR-Department' → 'HR')
+          // Groups follow pattern: /DepartmentCode-Department (e.g., /HR-Department, /ENG-Department)
+          const departmentGroup = groups.find((g: string) => g.endsWith('-Department'));
+          const departmentId = departmentGroup
+            ? departmentGroup.replace(/^\//, '').replace(/-Department$/, '')
+            : undefined;
+
           // Log available claims for debugging
           this.logger.debug('JWT claims:', {
             sub: payload.sub,
@@ -202,6 +209,7 @@ export class JWTValidator {
             email: payload.email || '',
             roles: allRoles,
             groups: groups,
+            departmentId: departmentId,
           });
         }
       );

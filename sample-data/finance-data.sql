@@ -970,7 +970,7 @@ BEGIN
     PERFORM set_config('app.current_user_id', p_user_id, true);
     PERFORM set_config('app.current_user_email', p_user_email, true);
     PERFORM set_config('app.current_user_roles', p_user_roles, true);
-    PERFORM set_config('app.current_user_department', COALESCE(p_user_department, ''), true);
+    PERFORM set_config('app.current_department_id', COALESCE(p_user_department, ''), true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -994,12 +994,12 @@ CREATE POLICY budget_executive_access ON finance.department_budgets
     );
 
 -- Policy 3: Department heads can see their own department's budget
--- Uses full department name to match session variable (e.g., 'Engineering')
+-- Uses department_code to match session variable from JWT (e.g., 'HR', 'ENG')
 CREATE POLICY budget_department_access ON finance.department_budgets
     FOR SELECT
     USING (
         string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
-        AND department = current_setting('app.current_user_department', true)
+        AND department_code = current_setting('app.current_department_id', true)
     );
 
 -- Policy 4: Finance-write can modify budgets
@@ -1018,11 +1018,11 @@ CREATE POLICY budget_department_submit ON finance.department_budgets
     FOR UPDATE
     USING (
         string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
-        AND department = current_setting('app.current_user_department', true)
+        AND department_code = current_setting('app.current_department_id', true)
     )
     WITH CHECK (
         string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
-        AND department = current_setting('app.current_user_department', true)
+        AND department_code = current_setting('app.current_department_id', true)
     );
 
 -- -----------------------------------------------------------------------------
@@ -1052,7 +1052,7 @@ CREATE POLICY budget_history_department_access ON finance.budget_approval_histor
         AND EXISTS (
             SELECT 1 FROM finance.department_budgets db
             WHERE db.id = budget_approval_history.budget_id
-            AND db.department = current_setting('app.current_user_department', true)
+            AND db.department = current_setting('app.current_department_id', true)
         )
     );
 
@@ -1071,7 +1071,7 @@ CREATE POLICY budget_history_manager_insert ON finance.budget_approval_history
         AND EXISTS (
             SELECT 1 FROM finance.department_budgets db
             WHERE db.id = budget_approval_history.budget_id
-            AND db.department = current_setting('app.current_user_department', true)
+            AND db.department = current_setting('app.current_department_id', true)
         )
     );
 
@@ -1099,7 +1099,7 @@ CREATE POLICY invoice_department_access ON finance.invoices
     FOR SELECT
     USING (
         string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
-        AND department_code = current_setting('app.current_user_department', true)
+        AND department_code = current_setting('app.current_department_id', true)
     );
 
 -- Policy 4: Finance-write can modify invoices
@@ -1234,8 +1234,8 @@ CREATE POLICY expense_manager_access ON finance.expenses
         AND department_id IN (
             SELECT d.id
             FROM finance.departments d
-            WHERE d.name = current_setting('app.current_user_department', true)
-               OR d.code = current_setting('app.current_user_department', true)
+            WHERE d.name = current_setting('app.current_department_id', true)
+               OR d.code = current_setting('app.current_department_id', true)
         )
     );
 
@@ -1365,7 +1365,7 @@ CREATE POLICY expense_reports_manager_access ON finance.expense_reports
     FOR SELECT
     USING (
         string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['manager']
-        AND department_code = current_setting('app.current_user_department', true)
+        AND department_code = current_setting('app.current_department_id', true)
     );
 
 -- Policy 5: Employees can insert their own expense reports

@@ -131,6 +131,7 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
             username: userContext.username,
             email: userContext.email,  // Required for RLS policies
             roles: userContext.roles,
+            departmentId: userContext.departmentId,  // Required for department-level RLS
           },
         },
         {

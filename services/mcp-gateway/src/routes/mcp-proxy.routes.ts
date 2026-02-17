@@ -144,6 +144,7 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
             username: userContext.username,
             email: userContext.email,
             roles: userContext.roles,
+            departmentId: userContext.departmentId,
           },
         },
         {
@@ -264,6 +265,7 @@ export function createMCPProxyRoutes(deps: MCPProxyRoutesDependencies): Router {
           username: userContext.username,
           email: userContext.email,
           roles: userContext.roles,
+          departmentId: userContext.departmentId,
         },
       };
 

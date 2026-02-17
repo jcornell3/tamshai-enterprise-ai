@@ -11,6 +11,8 @@ export interface UserContext {
   email: string;
   roles: string[];
   groups: string[];
+  departmentId?: string;  // Extracted from groups (e.g., /HR-Department → HR)
+  managerId?: string;     // For future use
 }
 
 /**
