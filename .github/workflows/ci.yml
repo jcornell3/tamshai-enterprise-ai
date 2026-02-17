@@ -668,12 +668,15 @@ jobs:
         run: npm start &
         env:
           PORT: ${{ vars.DEV_MCP_GATEWAY }}
-          # CRITICAL: Use 127.0.0.1 to match test runner (jest.setup.js)
-          # This ensures JWT issuer claim matches Gateway's expected issuer
           KEYCLOAK_URL: http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
           KEYCLOAK_CLIENT_ID: mcp-gateway
           MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
+          # CRITICAL: Keycloak is configured with KC_HOSTNAME=localhost, so tokens
+          # have issuer=http://localhost:PORT/realms/tamshai-corp regardless of
+          # how clients access Keycloak. Gateway must expect this issuer.
+          KEYCLOAK_ISSUER: http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp
+          JWKS_URI: http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp/protocol/openid-connect/certs
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
