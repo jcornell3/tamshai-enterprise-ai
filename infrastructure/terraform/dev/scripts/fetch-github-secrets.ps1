@@ -52,6 +52,7 @@ $output = @{
     "mongodb_password" = ""
     "postgres_password" = ""
     "tamshai_db_password" = ""
+    "tamshai_app_password" = ""
     "keycloak_db_password" = ""
     "redis_password" = ""
     # Keycloak admin
@@ -154,6 +155,7 @@ try {
     $output["mongodb_password"] = Get-EnvSecret "MONGODB_PASSWORD"
     $output["postgres_password"] = Get-EnvSecret "POSTGRES_PASSWORD"
     $output["tamshai_db_password"] = Get-EnvSecret "TAMSHAI_DB_PASSWORD"
+    $output["tamshai_app_password"] = Get-EnvSecret "TAMSHAI_APP_PASSWORD"
     $output["keycloak_db_password"] = Get-EnvSecret "KEYCLOAK_DB_PASSWORD"
     $output["redis_password"] = Get-EnvSecret "REDIS_PASSWORD"
 

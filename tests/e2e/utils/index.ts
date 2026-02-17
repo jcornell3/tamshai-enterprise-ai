@@ -88,3 +88,10 @@ export {
   BASE_URLS,
   TEST_USER,
 } from './auth';
+
+// Role management utilities for temporary permission elevation
+export {
+  grantRealmRole,
+  revokeRealmRole,
+  getUserRealmRoles,
+} from './roles';

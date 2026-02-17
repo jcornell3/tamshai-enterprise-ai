@@ -32,6 +32,7 @@ $output = @{
     "user_password" = ""
     "test_user_password" = ""
     "test_user_totp_secret_raw" = ""
+    "tamshai_app_password" = ""
 }
 
 try {
@@ -91,6 +92,12 @@ try {
     $totpSecretFile = Join-Path $tempDir "TEST_USER_TOTP_SECRET_RAW"
     if (Test-Path $totpSecretFile) {
         $output["test_user_totp_secret_raw"] = (Get-Content $totpSecretFile -Raw).Trim()
+    }
+
+    # Read environment-specific tamshai_app password (for MCP servers - RLS enforced)
+    $tamshaiAppPwdFile = Join-Path $tempDir "${environment}_TAMSHAI_APP_PASSWORD"
+    if (Test-Path $tamshaiAppPwdFile) {
+        $output["tamshai_app_password"] = (Get-Content $tamshaiAppPwdFile -Raw).Trim()
     }
 
     # Cleanup temp directory

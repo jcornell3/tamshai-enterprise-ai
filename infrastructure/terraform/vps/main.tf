@@ -202,10 +202,9 @@ resource "random_password" "postgres_password" {
   special = false
 }
 
-resource "random_password" "tamshai_app_password" {
-  length  = 24
-  special = false
-}
+# NOTE: tamshai_app_password comes from GitHub Secrets (STAGE_TAMSHAI_APP_PASSWORD)
+# This user has NO BYPASSRLS - used by MCP servers to enforce RLS policies
+# The main 'tamshai' user has BYPASSRLS for identity-sync
 
 resource "random_password" "keycloak_admin_password" {
   length  = 24
@@ -495,6 +494,9 @@ locals {
     ""
   )
 
+  # Fetch tamshai_app_password from GitHub Secrets (required for RLS enforcement)
+  tamshai_app_password = data.external.github_secrets.result.tamshai_app_password
+
   cloud_init_config = templatefile("${path.module}/cloud-init.yaml", {
     domain                       = var.domain
     email                        = var.email
@@ -504,7 +506,7 @@ locals {
     claude_api_key               = replace(var.claude_api_key_stage, "$", "$$") # User-provided, may have special chars
     gemini_api_key               = replace(var.gemini_api_key_stage, "$", "$$") # User-provided, may have special chars
     postgres_password            = random_password.postgres_password.result
-    tamshai_app_password         = random_password.tamshai_app_password.result
+    tamshai_app_password         = local.tamshai_app_password
     keycloak_admin_pass          = random_password.keycloak_admin_password.result
     keycloak_db_password         = random_password.keycloak_db_password.result
     mongodb_password             = random_password.mongodb_password.result

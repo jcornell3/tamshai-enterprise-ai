@@ -6,13 +6,15 @@
  * - Verifies each app loads and shows role-appropriate content
  * - Validates portal shows all available apps for executive role
  *
- * Uses eve.thompson (CEO) credentials with executive composite role,
- * which grants read access to all departments.
+ * This test temporarily grants 'executive' role to test-user.journey,
+ * runs the tests, then revokes the role. The executive composite role
+ * grants read access to all departments.
  *
  * Architecture v1.5 - Cross-App Navigation
  *
  * Prerequisites:
- * - User must be authenticated with executive role (test-user.journey in dev)
+ * - test-user.journey must exist in Keycloak
+ * - Keycloak Admin API must be accessible
  */
 
 import { test, expect, BrowserContext } from '@playwright/test';
@@ -21,18 +23,35 @@ import {
   warmUpContext,
   BASE_URLS,
   ENV,
+  TEST_USER,
+  grantRealmRole,
+  revokeRealmRole,
 } from '../utils';
 
 let authenticatedContext: BrowserContext | null = null;
+const EXECUTIVE_ROLE = 'executive';
 
 test.describe('Cross-App Executive Journey', () => {
   test.beforeAll(async ({ browser }) => {
+    // Grant executive role BEFORE authentication so JWT includes the role
+    console.log(`[cross-app-executive] Granting '${EXECUTIVE_ROLE}' role to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, EXECUTIVE_ROLE);
+
+    // Now authenticate - the JWT will include the executive role
     authenticatedContext = await createAuthenticatedContext(browser);
     // Warm up the portal first
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/`);
   });
 
   test.afterAll(async () => {
+    // Always revoke the role, even if tests fail
+    try {
+      console.log(`[cross-app-executive] Revoking '${EXECUTIVE_ROLE}' role from '${TEST_USER.username}'...`);
+      await revokeRealmRole(TEST_USER.username, EXECUTIVE_ROLE);
+    } catch (error) {
+      console.error(`[cross-app-executive] Failed to revoke role: ${error}`);
+    }
+
     if (authenticatedContext) await authenticatedContext.close();
   });
 
