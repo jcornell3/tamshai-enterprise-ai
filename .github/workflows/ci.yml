@@ -1252,6 +1252,15 @@ jobs:
             TOKEN=$(echo "$EXCHANGE_BODY" | jq -r '.access_token')
             echo "Token preview: ${TOKEN:0:50}..."
 
+            # Step 2.5: Decode token and show key claims
+            echo "Decoding token claims..."
+            TOKEN_PAYLOAD=$(echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null || echo "$TOKEN" | cut -d. -f2 | base64 -di 2>/dev/null)
+            echo "Token issuer (iss): $(echo "$TOKEN_PAYLOAD" | jq -r '.iss')"
+            echo "Token audience (aud): $(echo "$TOKEN_PAYLOAD" | jq -r '.aud')"
+            echo "Token subject (sub): $(echo "$TOKEN_PAYLOAD" | jq -r '.sub')"
+            echo "Token exp: $(echo "$TOKEN_PAYLOAD" | jq -r '.exp')"
+            echo "Gateway expects issuer: http://localhost:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp"
+
             # Step 3: Test token against MCP Gateway
             echo "Testing token against MCP Gateway /api/user..."
             USER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://localhost:${{ vars.DEV_MCP_GATEWAY }}/api/user \
