@@ -26,8 +26,9 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA hr TO tamshai;
 ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON TABLES TO tamshai;
 ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON SEQUENCES TO tamshai;
 
--- IMPORTANT: Allow tamshai to bypass Row-Level Security policies
--- Required for identity-sync service account to read all employees
+-- IMPORTANT: tamshai user HAS BYPASSRLS for identity-sync service
+-- identity-sync needs to read ALL employees to sync them to Keycloak
+-- MCP servers use tamshai_app (below) which does NOT have BYPASSRLS
 ALTER USER tamshai BYPASSRLS;
 
 -- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)

@@ -51,11 +51,13 @@ x-mcp-common-env: &mcp-common-env
   MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?MCP_INTERNAL_SECRET is required}
 
 # PostgreSQL connection variables (HR, Finance, Payroll, Tax)
+# Uses tamshai_app user which does NOT have BYPASSRLS - RLS policies enforced
+# (tamshai user has BYPASSRLS and is used only by identity-sync)
 x-mcp-pg-env: &mcp-pg-env
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
-  POSTGRES_USER: tamshai
-  POSTGRES_PASSWORD: ${TAMSHAI_DB_PASSWORD:?TAMSHAI_DB_PASSWORD is required}
+  POSTGRES_USER: tamshai_app
+  POSTGRES_PASSWORD: ${TAMSHAI_APP_PASSWORD:-changeme}
 
 # Redis connection variables (all MCP services)
 x-mcp-redis-env: &mcp-redis-env
