@@ -31,15 +31,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA hr GRANT ALL ON SEQUENCES TO tamshai;
 -- MCP servers use tamshai_app (below) which does NOT have BYPASSRLS
 ALTER USER tamshai BYPASSRLS;
 
--- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)
--- This user does NOT have BYPASSRLS - RLS policies will be enforced
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app') THEN
-        CREATE ROLE tamshai_app WITH LOGIN PASSWORD 'changeme';
-    END IF;
-END
-$$;
+-- tamshai_app user is created by init-multiple-databases.sh with password from
+-- TAMSHAI_APP_PASSWORD env var. This user does NOT have BYPASSRLS - RLS enforced.
 
 -- Grant permissions to tamshai_app (same as tamshai but without BYPASSRLS)
 GRANT USAGE ON SCHEMA hr TO tamshai_app;

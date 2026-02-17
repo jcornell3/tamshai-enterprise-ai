@@ -312,11 +312,11 @@ resource "local_file" "docker_env" {
   filename = local.env_file
   content = templatefile("${path.module}/templates/docker.env.tftpl", {
     # Database credentials (from GitHub secrets, environment-specific)
-    postgres_password     = data.external.github_secrets.result.postgres_password
-    tamshai_db_password   = data.external.github_secrets.result.tamshai_db_password
-    tamshai_app_password  = data.external.github_secrets.result.tamshai_app_password
-    keycloak_db_password  = data.external.github_secrets.result.keycloak_db_password
-    mongodb_password      = data.external.github_secrets.result.mongodb_password
+    postgres_password    = data.external.github_secrets.result.postgres_password
+    tamshai_db_password  = data.external.github_secrets.result.tamshai_db_password
+    tamshai_app_password = data.external.github_secrets.result.tamshai_app_password
+    keycloak_db_password = data.external.github_secrets.result.keycloak_db_password
+    mongodb_password     = data.external.github_secrets.result.mongodb_password
 
     # Keycloak (from GitHub secrets only - no fallbacks)
     keycloak_admin          = "admin"
@@ -760,16 +760,16 @@ resource "null_resource" "keycloak_sync_customer_realm" {
 
   provisioner "local-exec" {
     interpreter = ["bash", "-c"]
-    # IMPORTANT: Use //tmp/ (double slash) to prevent Git Bash from converting
-    # /tmp/ to C:/Users/.../AppData/Local/Temp/ on Windows
-    command     = <<-EOT
+    # IMPORTANT: Use heredoc for docker exec to prevent Git Bash MSYS path conversion
+    # (docker cp container:/path is not affected, but docker exec -c "/path" is)
+    command = <<-EOT
       echo "Syncing customer realm..."
 
-      # Copy scripts into container (use //tmp to prevent MSYS path conversion)
-      docker cp "${var.project_root}/keycloak/scripts/sync-customer-realm.sh" tamshai-dev-keycloak://tmp/sync-customer-realm.sh
-      docker cp "${var.project_root}/keycloak/scripts/lib" tamshai-dev-keycloak://tmp/lib
+      # Copy scripts into container (container:/path format is not affected by MSYS conversion)
+      docker cp "${var.project_root}/keycloak/scripts/sync-customer-realm.sh" tamshai-dev-keycloak:/tmp/sync-customer-realm.sh
+      docker cp "${var.project_root}/keycloak/scripts/lib" tamshai-dev-keycloak:/tmp/lib
 
-      # Fix line endings and permissions (use heredoc to avoid path conversion)
+      # Fix line endings and permissions (use heredoc to avoid path conversion in docker exec)
       docker exec -u 0 tamshai-dev-keycloak bash << 'INNEREOF'
 sed -i "s/\r$//" /tmp/sync-customer-realm.sh
 find /tmp/lib -name "*.sh" -exec sed -i "s/\r$//" {} \;

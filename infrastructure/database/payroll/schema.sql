@@ -287,15 +287,8 @@ CREATE POLICY payroll_admin_contractor_payments ON payroll.contractor_payments
         string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['payroll-read', 'payroll-write', 'executive']
     );
 
--- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)
--- This user does NOT have BYPASSRLS - RLS policies will be enforced
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app') THEN
-        CREATE ROLE tamshai_app WITH LOGIN PASSWORD 'changeme';
-    END IF;
-END
-$$;
+-- tamshai_app user is created by init-multiple-databases.sh with password from
+-- TAMSHAI_APP_PASSWORD env var. This user does NOT have BYPASSRLS - RLS enforced.
 
 -- Grant permissions to tamshai_app user (without BYPASSRLS)
 GRANT USAGE ON SCHEMA payroll TO tamshai_app;

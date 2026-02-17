@@ -40,15 +40,42 @@ EOSQL
 
 if [ -n "$POSTGRES_MULTIPLE_DATABASES" ]; then
     echo "Multiple database creation requested: $POSTGRES_MULTIPLE_DATABASES"
-    
+
     # Split by comma
     IFS=',' read -ra DATABASES <<< "$POSTGRES_MULTIPLE_DATABASES"
-    
+
     for db_config in "${DATABASES[@]}"; do
         # Split by colon (database:user:password)
         IFS=':' read -r database user password <<< "$db_config"
         create_user_and_database "$database" "$user" "$password"
     done
-    
+
     echo "Multiple databases created successfully"
+fi
+
+# Create tamshai_app user for MCP servers (RLS-enforced, no BYPASSRLS)
+# This user is used by MCP servers to connect with Row-Level Security enforcement
+if [ -n "${TAMSHAI_APP_PASSWORD:-}" ]; then
+    echo "Creating tamshai_app user for RLS-enforced MCP connections..."
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+        DO \$\$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app') THEN
+                CREATE ROLE tamshai_app WITH LOGIN PASSWORD '$TAMSHAI_APP_PASSWORD';
+                RAISE NOTICE 'Created tamshai_app user';
+            ELSE
+                -- Update password if user already exists (idempotent)
+                ALTER ROLE tamshai_app WITH PASSWORD '$TAMSHAI_APP_PASSWORD';
+                RAISE NOTICE 'Updated tamshai_app password';
+            END IF;
+            -- Ensure NO BYPASSRLS - critical for RLS enforcement
+            ALTER ROLE tamshai_app NOBYPASSRLS;
+        END
+        \$\$;
+EOSQL
+
+    echo "tamshai_app user ready"
+else
+    echo "WARNING: TAMSHAI_APP_PASSWORD not set - tamshai_app user will use default password from SQL scripts"
 fi

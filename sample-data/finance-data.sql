@@ -21,15 +21,9 @@ ALTER USER tamshai SET row_security = on;
 ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai;
 ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT USAGE, SELECT ON SEQUENCES TO tamshai;
 
--- Create tamshai_app user for RLS-enforced operations (used by MCP servers and tests)
--- This user does NOT have BYPASSRLS - RLS policies will be enforced
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app') THEN
-        CREATE ROLE tamshai_app WITH LOGIN PASSWORD 'changeme';
-    END IF;
-END
-$$;
+-- tamshai_app user is created by init-multiple-databases.sh with password from
+-- TAMSHAI_APP_PASSWORD env var. This user does NOT have BYPASSRLS - RLS enforced.
+
 -- Grant permissions to tamshai_app (RLS-enforced, no DELETE)
 GRANT USAGE ON SCHEMA finance TO tamshai_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
