@@ -65,16 +65,15 @@ function Set-TerraformVar {
     Write-Host ""
 }
 
-Write-Host "SECTION 1: Keycloak Configuration (Required Now)" -ForegroundColor Magenta
+Write-Host "SECTION 1: Keycloak Configuration" -ForegroundColor Magenta
 Write-Host "------------------------------------------------------" -ForegroundColor Magenta
 Write-Host ""
 
-Set-TerraformVar `
-    -Name "TF_VAR_keycloak_admin_password" `
-    -Value "admin" `
-    -Description "Keycloak admin password (dev only)" `
-    -Required $true `
-    -Sensitive $true
+# NOTE: keycloak_admin_password is fetched from GitHub Secrets via Terraform's
+# external data source (fetch-github-secrets.ps1). Do NOT set TF_VAR_keycloak_admin_password
+# here - default passwords should never be used.
+Write-Host "  keycloak_admin_password: Fetched from GitHub Secret (DEV_KEYCLOAK_ADMIN_PASSWORD)" -ForegroundColor Cyan
+Write-Host ""
 
 # test_user_password must be set via TEST_USER_PASSWORD environment variable
 # This is used for test-user.journey E2E account
