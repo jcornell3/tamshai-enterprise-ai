@@ -391,6 +391,20 @@ resource "keycloak_openid_client_service_account_role" "integration_runner_imper
   role                    = data.keycloak_role.impersonation.name
 }
 
+# Audience mapper for integration runner to include mcp-gateway in exchanged tokens
+# This allows tokens exchanged via mcp-integration-runner to be accepted by mcp-gateway
+resource "keycloak_openid_audience_protocol_mapper" "integration_runner_mcp_gateway_audience" {
+  count = var.environment == "dev" || var.environment == "ci" ? 1 : 0
+
+  realm_id  = keycloak_realm.tamshai_corp.id
+  client_id = keycloak_openid_client.mcp_integration_runner[0].id
+  name      = "mcp-gateway-audience"
+
+  included_client_audience = "mcp-gateway"
+  add_to_id_token          = false
+  add_to_access_token      = true
+}
+
 # ============================================================
 # Test Users
 # ============================================================

@@ -1235,15 +1235,14 @@ jobs:
           echo "✅ Service token acquired"
 
           # Step 2: Token exchange for alice.chen
-          # Use audience=mcp-gateway to match integration tests and E2E tests
-          echo "Exchanging for alice.chen user token (audience=mcp-gateway)..."
+          # Don't specify audience - mcp-integration-runner has audience mapper that adds mcp-gateway
+          echo "Exchanging for alice.chen user token (no audience param - using mapper)..."
           EXCHANGE_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://127.0.0.1:${{ vars.DEV_KEYCLOAK }}/realms/tamshai-corp/protocol/openid-connect/token \
             -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
             -d "client_id=mcp-integration-runner" \
             -d "client_secret=${MCP_INTEGRATION_RUNNER_SECRET}" \
             -d "subject_token=${SVC_TOKEN}" \
-            -d "requested_subject=alice.chen" \
-            -d "audience=mcp-gateway")
+            -d "requested_subject=alice.chen")
 
           EXCHANGE_HTTP_CODE=$(echo "$EXCHANGE_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
           EXCHANGE_BODY=$(echo "$EXCHANGE_RESPONSE" | grep -v "HTTP_CODE:")

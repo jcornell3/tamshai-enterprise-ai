@@ -79,8 +79,8 @@ async function getAccessToken(
   const svcToken = (await svcResponse.json()).access_token;
 
   // Step 2: Exchange for user token via token-exchange
-  // Include both audience (for gateway validation) and scope (for claims)
-  // Matches integration tests: services/mcp-gateway/src/__tests__/integration/setup.ts
+  // Don't specify audience - the mcp-integration-runner client has an audience mapper
+  // that automatically adds mcp-gateway to the token's aud claim
   const exchangeResponse = await request.post(tokenUrl, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     data: new URLSearchParams({
@@ -89,7 +89,6 @@ async function getAccessToken(
       client_secret: INTEGRATION_CLIENT_SECRET,
       subject_token: svcToken,
       requested_subject: username,
-      audience: 'mcp-gateway',
     }).toString(),
   });
 

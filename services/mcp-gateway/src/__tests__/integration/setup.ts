@@ -352,6 +352,8 @@ export async function getImpersonatedToken(username: string): Promise<string> {
         throw new Error('MCP_INTEGRATION_RUNNER_SECRET environment variable is required for integration tests');
     }
 
+    // Don't specify audience - mcp-integration-runner has an audience mapper
+    // that automatically adds mcp-gateway to the token's aud claim
     const response = await axios.post(
         `${KEYCLOAK_CONFIG.url}/realms/${KEYCLOAK_CONFIG.realm}/protocol/openid-connect/token`,
         new URLSearchParams({
@@ -360,7 +362,6 @@ export async function getImpersonatedToken(username: string): Promise<string> {
             client_secret: clientSecret,
             subject_token: serviceToken,
             requested_subject: username,
-            audience: 'mcp-gateway',
         }),
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
