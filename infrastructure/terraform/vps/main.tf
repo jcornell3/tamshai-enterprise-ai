@@ -202,6 +202,11 @@ resource "random_password" "postgres_password" {
   special = false
 }
 
+resource "random_password" "tamshai_app_password" {
+  length  = 24
+  special = false
+}
+
 resource "random_password" "keycloak_admin_password" {
   length  = 24
   special = false # Avoid shell/docker-compose expansion issues with $, (, ), etc.
@@ -499,6 +504,7 @@ locals {
     claude_api_key               = replace(var.claude_api_key_stage, "$", "$$") # User-provided, may have special chars
     gemini_api_key               = replace(var.gemini_api_key_stage, "$", "$$") # User-provided, may have special chars
     postgres_password            = random_password.postgres_password.result
+    tamshai_app_password         = random_password.tamshai_app_password.result
     keycloak_admin_pass          = random_password.keycloak_admin_password.result
     keycloak_db_password         = random_password.keycloak_db_password.result
     mongodb_password             = random_password.mongodb_password.result

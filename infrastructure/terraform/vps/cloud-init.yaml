@@ -61,6 +61,9 @@ write_files:
       POSTGRES_PASSWORD=${postgres_password}
       KEYCLOAK_DB_PASSWORD=${keycloak_db_password}
       TAMSHAI_DB_PASSWORD=${postgres_password}
+      # tamshai_app user for MCP servers (enforces RLS - no BYPASSRLS)
+      # The main 'tamshai' user has BYPASSRLS for identity-sync
+      TAMSHAI_APP_PASSWORD=${tamshai_app_password}
 
       # MongoDB
       MONGO_INITDB_ROOT_USERNAME=tamshai
