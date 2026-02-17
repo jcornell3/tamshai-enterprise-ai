@@ -44,7 +44,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Payroll Dashboard")')).toBeVisible({ timeout: 10000 });
 
@@ -67,7 +67,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Payroll Dashboard")')).toBeVisible({ timeout: 10000 });
 
@@ -89,7 +89,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/pay-runs`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         // h1 heading (unique vs sidebar "Pay Runs" link)
         await expect(page.locator('h1:has-text("Pay Runs")')).toBeVisible({ timeout: 10000 });
@@ -111,7 +111,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/pay-runs`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         // New Pay Run is a Link wrapping a button (invalid HTML nesting)
         await expect(page.locator('a:has-text("New Pay Run"), button:has-text("New Pay Run")').first()).toBeVisible({ timeout: 10000 });
@@ -127,7 +127,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/pay-stubs`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Pay Stubs")')).toBeVisible({ timeout: 10000 });
       } finally {
@@ -140,7 +140,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/pay-stubs`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         // YTD cards are always visible (h3 elements inside cards)
         await expect(page.locator('h3:has-text("YTD Gross")')).toBeVisible({ timeout: 10000 });
@@ -157,7 +157,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/direct-deposit`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Direct Deposit")')).toBeVisible({ timeout: 10000 });
       } finally {
@@ -170,7 +170,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/direct-deposit`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('button:has-text("Add Account")')).toBeVisible({ timeout: 10000 });
       } finally {
@@ -185,7 +185,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/1099`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("1099 Contractors")')).toBeVisible({ timeout: 10000 });
       } finally {
@@ -198,7 +198,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/1099`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('button:has-text("Generate 1099s")')).toBeVisible({ timeout: 10000 });
       } finally {
@@ -213,7 +213,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/benefits`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Benefits")')).toBeVisible({ timeout: 10000 });
         await expect(page.locator('text=View your benefit elections and deductions')).toBeVisible();
@@ -227,7 +227,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/benefits`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Benefits")')).toBeVisible({ timeout: 10000 });
 
@@ -246,7 +246,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/benefits`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Benefits")')).toBeVisible({ timeout: 10000 });
 
@@ -275,7 +275,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/1099`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         const statusFilter = page.locator('#status-filter, select[aria-label="Status"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
@@ -297,7 +297,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/1099`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         const yearFilter = page.locator('#year-filter, select[aria-label="Year"]');
         const hasFilter = await yearFilter.isVisible({ timeout: 10000 }).catch(() => false);
@@ -319,7 +319,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/1099`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         const hasTable = await page.locator('th:has-text("Name")').isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTable) {
@@ -347,7 +347,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/1099`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         const hasTable = await page.locator('tbody tr').first().isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTable) {
@@ -371,7 +371,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/tax`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Tax Withholdings")')).toBeVisible({ timeout: 10000 });
         await expect(page.locator('text=Manage your federal and state tax elections')).toBeVisible();
@@ -385,7 +385,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/tax`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         await expect(page.locator('h1:has-text("Tax Withholdings")')).toBeVisible({ timeout: 10000 });
 
@@ -410,7 +410,7 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/tax`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         // Verify the page renders correctly regardless of data availability
         await expect(page.locator('h1:has-text("Tax Withholdings")')).toBeVisible({ timeout: 10000 });
@@ -439,16 +439,16 @@ test.describe('Payroll App E2E Tests', () => {
 
       try {
         await page.goto(`${PAYROLL_URL}/`);
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
 
         // Click Pay Runs in sidebar
         await page.click('a[href*="/pay-runs"]');
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
         await expect(page.locator('h1:has-text("Pay Runs")')).toBeVisible({ timeout: 10000 });
 
         // Click Pay Stubs in sidebar
         await page.click('a[href*="/pay-stubs"]');
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
         await expect(page.locator('h1:has-text("Pay Stubs")')).toBeVisible({ timeout: 10000 });
       } finally {
         await page.close();
@@ -476,7 +476,7 @@ test.describe('Payroll User Journeys', () => {
     try {
       // Navigate to pay stubs
       await page.goto(`${PAYROLL_URL}/pay-stubs`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
 
       // Verify pay stubs page is visible
       await expect(page.locator('h1:has-text("Pay Stubs")')).toBeVisible({ timeout: 10000 });
@@ -499,7 +499,7 @@ test.describe('Payroll User Journeys', () => {
     try {
       // Navigate to pay runs
       await page.goto(`${PAYROLL_URL}/pay-runs`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
 
       // Click new pay run button (Link styled as button)
       const newPayRunButton = page.locator('a:has-text("New Pay Run"), button:has-text("New Pay Run")');
