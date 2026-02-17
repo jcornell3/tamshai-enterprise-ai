@@ -77,6 +77,11 @@ runs:
         DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_USERNAME=admin"
         DOCKER_ARGS="$DOCKER_ARGS -e KC_BOOTSTRAP_ADMIN_PASSWORD=${{ inputs.admin-password }}"
 
+        # Set hostname to 'localhost' so tokens always use consistent issuer claim
+        # This prevents issuer mismatch when clients use 127.0.0.1 vs localhost
+        DOCKER_ARGS="$DOCKER_ARGS -e KC_HOSTNAME=localhost"
+        DOCKER_ARGS="$DOCKER_ARGS -e KC_HOSTNAME_PORT=${{ inputs.keycloak-port }}"
+
         # Set relative path if provided
         REL_PATH="${{ inputs.http-relative-path }}"
         if [ -n "$REL_PATH" ]; then
