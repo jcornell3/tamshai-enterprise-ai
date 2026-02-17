@@ -18,7 +18,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
-import { getEphemeralUser, getImpersonatedToken } from './setup';
+import { getImpersonatedToken } from './setup';
 
 // Get internal secret from environment (required for gateway auth)
 const MCP_INTERNAL_SECRET = process.env.MCP_INTERNAL_SECRET || '';
@@ -110,8 +110,26 @@ function createMcpUiClient(): AxiosInstance {
 const tokenCache = new Map<string, string>();
 
 /**
+ * Map roles to pre-seeded real users who exist in BOTH Keycloak and hr.employees.
+ * These users have matching keycloak_user_id in hr.employees for org chart lookups.
+ */
+const ROLE_TO_REAL_USER: Record<string, string> = {
+  'executive': 'eve.thompson',
+  'hr-read': 'alice.chen',
+  'hr-write': 'alice.chen',
+  'finance-read': 'bob.martinez',
+  'finance-write': 'bob.martinez',
+  'sales-read': 'carol.johnson',
+  'sales-write': 'carol.johnson',
+  'support-read': 'dan.williams',
+  'support-write': 'dan.williams',
+  'manager': 'nina.patel',
+};
+
+/**
  * Helper to make display requests with JWT authentication
- * Uses token exchange via getImpersonatedToken (no ROPC)
+ * Uses token exchange via getImpersonatedToken with REAL pre-seeded users
+ * (not ephemeral users) so org chart lookups find matching employee records.
  */
 async function postDisplay(
   client: AxiosInstance,
@@ -119,27 +137,11 @@ async function postDisplay(
   userContext: DisplayRequest['userContext']
 ): Promise<{ status: number; data: DisplayResponse }> {
   // Get JWT token for the user
-  let token = tokenCache.get(userContext.username!);
+  const realUsername = ROLE_TO_REAL_USER[userContext.roles[0]] || 'eve.thompson';
+  let token = tokenCache.get(realUsername);
   if (!token) {
-    // Map test user to ephemeral user credentials
-    const roleToEphemeralRole: Record<string, 'executive' | 'hr' | 'finance' | 'sales' | 'support'> = {
-      'executive': 'executive',
-      'hr-read': 'hr',
-      'hr-write': 'hr',
-      'finance-read': 'finance',
-      'finance-write': 'finance',
-      'sales-read': 'sales',
-      'sales-write': 'sales',
-      'support-read': 'support',
-      'support-write': 'support',
-      'manager': 'hr', // Managers are in HR department
-    };
-
-    const ephemeralRole = roleToEphemeralRole[userContext.roles[0]] || 'executive';
-    const ephemeralUser = getEphemeralUser(ephemeralRole);
-
-    token = await getImpersonatedToken(ephemeralUser.username);
-    tokenCache.set(userContext.username!, token);
+    token = await getImpersonatedToken(realUsername);
+    tokenCache.set(realUsername, token);
   }
 
   const response = await client.post<DisplayResponse>(
@@ -373,9 +375,8 @@ describeIntegration('MCP UI - Error Handling', () => {
   });
 
   test('Missing directive field returns proper error', async () => {
-    // Get JWT token for the user via token exchange
-    const ephemeralUser = getEphemeralUser('executive');
-    const token = await getImpersonatedToken(ephemeralUser.username);
+    // Get JWT token for the user via token exchange (using real pre-seeded user)
+    const token = await getImpersonatedToken(TEST_USERS.executive.username);
 
     const response = await client.post('/api/display', {
       // Missing directive field
