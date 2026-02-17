@@ -199,7 +199,7 @@ data "external" "github_secrets" {
 
 resource "random_password" "postgres_password" {
   length  = 24
-  special = false
+  special = true
 }
 
 # NOTE: tamshai_app_password comes from GitHub Secrets (STAGE_TAMSHAI_APP_PASSWORD)
@@ -208,62 +208,62 @@ resource "random_password" "postgres_password" {
 
 resource "random_password" "keycloak_admin_password" {
   length  = 24
-  special = false # Avoid shell/docker-compose expansion issues with $, (, ), etc.
+  special = true
 }
 
 resource "random_password" "keycloak_db_password" {
   length  = 24
-  special = false
+  special = true
 }
 
 resource "random_password" "mongodb_password" {
   length  = 24
-  special = false
+  special = true
 }
 
 resource "random_password" "minio_password" {
   length  = 24
-  special = false
+  special = true
 }
 
 resource "random_password" "jwt_secret" {
   length  = 64
-  special = false
+  special = true
 }
 
 resource "random_password" "mcp_hr_service_secret" {
   length  = 32
-  special = false
+  special = true
 }
 
 resource "random_password" "redis_password" {
   length  = 24
-  special = false
+  special = true
 }
 
 resource "random_password" "elastic_password" {
   length  = 24
-  special = false
+  special = true
 }
 
 resource "random_password" "vault_dev_root_token" {
   length  = 24
-  special = false
+  special = true
 }
 
 resource "random_password" "mcp_internal_secret" {
   length  = 32
-  special = false
+  special = true
 }
 
 resource "random_password" "mcp_ui_client_secret" {
   length  = 32
-  special = false
+  special = true
 }
 
 resource "random_password" "e2e_admin_api_key" {
   length  = 32
-  special = false
+  special = true
 }
 
 # SECURITY: Root password stored in encrypted Terraform Cloud state.
@@ -445,14 +445,12 @@ resource "hcloud_firewall" "tamshai" {
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
-  # Vault HTTPS API - required for GitHub Actions OIDC authentication
-  # before SSH certificates can be obtained
-  rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "8200"
-    source_ips = ["0.0.0.0/0", "::/0"]
-  }
+  # SECURITY: Vault port 8200 is NOT exposed to the public internet.
+  # Access Vault via SSH tunnel instead. See docs/security/VAULT_ACCESS.md
+  #
+  # Previous configuration exposed 8200 to 0.0.0.0/0 which was a security risk.
+  # All GitHub Actions workflows access Vault through SSH tunneling:
+  #   ssh root@vps "VAULT_ADDR='https://127.0.0.1:8200' vault status"
 
   dynamic "rule" {
     for_each = length(var.allowed_ssh_ips) > 0 ? [1] : []
@@ -505,25 +503,25 @@ locals {
     github_branch                = var.github_branch
     claude_api_key               = replace(var.claude_api_key_stage, "$", "$$") # User-provided, may have special chars
     gemini_api_key               = replace(var.gemini_api_key_stage, "$", "$$") # User-provided, may have special chars
-    postgres_password            = random_password.postgres_password.result
-    tamshai_app_password         = local.tamshai_app_password
-    keycloak_admin_pass          = random_password.keycloak_admin_password.result
-    keycloak_db_password         = random_password.keycloak_db_password.result
-    mongodb_password             = random_password.mongodb_password.result
-    minio_password               = random_password.minio_password.result
-    jwt_secret                   = random_password.jwt_secret.result
-    root_password                = random_password.root_password.result
-    mcp_gateway_client_secret    = var.mcp_gateway_client_secret
-    mcp_hr_service_client_secret = local.mcp_hr_service_secret
-    stage_user_password          = local.stage_user_password_resolved
-    test_user_password           = local.test_user_password
-    test_user_totp_secret_raw    = local.test_user_totp_secret_raw
-    redis_password               = random_password.redis_password.result
-    elastic_password             = random_password.elastic_password.result
-    vault_dev_root_token         = random_password.vault_dev_root_token.result
-    mcp_internal_secret          = random_password.mcp_internal_secret.result
-    mcp_ui_client_secret         = random_password.mcp_ui_client_secret.result
-    e2e_admin_api_key            = random_password.e2e_admin_api_key.result
+    postgres_password            = base64encode(random_password.postgres_password.result)
+    tamshai_app_password         = base64encode(local.tamshai_app_password)
+    keycloak_admin_pass          = base64encode(random_password.keycloak_admin_password.result)
+    keycloak_db_password         = base64encode(random_password.keycloak_db_password.result)
+    mongodb_password             = base64encode(random_password.mongodb_password.result)
+    minio_password               = base64encode(random_password.minio_password.result)
+    jwt_secret                   = base64encode(random_password.jwt_secret.result)
+    root_password                = base64encode(random_password.root_password.result)
+    mcp_gateway_client_secret    = base64encode(var.mcp_gateway_client_secret)
+    mcp_hr_service_client_secret = base64encode(local.mcp_hr_service_secret)
+    stage_user_password          = base64encode(local.stage_user_password_resolved)
+    test_user_password           = base64encode(local.test_user_password)
+    test_user_totp_secret_raw    = base64encode(local.test_user_totp_secret_raw)
+    redis_password               = base64encode(random_password.redis_password.result)
+    elastic_password             = base64encode(random_password.elastic_password.result)
+    vault_dev_root_token         = base64encode(random_password.vault_dev_root_token.result)
+    mcp_internal_secret          = base64encode(random_password.mcp_internal_secret.result)
+    mcp_ui_client_secret         = base64encode(random_password.mcp_ui_client_secret.result)
+    e2e_admin_api_key            = base64encode(random_password.e2e_admin_api_key.result)
   })
 }
 

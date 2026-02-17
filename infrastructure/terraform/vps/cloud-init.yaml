@@ -338,6 +338,57 @@ runcmd:
   # Move generated .env file from temp location
   - mv /tmp/tamshai.env /opt/tamshai/.env
 
+  # Decode passwords in .env file
+  - |
+    #!/bin/bash
+    set -e
+    ENV_FILE="/opt/tamshai/.env"
+    DECODED_FILE="$ENV_FILE.decoded"
+    
+    # List of password variables to decode
+    PASSWORD_VARS=(
+      "postgres_password"
+      "tamshai_app_password"
+      "keycloak_admin_pass"
+      "keycloak_db_password"
+      "mongodb_password"
+      "minio_password"
+      "jwt_secret"
+      "root_password"
+      "mcp_gateway_client_secret"
+      "mcp_hr_service_client_secret"
+      "stage_user_password"
+      "test_user_password"
+      "test_user_totp_secret_raw"
+      "redis_password"
+      "elastic_password"
+      "vault_dev_root_token"
+      "mcp_internal_secret"
+      "mcp_ui_client_secret"
+      "e2e_admin_api_key"
+    )
+
+    # Create a new file with decoded passwords
+    while IFS= read -r line; do
+      is_password=false
+      for var in "${PASSWORD_VARS[@]}"; do
+        if [[ "$line" == "$var="* ]]; then
+          is_password=true
+          key=$(echo "$line" | cut -d '=' -f 1)
+          value=$(echo "$line" | cut -d '=' -f 2-)
+          decoded_value=$(echo "$value" | base64 -d)
+          echo "$key=$decoded_value" >> "$DECODED_FILE"
+          break
+        fi
+      done
+      if [ "$is_password" = false ]; then
+        echo "$line" >> "$DECODED_FILE"
+      fi
+    done < "$ENV_FILE"
+
+    # Replace the original .env file
+    mv "$DECODED_FILE" "$ENV_FILE"
+
   # Symlink .env so docker compose in infrastructure/docker/ can find it
   - ln -sf /opt/tamshai/.env /opt/tamshai/infrastructure/docker/.env
 
@@ -468,7 +519,7 @@ runcmd:
       "type": "otp",
       "userLabel": "Terraform Provisioned",
       "secretData": "{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}",
-      "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA1\",\"counter\":0}"
+      "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\",\"counter\":0}"
     }
     EOF
     )
