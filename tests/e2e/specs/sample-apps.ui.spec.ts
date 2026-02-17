@@ -394,7 +394,8 @@ test.describe('Cross-App Navigation', () => {
       const hrCard = page.locator('a[href*="/hr"], [data-app="hr"]').first();
       if (await hrCard.isVisible({ timeout: 5000 })) {
         await hrCard.click();
-        await page.waitForLoadState('networkidle');
+        // Use 'load' instead of 'networkidle' - SSE connections keep network active
+        await page.waitForLoadState('load');
 
         // Verify HR app loaded (Employee Directory is the index page)
         await expect(page.locator('text=Employee Directory')).toBeVisible({ timeout: 10000 });

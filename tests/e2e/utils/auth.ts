@@ -88,7 +88,8 @@ export async function authenticateUser(page: Page): Promise<void> {
     // TOTP not required — continue
   }
 
-  await page.waitForLoadState('networkidle', { timeout: 30000 });
+  // Use 'load' instead of 'networkidle' - SSE connections keep network active
+  await page.waitForLoadState('load', { timeout: 30000 });
 }
 
 /**
@@ -212,18 +213,18 @@ export async function warmUpContext(
 ): Promise<void> {
   const warmup = await ctx.newPage();
   try {
-    // Hard reload to bypass cache
+    // Use 'load' instead of 'networkidle' - SSE connections keep network active
     await warmup.goto(url, {
       timeout: 60000,
-      waitUntil: 'networkidle',
+      waitUntil: 'load',
     });
     // Wait for the app to fully render (after potential OIDC redirect cycle)
     try {
-      await warmup.waitForSelector(selectors, { timeout: 45000 });
+      await warmup.waitForSelector(selectors, { timeout: 30000 });
     } catch {
       // Selector wait failed, but OIDC redirect may have completed.
       // Wait a bit more for tokens to settle in sessionStorage.
-      await warmup.waitForTimeout(3000);
+      await warmup.waitForTimeout(2000);
     }
 
     // Re-capture sessionStorage which now contains app-specific OIDC tokens
