@@ -184,26 +184,38 @@ sync_token_exchange_permissions() {
     # Get admin token for REST API calls (inline to avoid subshell issues)
     log_info "  Authenticating for REST API access..."
 
-    # Set admin credentials from environment
-    local ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-    local ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD}"
-
-    if [ -z "$ADMIN_PASS" ]; then
-        log_error "  KEYCLOAK_ADMIN_PASSWORD not set"
-        return 1
-    fi
-
-    # Acquire admin token (inline pattern from configure-token-exchange.sh)
+    # Acquire admin token
+    # Security: Prefer client credentials grant (no password exposure)
+    # Fall back to password grant only if KEYCLOAK_ADMIN_CLIENT_SECRET is not set
     local token_url="${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
     log_info "  Token URL: $token_url"
 
     # Note: ADMIN_TOKEN must be non-local so rest_api_call() can access it
-    ADMIN_TOKEN=$(curl -s -X POST "$token_url" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=${ADMIN_USER}" \
-        -d "password=${ADMIN_PASS}" \
-        -d "grant_type=password" \
-        -d "client_id=admin-cli" | /usr/local/bin/jq -r '.access_token // empty')
+    if [ -n "${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" ]; then
+        log_info "  Using client credentials grant (KEYCLOAK_ADMIN_CLIENT_SECRET)"
+        ADMIN_TOKEN=$(curl -s -X POST "$token_url" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "client_id=admin-cli" \
+            -d "client_secret=${KEYCLOAK_ADMIN_CLIENT_SECRET}" \
+            -d "grant_type=client_credentials" | /usr/local/bin/jq -r '.access_token // empty')
+    else
+        # Fallback to password grant (for environments without admin client secret)
+        log_warn "  KEYCLOAK_ADMIN_CLIENT_SECRET not set, falling back to password grant"
+        local ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
+        local ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD}"
+
+        if [ -z "$ADMIN_PASS" ]; then
+            log_error "  Neither KEYCLOAK_ADMIN_CLIENT_SECRET nor KEYCLOAK_ADMIN_PASSWORD set"
+            return 1
+        fi
+
+        ADMIN_TOKEN=$(curl -s -X POST "$token_url" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=${ADMIN_USER}" \
+            -d "password=${ADMIN_PASS}" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" | /usr/local/bin/jq -r '.access_token // empty')
+    fi
 
     if [ -z "$ADMIN_TOKEN" ] || [ "$ADMIN_TOKEN" = "null" ]; then
         log_error "  Failed to get admin token"

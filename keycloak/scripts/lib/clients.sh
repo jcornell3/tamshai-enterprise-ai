@@ -127,22 +127,31 @@ EOF
 # P1: directAccessGrantsEnabled is only true in dev (for integration tests).
 # In stage/prod, password grant is disabled — use PKCE or service account flows.
 get_mcp_gateway_client_json() {
-    # Determine domain based on environment
+    # Determine domain and webOrigins based on environment
+    # Security: Explicit webOrigins prevent CSRF attacks (no wildcards)
     local domain
     local direct_access="false"
+    local web_origins
     case "${ENV:-dev}" in
         dev)
             domain="tamshai.local"
             direct_access="false"
+            # Dev: localhost for tests + tamshai.local with various ports
+            web_origins='"http://localhost:3100", "http://localhost:4000", "http://localhost:4001", "http://localhost:4002", "http://localhost:4003", "http://localhost:4004", "https://www.tamshai.local", "https://www.tamshai.local:8443"'
             ;;
         stage)
             domain="www.tamshai.com"
+            # Stage: Only the production staging domain
+            web_origins='"https://www.tamshai.com"'
             ;;
         prod)
             domain="prod.tamshai.com"
+            # Prod: Only the production domain
+            web_origins='"https://prod.tamshai.com"'
             ;;
         *)
             domain="localhost"
+            web_origins='"http://localhost:3100"'
             ;;
     esac
 
@@ -162,7 +171,7 @@ get_mcp_gateway_client_json() {
         "https://$domain/*",
         "https://$domain/api/*"
     ],
-    "webOrigins": ["+"],
+    "webOrigins": [$web_origins],
     "fullScopeAllowed": true,
     "defaultClientScopes": ["openid", "profile", "email", "roles"]
 }
@@ -287,6 +296,7 @@ EOF
 }
 
 # Generate JSON for mcp-hr-service client (confidential, service account)
+# Security: fullScopeAllowed=false limits token claims to explicitly assigned scopes
 get_mcp_hr_service_client_json() {
     cat <<EOF
 {
@@ -298,7 +308,7 @@ get_mcp_hr_service_client_json() {
     "standardFlowEnabled": false,
     "directAccessGrantsEnabled": false,
     "serviceAccountsEnabled": true,
-    "fullScopeAllowed": true,
+    "fullScopeAllowed": false,
     "protocol": "openid-connect",
     "defaultClientScopes": ["profile", "email", "roles"]
 }
@@ -475,14 +485,17 @@ _post_sync_ui() {
     log_info "  mcp-ui client configured"
 }
 
-# Post-sync for mcp-hr-service: set secret, enable fullScope, add mappers, assign roles
+# Post-sync for mcp-hr-service: set secret, add mappers, assign minimal roles
+# Security: Only assigns roles needed for identity-sync (view/query/manage users)
+# Removed: manage-realm, view-realm (not needed for user provisioning)
+# Removed: fullScopeAllowed=true (set to false in client JSON for principle of least privilege)
 _post_sync_hr_service() {
     local client_id="$1"
 
     # Get client secret from environment (fail if not set)
     local client_secret="${MCP_HR_SERVICE_CLIENT_SECRET:?MCP_HR_SERVICE_CLIENT_SECRET must be set}"
 
-    # Set client secret and fullScopeAllowed explicitly
+    # Set client secret
     local uuid
     uuid=$(get_client_uuid "$client_id")
     if [ -n "$uuid" ]; then
@@ -490,12 +503,6 @@ _post_sync_hr_service() {
         _kcadm update "clients/$uuid" -r "$REALM" -s "secret=$client_secret" 2>/dev/null || {
             log_warn "  Failed to set client secret via update, trying regenerate..."
             _kcadm create "clients/$uuid/client-secret" -r "$REALM" 2>/dev/null || true
-        }
-
-        # Enable fullScopeAllowed so service account roles appear in access token
-        log_info "  Enabling fullScopeAllowed for service account roles..."
-        _kcadm update "clients/$uuid" -r "$REALM" -s "fullScopeAllowed=true" 2>/dev/null || {
-            log_warn "  Failed to enable fullScopeAllowed"
         }
 
         # Add protocol mapper to include realm-management client roles in access token
@@ -516,8 +523,10 @@ _post_sync_hr_service() {
         }
     fi
 
-    # Assign service account roles for user management
-    log_info "  Assigning realm-management roles to service account..."
+    # Assign service account roles for user management (minimal permissions)
+    # Security: Only view-users, query-users, manage-users needed for identity-sync
+    # Removed: view-realm, manage-realm (not needed for user provisioning)
+    log_info "  Assigning minimal realm-management roles to service account..."
     local service_account_id
     service_account_id=$(_kcadm get "clients/$uuid/service-account-user" -r "$REALM" --fields id 2>/dev/null | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
     if [ -n "$service_account_id" ]; then
@@ -525,7 +534,8 @@ _post_sync_hr_service() {
         local realm_mgmt_uuid
         realm_mgmt_uuid=$(get_client_uuid "realm-management")
         if [ -n "$realm_mgmt_uuid" ]; then
-            local roles=("manage-users" "view-users" "query-users" "view-realm" "manage-realm")
+            # Minimal roles for identity-sync: view, query, and manage users only
+            local roles=("view-users" "query-users" "manage-users")
             for rolename in "${roles[@]}"; do
                 log_info "  Assigning $rolename role..."
                 if _kcadm add-roles -r "$REALM" \
@@ -538,7 +548,7 @@ _post_sync_hr_service() {
                 fi
             done
 
-            log_info "  Service account roles assigned"
+            log_info "  Service account roles assigned (minimal permissions)"
         fi
     fi
 

@@ -301,13 +301,14 @@ assign_critical_prod_users() {
     #   - michael.roberts (CFO)
     #   - sarah.kim (CTO)
     #   - james.wilson (COO)
+    # Security: test-user.journey only gets All-Employees (basic access).
+    # E2E tests use temporary elevation via grantRealmRole() when executive access is needed.
     local -a critical_users=(
         "eve.thompson:C-Suite"
         "michael.roberts:C-Suite"
         "sarah.kim:C-Suite"
         "james.wilson:C-Suite"
         "test-user.journey:All-Employees"
-        "test-user.journey:C-Suite"
     )
 
     for mapping in "${critical_users[@]}"; do

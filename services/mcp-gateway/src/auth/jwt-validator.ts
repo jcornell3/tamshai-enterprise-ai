@@ -120,7 +120,9 @@ export class JWTValidator {
         {
           algorithms: this.config.algorithms,
           // Don't validate issuer here - we'll do it manually below to support multiple issuers
-          audience: [this.config.clientId, 'account', 'mcp-integration-runner'],
+          // Security: Only accept tokens explicitly intended for mcp-gateway or integration tests
+          // Removed 'account' - tokens for Keycloak account management should not access MCP
+          audience: [this.config.clientId, 'mcp-integration-runner'],
         },
         (err: Error | null, decoded: unknown) => {
           if (err) {
@@ -128,7 +130,7 @@ export class JWTValidator {
             // Log specific validation failure reason without leaking token data
             this.logger.error(`JWT Verification Failed: ${err.message}`, {
               errorName: err.name,
-              expectedAudiences: [this.config.clientId, 'account', 'mcp-integration-runner'],
+              expectedAudiences: [this.config.clientId, 'mcp-integration-runner'],
             });
             reject(new Error('Invalid or expired token'));
             return;
