@@ -12,6 +12,11 @@
   }
 }
 
+# Legacy domain redirect - consolidate on www.tamshai.com
+vps.tamshai.com {
+  redir https://www.tamshai.com{uri} permanent
+}
+
 # HTTPS with Let's Encrypt (Caddy auto-provisions certificates)
 # Cloudflare SSL/TLS must be set to "Full (Strict)" for end-to-end encryption
 www.tamshai.com {
