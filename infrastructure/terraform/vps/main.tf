@@ -216,9 +216,12 @@ resource "random_password" "keycloak_db_password" {
   special = true
 }
 
+# URL-safe special characters only (no @:/?# which break URL parsing)
+# Password is embedded in MONGODB_URI as mongodb://user:PASSWORD@host:port
 resource "random_password" "mongodb_password" {
-  length  = 24
-  special = true
+  length           = 24
+  special          = true
+  override_special = "!$%^&*()-_=+|~"
 }
 
 resource "random_password" "minio_password" {
@@ -241,9 +244,12 @@ resource "random_password" "redis_password" {
   special = true
 }
 
+# URL-safe special characters only (no @:/?# which break URL parsing)
+# Password is embedded in ELASTICSEARCH_URL as http://elastic:PASSWORD@host:port
 resource "random_password" "elastic_password" {
-  length  = 24
-  special = true
+  length           = 24
+  special          = true
+  override_special = "!$%^&*()-_=+|~"
 }
 
 resource "random_password" "vault_dev_root_token" {
