@@ -232,6 +232,7 @@
   ],
   "users": [
     {
+      "id": "u1000010-0000-0000-0000-000000000010",
       "username": "alice.chen",
       "email": "alice@tamshai.local",
       "firstName": "Alice",
@@ -250,6 +251,7 @@
       }
     },
     {
+      "id": "u1000020-0000-0000-0000-000000000020",
       "username": "bob.martinez",
       "email": "bob@tamshai.local",
       "firstName": "Bob",
@@ -268,6 +270,7 @@
       }
     },
     {
+      "id": "u1000030-0000-0000-0000-000000000030",
       "username": "carol.johnson",
       "email": "carol@tamshai.local",
       "firstName": "Carol",
@@ -285,6 +288,7 @@
       }
     },
     {
+      "id": "u1000040-0000-0000-0000-000000000040",
       "username": "dan.williams",
       "email": "dan@tamshai.local",
       "firstName": "Dan",
@@ -303,6 +307,7 @@
       }
     },
     {
+      "id": "u1000001-0000-0000-0000-000000000001",
       "username": "eve.thompson",
       "email": "eve@tamshai.local",
       "firstName": "Eve",
@@ -320,6 +325,7 @@
       }
     },
     {
+      "id": "u1000061-0000-0000-0000-000000000061",
       "username": "frank.davis",
       "email": "frank@tamshai.local",
       "firstName": "Frank",
@@ -337,6 +343,7 @@
       }
     },
     {
+      "id": "u1000051-0000-0000-0000-000000000051",
       "username": "nina.patel",
       "email": "nina.p@tamshai.local",
       "firstName": "Nina",
@@ -354,6 +361,7 @@
       }
     },
     {
+      "id": "u1000052-0000-0000-0000-000000000052",
       "username": "marcus.johnson",
       "email": "marcus.j@tamshai.local",
       "firstName": "Marcus",

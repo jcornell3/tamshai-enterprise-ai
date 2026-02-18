@@ -198,6 +198,7 @@
   ],
   "users": [
     {
+      "id": "e2e00001-0000-0000-0000-000000000001",
       "username": "test-user.journey",
       "email": "test-user@tamshai.com",
       "emailVerified": true,
@@ -214,6 +215,222 @@
         {
           "type": "password",
           "value": "__TEST_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000001-0000-0000-0000-000000000001",
+      "username": "eve.thompson",
+      "email": "eve.thompson@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Eve",
+      "lastName": "Thompson",
+      "attributes": {
+        "employeeId": ["EMP001"],
+        "department": ["Executive"],
+        "title": ["CEO"]
+      },
+      "groups": ["/All-Employees", "/C-Suite"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000010-0000-0000-0000-000000000010",
+      "username": "alice.chen",
+      "email": "alice.chen@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Alice",
+      "lastName": "Chen",
+      "attributes": {
+        "employeeId": ["EMP010"],
+        "department": ["Human Resources"],
+        "title": ["VP of Human Resources"]
+      },
+      "groups": ["/All-Employees", "/HR-Department", "/Managers"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000020-0000-0000-0000-000000000020",
+      "username": "bob.martinez",
+      "email": "bob.martinez@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Bob",
+      "lastName": "Martinez",
+      "attributes": {
+        "employeeId": ["EMP020"],
+        "department": ["Finance"],
+        "title": ["Finance Director"]
+      },
+      "groups": ["/All-Employees", "/Finance-Team", "/Managers"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000030-0000-0000-0000-000000000030",
+      "username": "carol.johnson",
+      "email": "carol.johnson@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Carol",
+      "lastName": "Johnson",
+      "attributes": {
+        "employeeId": ["EMP030"],
+        "department": ["Sales"],
+        "title": ["VP of Sales"]
+      },
+      "groups": ["/All-Employees", "/Sales-Managers"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000040-0000-0000-0000-000000000040",
+      "username": "dan.williams",
+      "email": "dan.williams@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Dan",
+      "lastName": "Williams",
+      "attributes": {
+        "employeeId": ["EMP040"],
+        "department": ["Customer Support"],
+        "title": ["Support Director"]
+      },
+      "groups": ["/All-Employees", "/Support-Team", "/Managers"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000051-0000-0000-0000-000000000051",
+      "username": "nina.patel",
+      "email": "nina.patel@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Nina",
+      "lastName": "Patel",
+      "attributes": {
+        "employeeId": ["EMP051"],
+        "department": ["Engineering"],
+        "title": ["Engineering Manager"]
+      },
+      "groups": ["/All-Employees", "/Engineering-Managers"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000052-0000-0000-0000-000000000052",
+      "username": "marcus.johnson",
+      "email": "marcus.johnson@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Marcus",
+      "lastName": "Johnson",
+      "attributes": {
+        "employeeId": ["EMP052"],
+        "department": ["Engineering"],
+        "title": ["Software Engineer"]
+      },
+      "groups": ["/All-Employees", "/Engineering-Team"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
+    },
+    {
+      "id": "u1000061-0000-0000-0000-000000000061",
+      "username": "frank.davis",
+      "email": "frank.davis@tamshai.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Frank",
+      "lastName": "Davis",
+      "attributes": {
+        "employeeId": ["EMP061"],
+        "department": ["IT"],
+        "title": ["IT Intern"]
+      },
+      "groups": ["/All-Employees", "/IT-Team"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
         },
         {

@@ -841,3 +841,110 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO tamshai_app;
 
 -- Grant execute on hr schema functions to tamshai_app (needed for is_manager_of, etc.)
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA hr TO tamshai_app;
+
+-- =============================================================================
+-- KEYCLOAK USER ID SYNC (Idempotent)
+-- Links HR employee records to Keycloak identities using DETERMINISTIC UUIDs.
+--
+-- UUID GENERATION PATTERN:
+--   Employee Number: EMPXXX → Keycloak ID: u1000xxx-0000-0000-0000-0000000000xx
+--   Example: EMP001 → u1000001-0000-0000-0000-000000000001
+--
+-- This pattern is used by:
+--   1. hr-data.sql (this file) - Sets keycloak_user_id for all employees
+--   2. realm-export-*.json - Pre-seeds test users with matching IDs
+--   3. identity-sync service - Provisions new employees with same pattern
+--
+-- Benefits:
+--   - Idempotent: Same employee always gets same UUID
+--   - Phoenix-proof: Rebuild creates matching IDs in both systems
+--   - Onboarding-ready: HR onboarding can provision with predictable IDs
+-- =============================================================================
+
+-- Executive (EMP001-004)
+UPDATE hr.employees SET keycloak_user_id = 'u1000001-0000-0000-0000-000000000001' WHERE employee_number = 'EMP001';
+UPDATE hr.employees SET keycloak_user_id = 'u1000002-0000-0000-0000-000000000002' WHERE employee_number = 'EMP002';
+UPDATE hr.employees SET keycloak_user_id = 'u1000003-0000-0000-0000-000000000003' WHERE employee_number = 'EMP003';
+UPDATE hr.employees SET keycloak_user_id = 'u1000004-0000-0000-0000-000000000004' WHERE employee_number = 'EMP004';
+
+-- HR Department (EMP010-013)
+UPDATE hr.employees SET keycloak_user_id = 'u1000010-0000-0000-0000-000000000010' WHERE employee_number = 'EMP010';
+UPDATE hr.employees SET keycloak_user_id = 'u1000011-0000-0000-0000-000000000011' WHERE employee_number = 'EMP011';
+UPDATE hr.employees SET keycloak_user_id = 'u1000012-0000-0000-0000-000000000012' WHERE employee_number = 'EMP012';
+UPDATE hr.employees SET keycloak_user_id = 'u1000013-0000-0000-0000-000000000013' WHERE employee_number = 'EMP013';
+
+-- Finance Department (EMP020-025)
+UPDATE hr.employees SET keycloak_user_id = 'u1000020-0000-0000-0000-000000000020' WHERE employee_number = 'EMP020';
+UPDATE hr.employees SET keycloak_user_id = 'u1000021-0000-0000-0000-000000000021' WHERE employee_number = 'EMP021';
+UPDATE hr.employees SET keycloak_user_id = 'u1000022-0000-0000-0000-000000000022' WHERE employee_number = 'EMP022';
+UPDATE hr.employees SET keycloak_user_id = 'u1000023-0000-0000-0000-000000000023' WHERE employee_number = 'EMP023';
+UPDATE hr.employees SET keycloak_user_id = 'u1000024-0000-0000-0000-000000000024' WHERE employee_number = 'EMP024';
+UPDATE hr.employees SET keycloak_user_id = 'u1000025-0000-0000-0000-000000000025' WHERE employee_number = 'EMP025';
+
+-- Sales Department (EMP030-038)
+UPDATE hr.employees SET keycloak_user_id = 'u1000030-0000-0000-0000-000000000030' WHERE employee_number = 'EMP030';
+UPDATE hr.employees SET keycloak_user_id = 'u1000031-0000-0000-0000-000000000031' WHERE employee_number = 'EMP031';
+UPDATE hr.employees SET keycloak_user_id = 'u1000032-0000-0000-0000-000000000032' WHERE employee_number = 'EMP032';
+UPDATE hr.employees SET keycloak_user_id = 'u1000033-0000-0000-0000-000000000033' WHERE employee_number = 'EMP033';
+UPDATE hr.employees SET keycloak_user_id = 'u1000034-0000-0000-0000-000000000034' WHERE employee_number = 'EMP034';
+UPDATE hr.employees SET keycloak_user_id = 'u1000035-0000-0000-0000-000000000035' WHERE employee_number = 'EMP035';
+UPDATE hr.employees SET keycloak_user_id = 'u1000036-0000-0000-0000-000000000036' WHERE employee_number = 'EMP036';
+UPDATE hr.employees SET keycloak_user_id = 'u1000037-0000-0000-0000-000000000037' WHERE employee_number = 'EMP037';
+UPDATE hr.employees SET keycloak_user_id = 'u1000038-0000-0000-0000-000000000038' WHERE employee_number = 'EMP038';
+
+-- Support Department (EMP040-047)
+UPDATE hr.employees SET keycloak_user_id = 'u1000040-0000-0000-0000-000000000040' WHERE employee_number = 'EMP040';
+UPDATE hr.employees SET keycloak_user_id = 'u1000041-0000-0000-0000-000000000041' WHERE employee_number = 'EMP041';
+UPDATE hr.employees SET keycloak_user_id = 'u1000042-0000-0000-0000-000000000042' WHERE employee_number = 'EMP042';
+UPDATE hr.employees SET keycloak_user_id = 'u1000043-0000-0000-0000-000000000043' WHERE employee_number = 'EMP043';
+UPDATE hr.employees SET keycloak_user_id = 'u1000044-0000-0000-0000-000000000044' WHERE employee_number = 'EMP044';
+UPDATE hr.employees SET keycloak_user_id = 'u1000045-0000-0000-0000-000000000045' WHERE employee_number = 'EMP045';
+UPDATE hr.employees SET keycloak_user_id = 'u1000046-0000-0000-0000-000000000046' WHERE employee_number = 'EMP046';
+UPDATE hr.employees SET keycloak_user_id = 'u1000047-0000-0000-0000-000000000047' WHERE employee_number = 'EMP047';
+
+-- Engineering Department (EMP050-059, EMP05A)
+UPDATE hr.employees SET keycloak_user_id = 'u1000050-0000-0000-0000-000000000050' WHERE employee_number = 'EMP050';
+UPDATE hr.employees SET keycloak_user_id = 'u1000051-0000-0000-0000-000000000051' WHERE employee_number = 'EMP051';
+UPDATE hr.employees SET keycloak_user_id = 'u1000052-0000-0000-0000-000000000052' WHERE employee_number = 'EMP052';
+UPDATE hr.employees SET keycloak_user_id = 'u1000053-0000-0000-0000-000000000053' WHERE employee_number = 'EMP053';
+UPDATE hr.employees SET keycloak_user_id = 'u1000054-0000-0000-0000-000000000054' WHERE employee_number = 'EMP054';
+UPDATE hr.employees SET keycloak_user_id = 'u1000055-0000-0000-0000-000000000055' WHERE employee_number = 'EMP055';
+UPDATE hr.employees SET keycloak_user_id = 'u1000056-0000-0000-0000-000000000056' WHERE employee_number = 'EMP056';
+UPDATE hr.employees SET keycloak_user_id = 'u1000057-0000-0000-0000-000000000057' WHERE employee_number = 'EMP057';
+UPDATE hr.employees SET keycloak_user_id = 'u1000058-0000-0000-0000-000000000058' WHERE employee_number = 'EMP058';
+UPDATE hr.employees SET keycloak_user_id = 'u1000059-0000-0000-0000-000000000059' WHERE employee_number = 'EMP059';
+UPDATE hr.employees SET keycloak_user_id = 'u100005a-0000-0000-0000-00000000005a' WHERE employee_number = 'EMP05A';
+
+-- IT Department (EMP060-062)
+UPDATE hr.employees SET keycloak_user_id = 'u1000060-0000-0000-0000-000000000060' WHERE employee_number = 'EMP060';
+UPDATE hr.employees SET keycloak_user_id = 'u1000061-0000-0000-0000-000000000061' WHERE employee_number = 'EMP061';
+UPDATE hr.employees SET keycloak_user_id = 'u1000062-0000-0000-0000-000000000062' WHERE employee_number = 'EMP062';
+
+-- Marketing Department (EMP070-075)
+UPDATE hr.employees SET keycloak_user_id = 'u1000070-0000-0000-0000-000000000070' WHERE employee_number = 'EMP070';
+UPDATE hr.employees SET keycloak_user_id = 'u1000071-0000-0000-0000-000000000071' WHERE employee_number = 'EMP071';
+UPDATE hr.employees SET keycloak_user_id = 'u1000072-0000-0000-0000-000000000072' WHERE employee_number = 'EMP072';
+UPDATE hr.employees SET keycloak_user_id = 'u1000073-0000-0000-0000-000000000073' WHERE employee_number = 'EMP073';
+UPDATE hr.employees SET keycloak_user_id = 'u1000074-0000-0000-0000-000000000074' WHERE employee_number = 'EMP074';
+UPDATE hr.employees SET keycloak_user_id = 'u1000075-0000-0000-0000-000000000075' WHERE employee_number = 'EMP075';
+
+-- Operations Department (EMP080-084)
+UPDATE hr.employees SET keycloak_user_id = 'u1000080-0000-0000-0000-000000000080' WHERE employee_number = 'EMP080';
+UPDATE hr.employees SET keycloak_user_id = 'u1000081-0000-0000-0000-000000000081' WHERE employee_number = 'EMP081';
+UPDATE hr.employees SET keycloak_user_id = 'u1000082-0000-0000-0000-000000000082' WHERE employee_number = 'EMP082';
+UPDATE hr.employees SET keycloak_user_id = 'u1000083-0000-0000-0000-000000000083' WHERE employee_number = 'EMP083';
+UPDATE hr.employees SET keycloak_user_id = 'u1000084-0000-0000-0000-000000000084' WHERE employee_number = 'EMP084';
+
+-- Legal Department (EMP090-092)
+UPDATE hr.employees SET keycloak_user_id = 'u1000090-0000-0000-0000-000000000090' WHERE employee_number = 'EMP090';
+UPDATE hr.employees SET keycloak_user_id = 'u1000091-0000-0000-0000-000000000091' WHERE employee_number = 'EMP091';
+UPDATE hr.employees SET keycloak_user_id = 'u1000092-0000-0000-0000-000000000092' WHERE employee_number = 'EMP092';
+
+-- Terminated Employees (EMP-T001 to EMP-T003) - Use 't' prefix pattern
+UPDATE hr.employees SET keycloak_user_id = 'ut000001-0000-0000-0000-000000000001' WHERE employee_number = 'EMP-T001';
+UPDATE hr.employees SET keycloak_user_id = 'ut000002-0000-0000-0000-000000000002' WHERE employee_number = 'EMP-T002';
+UPDATE hr.employees SET keycloak_user_id = 'ut000003-0000-0000-0000-000000000003' WHERE employee_number = 'EMP-T003';
+
+-- E2E Test User (TEST001) - Already has fixed ID from realm-export
+-- Note: This user is defined in realm-export-*.json with this exact ID
+UPDATE hr.employees SET keycloak_user_id = 'e2e00001-0000-0000-0000-000000000001' WHERE employee_number = 'TEST001';

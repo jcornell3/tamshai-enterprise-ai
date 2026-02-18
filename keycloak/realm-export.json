@@ -198,6 +198,7 @@
   ],
   "users": [
     {
+      "id": "e2e00001-0000-0000-0000-000000000001",
       "username": "test-user.journey",
       "email": "test-user@tamshai.com",
       "emailVerified": true,
@@ -213,7 +214,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "***REDACTED_PASSWORD***",
+          "value": "__PROD_USER_PASSWORD__",
           "temporary": false
         },
         {
