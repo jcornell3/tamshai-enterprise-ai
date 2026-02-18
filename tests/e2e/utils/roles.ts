@@ -215,6 +215,7 @@ export async function grantRealmRole(
     throw new Error(`Failed to grant role '${roleName}' to '${username}' (HTTP ${res.status})`);
   }
 
+  // lgtm[js/clear-text-logging] - username is masked via maskUsername()
   console.log(`[roles] Granted '${roleName}' role to '${maskUsername(username)}'`);
 }
 
@@ -248,6 +249,7 @@ export async function revokeRealmRole(
     throw new Error(`Failed to revoke role '${roleName}' from '${username}' (HTTP ${res.status})`);
   }
 
+  // lgtm[js/clear-text-logging] - username is masked via maskUsername()
   console.log(`[roles] Revoked '${roleName}' role from '${maskUsername(username)}'`);
 }
 
