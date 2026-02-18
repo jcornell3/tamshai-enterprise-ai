@@ -745,7 +745,9 @@ jobs:
           set -e
           set +H  # Disable history expansion for passwords with special characters
 
-          KEYCLOAK_URL="http://localhost/auth"
+          # Use direct port (8180) instead of Caddy proxy (80) for admin API
+          # Caddy returns 403 on admin endpoints due to reverse proxy configuration
+          KEYCLOAK_URL="http://localhost:8180/auth"
           # Read password from VPS .env file (more reliable than GitHub secret after rebuilds)
           KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" /opt/tamshai/.env | cut -d= -f2-)
           TEST_PASSWORD='${{ secrets.TEST_USER_PASSWORD }}'
@@ -793,6 +795,18 @@ jobs:
           fi
           echo "[OK] Admin token obtained"
 
+          # Verify realm exists before user operations
+          echo "Verifying tamshai-corp realm exists..."
+          REALM_CHECK=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${KEYCLOAK_URL}/admin/realms/tamshai-corp" \
+            -H "Authorization: Bearer $TOKEN")
+          if [ "$REALM_CHECK" != "200" ]; then
+            echo "ERROR: tamshai-corp realm not found (HTTP $REALM_CHECK)"
+            echo "Keycloak may not have imported the realm export correctly"
+            exit 1
+          fi
+          echo "[OK] tamshai-corp realm exists"
+
           # Get test-user.journey ID (create if doesn't exist - Phoenix principle)
           USER_ID=$(curl -sf "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users?username=test-user.journey" \
             -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
@@ -800,13 +814,12 @@ jobs:
           if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
             echo "[WARN] test-user.journey not found in Keycloak - creating..."
 
-            # Create test-user.journey with fixed ID (Phoenix: deterministic UUID)
+            # Create test-user.journey (let Keycloak generate ID - explicit IDs may be forbidden)
             CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
               "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
               -d '{
-                "id": "e2e00001-0000-0000-0000-000000000001",
                 "username": "test-user.journey",
                 "email": "test-user@tamshai.com",
                 "firstName": "Test",
@@ -827,6 +840,13 @@ jobs:
               # Re-fetch user ID
               USER_ID=$(curl -sf "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users?username=test-user.journey" \
                 -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+            elif [ "$CREATE_HTTP" = "403" ]; then
+              echo "ERROR: 403 Forbidden - admin may not have user management permissions"
+              echo "Checking admin roles..."
+              curl -sf "${KEYCLOAK_URL}/admin/realms/master/users?username=admin" \
+                -H "Authorization: Bearer $TOKEN" | jq '.[0].realmRoles // "none"'
+              echo "Response body: $(echo "$CREATE_RESPONSE" | head -n-1)"
+              exit 1
             else
               echo "ERROR: Failed to create test-user.journey (HTTP $CREATE_HTTP)"
               echo "Response: $(echo "$CREATE_RESPONSE" | head -n-1)"
