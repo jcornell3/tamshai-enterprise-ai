@@ -13,6 +13,15 @@ import * as http from 'http';
 const ENV = process.env.TEST_ENV || 'dev';
 const REALM = 'tamshai-corp';
 
+/**
+ * Mask username for logging to avoid clear-text PII exposure.
+ * Shows first 3 characters followed by asterisks.
+ */
+function maskUsername(username: string): string {
+  if (username.length <= 3) return '***';
+  return `${username.substring(0, 3)}***`;
+}
+
 const PORT_CADDY_HTTPS = process.env.PORT_CADDY_HTTPS;
 
 const KEYCLOAK_URLS: Record<string, string> = {
@@ -206,7 +215,7 @@ export async function grantRealmRole(
     throw new Error(`Failed to grant role '${roleName}' to '${username}' (HTTP ${res.status})`);
   }
 
-  console.log(`[roles] Granted '${roleName}' role to '${username}'`);
+  console.log(`[roles] Granted '${roleName}' role to '${maskUsername(username)}'`);
 }
 
 /**
@@ -239,7 +248,7 @@ export async function revokeRealmRole(
     throw new Error(`Failed to revoke role '${roleName}' from '${username}' (HTTP ${res.status})`);
   }
 
-  console.log(`[roles] Revoked '${roleName}' role from '${username}'`);
+  console.log(`[roles] Revoked '${roleName}' role from '${maskUsername(username)}'`);
 }
 
 /**

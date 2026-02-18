@@ -13,10 +13,21 @@
  * ```
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 let oathtoolSha256Checked = false;
 let oathtoolSha256Available = false;
+
+// Base32 alphabet (RFC 4648) - used for TOTP secret validation
+const BASE32_REGEX = /^[A-Z2-7]+=*$/i;
+
+/**
+ * Validate that a string is a valid Base32-encoded TOTP secret.
+ * This prevents command injection by ensuring only safe characters.
+ */
+function isValidBase32Secret(secret: string): boolean {
+  return BASE32_REGEX.test(secret);
+}
 
 /**
  * Check if oathtool with SHA256 support is available.
@@ -27,7 +38,8 @@ export function isOathtoolSha256Available(): boolean {
 
   try {
     // Test if oathtool supports --sha256
-    const result = execSync('oathtool --totp --sha256 JBSWY3DPEHPK3PXP', {
+    // Using execFileSync avoids shell interpretation
+    const result = execFileSync('oathtool', ['--totp', '--sha256', 'JBSWY3DPEHPK3PXP'], {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim();
@@ -54,10 +66,19 @@ export function generateTotpCode(secret: string): string {
     throw new Error('TOTP secret is required but not provided');
   }
 
+  // Validate secret is Base32 to prevent command injection
+  if (!isValidBase32Secret(secret)) {
+    throw new Error(
+      `Invalid TOTP secret format: must be Base32 encoded (A-Z, 2-7, =). ` +
+      `Got: ${secret.substring(0, 4)}...`
+    );
+  }
+
   // Try oathtool with SHA256 (works on Windows, Linux, macOS)
+  // Using execFileSync with array args avoids shell interpretation
   if (isOathtoolSha256Available()) {
     try {
-      const totpCode = execSync(`oathtool --totp --sha256 ${secret}`, {
+      const totpCode = execFileSync('oathtool', ['--totp', '--sha256', secret], {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
