@@ -456,7 +456,9 @@ describe('JWTValidator', () => {
 
       (jwt.verify as jest.Mock).mockImplementation((token, getKey, options, callback) => {
         // Note: issuer is now validated manually after jwt.verify (multi-issuer support)
-        expect(options.audience).toEqual(['mcp-gateway', 'account', 'mcp-integration-runner']);
+        // Security: 'account' removed from valid audiences (E1 remediation)
+        // Tokens for Keycloak account management should not access mcp-gateway
+        expect(options.audience).toEqual(['mcp-gateway', 'mcp-integration-runner']);
         callback(null, mockPayload);
       });
 
