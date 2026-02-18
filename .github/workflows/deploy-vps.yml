@@ -377,13 +377,16 @@ jobs:
 
           # =========================================================================
           # PHOENIX: Substitute secrets in realm-export-stage.json
-          # This ensures test-user.journey has correct credentials after fresh deploy
-          # Placeholders: __TEST_USER_PASSWORD__, __TEST_USER_TOTP_SECRET__
+          # This ensures users have correct credentials after fresh deploy
+          # Placeholders:
+          #   __TEST_USER_PASSWORD__ - for test-user.journey (E2E testing)
+          #   __TEST_USER_TOTP_SECRET__ - TOTP secret for test-user.journey
+          #   __STAGE_USER_PASSWORD__ - for corporate users (eve.thompson, alice.chen, etc.)
           # =========================================================================
           echo "=== Substituting secrets in realm-export-stage.json ==="
           if [ -n "${TEST_USER_PASSWORD}" ]; then
             sed -i "s/__TEST_USER_PASSWORD__/${TEST_USER_PASSWORD}/g" keycloak/realm-export-stage.json
-            echo "[OK] Password placeholder substituted"
+            echo "[OK] TEST_USER_PASSWORD placeholder substituted"
           else
             echo "[WARN] TEST_USER_PASSWORD not set - using placeholder"
           fi
@@ -393,6 +396,13 @@ jobs:
             echo "[OK] TOTP secret placeholder substituted"
           else
             echo "[WARN] TEST_USER_TOTP_SECRET_RAW not set - using placeholder"
+          fi
+
+          if [ -n "${STAGE_USER_PASSWORD}" ]; then
+            sed -i "s/__STAGE_USER_PASSWORD__/${STAGE_USER_PASSWORD}/g" keycloak/realm-export-stage.json
+            echo "[OK] STAGE_USER_PASSWORD placeholder substituted"
+          else
+            echo "[WARN] STAGE_USER_PASSWORD not set - corporate users will have placeholder passwords"
           fi
 
           # Use realm-export-stage.json for stage deployment (not dev)
