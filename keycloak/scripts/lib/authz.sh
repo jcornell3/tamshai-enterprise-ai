@@ -70,10 +70,11 @@ get_admin_token() {
         }
     else
         log_info "  [DEBUG] Using ROPC fallback (admin username/password)"
+        # Use --data-urlencode for password to handle special characters
         token_response=$(curl -s -X POST "$token_url" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=${ADMIN_USER}" \
-            -d "password=${ADMIN_PASS}" \
+            --data-urlencode "password=${ADMIN_PASS}" \
             -d "grant_type=password" \
             -d "client_id=admin-cli" 2>&1) || {
             log_error "curl command failed"
@@ -209,10 +210,11 @@ sync_token_exchange_permissions() {
             return 1
         fi
 
+        # Use --data-urlencode for password to handle special characters
         ADMIN_TOKEN=$(curl -s -X POST "$token_url" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=${ADMIN_USER}" \
-            -d "password=${ADMIN_PASS}" \
+            --data-urlencode "password=${ADMIN_PASS}" \
             -d "grant_type=password" \
             -d "client_id=admin-cli" | /usr/local/bin/jq -r '.access_token // empty')
     fi

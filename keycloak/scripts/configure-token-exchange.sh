@@ -45,10 +45,11 @@ if [ -n "${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" ]; then
     -d "grant_type=client_credentials" | jq -r '.access_token')
 else
   echo "  Using ROPC fallback (admin username/password)"
+  # Use --data-urlencode for password to handle special characters
   ADMIN_TOKEN=$(curl -s -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "username=$ADMIN_USER" \
-    -d "password=$ADMIN_PASS" \
+    --data-urlencode "password=$ADMIN_PASS" \
     -d "grant_type=password" \
     -d "client_id=admin-cli" | jq -r '.access_token')
 fi
