@@ -9,6 +9,9 @@
 # =============================================================================
 FROM node:20-alpine AS builder
 
+# Security: Update npm to fix CVE-2026-24842 (node-tar path traversal)
+RUN npm install -g npm@latest
+
 WORKDIR /app
 
 # Copy shared package first (dependency)
@@ -41,6 +44,9 @@ RUN npm prune --production
 # =============================================================================
 FROM node:20-alpine AS indexer
 
+# Security: Update npm to fix CVE-2026-24842 (node-tar path traversal)
+RUN npm install -g npm@latest
+
 WORKDIR /indexer
 
 # Copy built files from builder
@@ -72,6 +78,9 @@ FROM node:20-alpine AS production
 
 # Security: Apply Alpine security patches
 RUN apk update && apk upgrade --no-cache
+
+# Security: Update npm to fix CVE-2026-24842 (node-tar path traversal)
+RUN npm install -g npm@latest
 
 # Security: Run as non-root user
 RUN addgroup -g 1001 -S nodejs && \
