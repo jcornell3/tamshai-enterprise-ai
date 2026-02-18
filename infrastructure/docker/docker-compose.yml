@@ -93,12 +93,16 @@ x-web-depends: &web-depends
     condition: service_started
 
 # Common Vite build args for web apps
+# NOTE: Gateway URLs are EMPTY to use relative URLs (proxied by Caddy).
+# - /api/* → Kong → MCP Gateway
+# - /mcp-ui/* → MCP UI Service
+# This avoids CORS issues and works with reverse proxy setups.
 x-web-build-args: &web-build-args
   VITE_KEYCLOAK_URL: http://127.0.0.1:8180/auth/realms/tamshai-corp
   VITE_KEYCLOAK_CLIENT_ID: web-portal
-  VITE_API_GATEWAY_URL: http://127.0.0.1:${PORT_KONG_PROXY}
-  VITE_MCP_GATEWAY_URL: http://127.0.0.1:${PORT_MCP_GATEWAY}
-  # VITE_MCP_UI_URL left empty to use relative URL /mcp-ui/* (proxied by Caddy)
+  # Empty = use relative URLs (works with Caddy reverse proxy)
+  VITE_API_GATEWAY_URL: ""
+  VITE_MCP_GATEWAY_URL: ""
   VITE_MCP_UI_URL: ""
 
 # Common web app runtime environment
