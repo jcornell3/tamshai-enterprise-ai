@@ -346,7 +346,8 @@ runcmd:
     DECODED_FILE="$ENV_FILE.decoded"
 
     # List of password variables to decode (space-separated for POSIX compatibility)
-    PASSWORD_VARS="postgres_password tamshai_app_password keycloak_admin_pass keycloak_db_password mongodb_password minio_password jwt_secret root_password mcp_gateway_client_secret mcp_hr_service_client_secret stage_user_password test_user_password test_user_totp_secret_raw redis_password elastic_password vault_dev_root_token mcp_internal_secret mcp_ui_client_secret e2e_admin_api_key"
+    # MUST match the exact variable names in the .env file (UPPERCASE)
+    PASSWORD_VARS="POSTGRES_PASSWORD TAMSHAI_APP_PASSWORD KEYCLOAK_ADMIN_PASSWORD KC_DB_PASSWORD KEYCLOAK_DB_PASSWORD TAMSHAI_DB_PASSWORD MONGO_INITDB_ROOT_PASSWORD MONGODB_PASSWORD MINIO_ROOT_PASSWORD JWT_SECRET MCP_HR_SERVICE_CLIENT_SECRET MCP_GATEWAY_CLIENT_SECRET REDIS_PASSWORD ELASTIC_PASSWORD VAULT_DEV_ROOT_TOKEN MCP_INTERNAL_SECRET MCP_UI_CLIENT_SECRET E2E_ADMIN_API_KEY TEST_USER_PASSWORD TEST_USER_TOTP_SECRET_RAW STAGE_USER_PASSWORD"
 
     # Create a new file with decoded passwords
     while IFS= read -r line; do
