@@ -25,6 +25,7 @@ source "$SCRIPT_LIB_DIR/common.sh"
 
 # Provision test-user.journey for E2E testing
 # Skips in production (user imported from realm-export.json with TOTP)
+# PHOENIX: Never delete existing user - update instead to preserve any existing config
 provision_test_user() {
     # In production, test-user.journey is imported from realm-export.json during Keycloak startup
     # This import includes TOTP credentials which cannot be set via Admin API
@@ -40,21 +41,25 @@ provision_test_user() {
     local user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
 
     if [ -n "$user_id" ]; then
-        log_info "  User already exists (ID: $user_id), deleting to recreate with TOTP..."
-        _kcadm delete users/$user_id -r "$REALM" 2>/dev/null
-        if [ $? -eq 0 ]; then
-            log_info "  User deleted successfully"
-            user_id=""  # Reset so we create fresh
-        else
-            log_warn "  Failed to delete existing user"
-        fi
-    fi
-
-    if [ -z "$user_id" ]; then
+        # PHOENIX: User exists - update instead of delete/recreate
+        # This preserves TOTP credentials and avoids the delete-then-fail-to-create race condition
+        log_info "  User already exists (ID: $user_id), updating properties..."
+        _kcadm update "users/$user_id" -r "$REALM" \
+            -s email=test-user@tamshai.com \
+            -s firstName=Test \
+            -s lastName=User \
+            -s enabled=true \
+            -s emailVerified=true \
+            -s 'attributes.department=["Testing"]' \
+            -s 'attributes.employeeId=["TEST001"]' \
+            -s 'attributes.title=["Journey Test Account"]' 2>/dev/null || true
+        log_info "  User properties updated"
+    else
         log_info "  Creating test-user.journey user..."
 
-        # Create user
+        # Create user with deterministic ID (Phoenix principle)
         _kcadm create users -r "$REALM" \
+            -s id=e2e00001-0000-0000-0000-000000000001 \
             -s username=test-user.journey \
             -s email=test-user@tamshai.com \
             -s firstName=Test \
@@ -67,54 +72,65 @@ provision_test_user() {
 
         if [ $? -eq 0 ]; then
             log_info "  User created successfully"
-
-            # Get the newly created user ID
-            user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
-
-            if [ -n "$user_id" ]; then
-                # Set password from TEST_USER_PASSWORD GitHub secret (non-temporary)
-                local test_password
-                test_password=$(get_test_user_password)
-
-                if [ -n "$test_password" ]; then
-                    log_info "  Setting password from TEST_USER_PASSWORD..."
-                    local password_json="{\"type\":\"password\",\"value\":\"$test_password\",\"temporary\":false}"
-                    echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f -
-
-                    if [ $? -eq 0 ]; then
-                        log_info "  Password set successfully"
-                    else
-                        log_warn "  Failed to set password"
-                    fi
-                else
-                    log_warn "  TEST_USER_PASSWORD not set - test-user.journey will have no password"
-                    log_warn "  Set TEST_USER_PASSWORD environment variable to enable E2E tests"
-                fi
-
-                # Note: TOTP credentials cannot be pre-configured via Admin API
-                log_info "  TOTP configuration skipped (not supported via Admin API)"
-                log_info "  Note: TOTP must be configured manually or via realm import"
-
-                # Assign test-user.journey to All-Employees group for self-access
-                local all_emp_id
-                if type get_group_id &>/dev/null; then
-                    all_emp_id=$(get_group_id "All-Employees")
-                else
-                    all_emp_id=$(_kcadm get groups -r "$REALM" -q "name=All-Employees" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
-                fi
-
-                if [ -n "$all_emp_id" ]; then
-                    if _kcadm update "users/$user_id/groups/$all_emp_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
-                        log_info "  Added test-user.journey to All-Employees group"
-                    else
-                        log_info "  test-user.journey: All-Employees (already member or error)"
-                    fi
-                fi
-            else
-                log_warn "  Could not retrieve user ID after creation"
-            fi
+            user_id="e2e00001-0000-0000-0000-000000000001"
         else
             log_error "  Failed to create user"
+            # Try without explicit ID (Keycloak may not support setting ID)
+            log_info "  Retrying without explicit ID..."
+            _kcadm create users -r "$REALM" \
+                -s username=test-user.journey \
+                -s email=test-user@tamshai.com \
+                -s firstName=Test \
+                -s lastName=User \
+                -s enabled=true \
+                -s emailVerified=true \
+                -s 'attributes.department=["Testing"]' \
+                -s 'attributes.employeeId=["TEST001"]' \
+                -s 'attributes.title=["Journey Test Account"]'
+
+            if [ $? -eq 0 ]; then
+                log_info "  User created successfully (without explicit ID)"
+                user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+            else
+                log_error "  Failed to create user on retry"
+                return 1
+            fi
+        fi
+    fi
+
+    # Set password if we have a user ID
+    if [ -n "$user_id" ]; then
+        local test_password
+        test_password=$(get_test_user_password)
+
+        if [ -n "$test_password" ]; then
+            log_info "  Setting password from TEST_USER_PASSWORD..."
+            local password_json="{\"type\":\"password\",\"value\":\"$test_password\",\"temporary\":false}"
+            echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f -
+
+            if [ $? -eq 0 ]; then
+                log_info "  Password set successfully"
+            else
+                log_warn "  Failed to set password"
+            fi
+        else
+            log_warn "  TEST_USER_PASSWORD not set - password not updated"
+        fi
+
+        # Assign test-user.journey to All-Employees group for self-access
+        local all_emp_id
+        if type get_group_id &>/dev/null; then
+            all_emp_id=$(get_group_id "All-Employees")
+        else
+            all_emp_id=$(_kcadm get groups -r "$REALM" -q "name=All-Employees" --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
+        fi
+
+        if [ -n "$all_emp_id" ]; then
+            if _kcadm update "users/$user_id/groups/$all_emp_id" -r "$REALM" -s realm="$REALM" -n 2>/dev/null; then
+                log_info "  Added test-user.journey to All-Employees group"
+            else
+                log_info "  test-user.journey: All-Employees (already member or error)"
+            fi
         fi
     fi
 }

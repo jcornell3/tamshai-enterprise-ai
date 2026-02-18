@@ -770,12 +770,49 @@ jobs:
           fi
           echo "[OK] Admin token obtained"
 
-          # Get test-user.journey ID
+          # Get test-user.journey ID (create if doesn't exist - Phoenix principle)
           USER_ID=$(curl -sf "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users?username=test-user.journey" \
             -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
 
           if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
-            echo "ERROR: test-user.journey not found in Keycloak"
+            echo "[WARN] test-user.journey not found in Keycloak - creating..."
+
+            # Create test-user.journey with fixed ID (Phoenix: deterministic UUID)
+            CREATE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "id": "e2e00001-0000-0000-0000-000000000001",
+                "username": "test-user.journey",
+                "email": "test-user@tamshai.com",
+                "firstName": "Test",
+                "lastName": "User",
+                "enabled": true,
+                "emailVerified": true,
+                "attributes": {
+                  "department": ["Testing"],
+                  "employeeId": ["TEST001"],
+                  "title": ["Journey Test Account"]
+                }
+              }')
+            CREATE_HTTP=$(echo "$CREATE_RESPONSE" | tail -n1)
+
+            if [ "$CREATE_HTTP" = "201" ] || [ "$CREATE_HTTP" = "409" ]; then
+              # 201 = created, 409 = already exists (race condition)
+              echo "[OK] test-user.journey created (HTTP $CREATE_HTTP)"
+              # Re-fetch user ID
+              USER_ID=$(curl -sf "${KEYCLOAK_URL}/admin/realms/tamshai-corp/users?username=test-user.journey" \
+                -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
+            else
+              echo "ERROR: Failed to create test-user.journey (HTTP $CREATE_HTTP)"
+              echo "Response: $(echo "$CREATE_RESPONSE" | head -n-1)"
+              exit 1
+            fi
+          fi
+
+          if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
+            echo "ERROR: test-user.journey still not found after create attempt"
             exit 1
           fi
           echo "[OK] Found test-user.journey (ID: $USER_ID)"
