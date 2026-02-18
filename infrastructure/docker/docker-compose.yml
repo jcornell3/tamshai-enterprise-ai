@@ -373,6 +373,7 @@ services:
     networks:
       - backend-network
       - keycloak-network
+      - gateway-network  # Web apps need to reach mcp-ui for generative UI
 
   mcp-hr:
     build:
