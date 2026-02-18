@@ -18,7 +18,7 @@
   "quickLoginCheckMilliSeconds": 1000,
   "maxDeltaTimeSeconds": 43200,
   "failureFactor": 5,
-  "accessTokenLifespan": 1800,
+  "accessTokenLifespan": 300,
   "accessTokenLifespanForImplicitFlow": 1800,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
