@@ -283,23 +283,46 @@ jobs:
           MCP_UI_CLIENT_SECRET: ${{ secrets.MCP_UI_CLIENT_SECRET }}
           E2E_ADMIN_API_KEY: ${{ secrets.E2E_ADMIN_API_KEY }}
           TAMSHAI_APP_PASSWORD: ${{ secrets.STAGE_TAMSHAI_APP_PASSWORD }}
+          # MCP client secrets (for sync-realm.sh and service authentication)
+          MCP_HR_SERVICE_CLIENT_SECRET: ${{ secrets.MCP_HR_SERVICE_CLIENT_SECRET }}
+          MCP_GATEWAY_CLIENT_SECRET: ${{ secrets.MCP_GATEWAY_CLIENT_SECRET }}
+          # User credential secrets (for realm export substitution and identity-sync)
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
+          STAGE_USER_PASSWORD: ${{ secrets.STAGE_USER_PASSWORD }}
         run: |
           SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
 
           # Build a list of var=value pairs to ensure exist in .env
-          # Only appends if the variable is not already present
-          ENSURE_SCRIPT='cd /opt/tamshai && ensure() { grep -q "^$1=" .env 2>/dev/null || echo "$1=$2" >> .env; }'
+          # Uses upsert pattern: update if exists, insert if not
+          ENSURE_SCRIPT='cd /opt/tamshai && upsert() {
+            if grep -q "^$1=" .env 2>/dev/null; then
+              sed -i "s|^$1=.*|$1=$2|" .env
+            else
+              echo "$1=$2" >> .env
+            fi
+          }'
 
           # Secret variables (may be missing from original bootstrap)
+          # Use upsert to ensure secrets are updated on each deploy (supports rotation)
           ENSURE_SCRIPT="$ENSURE_SCRIPT"'
-          ensure REDIS_PASSWORD "'"$REDIS_PASSWORD"'"
-          ensure ELASTIC_PASSWORD "'"$ELASTIC_PASSWORD"'"
-          ensure VAULT_DEV_ROOT_TOKEN "'"$VAULT_DEV_ROOT_TOKEN"'"
-          ensure MCP_INTERNAL_SECRET "'"$MCP_INTERNAL_SECRET"'"
-          ensure MCP_UI_CLIENT_SECRET "'"$MCP_UI_CLIENT_SECRET"'"
-          ensure E2E_ADMIN_API_KEY "'"$E2E_ADMIN_API_KEY"'"
-          ensure TAMSHAI_APP_PASSWORD "'"$TAMSHAI_APP_PASSWORD"'"
-          ensure KEYCLOAK_ADMIN admin'
+          upsert REDIS_PASSWORD "'"$REDIS_PASSWORD"'"
+          upsert ELASTIC_PASSWORD "'"$ELASTIC_PASSWORD"'"
+          upsert VAULT_DEV_ROOT_TOKEN "'"$VAULT_DEV_ROOT_TOKEN"'"
+          upsert MCP_INTERNAL_SECRET "'"$MCP_INTERNAL_SECRET"'"
+          upsert MCP_UI_CLIENT_SECRET "'"$MCP_UI_CLIENT_SECRET"'"
+          upsert MCP_HR_SERVICE_CLIENT_SECRET "'"$MCP_HR_SERVICE_CLIENT_SECRET"'"
+          upsert MCP_GATEWAY_CLIENT_SECRET "'"$MCP_GATEWAY_CLIENT_SECRET"'"
+          upsert E2E_ADMIN_API_KEY "'"$E2E_ADMIN_API_KEY"'"
+          upsert TAMSHAI_APP_PASSWORD "'"$TAMSHAI_APP_PASSWORD"'"
+          upsert TEST_USER_PASSWORD "'"$TEST_USER_PASSWORD"'"
+          upsert TEST_USER_TOTP_SECRET_RAW "'"$TEST_USER_TOTP_SECRET_RAW"'"
+          upsert STAGE_USER_PASSWORD "'"$STAGE_USER_PASSWORD"'"
+          upsert KEYCLOAK_ADMIN admin'
+
+          # Port variables use ensure (append-only) since they don't change
+          ENSURE_SCRIPT="$ENSURE_SCRIPT"'
+          ensure() { grep -q "^$1=" .env 2>/dev/null || echo "$1=$2" >> .env; }'
 
           # Port variables (sourced from GitHub repository variables)
           ENSURE_SCRIPT="$ENSURE_SCRIPT"'
