@@ -199,10 +199,29 @@ get_test_user_password() {
     echo "${TEST_USER_PASSWORD:-}"
 }
 
-# Get corporate user password from DEV_USER_PASSWORD GitHub secret
+# Get corporate user password based on environment
+# Returns the appropriate password variable for the current environment:
+#   dev:   DEV_USER_PASSWORD
+#   stage: STAGE_USER_PASSWORD
+#   prod:  PROD_USER_PASSWORD
 # This is the password for all corporate users (alice.chen, bob.martinez, etc.)
+get_corporate_user_password() {
+    case "${ENV:-dev}" in
+        prod)
+            echo "${PROD_USER_PASSWORD:-}"
+            ;;
+        stage)
+            echo "${STAGE_USER_PASSWORD:-}"
+            ;;
+        *)
+            echo "${DEV_USER_PASSWORD:-}"
+            ;;
+    esac
+}
+
+# Backwards compatibility alias
 get_dev_user_password() {
-    echo "${DEV_USER_PASSWORD:-}"
+    get_corporate_user_password
 }
 
 # Set test-user.journey password from TEST_USER_PASSWORD GitHub secret
@@ -236,20 +255,29 @@ set_test_user_password() {
     fi
 }
 
-# Set passwords for corporate users from DEV_USER_PASSWORD GitHub secret
-# This is called to update passwords for users imported from realm-export-dev.json
+# Set passwords for corporate users from environment-specific password variable
+# This is called to update passwords for users imported from realm export
+# Uses: DEV_USER_PASSWORD (dev), STAGE_USER_PASSWORD (stage), PROD_USER_PASSWORD (prod)
 # Corporate users: alice.chen, bob.martinez, carol.johnson, dan.williams, eve.thompson, frank.davis, nina.patel, marcus.johnson
 set_corporate_user_passwords() {
-    local dev_password
-    dev_password=$(get_dev_user_password)
+    local corp_password
+    corp_password=$(get_corporate_user_password)
 
-    if [ -z "$dev_password" ]; then
-        log_warn "DEV_USER_PASSWORD not set - cannot set corporate user passwords"
+    # Determine which variable name to show in logs
+    local password_var_name
+    case "${ENV:-dev}" in
+        prod)  password_var_name="PROD_USER_PASSWORD" ;;
+        stage) password_var_name="STAGE_USER_PASSWORD" ;;
+        *)     password_var_name="DEV_USER_PASSWORD" ;;
+    esac
+
+    if [ -z "$corp_password" ]; then
+        log_warn "$password_var_name not set - cannot set corporate user passwords"
         log_warn "Integration tests requiring corporate user authentication will fail"
         return 0
     fi
 
-    log_info "Setting corporate user passwords from DEV_USER_PASSWORD..."
+    log_info "Setting corporate user passwords from $password_var_name..."
 
     # List of corporate users to set passwords for
     local users=("alice.chen" "bob.martinez" "carol.johnson" "dan.williams" "eve.thompson" "frank.davis" "nina.patel" "marcus.johnson")
@@ -264,7 +292,7 @@ set_corporate_user_passwords() {
         fi
 
         # Set password (non-temporary to avoid requiredActions)
-        local password_json="{\"type\":\"password\",\"value\":\"$dev_password\",\"temporary\":false}"
+        local password_json="{\"type\":\"password\",\"value\":\"$corp_password\",\"temporary\":false}"
         if echo "$password_json" | _kcadm update "users/$user_id/reset-password" -r "$REALM" -f - 2>/dev/null; then
             log_info "  $username password updated successfully"
         else
