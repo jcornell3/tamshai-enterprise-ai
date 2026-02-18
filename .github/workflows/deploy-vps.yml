@@ -360,6 +360,82 @@ jobs:
           $SSH_CMD "$ENSURE_SCRIPT"
           echo "VPS .env updated with any missing variables"
 
+      - name: Validate and fix .env
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+        run: |
+          echo "=== Validating .env for docker-compose compatibility ==="
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          # Test docker-compose config parsing and fix if needed
+          $SSH_CMD << 'VALIDATE_SCRIPT'
+          set -e
+          cd /opt/tamshai/infrastructure/docker
+
+          # Test if docker-compose can parse the config
+          if docker compose --env-file ../../.env config --quiet 2>/dev/null; then
+            echo "[OK] .env is valid for docker-compose"
+            exit 0
+          fi
+
+          echo "[WARN] .env has values that break docker-compose parsing"
+          echo "       Fixing malformed password values..."
+
+          cd /opt/tamshai
+
+          # Function to check if a value breaks shell/docker-compose parsing
+          # Values with unescaped special chars like ()[]{}|;:<>!? can cause issues
+          is_malformed() {
+            local val="$1"
+            # Check for problematic patterns:
+            # - Contains shell metacharacters that aren't properly quoted
+            # - Contains multiple = signs (corrupted base64 decode)
+            # - Is empty when it shouldn't be
+            if echo "$val" | grep -qE '[(){}|;<>]|=[A-Z_]+=' 2>/dev/null; then
+              return 0  # true, is malformed
+            fi
+            return 1  # false, is OK
+          }
+
+          # Generate a safe random password (alphanumeric only)
+          gen_safe_password() {
+            local len="${1:-24}"
+            openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c "$len"
+          }
+
+          # List of password variables that may need fixing
+          PASSWORD_VARS="REDIS_PASSWORD ELASTIC_PASSWORD POSTGRES_PASSWORD MONGODB_PASSWORD MINIO_ROOT_PASSWORD"
+
+          FIXED_COUNT=0
+          for var in $PASSWORD_VARS; do
+            current_val=$(grep "^${var}=" .env 2>/dev/null | cut -d= -f2- || echo "")
+
+            if [ -z "$current_val" ] || is_malformed "$current_val"; then
+              new_val=$(gen_safe_password 24)
+              # Remove old entry and add new one
+              sed -i "/^${var}=/d" .env
+              echo "${var}=${new_val}" >> .env
+              echo "  Fixed: $var"
+              FIXED_COUNT=$((FIXED_COUNT + 1))
+            fi
+          done
+
+          if [ $FIXED_COUNT -gt 0 ]; then
+            echo "[OK] Fixed $FIXED_COUNT malformed password(s)"
+
+            # Verify fix worked
+            cd infrastructure/docker
+            if docker compose --env-file ../../.env config --quiet 2>/dev/null; then
+              echo "[OK] .env is now valid for docker-compose"
+            else
+              echo "[ERROR] .env still has parsing issues after fix"
+              echo "        Manual intervention may be required"
+              exit 1
+            fi
+          fi
+          VALIDATE_SCRIPT
+
       - name: Deploy to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
