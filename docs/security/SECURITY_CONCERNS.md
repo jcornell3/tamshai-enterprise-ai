@@ -280,3 +280,29 @@ oathtool --totp --sha256 $TOTP_SECRET  # Generates valid codes
 **Industry Standard:** Path-level wildcards on owned domains with PKCE is standard practice for SPA OAuth implementations (Auth0, Okta, Azure AD all recommend this pattern).
 
 **Reference:** [OAuth 2.0 Security Best Current Practice (RFC 9700)](https://datatracker.ietf.org/doc/rfc9700/)
+
+### 10. Legacy Workflow Using Direct Vault Access (Previously Medium)
+
+**Concern:** The `.github/workflows/deploy.yml` workflow used `hashicorp/vault-action@v3` which required direct network access to Vault from GitHub Actions runners. After closing the Vault firewall port (Resolved Concern #2), this workflow would fail.
+
+**Resolution (2026-02-17):** The legacy `deploy.yml` workflow has been removed.
+
+**Analysis:**
+- The workflow was superseded by environment-specific approaches:
+  - **VPS/Stage**: `deploy-vps.yml` uses GitHub Secrets + SSH (no direct Vault access needed)
+  - **GCP/Prod**: Terraform with GCP Secret Manager (not VPS Vault)
+- The removed workflow had issues:
+  - Referenced non-existent Vault paths (`kv/data/staging/database`, etc.)
+  - Production job was disabled (`if: false && ...`)
+  - Staging job targeted "Staging VPS", not GCP
+  - Required `VAULT_ADDR`, `VAULT_ROLE_ID`, `VAULT_SECRET_ID` secrets that may not exist
+
+**Current Secrets Architecture:**
+
+| Environment | Secrets Source | Access Method |
+|-------------|----------------|---------------|
+| Dev | GitHub Secrets | Direct injection via workflow |
+| VPS/Stage | GitHub Secrets | SSH → VPS `.env` file |
+| GCP/Prod | GCP Secret Manager | Terraform `google_secret_manager_secret` resources |
+
+**Reference:** Commit `589a21c0` - "chore(ci): remove legacy deploy.yml workflow"
