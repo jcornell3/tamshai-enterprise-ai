@@ -1,0 +1,39 @@
+{
+  "name": "@tamshai/keycloak-admin",
+  "version": "1.0.0",
+  "description": "Keycloak administration client for Tamshai Enterprise AI",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "sync": "tsx src/index.ts sync",
+    "sync:dev": "ENV=dev tsx src/index.ts sync",
+    "sync:stage": "ENV=stage tsx src/index.ts sync",
+    "sync:prod": "ENV=prod tsx src/index.ts sync"
+  },
+  "dependencies": {
+    "@keycloak/keycloak-admin-client": "^26.0.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@typescript-eslint/eslint-plugin": "^8.24.0",
+    "@typescript-eslint/parser": "^8.24.0",
+    "eslint": "^9.20.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
