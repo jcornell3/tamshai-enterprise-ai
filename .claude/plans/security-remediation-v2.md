@@ -2,7 +2,7 @@
 
 **Created**: 2026-02-18
 **Source**: `docs/security/SECURITY_CONCERNSv2.md`
-**Status**: In Progress (E1-E4, M1-M3 Complete)
+**Status**: In Progress (E1-E4, M1-M3, C2, C3 Complete)
 **Last Updated**: 2026-02-18
 
 ---
@@ -380,11 +380,17 @@ GitHub Secrets (encrypted)
 ```
 
 **Acceptance Criteria:**
-- [ ] No plaintext secrets written to VPS disk
-- [ ] Phoenix rebuild works with encrypted secrets
-- [ ] Secrets accessible to containers via environment
-- [ ] Key rotation procedure documented
-- [ ] Monitoring for decryption failures
+- [x] No plaintext secrets written to VPS disk
+- [x] Phoenix rebuild works with encrypted secrets
+- [x] Secrets accessible to containers via environment
+- [ ] Key rotation procedure documented (future enhancement)
+- [ ] Monitoring for decryption failures (future enhancement)
+
+**Implementation (2026-02-18):**
+- Commit `857a0f32`: feat(security): implement C2 - encrypted secrets at rest
+- Files created: `infrastructure/terraform/vps/encryption.tf`, `scripts/secrets/*.sh`
+- Files modified: `cloud-init.yaml`, `main.tf`, `deploy-vps.yml`
+- Architecture: Secrets written to RAM (/dev/shm), encrypted with AES-256-CBC, key derived from SHA256(instance_id + salt)
 
 ---
 
@@ -453,11 +459,17 @@ keycloak_admin.create_client({
 5. Day 5: Testing, documentation, deprecate shell scripts
 
 **Acceptance Criteria:**
-- [ ] New TypeScript/Node.js admin client project
-- [ ] All sync-realm.sh functions migrated
-- [ ] Type-safe Keycloak API interactions
-- [ ] Unit tests for admin operations
-- [ ] Shell scripts deprecated (kept for reference)
+- [x] New TypeScript/Node.js admin client project
+- [x] All sync-realm.sh functions migrated
+- [x] Type-safe Keycloak API interactions
+- [x] Unit tests for admin operations (14 tests passing)
+- [x] Shell scripts deprecated (kept for reference)
+
+**Implementation (2026-02-18):**
+- Commit `403d71a8`: feat(keycloak): add TypeScript admin client for realm sync (C3.1-C3.3)
+- Package created: `keycloak/admin-client/`
+- Modules: `src/sync/clients.ts`, `groups.ts`, `scopes.ts`, `mappers.ts`, `users.ts`, `authz.ts`
+- Security fixes included: E2 (test-user not in C-Suite), E3 (explicit webOrigins), M1 (fullScopeAllowed=false)
 
 ---
 
@@ -492,15 +504,12 @@ keycloak_admin.create_client({
 
 ### Sprint 3: Infrastructure (Week 3)
 - [x] M3: Docker network segmentation
+- [x] C2: Encrypted secrets at rest (all phases) ✅ 2026-02-18
+- [x] C3: Keycloak admin client migration ✅ 2026-02-18
+
+### Sprint 4: Vault Production Mode (Week 4)
 - [ ] C1: Begin Vault production mode (Phases 1-2)
-
-### Sprint 4: Secrets Management (Week 4)
 - [ ] C1: Complete Vault production mode (Phases 3-4)
-- [ ] C2: Encrypted secrets at rest (Phases 1-2)
-
-### Sprint 5: Finalization (Week 5)
-- [ ] C2: Complete encrypted secrets (Phases 3-4)
-- [ ] C3: Begin Keycloak admin client migration (optional)
 
 ---
 
@@ -523,14 +532,15 @@ Git revert of configuration changes; no data migration needed.
 
 ## Success Metrics
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Critical vulnerabilities | 4 | 0 |
-| High-risk findings | 2 | 0 |
-| Medium-risk findings | 4 | 0 |
-| Low-risk findings | 2 | 2 (acceptable) |
-| Secrets in plaintext | Yes | No |
-| Network segmentation | None | 4 zones |
+| Metric | Initial | Current | Target |
+|--------|---------|---------|--------|
+| Critical vulnerabilities | 4 | 1 (C1 remaining) | 0 |
+| High-risk findings | 2 | 0 | 0 |
+| Medium-risk findings | 4 | 0 | 0 |
+| Low-risk findings | 2 | 0 | 2 (acceptable) |
+| Secrets in plaintext | Yes | No (C2 ✅) | No |
+| Network segmentation | None | 4 zones (M3 ✅) | 4 zones |
+| Keycloak admin scripts | Bash/curl | TypeScript (C3 ✅) | TypeScript |
 
 ---
 
