@@ -524,6 +524,12 @@ jobs:
           git checkout ${{ env.DEPLOY_BRANCH }}
           git reset --hard origin/${{ env.DEPLOY_BRANCH }}
 
+          # Clean up vault config directory (remove old .hcl files that may cause issues)
+          # The config/ directory should only contain .gitkeep for dev mode
+          echo "=== Cleaning vault config directory ==="
+          rm -f infrastructure/docker/vault/config/*.hcl 2>/dev/null || true
+          echo "[OK] Vault config directory cleaned"
+
           # =========================================================================
           # Fix .env paths for docker-compose running from infrastructure/docker/
           # Old format: ./infrastructure/docker/Caddyfile.stage (root-relative)
@@ -1133,17 +1139,17 @@ jobs:
           # Create vault config directory if not exists
           mkdir -p infrastructure/docker/vault/config
 
-          # Verify vault-stage.hcl exists and copy to config directory
-          # Config stored in config-stage/ to avoid affecting dev mode (config/ is mounted)
+          # Verify vault-stage.hcl exists (for future production mode)
+          # NOTE: Not copying to config/ yet since we're still using dev mode
+          # When switching to production mode, update docker-compose command and copy config
           if [ -f infrastructure/docker/vault/config-stage/vault-stage.hcl ]; then
-            echo "[OK] vault-stage.hcl found in repository"
-            cp infrastructure/docker/vault/config-stage/vault-stage.hcl infrastructure/docker/vault/config/vault.hcl
-            echo "[OK] Copied to config/vault.hcl for production mode"
+            echo "[OK] vault-stage.hcl found in repository (ready for production mode)"
           else
-            echo "[ERROR] vault-stage.hcl not found - git pull may have failed"
-            echo "       Expected at: infrastructure/docker/vault/config-stage/vault-stage.hcl"
-            exit 1
+            echo "[WARN] vault-stage.hcl not found - production mode config not available"
           fi
+
+          # Ensure config directory is clean for dev mode
+          rm -f infrastructure/docker/vault/config/*.hcl 2>/dev/null || true
 
           # Check if Vault is currently running in dev mode
           CURRENT_CMD=$(docker inspect --format='{{.Config.Cmd}}' tamshai-dev-vault 2>/dev/null | tr -d '[]' || echo "unknown")
