@@ -17,6 +17,48 @@ vps.tamshai.com {
   redir https://www.tamshai.com{uri} permanent
 }
 
+# Customer Support Portal (External Customers)
+# Uses tamshai-customers realm for authentication (separate from employee realm)
+# Customers authenticate with username/password only (no TOTP required)
+customers.tamshai.com {
+  encode gzip
+
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+
+  # Keycloak authentication (customer realm: tamshai-customers)
+  handle /auth/* {
+    reverse_proxy keycloak:8080
+  }
+
+  # API Gateway (customer tools via MCP Support)
+  handle /api/* {
+    # SSE streaming support
+    @sse {
+      path /api/query*
+      header Accept text/event-stream
+    }
+    reverse_proxy @sse kong:8000 {
+      flush_interval -1
+      transport http {
+        read_timeout 120s
+        write_timeout 120s
+      }
+    }
+
+    reverse_proxy kong:8000
+  }
+
+  # Customer Portal SPA
+  handle {
+    reverse_proxy web-customer-support:80
+  }
+}
+
 # HTTPS with Let's Encrypt (Caddy auto-provisions certificates)
 # Cloudflare SSL/TLS must be set to "Full (Strict)" for end-to-end encryption
 www.tamshai.com {
