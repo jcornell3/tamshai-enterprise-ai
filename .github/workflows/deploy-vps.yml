@@ -35,6 +35,8 @@ on:
       - 'sample-data/**'
       # Shared library (all services depend on this)
       - 'services/shared/**'
+      # MCP services (gateway, hr, finance, sales, support, payroll, tax, ui, journey)
+      - 'services/mcp-*/**'
       # Web client apps (no individual deploy workflows)
       - 'clients/web/**'
       # Deployment and infra scripts
