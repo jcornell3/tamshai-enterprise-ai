@@ -24,7 +24,7 @@ import {
   getUserId as sharedGetUserId,
   getUser as sharedGetUser,
   getUserCredentials as sharedGetUserCredentials,
-  updateUserRequiredActions as sharedUpdateUserRequiredActions,
+  // updateUserRequiredActions available but not currently used
   prepareTestUsers as sharedPrepareTestUsers,
   restoreTestUsers as sharedRestoreTestUsers,
   type KeycloakAdminConfig,
@@ -311,11 +311,14 @@ async function getUserId(username: string): Promise<string | null> {
   return sharedGetUserId(keycloakAdminToken!, keycloakAdminConfig, username);
 }
 
-async function getUser(userId: string) {
+// Reserved for debugging - uncomment when needed for local troubleshooting
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _getUser(userId: string) {
   return sharedGetUser(keycloakAdminToken!, keycloakAdminConfig, userId);
 }
 
-async function getUserCredentials(userId: string) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _getUserCredentials(userId: string) {
   return sharedGetUserCredentials(keycloakAdminToken!, keycloakAdminConfig, userId);
 }
 
