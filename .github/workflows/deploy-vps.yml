@@ -784,10 +784,11 @@ jobs:
 
           # PHOENIX: Verify minimum users exist in Keycloak
           echo "=== Verifying user provisioning ==="
+          # Use --data-urlencode for password to handle special characters
           TOKEN=$(curl -sf -X POST "http://localhost/auth/realms/master/protocol/openid-connect/token" \
             -d "client_id=admin-cli" \
             -d "username=admin" \
-            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
             -d "grant_type=password" | jq -r '.access_token')
 
           USER_COUNT=$(curl -sf "http://localhost/auth/admin/realms/tamshai-corp/users?briefRepresentation=true" \
@@ -860,11 +861,12 @@ jobs:
           fi
 
           # Get admin token
+          # Use --data-urlencode for password to handle special characters
           echo "Getting Keycloak admin token..."
           TOKEN_RESPONSE=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=admin" \
-            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+            --data-urlencode "password=${KEYCLOAK_ADMIN_PASSWORD}" \
             -d "grant_type=password" \
             -d "client_id=admin-cli")
 
