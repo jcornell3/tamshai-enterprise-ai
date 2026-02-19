@@ -101,10 +101,11 @@ jobs:
           echo "🔍 Verifying test-user.journey TOTP configuration..."
 
           # Get access token
+          # Use --data-urlencode for password to handle special characters
           TOKEN_RESPONSE=$(curl -s -X POST "https://keycloak-fn44nd7wba-uc.a.run.app/auth/realms/master/protocol/openid-connect/token" \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "username=admin" \
-            -d "password=$KEYCLOAK_ADMIN_PASSWORD" \
+            --data-urlencode "password=$KEYCLOAK_ADMIN_PASSWORD" \
             -d "grant_type=password" \
             -d "client_id=admin-cli")
 
