@@ -3,14 +3,28 @@
  *
  * Employee-facing tools for listing and managing support tickets.
  * Uses role-based access control for filtering tickets.
+ *
+ * NOTE: Uses backend factory (Elasticsearch/MongoDB) for data access.
+ * Direct MongoDB access (getCollection) is NOT used here - that would
+ * bypass the SUPPORT_DATA_BACKEND environment variable setting.
  */
 
 import { z } from 'zod';
 import { MCPToolResponse, createSuccessResponse, PaginationMetadata, createLogger } from '@tamshai/shared';
-import { getCollection } from '../database/connection';
-import { UserContext } from '../database/types';
+import { UserContext, ISupportBackend } from '../database/types';
+import { createSupportBackend } from '../database/backend.factory';
 
 const logger = createLogger('mcp-support');
+
+// Lazy-initialized backend (singleton within this module)
+let backend: ISupportBackend | null = null;
+
+function getBackend(): ISupportBackend {
+  if (!backend) {
+    backend = createSupportBackend();
+  }
+  return backend;
+}
 
 // Employee ticket interface
 export interface EmployeeTicket {
@@ -39,62 +53,10 @@ const ListTicketsInputSchema = z.object({
 export type ListTicketsInput = z.infer<typeof ListTicketsInputSchema>;
 
 /**
- * Build role-based filter for employee ticket access
- *
- * Access levels:
- * - support-read/support-write/executive: All tickets
- * - manager: Tickets created by or assigned to team members
- * - user: Only tickets they created
- */
-function buildEmployeeTicketFilter(
-  userContext: UserContext,
-  filters: Partial<ListTicketsInput>
-): Record<string, any> {
-  const { roles, username } = userContext;
-  const baseFilter: Record<string, any> = {};
-
-  // Add priority filter
-  if (filters.priority) {
-    baseFilter.priority = filters.priority;
-  }
-
-  // Add status filter
-  if (filters.status) {
-    baseFilter.status = filters.status;
-  }
-
-  // Add assigned_to filter
-  if (filters.assignedTo) {
-    baseFilter.assigned_to = filters.assignedTo;
-  }
-
-  // Role-based access control
-  const hasFullAccess = roles.includes('support-read') || roles.includes('support-write') || roles.includes('executive');
-
-  if (hasFullAccess) {
-    // Full access to all tickets
-    return baseFilter;
-  } else if (roles.includes('manager')) {
-    // Managers see tickets created by or assigned to them
-    // TODO: Enhance to include team members' tickets
-    return {
-      ...baseFilter,
-      $or: [
-        { created_by: username },
-        { assigned_to: username },
-      ],
-    };
-  } else {
-    // Regular users see only their own tickets
-    return {
-      ...baseFilter,
-      created_by: username,
-    };
-  }
-}
-
-/**
  * List support tickets with filtering and pagination
+ *
+ * Uses the backend factory (Elasticsearch/MongoDB) based on SUPPORT_DATA_BACKEND.
+ * Role-based access control is handled by the backend's searchTickets method.
  *
  * @param input - Filter parameters (priority, status, assignedTo, limit, cursor)
  * @param userContext - User authentication context
@@ -106,55 +68,48 @@ export async function listTickets(
 ): Promise<MCPToolResponse<EmployeeTicket[]>> {
   try {
     const validatedInput = ListTicketsInputSchema.parse(input);
-    const { limit, cursor } = validatedInput;
+    const { priority, status, limit, cursor } = validatedInput;
 
     logger.debug('Listing employee tickets', {
       userId: userContext.userId,
       filters: validatedInput,
     });
 
-    const collection = await getCollection('tickets');
+    // Use backend factory (Elasticsearch or MongoDB based on SUPPORT_DATA_BACKEND)
+    const supportBackend = getBackend();
 
-    // Build filter with role-based access
-    let filter = buildEmployeeTicketFilter(userContext, validatedInput);
+    // Backend's searchTickets handles role-based filtering via userContext
+    const result = await supportBackend.searchTickets({
+      status,
+      priority,
+      limit,
+      cursor,
+      userContext,
+    });
 
-    // Handle cursor-based pagination
-    if (cursor) {
-      try {
-        const decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
-        filter = {
-          ...filter,
-          created_at: { $lt: new Date(decodedCursor.lastCreatedAt) },
-        };
-      } catch (error) {
-        logger.warn('Invalid cursor', { cursor, error });
-        // Continue without cursor if invalid
-      }
-    }
-
-    // Query with limit+1 for pagination detection
-    const tickets = await collection
-      .find(filter)
-      .sort({ created_at: -1 })
-      .limit(limit + 1)
-      .toArray();
-
-    const hasMore = tickets.length > limit;
-    const resultTickets = tickets.slice(0, limit) as unknown as EmployeeTicket[];
+    // Map to EmployeeTicket type
+    const resultTickets: EmployeeTicket[] = result.data.map(ticket => ({
+      ticket_id: ticket.ticket_id,
+      title: ticket.title,
+      description: ticket.description,
+      status: ticket.status,
+      priority: ticket.priority,
+      created_by: ticket.created_by,
+      created_at: ticket.created_at,
+      updated_at: ticket.updated_at,
+      assigned_to: ticket.assigned_to || null,
+      tags: ticket.tags || [],
+      resolution: ticket.resolution,
+    }));
 
     // Build pagination metadata
     let metadata: PaginationMetadata | undefined;
-    if (hasMore || cursor) {
-      const lastTicket = resultTickets[resultTickets.length - 1];
-      const nextCursor = hasMore
-        ? Buffer.from(JSON.stringify({ lastCreatedAt: lastTicket.created_at })).toString('base64')
-        : undefined;
-
+    if (result.hasMore || cursor) {
       metadata = {
-        hasMore,
+        hasMore: result.hasMore,
         returnedCount: resultTickets.length,
-        ...(hasMore && nextCursor && {
-          nextCursor,
+        ...(result.hasMore && result.nextCursor && {
+          nextCursor: result.nextCursor,
           hint: 'To see more tickets, provide the nextCursor parameter.',
         }),
       };
@@ -163,7 +118,7 @@ export async function listTickets(
     logger.info('list_tickets completed', {
       userId: userContext.userId,
       ticketCount: resultTickets.length,
-      hasMore,
+      hasMore: result.hasMore,
     });
 
     return createSuccessResponse(resultTickets, metadata);
