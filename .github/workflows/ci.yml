@@ -92,7 +92,7 @@ jobs:
           cache-dependency-path: services/mcp-gateway/package-lock.json
 
       - name: Download shared artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -185,7 +185,7 @@ jobs:
           cache-dependency-path: services/mcp-hr/package-lock.json
 
       - name: Download shared artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -653,7 +653,7 @@ jobs:
           cache-dependency-path: services/mcp-gateway/package-lock.json
 
       - name: Download shared artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -1161,7 +1161,7 @@ jobs:
       # Build and Start MCP Gateway
       # =========================================================================
       - name: Download shared artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -1365,7 +1365,7 @@ jobs:
       # MCP Gateway Setup
       # =========================================================================
       - name: Download shared artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: shared-dist
           path: services/shared/
