@@ -69,21 +69,7 @@ name = "eslint"
 version = "8.57.1"
 package_file = "package.json"
 package_filters = ["eslint", "jest", "prettier"]
-prefix = "clients/unified"
-
-[[plugin]]
-name = "eslint"
-version = "8.57.1"
-package_file = "package.json"
-package_filters = ["eslint", "jest", "prettier"]
 prefix = "services/mcp-gateway"
-
-[[plugin]]
-name = "eslint"
-version = "8.57.1"
-package_file = "package.json"
-package_filters = ["eslint", "jest", "prettier"]
-prefix = "clients/desktop"
 
 [[plugin]]
 name = "hadolint"
