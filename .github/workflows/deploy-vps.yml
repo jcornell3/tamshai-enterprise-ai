@@ -1133,12 +1133,15 @@ jobs:
           # Create vault config directory if not exists
           mkdir -p infrastructure/docker/vault/config
 
-          # Verify vault-stage.hcl exists in repo (pulled earlier by git reset)
-          if [ -f infrastructure/docker/vault/config/vault-stage.hcl ]; then
+          # Verify vault-stage.hcl exists and copy to config directory
+          # Config stored in config-stage/ to avoid affecting dev mode (config/ is mounted)
+          if [ -f infrastructure/docker/vault/config-stage/vault-stage.hcl ]; then
             echo "[OK] vault-stage.hcl found in repository"
+            cp infrastructure/docker/vault/config-stage/vault-stage.hcl infrastructure/docker/vault/config/vault.hcl
+            echo "[OK] Copied to config/vault.hcl for production mode"
           else
             echo "[ERROR] vault-stage.hcl not found - git pull may have failed"
-            echo "       Expected at: infrastructure/docker/vault/config/vault-stage.hcl"
+            echo "       Expected at: infrastructure/docker/vault/config-stage/vault-stage.hcl"
             exit 1
           fi
 
