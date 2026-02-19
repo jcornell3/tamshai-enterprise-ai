@@ -82,6 +82,14 @@ send_recovery_alert() {
 # =============================================================================
 # Health Check Functions
 # =============================================================================
+#
+# Vault Health Check Notes:
+# - Vault returns HTTP 503 when sealed (treated as failure)
+# - Vault returns HTTP 200 when unsealed and healthy
+# - After Phoenix rebuild, Vault may need re-initialization
+# - The deploy workflow auto-unseals using stored keys (C1 Security)
+#
+# =============================================================================
 
 check_endpoint() {
     local endpoint="$1"
