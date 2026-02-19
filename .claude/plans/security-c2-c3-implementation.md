@@ -2,7 +2,52 @@
 
 **Created**: 2026-02-18
 **Author**: Tamshai-Dev (Claude-Dev)
-**Status**: Detailed Planning
+**Status**: ✅ COMPLETE
+
+---
+
+## Implementation Status
+
+| Item | Status | Commit |
+|------|--------|--------|
+| C2: Encrypted Secrets at Rest | ✅ Complete | 857a0f32 |
+| C3: Keycloak Admin Client | ✅ Complete | 403d71a8 |
+
+### C2 Implementation Summary
+
+**Files Created:**
+- `infrastructure/terraform/vps/encryption.tf` - Terraform encryption infrastructure
+- `scripts/secrets/encrypt-secrets.sh` - Encrypt secrets in CI/CD
+- `scripts/secrets/decrypt-secrets.sh` - Decrypt at VPS startup
+- `scripts/secrets/start-services.sh` - Secure service startup
+- `scripts/secrets/validate-no-plaintext.sh` - Validation script
+
+**Files Modified:**
+- `infrastructure/terraform/vps/cloud-init.yaml` - Encrypted secrets flow
+- `infrastructure/terraform/vps/main.tf` - Pass encryption_salt to cloud-init
+- `.github/workflows/deploy-vps.yml` - Re-encrypt on deploy, validate post-deploy
+
+**Security Properties:**
+- Secrets written to RAM (/dev/shm), encrypted immediately
+- Encrypted blob stored at /opt/tamshai/.env.enc
+- Key derived from SHA256(instance_id + salt)
+- Plaintext never touches disk
+
+### C3 Implementation Summary
+
+**Package Created:** `keycloak/admin-client/`
+- 14 unit tests passing
+- TypeScript with full type safety
+- CLI interface with `npm run sync:dev|stage|prod`
+
+**Files:**
+- `src/client.ts` - Keycloak client wrapper
+- `src/sync/clients.ts` - Client sync with E3 fix (explicit webOrigins)
+- `src/sync/groups.ts` - Group sync with E2 fix (test-user.journey)
+- `src/sync/scopes.ts` - Client scope management
+- `src/sync/mappers.ts` - Protocol mapper configuration
+- `src/sync/users.ts` - User provisioning
+- `src/sync/authz.ts` - Token exchange permissions
 
 ---
 
