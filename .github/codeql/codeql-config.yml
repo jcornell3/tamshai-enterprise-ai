@@ -14,9 +14,8 @@ paths-ignore:
   # Node modules (third-party dependencies)
   - '**/node_modules/**'
 
-  # DEPRECATED: React Native client (replaced by Flutter - see ADR-005)
+  # DEPRECATED: Electron desktop client (replaced by Flutter - see ADR-005)
   # Entire directory excluded from scanning
-  - 'clients/unified/**'
   - 'clients/desktop/**'
 
   # Flutter Android platform code (generated, not maintained)
@@ -43,7 +42,7 @@ paths-ignore:
   - '**/*.freezed.dart'
 
 # Paths to explicitly include (our actual source code)
-# Note: clients/unified and clients/desktop are deprecated React Native code
+# Note: clients/desktop is deprecated Electron code (Flutter is the active client)
 paths:
   - 'services/**'
   - 'clients/web/**'
