@@ -1133,31 +1133,13 @@ jobs:
           # Create vault config directory if not exists
           mkdir -p infrastructure/docker/vault/config
 
-          # Check if vault-stage.hcl exists in repo (pulled earlier)
+          # Verify vault-stage.hcl exists in repo (pulled earlier by git reset)
           if [ -f infrastructure/docker/vault/config/vault-stage.hcl ]; then
             echo "[OK] vault-stage.hcl found in repository"
           else
-            echo "[INFO] Creating vault-stage.hcl..."
-            cat > infrastructure/docker/vault/config/vault-stage.hcl << 'EOF'
-storage "file" {
-  path = "/vault/file"
-}
-
-listener "tcp" {
-  address     = "0.0.0.0:8200"
-  tls_disable = "true"
-}
-
-api_addr = "http://vault:8200"
-cluster_addr = "http://vault:8201"
-disable_mlock = true
-ui = true
-
-telemetry {
-  disable_hostname = true
-}
-EOF
-            echo "[OK] vault-stage.hcl created"
+            echo "[ERROR] vault-stage.hcl not found - git pull may have failed"
+            echo "       Expected at: infrastructure/docker/vault/config/vault-stage.hcl"
+            exit 1
           fi
 
           # Check if Vault is currently running in dev mode
@@ -1165,8 +1147,8 @@ EOF
           echo "Current Vault command: $CURRENT_CMD"
 
           if echo "$CURRENT_CMD" | grep -q "\-dev"; then
-            echo "[INFO] Vault is running in dev mode - will switch to production mode"
-            echo "[WARN] This requires re-initialization if not already done"
+            echo "[INFO] Vault is running in dev mode"
+            echo "[INFO] Production mode requires Vault to be restarted with config file"
           else
             echo "[OK] Vault appears to be in production mode already"
           fi
