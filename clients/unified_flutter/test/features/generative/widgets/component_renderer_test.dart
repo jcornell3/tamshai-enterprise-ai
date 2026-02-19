@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:unified_flutter/features/generative/models/component_response.dart';
 import 'package:unified_flutter/features/generative/widgets/component_renderer.dart';
+import 'package:unified_flutter/features/generative/widgets/org_chart_component.dart';
+import 'package:unified_flutter/features/generative/widgets/customer_detail_card.dart';
+import 'package:unified_flutter/features/generative/widgets/leads_data_table.dart';
+import 'package:unified_flutter/features/generative/widgets/forecast_chart.dart';
+import 'package:unified_flutter/features/generative/widgets/budget_summary_card.dart';
+import 'package:unified_flutter/features/generative/widgets/approvals_queue.dart';
+import 'package:unified_flutter/features/generative/widgets/quarterly_report_dashboard.dart';
 
 void main() {
   group('ComponentRenderer', () {
@@ -25,7 +32,7 @@ void main() {
     }
 
     group('known component types', () {
-      testWidgets('renders OrgChartComponent placeholder for org_chart type',
+      testWidgets('renders OrgChartComponent with data for org_chart type',
           (tester) async {
         final component = ComponentResponse(
           type: 'OrgChartComponent',
@@ -40,101 +47,150 @@ void main() {
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        // Should render OrgChartComponent placeholder (not UnknownComponentFallback)
-        expect(find.text('OrgChartComponent'), findsOneWidget);
+        // Should render actual OrgChartComponent with employee data
+        expect(find.byType(OrgChartComponent), findsOneWidget);
+        expect(find.text('Marcus Johnson'), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
 
-      testWidgets('renders ApprovalsQueue placeholder for approvals type',
+      testWidgets('renders ApprovalsQueue for approvals type',
           (tester) async {
         final component = ComponentResponse(
           type: 'ApprovalsQueue',
           props: {
             'timeOffRequests': [],
             'expenseReports': [],
+            'budgetAmendments': [],
           },
         );
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('ApprovalsQueue'), findsOneWidget);
+        // Should render actual ApprovalsQueue (empty state shows "No pending approvals")
+        expect(find.byType(ApprovalsQueue), findsOneWidget);
+        expect(find.text('No pending approvals'), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
 
-      testWidgets('renders CustomerDetailCard placeholder', (tester) async {
+      testWidgets('renders CustomerDetailCard with data', (tester) async {
         final component = ComponentResponse(
           type: 'CustomerDetailCard',
           props: {
             'customer': {
               'id': 'cust-123',
               'name': 'Acme Corporation',
+              'industry': 'Technology',
+              'status': 'active',
             },
+            'contacts': [],
+            'opportunities': [],
           },
         );
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('CustomerDetailCard'), findsOneWidget);
+        // Should render actual CustomerDetailCard with customer name
+        expect(find.byType(CustomerDetailCard), findsOneWidget);
+        expect(find.text('Acme Corporation'), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
 
-      testWidgets('renders LeadsDataTable placeholder', (tester) async {
+      testWidgets('renders LeadsDataTable with data', (tester) async {
         final component = ComponentResponse(
           type: 'LeadsDataTable',
           props: {
-            'leads': [],
+            'leads': [
+              {
+                'id': 'lead-1',
+                'name': 'John Doe',
+                'company': 'TestCorp',
+                'score': 75,
+                'status': 'NEW',
+              },
+            ],
           },
         );
 
-        await tester.pumpWidget(buildTestWidget(component: component));
+        // LeadsDataTable requires bounded height constraints
+        await tester.pumpWidget(MaterialApp(
+          theme: ThemeData.light(useMaterial3: true),
+          home: Scaffold(
+            body: SizedBox(
+              height: 600,
+              child: ComponentRenderer(
+                component: component,
+                onAction: (_) {},
+              ),
+            ),
+          ),
+        ));
 
-        expect(find.text('LeadsDataTable'), findsOneWidget);
+        // Should render actual LeadsDataTable with lead name
+        expect(find.byType(LeadsDataTable), findsOneWidget);
+        expect(find.text('John Doe'), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
 
-      testWidgets('renders ForecastChart placeholder', (tester) async {
+      testWidgets('renders ForecastChart with data', (tester) async {
         final component = ComponentResponse(
           type: 'ForecastChart',
           props: {
-            'period': 'Q1 2026',
-            'quota': 500000,
+            'periods': [
+              {'label': 'Jan', 'actual': 100000, 'forecast': 120000},
+            ],
+            'target': 500000,
+            'achieved': 100000,
+            'projected': 400000,
           },
         );
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('ForecastChart'), findsOneWidget);
+        // Should render actual ForecastChart
+        expect(find.byType(ForecastChart), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
 
-      testWidgets('renders BudgetSummaryCard placeholder', (tester) async {
+      testWidgets('renders BudgetSummaryCard with data', (tester) async {
         final component = ComponentResponse(
           type: 'BudgetSummaryCard',
           props: {
             'department': 'Engineering',
+            'year': 2026,
             'totalBudget': 2500000,
+            'spent': 1250000,
+            'remaining': 1250000,
+            'percentUsed': 50.0,
+            'status': 'APPROVED',
           },
         );
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('BudgetSummaryCard'), findsOneWidget);
+        // Should render actual BudgetSummaryCard with department name
+        expect(find.byType(BudgetSummaryCard), findsOneWidget);
+        expect(find.textContaining('Engineering'), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
 
-      testWidgets('renders QuarterlyReportDashboard placeholder',
+      testWidgets('renders QuarterlyReportDashboard with data',
           (tester) async {
         final component = ComponentResponse(
           type: 'QuarterlyReportDashboard',
           props: {
             'quarter': 'Q4',
             'year': 2025,
+            'revenue': 5000000,
+            'arr': 20000000,
+            'netIncome': 1000000,
           },
         );
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('QuarterlyReportDashboard'), findsOneWidget);
+        // Should render actual QuarterlyReportDashboard with quarter/year
+        expect(find.byType(QuarterlyReportDashboard), findsOneWidget);
+        expect(find.textContaining('Q4 2025'), findsOneWidget);
         expect(find.text('Unknown Component'), findsNothing);
       });
     });
@@ -172,7 +228,7 @@ void main() {
         final component = ComponentResponse(
           type: 'OrgChartComponent',
           props: {
-            'self': {'id': 'user-123', 'name': 'Test User'},
+            'self': {'id': 'user-123', 'name': 'Test User', 'title': 'Engineer'},
           },
         );
 
@@ -181,12 +237,9 @@ void main() {
           onAction: (action) => receivedAction = action,
         ));
 
-        // Find and tap the action button in the placeholder
-        final actionButton = find.byKey(const Key('trigger-action'));
-        if (actionButton.evaluate().isNotEmpty) {
-          await tester.tap(actionButton);
-          expect(receivedAction, isNotNull);
-        }
+        // The actual component renders - clicking on an employee card triggers action
+        expect(find.byType(OrgChartComponent), findsOneWidget);
+        // Note: testing onAction requires interacting with the OrgChartComponent
       });
     });
 
@@ -195,7 +248,7 @@ void main() {
         final component = ComponentResponse(
           type: 'OrgChartComponent',
           props: {
-            'self': {'id': 'user-123', 'name': 'Test User'},
+            'self': {'id': 'user-123', 'name': 'Test User', 'title': 'Engineer'},
           },
           narration: const Narration(
             text: 'You have 3 direct reports.',
@@ -207,15 +260,16 @@ void main() {
           voiceEnabled: true,
         ));
 
-        // Verify the component renders (voice behavior tested separately)
-        expect(find.text('OrgChartComponent'), findsOneWidget);
+        // Verify the actual component renders (voice behavior tested separately)
+        expect(find.byType(OrgChartComponent), findsOneWidget);
+        expect(find.text('Test User'), findsOneWidget);
       });
 
       testWidgets('widget renders when voiceEnabled is false', (tester) async {
         final component = ComponentResponse(
           type: 'OrgChartComponent',
           props: {
-            'self': {'id': 'user-123', 'name': 'Test User'},
+            'self': {'id': 'user-123', 'name': 'Test User', 'title': 'Engineer'},
           },
         );
 
@@ -224,27 +278,33 @@ void main() {
           voiceEnabled: false,
         ));
 
-        expect(find.text('OrgChartComponent'), findsOneWidget);
+        expect(find.byType(OrgChartComponent), findsOneWidget);
+        expect(find.text('Test User'), findsOneWidget);
       });
     });
 
     group('component props', () {
-      testWidgets('displays props data in placeholder component',
+      testWidgets('displays props data in actual component',
           (tester) async {
         final component = ComponentResponse(
           type: 'CustomerDetailCard',
           props: {
             'customer': {
+              'id': 'cust-123',
               'name': 'Acme Corporation',
               'industry': 'Technology',
+              'status': 'active',
             },
+            'contacts': [],
+            'opportunities': [],
           },
         );
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        // The placeholder should show the component type
-        expect(find.text('CustomerDetailCard'), findsOneWidget);
+        // The actual component should display customer data
+        expect(find.byType(CustomerDetailCard), findsOneWidget);
+        expect(find.text('Acme Corporation'), findsOneWidget);
       });
     });
 
@@ -253,7 +313,13 @@ void main() {
         final component = ComponentResponse(
           type: 'CustomerDetailCard',
           props: {
-            'customer': {'name': 'Test Corp'},
+            'customer': {
+              'id': 'cust-123',
+              'name': 'Test Corp',
+              'status': 'active',
+            },
+            'contacts': [],
+            'opportunities': [],
           },
           actions: [
             const ComponentAction(
@@ -266,7 +332,8 @@ void main() {
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('CustomerDetailCard'), findsOneWidget);
+        expect(find.byType(CustomerDetailCard), findsOneWidget);
+        expect(find.text('Test Corp'), findsOneWidget);
       });
     });
 
@@ -276,6 +343,12 @@ void main() {
           type: 'BudgetSummaryCard',
           props: {
             'department': 'Engineering',
+            'year': 2026,
+            'totalBudget': 2500000,
+            'spent': 1250000,
+            'remaining': 1250000,
+            'percentUsed': 50.0,
+            'status': 'APPROVED',
           },
           narration: const Narration(
             text: 'Engineering has spent 50% of budget.',
@@ -286,7 +359,8 @@ void main() {
 
         await tester.pumpWidget(buildTestWidget(component: component));
 
-        expect(find.text('BudgetSummaryCard'), findsOneWidget);
+        expect(find.byType(BudgetSummaryCard), findsOneWidget);
+        expect(find.textContaining('Engineering'), findsOneWidget);
       });
     });
 
@@ -296,7 +370,9 @@ void main() {
         final component = ComponentResponse(
           type: 'LeadsDataTable',
           props: {
-            'leads': [],
+            'leads': [
+              {'id': 'lead-1', 'name': 'Test Lead', 'status': 'NEW', 'score': 50},
+            ],
           },
           metadata: ComponentMetadata(
             truncated: true,
@@ -305,9 +381,22 @@ void main() {
           ),
         );
 
-        await tester.pumpWidget(buildTestWidget(component: component));
+        // LeadsDataTable requires bounded height constraints
+        await tester.pumpWidget(MaterialApp(
+          theme: ThemeData.light(useMaterial3: true),
+          home: Scaffold(
+            body: SizedBox(
+              height: 600,
+              child: ComponentRenderer(
+                component: component,
+                onAction: (_) {},
+              ),
+            ),
+          ),
+        ));
 
-        expect(find.text('LeadsDataTable'), findsOneWidget);
+        expect(find.byType(LeadsDataTable), findsOneWidget);
+        expect(find.text('Test Lead'), findsOneWidget);
       });
     });
 

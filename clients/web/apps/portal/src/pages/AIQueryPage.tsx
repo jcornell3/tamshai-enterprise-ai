@@ -62,13 +62,13 @@ export default function AIQueryPage() {
         let requestBody: Record<string, unknown>;
 
         if (approvalType === 'budget') {
-          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/approve_budget`;
+          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/tools/approve_budget`;
           requestBody = { budgetId: id };
         } else if (approvalType === 'expense') {
-          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/approve_expense_report`;
+          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/tools/approve_expense_report`;
           requestBody = { reportId: id };
         } else if (approvalType === 'time-off') {
-          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/hr/approve_time_off_request`;
+          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/hr/tools/approve_time_off_request`;
           requestBody = { requestId: id, approved: true };
         } else {
           console.error('Unknown approval type:', approvalType);
@@ -126,13 +126,13 @@ export default function AIQueryPage() {
         let requestBody: Record<string, unknown>;
 
         if (approvalType === 'budget') {
-          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/reject_budget`;
+          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/tools/reject_budget`;
           requestBody = { budgetId: id, rejectionReason: reason || 'No reason provided' };
         } else if (approvalType === 'expense') {
-          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/reject_expense_report`;
+          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/tools/reject_expense_report`;
           requestBody = { reportId: id, rejectionReason: reason || 'No reason provided' };
         } else if (approvalType === 'time-off') {
-          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/hr/approve_time_off_request`;
+          mcpEndpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/hr/tools/approve_time_off_request`;
           requestBody = { requestId: id, approved: false, approverNotes: reason || 'No reason provided' };
         } else {
           console.error('Unknown approval type:', approvalType);

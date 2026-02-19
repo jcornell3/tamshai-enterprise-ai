@@ -28,6 +28,7 @@ export 'models/component_response.dart';
 
 // Services
 export 'services/display_service.dart';
+export 'services/action_service.dart';
 
 // Widgets
 export 'widgets/component_renderer.dart';

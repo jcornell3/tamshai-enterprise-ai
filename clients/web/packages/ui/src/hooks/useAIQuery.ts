@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth, apiConfig } from '@tamshai/auth';
 import { useVoiceInput } from './useVoiceInput';
 import { useVoiceOutput } from './useVoiceOutput';
@@ -63,11 +63,14 @@ export function useAIQuery({ domain }: UseAIQueryOptions): UseAIQueryReturn {
   const [directiveError, setDirectiveError] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
 
-  // Voice input hook — lazy: only initializes SpeechRecognition when voice is enabled
+  // Track previous listening state for auto-submit detection
+  const wasListeningRef = useRef(false);
+
+  // Voice input hook — always enabled (independent of voice output toggle)
   const { isListening, transcript, error: voiceInputError, startListening, stopListening } = useVoiceInput({
     language: 'en-US',
     interimResults: false,
-    enabled: voiceEnabled,
+    enabled: true, // Voice INPUT is always available, separate from voice OUTPUT
     onResult: (recognizedText: string) => {
       setQuery(recognizedText);
     },
@@ -87,6 +90,22 @@ export function useAIQuery({ domain }: UseAIQueryOptions): UseAIQueryReturn {
       setQuery(transcript);
     }
   }, [transcript]);
+
+  // Auto-submit when voice recognition ends with a valid query
+  // Detects transition from isListening=true to isListening=false
+  useEffect(() => {
+    // If we were listening and now we're not, auto-submit if there's a query
+    if (wasListeningRef.current && !isListening && query.trim()) {
+      // Use setTimeout to ensure the query state has fully updated
+      setTimeout(() => {
+        setActiveQuery(query);
+        setComponentResponse(null);
+        setDirectiveError(null);
+      }, 100);
+    }
+    // Update ref for next render
+    wasListeningRef.current = isListening;
+  }, [isListening, query]);
 
   /**
    * Detect display directives in AI response

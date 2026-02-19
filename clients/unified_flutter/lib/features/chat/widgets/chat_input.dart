@@ -64,20 +64,27 @@ class _ChatInputState extends ConsumerState<ChatInput>
       _pulseController.reset();
     }
 
-    // Update text field when transcription completes
+    // Update text field when transcription completes and auto-submit
     ref.listen<SpeechState>(speechProvider, (previous, next) {
       if (previous?.isListening == true &&
           next.isListening == false &&
           next.transcribedText.isNotEmpty) {
-        // Append transcribed text to existing content
-        final currentText = widget.controller.text;
-        final separator = currentText.isNotEmpty ? ' ' : '';
-        widget.controller.text = currentText + separator + next.transcribedText;
+        // Set transcribed text as the query
+        final transcribedText = next.transcribedText;
+        widget.controller.text = transcribedText;
         widget.controller.selection = TextSelection.fromPosition(
           TextPosition(offset: widget.controller.text.length),
         );
-        // Clear transcription after appending
+        // Clear transcription
         ref.read(speechProvider.notifier).clearTranscription();
+
+        // Auto-submit the voice query after a brief delay
+        // (allows UI to update and user to see what was recognized)
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (widget.controller.text.isNotEmpty) {
+            widget.onSend();
+          }
+        });
       }
     });
 

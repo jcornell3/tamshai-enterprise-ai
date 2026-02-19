@@ -38,13 +38,16 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         directReports: (rootNode?.direct_reports || []).map(mapEmployee),
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      // data is the raw array from get_org_chart
-      const nodes = (data as Array<any>) || [];
-      const rootNode = nodes.find(n => n.level === 0);
-      const reportCount = rootNode?.direct_reports?.length || 0;
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { manager, self, peers, directReports }
+      const p = props as Record<string, unknown>;
+      const self = p.self as Record<string, unknown> | null;
+      const directReports = (p.directReports as Array<unknown>) || [];
+      const manager = p.manager as Record<string, unknown> | null;
+      const reportCount = directReports.length;
+      const managerInfo = manager ? `You report to ${manager.name || 'your manager'}.` : 'You report to no one.';
       return {
-        text: `You report to no one. You have ${reportCount} direct reports.`,
+        text: `${managerInfo} You have ${reportCount} direct report${reportCount !== 1 ? 's' : ''}.`,
       };
     },
   },
@@ -77,14 +80,17 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         opportunities: [],  // TODO: Add second MCP call for opportunities
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const d = data as Record<string, unknown>;
-      const customer = d.customer as Record<string, unknown> | undefined;
-      const opportunities = d.opportunities as unknown[] | undefined;
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { customer, contacts, opportunities }
+      const p = props as Record<string, unknown>;
+      const customer = p.customer as Record<string, unknown> | undefined;
+      const contacts = (p.contacts as unknown[]) || [];
+      const opportunities = (p.opportunities as unknown[]) || [];
       const name = customer?.name || 'Unknown';
-      const oppCount = opportunities?.length || 0;
+      const contactCount = contacts.length;
+      const oppCount = opportunities.length;
       return {
-        text: `${name} has ${oppCount} active opportunities.`,
+        text: `${name} has ${contactCount} contact${contactCount !== 1 ? 's' : ''} and ${oppCount} active opportunit${oppCount !== 1 ? 'ies' : 'y'}.`,
       };
     },
   },
@@ -117,14 +123,23 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         filters: {},
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const d = data as Record<string, unknown>;
-      const leads = d.leads as unknown[] | undefined;
-      const count = leads?.length || 0;
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { leads, totalCount, filters }
+      const p = props as Record<string, unknown>;
+      const leads = (p.leads as Array<any>) || [];
+      const count = leads.length;
       const status = params.status || 'all';
-      return {
-        text: `Showing ${count} ${status} leads.`,
-      };
+      // Count leads by status for richer narration
+      const hotLeads = leads.filter(l => l.score >= 70).length;
+      const qualifiedLeads = leads.filter(l => l.status === 'qualified').length;
+      let narration = `Showing ${count} ${status !== 'all' ? status + ' ' : ''}lead${count !== 1 ? 's' : ''}.`;
+      if (hotLeads > 0) {
+        narration += ` ${hotLeads} hot lead${hotLeads !== 1 ? 's' : ''} with high scores.`;
+      }
+      if (qualifiedLeads > 0) {
+        narration += ` ${qualifiedLeads} qualified.`;
+      }
+      return { text: narration };
     },
   },
 
@@ -144,8 +159,18 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         period: d.period,
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const period = params.period || 'current period';
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { forecast, actual, period }
+      const p = props as Record<string, unknown>;
+      const period = (p.period as string) || params.period || 'current period';
+      const forecast = Number(p.forecast) || 0;
+      const actual = Number(p.actual) || 0;
+      const performance = forecast > 0 ? Math.round((actual / forecast) * 100) : 0;
+      if (forecast > 0 && actual > 0) {
+        return {
+          text: `Sales forecast for ${period}: ${performance}% of target achieved.`,
+        };
+      }
       return {
         text: `Sales forecast for ${period}.`,
       };
@@ -188,11 +213,17 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         },
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const d = data as Record<string, unknown>;
-      const dept = params.department || (d.department as string) || 'department';
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { budget: { departmentName, fiscalYear, allocated, spent, remaining, categories } }
+      const p = props as Record<string, unknown>;
+      const budget = p.budget as Record<string, unknown> | undefined;
+      const dept = (budget?.departmentName as string) || params.department || 'department';
+      const allocated = Number(budget?.allocated) || 0;
+      const spent = Number(budget?.spent) || 0;
+      const remaining = Number(budget?.remaining) || 0;
+      const percentUsed = allocated > 0 ? Math.round((spent / allocated) * 100) : 0;
       return {
-        text: `Budget summary for ${dept}.`,
+        text: `${dept} budget: ${percentUsed}% used. $${remaining.toLocaleString()} remaining of $${allocated.toLocaleString()} allocated.`,
       };
     },
   },
@@ -264,17 +295,25 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         budgetAmendments,
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const d = data as Record<string, unknown>;
-      const timeOffRequests = d.timeOffRequests as unknown[] | undefined;
-      const expenseReports = d.expenseReports as unknown[] | undefined;
-      const budgetAmendments = d.budgetAmendments as unknown[] | undefined;
-      const timeOff = timeOffRequests?.length || 0;
-      const expenses = expenseReports?.length || 0;
-      const budgets = budgetAmendments?.length || 0;
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { timeOffRequests, expenseReports, budgetAmendments }
+      const p = props as Record<string, unknown>;
+      const timeOffRequests = (p.timeOffRequests as unknown[]) || [];
+      const expenseReports = (p.expenseReports as unknown[]) || [];
+      const budgetAmendments = (p.budgetAmendments as unknown[]) || [];
+      const timeOff = timeOffRequests.length;
+      const expenses = expenseReports.length;
+      const budgets = budgetAmendments.length;
       const total = timeOff + expenses + budgets;
+      if (total === 0) {
+        return { text: 'No pending approvals.' };
+      }
+      const parts: string[] = [];
+      if (timeOff > 0) parts.push(`${timeOff} time off request${timeOff !== 1 ? 's' : ''}`);
+      if (expenses > 0) parts.push(`${expenses} expense report${expenses !== 1 ? 's' : ''}`);
+      if (budgets > 0) parts.push(`${budgets} budget amendment${budgets !== 1 ? 's' : ''}`);
       return {
-        text: `You have ${total} pending approvals: ${timeOff} time off, ${expenses} expenses, ${budgets} budget amendments.`,
+        text: `You have ${total} pending approval${total !== 1 ? 's' : ''}: ${parts.join(', ')}.`,
       };
     },
   },
@@ -302,11 +341,13 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         },
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const d = data as Record<string, unknown>;
-      const quarter = d.quarter || params.quarter || 'Q1';
-      const year = d.year || params.year || '2026';
-      const highlights = (d.highlights as string[]) || [];
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { report: { quarter, year, kpis, arrWaterfall, highlights } }
+      const p = props as Record<string, unknown>;
+      const report = p.report as Record<string, unknown> | undefined;
+      const quarter = (report?.quarter as string) || params.quarter || 'Q1';
+      const year = (report?.year as number) || params.year || '2026';
+      const highlights = (report?.highlights as string[]) || [];
 
       // Generate summary from highlights if available
       if (highlights.length > 0) {
@@ -360,19 +401,21 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         })),
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const tickets = (data as Array<any>) || [];
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { tickets: [...] }
+      const p = props as Record<string, unknown>;
+      const tickets = (p.tickets as Array<any>) || [];
       const priority = params.priority || 'all';
       const status = params.status || 'all';
 
       if (tickets.length === 0) {
-        return { text: `No ${priority} priority ${status} tickets found.` };
+        return { text: `No ${priority !== 'all' ? priority + ' priority ' : ''}${status !== 'all' ? status + ' ' : ''}tickets found.` };
       }
 
       const highPriority = tickets.filter(t => t.priority === 'high' || t.priority === 'critical').length;
 
       return {
-        text: `Found ${tickets.length} tickets${priority !== 'all' ? ` (${priority} priority)` : ''}${highPriority > 0 ? `, including ${highPriority} high/critical` : ''}.`,
+        text: `Found ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}${priority !== 'all' ? ` (${priority} priority)` : ''}${highPriority > 0 ? `, including ${highPriority} high/critical` : ''}.`,
       };
     },
   },
@@ -421,11 +464,14 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         },
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const stub = data as any;
-      const employeeName = stub.employee_name || 'Employee';
-      const netPay = Number(stub.net_pay) || 0;
-      const payDate = stub.pay_date || 'unknown date';
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { payStubId, employee, payPeriod, grossPay, netPay, ... }
+      const p = props as Record<string, unknown>;
+      const employee = p.employee as Record<string, unknown> | undefined;
+      const payPeriod = p.payPeriod as Record<string, unknown> | undefined;
+      const employeeName = (employee?.name as string) || 'Employee';
+      const netPay = Number(p.netPay) || 0;
+      const payDate = (payPeriod?.payDate as string) || 'unknown date';
 
       return {
         text: `Pay stub for ${employeeName}: $${netPay.toFixed(2)} net pay for period ending ${payDate}.`,
@@ -471,19 +517,21 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         })),
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const runs = (data as Array<any>) || [];
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { payRuns: [...] }
+      const p = props as Record<string, unknown>;
+      const runs = (p.payRuns as Array<any>) || [];
       const status = params.status || 'all';
 
       if (runs.length === 0) {
-        return { text: `No ${status} pay runs found.` };
+        return { text: `No ${status !== 'all' ? status + ' ' : ''}pay runs found.` };
       }
 
-      const totalEmployees = runs.reduce((sum, r) => sum + (Number(r.employee_count) || 0), 0);
-      const totalPayout = runs.reduce((sum, r) => sum + (Number(r.total_net) || 0), 0);
+      const totalEmployees = runs.reduce((sum, r) => sum + (Number(r.employeeCount) || 0), 0);
+      const totalPayout = runs.reduce((sum, r) => sum + (Number(r.totalNet) || 0), 0);
 
       return {
-        text: `Found ${runs.length} pay run${runs.length !== 1 ? 's' : ''} covering ${totalEmployees} employees with total payout of $${totalPayout.toFixed(2)}.`,
+        text: `Found ${runs.length} pay run${runs.length !== 1 ? 's' : ''} covering ${totalEmployees} employee${totalEmployees !== 1 ? 's' : ''} with total payout of $${totalPayout.toLocaleString()}.`,
       };
     },
   },
@@ -534,31 +582,34 @@ const componentRegistry: Record<string, ComponentDefinition> = {
         paymentReference: estimate.payment_reference,
       };
     },
-    generateNarration: (data: unknown, params: Record<string, string>): { text: string } => {
-      const estimates = (data as Array<any>) || [];
-      const estimate = estimates[0] || {};
-      const quarter = `Q${estimate.quarter || params.quarter || 1}`;
-      const year = estimate.year || params.year || new Date().getFullYear();
-      const totalEstimate = Number(estimate.total_estimate) || 0;
-      const paidAmount = Number(estimate.paid_amount) || 0;
-      const owed = Math.max(0, totalEstimate - paidAmount);
-      const status = estimate.status || 'pending';
+    generateNarration: (props: unknown, params: Record<string, string>): { text: string } => {
+      // props is the transformed data: { period, federal, state, local, total, status, paidDate, paymentReference }
+      const p = props as Record<string, unknown>;
+      const period = p.period as Record<string, unknown> | undefined;
+      const total = p.total as Record<string, unknown> | undefined;
+      const quarter = (period?.quarter as string) || params.quarter || 'Q1';
+      const year = (period?.year as number) || params.year || new Date().getFullYear();
+      const dueDate = period?.dueDate as string;
+      const totalEstimate = Number(total?.estimatedTax) || 0;
+      const paidAmount = Number(total?.paid) || 0;
+      const owed = Number(total?.owed) || Math.max(0, totalEstimate - paidAmount);
+      const status = (p.status as string) || 'pending';
 
       if (status === 'paid') {
         return {
-          text: `${quarter} ${year} tax estimate: Fully paid ($${totalEstimate.toFixed(2)}).`,
+          text: `${quarter} ${year} tax estimate: Fully paid ($${totalEstimate.toLocaleString()}).`,
         };
       } else if (status === 'partial') {
         return {
-          text: `${quarter} ${year} tax estimate: $${owed.toFixed(2)} remaining of $${totalEstimate.toFixed(2)} total. Payment due by ${estimate.due_date || 'unknown'}.`,
+          text: `${quarter} ${year} tax estimate: $${owed.toLocaleString()} remaining of $${totalEstimate.toLocaleString()} total. Payment due by ${dueDate || 'unknown'}.`,
         };
       } else if (status === 'overdue') {
         return {
-          text: `${quarter} ${year} tax estimate: $${owed.toFixed(2)} OVERDUE. Payment was due ${estimate.due_date || 'unknown'}.`,
+          text: `${quarter} ${year} tax estimate: $${owed.toLocaleString()} OVERDUE. Payment was due ${dueDate || 'unknown'}.`,
         };
       } else {
         return {
-          text: `${quarter} ${year} tax estimate: $${totalEstimate.toFixed(2)} estimated. Payment due by ${estimate.due_date || 'unknown'}.`,
+          text: `${quarter} ${year} tax estimate: $${totalEstimate.toLocaleString()} estimated. Payment due by ${dueDate || 'unknown'}.`,
         };
       }
     },

@@ -185,9 +185,10 @@ router.post('/', validateJWT, async (req: AuthenticatedRequest, res: Response) =
     const props = componentDef.transform(mergedData);
     logger.info('Transform output props', { props: JSON.stringify(props).substring(0, 500) });
 
-    // Generate narration
-    logger.info('[NARRATION] About to generate narration');
-    const narration = componentDef.generateNarration(mergedData, parsed.params);
+    // Generate narration from transformed props (not raw MCP data)
+    // This ensures narration matches what the UI displays
+    logger.info('[NARRATION] About to generate narration from transformed props');
+    const narration = componentDef.generateNarration(props, parsed.params);
     logger.info('[NARRATION] Generated successfully', { narration: JSON.stringify(narration).substring(0, 200) });
 
     // Check for truncation in any MCP response
