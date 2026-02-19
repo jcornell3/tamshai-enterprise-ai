@@ -25,6 +25,7 @@ WORKDIR /app
 COPY clients/web/package*.json ./
 COPY clients/web/turbo.json ./
 COPY clients/web/tsconfig.json ./
+COPY clients/web/vite.config.base.ts ./
 
 # Copy all workspace packages and apps
 COPY clients/web/packages/ ./packages/
