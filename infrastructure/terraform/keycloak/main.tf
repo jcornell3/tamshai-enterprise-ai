@@ -287,7 +287,8 @@ resource "keycloak_openid_audience_protocol_mapper" "mcp_gateway_audience" {
   client_id = keycloak_openid_client.mcp_gateway.id
   name      = "audience-mapper"
 
-  included_client_audience = "mcp-gateway"
+  # Use client reference for consistency
+  included_client_audience = keycloak_openid_client.mcp_gateway.client_id
 
   add_to_id_token     = true
   add_to_access_token = true
@@ -400,7 +401,8 @@ resource "keycloak_openid_audience_protocol_mapper" "integration_runner_mcp_gate
   client_id = keycloak_openid_client.mcp_integration_runner[0].id
   name      = "mcp-gateway-audience"
 
-  included_client_audience = "mcp-gateway"
+  # Use client reference instead of hardcoded string to ensure proper dependency ordering
+  included_client_audience = keycloak_openid_client.mcp_gateway.client_id
   add_to_id_token          = false
   add_to_access_token      = true
 }
