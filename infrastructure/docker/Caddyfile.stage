@@ -95,6 +95,11 @@ www.tamshai.com {
     reverse_proxy mcp-journey:3105
   }
 
+  # MCP UI Service (Generative UI Components) (/mcp-ui/*)
+  handle_path /mcp-ui/* {
+    reverse_proxy mcp-ui:3108
+  }
+
   # Redirect /downloads to portal app (auth handled by PrivateRoute/Keycloak)
   @downloads path /downloads
   redir @downloads /app/downloads permanent
