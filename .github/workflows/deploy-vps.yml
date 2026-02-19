@@ -1114,6 +1114,133 @@ jobs:
           fi
           CONFIGURE_USER_SCRIPT
 
+      # =========================================================================
+      # C1 Security: Configure Vault for production mode and unseal
+      # Vault was initialized previously; unseal keys are in GitHub Secrets
+      # =========================================================================
+      - name: Configure Vault production mode (C1 Security)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+        run: |
+          echo "=== C1 Security: Configuring Vault for production mode ==="
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          $SSH_CMD << 'VAULT_CONFIG'
+          set -e
+          cd /opt/tamshai
+
+          # Create vault config directory if not exists
+          mkdir -p infrastructure/docker/vault/config
+
+          # Check if vault-stage.hcl exists in repo (pulled earlier)
+          if [ -f infrastructure/docker/vault/config/vault-stage.hcl ]; then
+            echo "[OK] vault-stage.hcl found in repository"
+          else
+            echo "[INFO] Creating vault-stage.hcl..."
+            cat > infrastructure/docker/vault/config/vault-stage.hcl << 'EOF'
+storage "file" {
+  path = "/vault/file"
+}
+
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = "true"
+}
+
+api_addr = "http://vault:8200"
+cluster_addr = "http://vault:8201"
+disable_mlock = true
+ui = true
+
+telemetry {
+  disable_hostname = true
+}
+EOF
+            echo "[OK] vault-stage.hcl created"
+          fi
+
+          # Check if Vault is currently running in dev mode
+          CURRENT_CMD=$(docker inspect --format='{{.Config.Cmd}}' tamshai-dev-vault 2>/dev/null | tr -d '[]' || echo "unknown")
+          echo "Current Vault command: $CURRENT_CMD"
+
+          if echo "$CURRENT_CMD" | grep -q "\-dev"; then
+            echo "[INFO] Vault is running in dev mode - will switch to production mode"
+            echo "[WARN] This requires re-initialization if not already done"
+          else
+            echo "[OK] Vault appears to be in production mode already"
+          fi
+          VAULT_CONFIG
+
+      - name: Unseal Vault (C1 Security)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+          VAULT_UNSEAL_KEY_1: ${{ secrets.VAULT_UNSEAL_KEY_1 }}
+          VAULT_UNSEAL_KEY_2: ${{ secrets.VAULT_UNSEAL_KEY_2 }}
+          VAULT_UNSEAL_KEY_3: ${{ secrets.VAULT_UNSEAL_KEY_3 }}
+        run: |
+          echo "=== C1 Security: Unsealing Vault ==="
+
+          # Check if unseal keys are configured
+          if [ -z "$VAULT_UNSEAL_KEY_1" ] || [ -z "$VAULT_UNSEAL_KEY_2" ] || [ -z "$VAULT_UNSEAL_KEY_3" ]; then
+            echo "[SKIP] Vault unseal keys not configured in GitHub Secrets"
+            echo "       Vault may be running in dev mode (no unseal required)"
+            exit 0
+          fi
+
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          $SSH_CMD << UNSEAL_SCRIPT
+          set -e
+          export VAULT_ADDR=http://127.0.0.1:8200
+
+          # Wait for Vault to be ready
+          echo "Waiting for Vault to be ready..."
+          for i in {1..30}; do
+            if curl -sf \$VAULT_ADDR/v1/sys/health 2>/dev/null | grep -q "initialized"; then
+              echo "[OK] Vault is responding"
+              break
+            fi
+            if [ \$i -eq 30 ]; then
+              echo "[WARN] Vault not responding after 60 seconds"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          # Check seal status
+          SEAL_STATUS=\$(curl -sf \$VAULT_ADDR/v1/sys/seal-status 2>/dev/null || echo '{}')
+          SEALED=\$(echo "\$SEAL_STATUS" | jq -r '.sealed // true')
+          INITIALIZED=\$(echo "\$SEAL_STATUS" | jq -r '.initialized // false')
+
+          echo "Vault status: initialized=\$INITIALIZED, sealed=\$SEALED"
+
+          if [ "\$INITIALIZED" = "false" ]; then
+            echo "[INFO] Vault not initialized - running in dev mode or needs init"
+            exit 0
+          fi
+
+          if [ "\$SEALED" = "false" ]; then
+            echo "[OK] Vault is already unsealed"
+            exit 0
+          fi
+
+          echo "Unsealing Vault..."
+          vault operator unseal "$VAULT_UNSEAL_KEY_1" > /dev/null
+          vault operator unseal "$VAULT_UNSEAL_KEY_2" > /dev/null
+          vault operator unseal "$VAULT_UNSEAL_KEY_3" > /dev/null
+
+          # Verify unsealed
+          FINAL_STATUS=\$(curl -sf \$VAULT_ADDR/v1/sys/seal-status | jq -r '.sealed')
+          if [ "\$FINAL_STATUS" = "false" ]; then
+            echo "[OK] Vault unsealed successfully"
+          else
+            echo "[ERROR] Vault still sealed after unseal attempt"
+            exit 1
+          fi
+          UNSEAL_SCRIPT
+
       - name: Verify deployment
         run: |
           echo "Verifying external endpoints..."
