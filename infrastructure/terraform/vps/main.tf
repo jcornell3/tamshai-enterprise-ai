@@ -528,6 +528,8 @@ locals {
     mcp_internal_secret          = base64encode(random_password.mcp_internal_secret.result)
     mcp_ui_client_secret         = base64encode(random_password.mcp_ui_client_secret.result)
     e2e_admin_api_key            = base64encode(random_password.e2e_admin_api_key.result)
+    # C2 Security: Encryption salt for secrets at rest
+    encryption_salt              = random_password.encryption_salt.result
   })
 }
 

@@ -2,7 +2,8 @@
 
 **Created**: 2026-02-18
 **Source**: `docs/security/SECURITY_CONCERNSv2.md`
-**Status**: Planning
+**Status**: In Progress (E1-E4, M1-M3 Complete)
+**Last Updated**: 2026-02-18
 
 ---
 
@@ -34,9 +35,9 @@ This plan addresses 12 security findings from the SECURITY_CONCERNSv2.md review,
 3. Run integration tests to ensure no regression
 
 **Acceptance Criteria:**
-- [ ] `account` audience removed from jwt-validator.ts
-- [ ] Unit test added: tokens with only `account` audience are rejected
-- [ ] Integration tests pass
+- [x] `account` audience removed from jwt-validator.ts
+- [x] Unit test added: tokens with only `account` audience are rejected
+- [x] Integration tests pass
 
 ---
 
@@ -93,10 +94,10 @@ test.describe('Executive Dashboard Tests', () => {
 - Principle of least privilege maintained
 
 **Acceptance Criteria:**
-- [ ] Line 310 (`test-user.journey:C-Suite`) removed from `groups.sh`
-- [ ] `test-user.journey` still in `All-Employees` group
-- [ ] E2E tests using temporary elevation pass
-- [ ] Verified via `./scripts/infra/keycloak.sh users prod` - no C-Suite membership
+- [x] Line 310 (`test-user.journey:C-Suite`) removed from `groups.sh`
+- [x] `test-user.journey` still in `All-Employees` group
+- [x] E2E tests using temporary elevation pass
+- [x] Verified via `./scripts/infra/keycloak.sh users prod` - no C-Suite membership
 
 ---
 
@@ -122,9 +123,9 @@ test.describe('Executive Dashboard Tests', () => {
 2. Use environment variable for domain configuration
 
 **Acceptance Criteria:**
-- [ ] webOrigins explicitly lists allowed domains
-- [ ] CORS preflight from unauthorized origin fails
-- [ ] All web apps continue to function
+- [x] webOrigins explicitly lists allowed domains
+- [x] CORS preflight from unauthorized origin fails
+- [x] All web apps continue to function
 
 ---
 
@@ -149,10 +150,10 @@ auto_https off
 4. Update Cloudflare SSL/TLS to "Full (Strict)" mode
 
 **Acceptance Criteria:**
-- [ ] Caddy automatically provisions Let's Encrypt certificate
-- [ ] Cloudflare set to "Full (Strict)" SSL mode
-- [ ] SSL Labs grade A or better
-- [ ] No mixed content warnings
+- [x] Caddy automatically provisions Let's Encrypt certificate
+- [x] Cloudflare set to "Full (Strict)" SSL mode
+- [x] SSL Labs grade A or better
+- [x] No mixed content warnings
 
 ---
 
@@ -179,10 +180,10 @@ auto_https off
 5. Test identity-sync workflow end-to-end
 
 **Acceptance Criteria:**
-- [ ] `fullScopeAllowed` set to false
-- [ ] `manage-realm` removed
-- [ ] Identity sync provisions users successfully
-- [ ] Identity sync cannot modify realm settings
+- [x] `fullScopeAllowed` set to false
+- [x] `manage-realm` removed
+- [x] Identity sync provisions users successfully
+- [x] Identity sync cannot modify realm settings
 
 ---
 
@@ -217,10 +218,10 @@ curl -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
 ```
 
 **Acceptance Criteria:**
-- [ ] Admin username/password not used in scripts
-- [ ] Client credentials grant used for admin API
-- [ ] All sync-realm.sh functions work correctly
-- [ ] KEYCLOAK_ADMIN_PASSWORD removed from .env requirements
+- [x] Admin username/password not used in scripts
+- [x] Client credentials grant used for admin API
+- [x] All sync-realm.sh functions work correctly
+- [x] KEYCLOAK_ADMIN_PASSWORD removed from .env requirements
 
 ---
 
@@ -256,10 +257,10 @@ Internet → Caddy [frontend] → Kong [frontend, gateway] → MCP Gateway [gate
 ```
 
 **Acceptance Criteria:**
-- [ ] 4 networks created with appropriate isolation
-- [ ] Kong cannot directly access databases
-- [ ] MCP servers cannot access Kong
-- [ ] All services functional after segmentation
+- [x] 4 networks created with appropriate isolation
+- [x] Kong cannot directly access databases
+- [x] MCP servers cannot access Kong
+- [x] All services functional after segmentation
 
 ---
 
@@ -480,17 +481,17 @@ keycloak_admin.create_client({
 ## Execution Schedule
 
 ### Sprint 1: Critical Items (Week 1)
-- [ ] E2: Remove test-user from C-Suite in prod
-- [ ] E4: Enable Caddy auto-HTTPS
-- [ ] E1: Remove account audience
-- [ ] E3: Restrict webOrigins
+- [x] E2: Remove test-user from C-Suite in prod
+- [x] E4: Enable Caddy auto-HTTPS
+- [x] E1: Remove account audience
+- [x] E3: Restrict webOrigins
 
 ### Sprint 2: Medium Priority (Week 2)
-- [ ] M1: Reduce mcp-hr-service permissions
-- [ ] M2: Replace password grant with client credentials
+- [x] M1: Reduce mcp-hr-service permissions
+- [x] M2: Replace password grant with client credentials
 
 ### Sprint 3: Infrastructure (Week 3)
-- [ ] M3: Docker network segmentation
+- [x] M3: Docker network segmentation
 - [ ] C1: Begin Vault production mode (Phases 1-2)
 
 ### Sprint 4: Secrets Management (Week 4)

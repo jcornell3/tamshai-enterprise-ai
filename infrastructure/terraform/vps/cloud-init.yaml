@@ -34,8 +34,16 @@ users:
     lock_passwd: true
 
 write_files:
-  # Environment file with secrets (temporary location)
-  - path: /tmp/tamshai.env
+  # Encryption salt for secrets at rest (C2 security remediation)
+  # This is combined with the instance ID to derive the encryption key
+  - path: /opt/tamshai/.encryption-salt
+    permissions: '0600'
+    content: "${encryption_salt}"
+
+  # Environment file with secrets (temporary RAM location - will be encrypted)
+  # NOTE: This file is written to /dev/shm (RAM-backed) and encrypted immediately
+  # The plaintext is NEVER written to persistent disk
+  - path: /dev/shm/tamshai-secrets.env
     permissions: '0600'
     content: |
       # Tamshai Enterprise AI - Environment Configuration
@@ -180,7 +188,8 @@ write_files:
       set -e
       set +H  # Disable history expansion to handle passwords with special characters like !
 
-      cd /opt/tamshai
+      TAMSHAI_ROOT="${TAMSHAI_ROOT:-/opt/tamshai}"
+      cd "$TAMSHAI_ROOT"
 
       echo "=== Tamshai Deployment $(date) ==="
 
@@ -217,20 +226,28 @@ write_files:
         exit 0
       fi
 
-      # Load environment
-      export $(cat .env | grep -v '^#' | xargs)
-
-      # Pull latest images
-      echo "Pulling Docker images..."
-      cd /opt/tamshai/infrastructure/docker
-      docker compose --env-file ../../.env pull
-
-      # Deploy with optional build (uses infrastructure/docker/docker-compose.yml)
-      echo "Deploying services..."
-      if [ -n "$BUILD_FLAG" ]; then
-        docker compose --env-file ../../.env build $NO_CACHE_FLAG && docker compose --env-file ../../.env up -d
+      # C2 Security: Use secure startup script for decryption
+      # This decrypts secrets in RAM and starts Docker without writing plaintext to disk
+      if [ -f "$TAMSHAI_ROOT/scripts/secrets/start-services.sh" ] && [ -f "$TAMSHAI_ROOT/.env.enc" ]; then
+        echo "Using secure startup (encrypted secrets)..."
+        "$TAMSHAI_ROOT/scripts/secrets/start-services.sh"
       else
-        docker compose --env-file ../../.env up -d
+        # Fallback for legacy deployments without encryption
+        echo "WARNING: Using legacy startup (plaintext secrets)"
+        export $(cat .env | grep -v '^#' | xargs)
+
+        # Pull latest images
+        echo "Pulling Docker images..."
+        cd /opt/tamshai/infrastructure/docker
+        docker compose --env-file ../../.env pull
+
+        # Deploy with optional build (uses infrastructure/docker/docker-compose.yml)
+        echo "Deploying services..."
+        if [ -n "$BUILD_FLAG" ]; then
+          docker compose --env-file ../../.env build $NO_CACHE_FLAG && docker compose --env-file ../../.env up -d
+        else
+          docker compose --env-file ../../.env up -d
+        fi
       fi
 
       # Cleanup old images
@@ -336,20 +353,28 @@ runcmd:
   # Copy Caddyfile from repo (Phoenix principle: single source of truth in version control)
   - cp /opt/tamshai/infrastructure/docker/Caddyfile.stage /opt/tamshai/Caddyfile
 
-  # Move generated .env file from temp location
-  - mv /tmp/tamshai.env /opt/tamshai/.env
-
-  # Decode passwords in .env file (POSIX sh compatible)
+  # C2 Security: Encrypt secrets at rest
+  # The plaintext secrets are in RAM (/dev/shm) and will be encrypted to disk
+  # This ensures secrets are NEVER written to disk in plaintext
   - |
     set -e
-    ENV_FILE="/opt/tamshai/.env"
-    DECODED_FILE="$ENV_FILE.decoded"
+    echo "=== C2 Security: Encrypting secrets at rest ==="
+
+    RAM_ENV="/dev/shm/tamshai-secrets.env"
+    ENC_FILE="/opt/tamshai/.env.enc"
+    SALT_FILE="/opt/tamshai/.encryption-salt"
+    DECODED_RAM="/dev/shm/tamshai-decoded.env"
+
+    # Verify RAM file exists
+    if [ ! -f "$RAM_ENV" ]; then
+      echo "ERROR: Secrets file not found in RAM at $RAM_ENV"
+      exit 1
+    fi
 
     # List of password variables to decode (space-separated for POSIX compatibility)
-    # MUST match the exact variable names in the .env file (UPPERCASE)
     PASSWORD_VARS="POSTGRES_PASSWORD TAMSHAI_APP_PASSWORD KEYCLOAK_ADMIN_PASSWORD KC_DB_PASSWORD KEYCLOAK_DB_PASSWORD TAMSHAI_DB_PASSWORD MONGO_INITDB_ROOT_PASSWORD MONGODB_PASSWORD MINIO_ROOT_PASSWORD JWT_SECRET MCP_HR_SERVICE_CLIENT_SECRET MCP_GATEWAY_CLIENT_SECRET REDIS_PASSWORD ELASTIC_PASSWORD VAULT_DEV_ROOT_TOKEN MCP_INTERNAL_SECRET MCP_UI_CLIENT_SECRET E2E_ADMIN_API_KEY TEST_USER_PASSWORD TEST_USER_TOTP_SECRET_RAW STAGE_USER_PASSWORD"
 
-    # Create a new file with decoded passwords
+    # Decode base64 passwords in RAM
     while IFS= read -r line; do
       is_password=false
       for var in $PASSWORD_VARS; do
@@ -358,20 +383,71 @@ runcmd:
           is_password=true
           value=$(echo "$line" | cut -d '=' -f 2-)
           decoded_value=$(echo "$value" | base64 -d)
-          echo "$key=$decoded_value" >> "$DECODED_FILE"
+          echo "$key=$decoded_value" >> "$DECODED_RAM"
           break
         fi
       done
       if [ "$is_password" = "false" ]; then
-        echo "$line" >> "$DECODED_FILE"
+        echo "$line" >> "$DECODED_RAM"
       fi
-    done < "$ENV_FILE"
+    done < "$RAM_ENV"
 
-    # Replace the original .env file
-    mv "$DECODED_FILE" "$ENV_FILE"
+    # Get instance ID from Hetzner metadata API
+    echo "Getting instance ID from metadata API..."
+    INSTANCE_ID=$(curl -sf --connect-timeout 5 http://169.254.169.254/hetzner/v1/metadata/instance-id 2>/dev/null || echo "")
 
-  # Symlink .env so docker compose in infrastructure/docker/ can find it
-  - ln -sf /opt/tamshai/.env /opt/tamshai/infrastructure/docker/.env
+    if [ -z "$INSTANCE_ID" ]; then
+      echo "ERROR: Could not retrieve instance ID from Hetzner metadata API"
+      exit 1
+    fi
+    echo "Instance ID: $INSTANCE_ID"
+
+    # Read encryption salt
+    ENCRYPTION_SALT=$(cat "$SALT_FILE")
+    echo "Encryption salt loaded (length: ${#ENCRYPTION_SALT})"
+
+    # Derive encryption key: SHA256(instance_id + salt)
+    ENCRYPTION_KEY=$(echo -n "$${INSTANCE_ID}$${ENCRYPTION_SALT}" | sha256sum | cut -d' ' -f1)
+    echo "Encryption key derived"
+
+    # Generate random IV (16 bytes hex = 32 chars)
+    IV=$(openssl rand -hex 16)
+
+    # Encrypt using AES-256-CBC
+    ENCRYPTED=$(openssl enc -aes-256-cbc \
+      -K "$ENCRYPTION_KEY" \
+      -iv "$IV" \
+      -in "$DECODED_RAM" \
+      -base64 -A)
+
+    # Write encrypted blob: IV:CIPHERTEXT
+    echo "$${IV}:$${ENCRYPTED}" > "$ENC_FILE"
+    chmod 600 "$ENC_FILE"
+
+    echo "Secrets encrypted to $ENC_FILE"
+
+    # Securely delete plaintext from RAM
+    rm -f "$RAM_ENV" "$DECODED_RAM"
+    echo "Plaintext secrets removed from RAM"
+
+    # Also create the decrypted .env for initial startup (in RAM)
+    # This will be used by docker compose during first boot
+    # After first boot, start-services.sh handles decryption
+    echo "Creating temporary .env in RAM for initial boot..."
+    TEMP_ENV="/dev/shm/tamshai-boot.env"
+
+    # Decrypt for initial boot
+    IFS=':' read -r DEC_IV DEC_CIPHERTEXT < "$ENC_FILE"
+    echo "$DEC_CIPHERTEXT" | openssl enc -aes-256-cbc -d \
+      -K "$ENCRYPTION_KEY" \
+      -iv "$DEC_IV" \
+      -base64 -A > "$TEMP_ENV"
+
+    # Symlink for docker compose
+    ln -sf "$TEMP_ENV" /opt/tamshai/.env
+    ln -sf "$TEMP_ENV" /opt/tamshai/infrastructure/docker/.env
+
+    echo "=== C2 Security: Encryption complete ==="
 
   # Set ownership
   - chown -R tamshai:tamshai /opt/tamshai

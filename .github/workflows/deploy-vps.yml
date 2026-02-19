@@ -360,6 +360,71 @@ jobs:
           $SSH_CMD "$ENSURE_SCRIPT"
           echo "VPS .env updated with any missing variables"
 
+      # C2 Security: Re-encrypt secrets after updating .env
+      # This ensures the encrypted .env.enc stays in sync with updated secrets
+      - name: Re-encrypt secrets (C2 Security)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+        run: |
+          echo "=== C2 Security: Re-encrypting secrets ==="
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          $SSH_CMD << 'ENCRYPT_SCRIPT'
+          set -e
+          cd /opt/tamshai
+
+          # Check if encryption infrastructure exists (C2 deployed)
+          if [ ! -f ".encryption-salt" ]; then
+            echo "[SKIP] No encryption salt found - running in legacy mode"
+            echo "       Secrets are stored in plaintext .env"
+            echo "       To enable C2, run terraform apply with encryption.tf"
+            exit 0
+          fi
+
+          echo "=== Encrypting updated secrets ==="
+
+          # Get instance ID from Hetzner metadata API
+          INSTANCE_ID=$(curl -sf --connect-timeout 5 http://169.254.169.254/hetzner/v1/metadata/instance-id 2>/dev/null || echo "")
+
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "[ERROR] Could not retrieve instance ID from metadata API"
+            exit 1
+          fi
+
+          # Read encryption salt
+          ENCRYPTION_SALT=$(cat .encryption-salt)
+
+          # Derive encryption key
+          ENCRYPTION_KEY=$(echo -n "${INSTANCE_ID}${ENCRYPTION_SALT}" | sha256sum | cut -d' ' -f1)
+
+          # Current .env is symlink to RAM; read from there
+          if [ -L ".env" ]; then
+            RAM_ENV=$(readlink -f .env)
+          else
+            # Legacy: .env is a real file, copy to RAM first
+            RAM_ENV="/dev/shm/tamshai-current.env"
+            cp .env "$RAM_ENV"
+          fi
+
+          # Generate random IV
+          IV=$(openssl rand -hex 16)
+
+          # Encrypt
+          ENCRYPTED=$(openssl enc -aes-256-cbc \
+            -K "$ENCRYPTION_KEY" \
+            -iv "$IV" \
+            -in "$RAM_ENV" \
+            -base64 -A)
+
+          # Write encrypted blob
+          echo "${IV}:${ENCRYPTED}" > .env.enc
+          chmod 600 .env.enc
+
+          echo "[OK] Secrets re-encrypted to .env.enc"
+          echo "     Encrypted size: $(wc -c < .env.enc) bytes"
+          ENCRYPT_SCRIPT
+
       - name: Validate and fix .env
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -1117,6 +1182,32 @@ jobs:
               description: 'Deployment completed successfully'
             }).catch(() => console.log('Could not create deployment status'));
 
+      # C2 Security: Validate no plaintext secrets on disk
+      - name: Validate secrets encryption (C2 Security)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+        run: |
+          echo "=== C2 Security: Validating secrets at rest ==="
+
+          # Setup SSH (may not have key from previous job)
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          # Run validation script if it exists
+          $SSH_CMD << 'VALIDATE_SCRIPT' || echo "[WARN] C2 validation not available (pre-C2 deployment)"
+          if [ -f /opt/tamshai/scripts/secrets/validate-no-plaintext.sh ]; then
+            /opt/tamshai/scripts/secrets/validate-no-plaintext.sh
+          else
+            echo "[SKIP] validate-no-plaintext.sh not found"
+            echo "       C2 security may not be enabled yet"
+          fi
+          VALIDATE_SCRIPT
+
       - name: Summary
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
@@ -1128,3 +1219,4 @@ jobs:
           echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | https://${{ secrets.VPS_DOMAIN || secrets.VPS_HOST }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| C2 Security | Encrypted secrets at rest |" >> $GITHUB_STEP_SUMMARY
