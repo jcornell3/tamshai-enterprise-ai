@@ -165,6 +165,13 @@ variable "test_user_totp_secret_raw" {
   default     = ""
 }
 
+variable "discord_webhook_url" {
+  description = "Discord webhook URL for startup/failure notifications (C2 monitoring)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # =============================================================================
 # PROVIDERS
 # =============================================================================
@@ -530,6 +537,8 @@ locals {
     e2e_admin_api_key            = base64encode(random_password.e2e_admin_api_key.result)
     # C2 Security: Encryption salt for secrets at rest
     encryption_salt              = random_password.encryption_salt.result
+    # C2 Monitoring: Discord webhook for startup notifications
+    discord_webhook_url          = var.discord_webhook_url
   })
 }
 

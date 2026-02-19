@@ -1,0 +1,47 @@
+# =============================================================================
+# Tamshai Stage Environment Monitor
+# =============================================================================
+# Runs LOCALLY to monitor the REMOTE stage VPS environment.
+# This ensures monitoring survives Phoenix rebuilds on the VPS.
+#
+# Usage:
+#   cd infrastructure/monitoring
+#   docker compose up -d
+#
+# Configuration:
+#   Copy .env.example to .env and configure alert endpoints
+#
+# =============================================================================
+
+services:
+  stage-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tamshai-stage-monitor
+    restart: unless-stopped
+    environment:
+      # Target environment
+      - MONITOR_TARGET_URL=${MONITOR_TARGET_URL:-https://www.tamshai.com}
+      - MONITOR_INTERVAL_SECONDS=${MONITOR_INTERVAL_SECONDS:-60}
+
+      # Discord webhook for alerts
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+
+      # Health check endpoints to monitor
+      - CHECK_ENDPOINTS=${CHECK_ENDPOINTS:-/api/health,/auth/realms/tamshai-corp}
+
+      # Failure thresholds
+      - FAILURE_THRESHOLD=${FAILURE_THRESHOLD:-3}
+      - RECOVERY_NOTIFY=${RECOVERY_NOTIFY:-true}
+    volumes:
+      - monitor-data:/data
+    networks:
+      - monitor-network
+
+networks:
+  monitor-network:
+    driver: bridge
+
+volumes:
+  monitor-data:

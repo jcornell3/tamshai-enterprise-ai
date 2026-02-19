@@ -11,6 +11,7 @@
 #   - /opt/tamshai/.env.enc (encrypted secrets blob)
 #   - /opt/tamshai/.encryption-salt (encryption salt)
 #   - Hetzner metadata API accessible (for instance ID)
+#   - DISCORD_WEBHOOK_URL (optional, for notifications)
 #
 # =============================================================================
 
@@ -20,11 +21,57 @@ TAMSHAI_ROOT="${TAMSHAI_ROOT:-/opt/tamshai}"
 DOCKER_DIR="$TAMSHAI_ROOT/infrastructure/docker"
 SCRIPTS_DIR="$TAMSHAI_ROOT/scripts/secrets"
 
+# =============================================================================
+# Discord Notification Function
+# =============================================================================
+send_discord_notification() {
+    local title="$1"
+    local description="$2"
+    local color="$3"  # Decimal: red=16711680, green=65280, yellow=16776960
+
+    # Get webhook URL from environment or file
+    local webhook_url="${DISCORD_WEBHOOK_URL:-}"
+    if [ -z "$webhook_url" ] && [ -f "$TAMSHAI_ROOT/.discord-webhook" ]; then
+        webhook_url=$(cat "$TAMSHAI_ROOT/.discord-webhook")
+    fi
+
+    if [ -z "$webhook_url" ]; then
+        echo "[INFO] No Discord webhook configured, skipping notification"
+        return 0
+    fi
+
+    # Get instance info for context
+    local instance_id
+    instance_id=$(curl -sf --connect-timeout 2 http://169.254.169.254/hetzner/v1/metadata/instance-id 2>/dev/null || echo "unknown")
+
+    local payload
+    payload=$(cat <<EOF
+{
+    "embeds": [{
+        "title": "$title",
+        "description": "$description",
+        "color": $color,
+        "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+        "footer": {"text": "VPS Instance: $instance_id"}
+    }]
+}
+EOF
+)
+
+    curl -sf -X POST "$webhook_url" \
+        -H "Content-Type: application/json" \
+        -d "$payload" >/dev/null 2>&1 || echo "[WARN] Failed to send Discord notification"
+}
+
 echo "=== Tamshai Secure Startup $(date) ==="
 
 # Verify we're in the right place
 if [ ! -d "$DOCKER_DIR" ]; then
     echo "ERROR: Docker directory not found at $DOCKER_DIR"
+    send_discord_notification \
+        "🚨 Startup Failed" \
+        "**Error:** Docker directory not found at $DOCKER_DIR\n**Action:** Check VPS deployment" \
+        16711680
     exit 1
 fi
 
@@ -45,6 +92,10 @@ else
         set +a
     else
         echo "ERROR: No secrets file found (.env.enc or .env)"
+        send_discord_notification \
+            "🚨 Startup Failed - No Secrets" \
+            "**Error:** No secrets file found (.env.enc or .env)\n**Action:** Check encryption deployment" \
+            16711680
         exit 1
     fi
 fi
@@ -59,6 +110,10 @@ REQUIRED_SECRETS=(
 for secret in "${REQUIRED_SECRETS[@]}"; do
     if [ -z "${!secret:-}" ]; then
         echo "ERROR: Required secret '$secret' not loaded"
+        send_discord_notification \
+            "🚨 Decryption Failed" \
+            "**Error:** Required secret '$secret' not loaded\n**Cause:** Decryption may have failed or secret missing from encrypted blob\n**Action:** Check encryption key derivation" \
+            16711680
         exit 1
     fi
 done
@@ -109,3 +164,9 @@ echo "=== Startup complete ==="
 echo ""
 echo "Services started with in-memory secrets."
 echo "No plaintext secrets written to disk."
+
+# Send success notification
+send_discord_notification \
+    "✅ Stage Services Started" \
+    "**Services:** $RUNNING/$TOTAL running\n**Secrets:** Decrypted in-memory (C2 secure)\n**Status:** All critical secrets verified" \
+    65280

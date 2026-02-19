@@ -40,6 +40,12 @@ write_files:
     permissions: '0600'
     content: "${encryption_salt}"
 
+  # Discord webhook for startup/failure notifications (C2 monitoring)
+  # Used by start-services.sh and decrypt-secrets.sh to send alerts
+  - path: /opt/tamshai/.discord-webhook
+    permissions: '0600'
+    content: "${discord_webhook_url}"
+
   # Environment file with secrets (temporary RAM location - will be encrypted)
   # NOTE: This file is written to /dev/shm (RAM-backed) and encrypted immediately
   # The plaintext is NEVER written to persistent disk
