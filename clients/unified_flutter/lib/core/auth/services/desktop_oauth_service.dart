@@ -206,7 +206,10 @@ class DesktopOAuthService implements AuthService {
       if (endKeycloakSession) {
         try {
           final idToken = await _storage.getIdToken();
-          if (idToken != null) {
+
+          // Only try to end Keycloak session if we have a non-expired id_token
+          // Using an expired token causes "Invalid parameter: id_token_hint" error
+          if (idToken != null && !JwtUtils.isExpired(idToken)) {
             // Build end session URL and open in browser
             // Only send id_token_hint, no redirect URI to avoid Keycloak validation errors
             final endSessionUrl = Uri.parse(
@@ -220,8 +223,13 @@ class DesktopOAuthService implements AuthService {
               mode: LaunchMode.externalApplication,
             );
             _logger.i('Keycloak session end initiated');
+          } else if (idToken == null) {
+            _logger.i('No id_token stored, skipping Keycloak session end');
+          } else {
+            _logger.i('id_token expired, skipping Keycloak session end to avoid error');
           }
         } catch (e, stackTrace) {
+          // Log but don't fail - clearing local storage is the priority
           _logger.w('Failed to end Keycloak session', error: e, stackTrace: stackTrace);
         }
       }
@@ -322,19 +330,28 @@ class DesktopOAuthService implements AuthService {
 
   Future<HttpServer> _startLocalServer() async {
     // Try preferred fixed ports first (for Keycloak redirect URI matching)
+    // These ports MUST match the redirect URIs registered in Keycloak
     for (final port in _preferredPorts) {
       try {
         _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
         _logger.i('Started local HTTP server on preferred port $port');
         break;
       } catch (e) {
-        _logger.d('Port $port not available, trying next...');
+        _logger.w('Port $port not available: $e');
       }
     }
 
-    // Fallback to dynamic port if all preferred ports are in use
-    _server ??= await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    _logger.i('Started local HTTP server on port ${_server!.port}');
+    // If no preferred port was available, fail with a helpful error
+    // Do NOT fall back to dynamic port - Keycloak won't accept it
+    if (_server == null) {
+      final portsStr = _preferredPorts.join(', ');
+      throw AuthException(
+        'All OAuth callback ports are in use ($portsStr). '
+        'Please close other Tamshai applications or processes using these ports.',
+      );
+    }
+
+    _logger.i('OAuth callback server ready on port ${_server!.port}');
 
     _server!.listen((request) async {
       if (request.uri.path == '/callback') {
@@ -452,8 +469,26 @@ class DesktopOAuthService implements AuthService {
       final responseBody = await response.transform(utf8.decoder).join();
 
       if (response.statusCode != 200) {
-        _logger.e('Token exchange failed: $responseBody');
-        throw AuthException('Token exchange failed: ${response.statusCode}');
+        _logger.e('Token exchange failed with status ${response.statusCode}');
+        _logger.e('Token exchange redirect_uri: $redirectUri');
+        _logger.e('Token exchange response: $responseBody');
+
+        // Parse Keycloak error response for better user messaging
+        String errorMessage = 'Token exchange failed: ${response.statusCode}';
+        try {
+          final errorJson = jsonDecode(responseBody) as Map<String, dynamic>;
+          final error = errorJson['error'] as String?;
+          final errorDesc = errorJson['error_description'] as String?;
+          if (errorDesc != null) {
+            errorMessage = 'Authentication failed: $errorDesc';
+          } else if (error != null) {
+            errorMessage = 'Authentication failed: $error';
+          }
+        } catch (_) {
+          // Use default message if parsing fails
+        }
+
+        throw AuthException(errorMessage);
       }
 
       final tokenResponse = jsonDecode(responseBody) as Map<String, dynamic>;

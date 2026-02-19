@@ -124,6 +124,10 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Checks for existing valid session and restores user if found.
   /// Also validates that stored tokens match the current environment's
   /// Keycloak issuer - clears stale tokens if environment has changed.
+  ///
+  /// If the access token is expired but a refresh token exists, this method
+  /// proactively refreshes the token. This ensures stale sessions are cleared
+  /// immediately on app startup rather than waiting for the first API call.
   Future<void> initialize() async {
     try {
       _logger.i('Initializing authentication');
@@ -146,10 +150,37 @@ class AuthNotifier extends Notifier<AuthState> {
         return;
       }
 
+      // Check if access token is expired - if so, try to refresh now
+      // This catches stale sessions early instead of failing on first API call
+      final isExpired = await _storage.isTokenExpired();
+      if (isExpired) {
+        _logger.i('Access token expired, attempting proactive refresh');
+        try {
+          final user = await _authService.refreshToken();
+          _logger.i('Proactive token refresh successful for user: ${user.username}');
+          state = AuthState.authenticated(user);
+          return;
+        } on TokenRefreshException catch (e) {
+          _logger.w('Proactive token refresh failed: ${e.message}');
+          // Refresh failed - clear tokens and show unauthenticated
+          await _storage.clearAll();
+          state = const AuthState.unauthenticated();
+          return;
+        } catch (e) {
+          _logger.w('Proactive token refresh error: $e');
+          // Clear stale tokens to avoid "Invalid parameter: id_token_hint" errors
+          await _storage.clearAll();
+          state = const AuthState.unauthenticated();
+          return;
+        }
+      }
+
       final user = await _authService.getCurrentUser();
 
       if (user == null) {
         _logger.w('Session exists but no user profile found');
+        // Clear potentially corrupt tokens
+        await _storage.clearAll();
         state = const AuthState.unauthenticated();
         return;
       }
@@ -158,6 +189,12 @@ class AuthNotifier extends Notifier<AuthState> {
       state = AuthState.authenticated(user);
     } catch (e, stackTrace) {
       _logger.e('Failed to initialize auth', error: e, stackTrace: stackTrace);
+      // Clear tokens on initialization failure to prevent stale session errors
+      try {
+        await _storage.clearAll();
+      } catch (_) {
+        // Ignore storage clear errors
+      }
       state = const AuthState.unauthenticated();
     }
   }
