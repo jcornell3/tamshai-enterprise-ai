@@ -121,6 +121,12 @@ variable "static_website_domain" {
   default     = "" # Temporarily disabled - requires domain ownership verification
 }
 
+variable "customer_portal_domain" {
+  description = "Customer support portal domain (e.g., customers-prod.tamshai.com). Empty = no customer portal."
+  type        = string
+  default     = ""
+}
+
 # =============================================================================
 # USER PROVISIONING
 # =============================================================================

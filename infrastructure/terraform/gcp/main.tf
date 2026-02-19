@@ -272,13 +272,18 @@ module "cloudrun" {
   redis_host = var.enable_utility_vm ? module.utility_vm[0].mcp_gateway_internal_ip : "10.0.0.10"
 
   # Domain configuration (all use Cloud Run domain mappings via ghs.googlehosted.com)
-  keycloak_domain = var.keycloak_domain
-  api_domain      = var.api_domain
-  app_domain      = var.app_domain
+  keycloak_domain        = var.keycloak_domain
+  api_domain             = var.api_domain
+  app_domain             = var.app_domain
+  customer_portal_domain = var.customer_portal_domain
 
   # Web Portal configuration
   enable_web_portal          = true
   web_portal_service_account = module.security.mcp_gateway_service_account_email
+
+  # MCP UI and Customer Portal
+  enable_mcp_ui         = true
+  enable_customer_portal = var.customer_portal_domain != ""
 
   depends_on = [module.database, module.security, module.networking]
 }

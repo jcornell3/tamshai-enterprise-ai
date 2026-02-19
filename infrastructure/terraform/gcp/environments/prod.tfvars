@@ -51,10 +51,11 @@ keycloak_min_instances = "0"
 # GCP provisions SSL certificates automatically (takes 10-15 minutes).
 # =============================================================================
 
-keycloak_domain       = "auth.tamshai.com"
-api_domain            = "api.tamshai.com"
-app_domain            = "app.tamshai.com"
-static_website_domain = "prod.tamshai.com"
+keycloak_domain        = "auth.tamshai.com"
+api_domain             = "api.tamshai.com"
+app_domain             = "app.tamshai.com"
+static_website_domain  = "prod.tamshai.com"
+customer_portal_domain = "customers-prod.tamshai.com"
 
 # =============================================================================
 # USER PROVISIONING

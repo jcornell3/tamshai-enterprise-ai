@@ -81,10 +81,11 @@ keycloak_min_instances = "1" # Keep warm during DR
 # GCP provisions SSL certificates automatically (takes 10-15 minutes).
 # =============================================================================
 
-keycloak_domain       = "auth-dr.tamshai.com"
-api_domain            = "api-dr.tamshai.com"
-app_domain            = "app-dr.tamshai.com"
-static_website_domain = "prod-dr.tamshai.com"
+keycloak_domain        = "auth-dr.tamshai.com"
+api_domain             = "api-dr.tamshai.com"
+app_domain             = "app-dr.tamshai.com"
+static_website_domain  = "prod-dr.tamshai.com"
+customer_portal_domain = "customers-dr.tamshai.com"
 
 # =============================================================================
 # USER PROVISIONING

@@ -89,6 +89,42 @@ output "web_portal_service_name" {
 }
 
 # =============================================================================
+# MCP UI
+# =============================================================================
+
+output "mcp_ui_url" {
+  description = "MCP UI Cloud Run URL"
+  value       = var.enable_mcp_ui ? google_cloud_run_service.mcp_ui[0].status[0].url : null
+}
+
+output "mcp_ui_service_name" {
+  description = "MCP UI Cloud Run service name"
+  value       = var.enable_mcp_ui ? google_cloud_run_service.mcp_ui[0].name : null
+}
+
+# =============================================================================
+# CUSTOMER PORTAL
+# =============================================================================
+
+output "customer_portal_url" {
+  description = "Customer Portal Cloud Run URL"
+  value       = var.enable_customer_portal ? google_cloud_run_service.customer_portal[0].status[0].url : null
+}
+
+output "customer_portal_service_name" {
+  description = "Customer Portal Cloud Run service name"
+  value       = var.enable_customer_portal ? google_cloud_run_service.customer_portal[0].name : null
+}
+
+output "customer_portal_domain_mapping" {
+  description = "Customer Portal custom domain mapping status"
+  value = var.enable_customer_portal && var.customer_portal_domain != "" ? {
+    domain = google_cloud_run_domain_mapping.customer_portal[0].name
+    status = google_cloud_run_domain_mapping.customer_portal[0].status[0].conditions
+  } : null
+}
+
+# =============================================================================
 # SERVICE URLS MAP
 # =============================================================================
 
@@ -105,6 +141,12 @@ output "service_urls" {
     },
     var.enable_web_portal ? {
       web_portal = google_cloud_run_service.web_portal[0].status[0].url
+    } : {},
+    var.enable_mcp_ui ? {
+      mcp_ui = google_cloud_run_service.mcp_ui[0].status[0].url
+    } : {},
+    var.enable_customer_portal ? {
+      customer_portal = google_cloud_run_service.customer_portal[0].status[0].url
     } : {}
   )
 }

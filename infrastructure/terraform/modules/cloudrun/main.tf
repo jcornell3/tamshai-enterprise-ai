@@ -701,6 +701,15 @@ resource "google_cloud_run_service" "web_portal" {
           name  = "MCP_GATEWAY_URL"
           value = google_cloud_run_service.mcp_gateway.status[0].url
         }
+
+        # MCP UI URL for generative UI components (/mcp-ui/*)
+        dynamic "env" {
+          for_each = var.enable_mcp_ui ? [1] : []
+          content {
+            name  = "MCP_UI_URL"
+            value = google_cloud_run_service.mcp_ui[0].status[0].url
+          }
+        }
       }
 
       service_account_name = var.web_portal_service_account
@@ -751,4 +760,194 @@ resource "google_cloud_run_service_iam_member" "web_portal_public" {
   location = google_cloud_run_service.web_portal[0].location
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# =============================================================================
+# MCP UI SERVICE
+# =============================================================================
+# Serves generative UI components for AI-powered dynamic rendering.
+# Used by web apps via /mcp-ui/* route.
+
+resource "google_cloud_run_service" "mcp_ui" {
+  count = var.enable_mcp_ui ? 1 : 0
+
+  name     = "mcp-ui"
+  location = var.region
+  project  = var.project_id
+
+  template {
+    spec {
+      containers {
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/mcp-ui:latest"
+
+        ports {
+          container_port = 3108
+        }
+
+        resources {
+          limits = {
+            cpu    = "1000m"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name  = "PORT"
+          value = "3108"
+        }
+
+        env {
+          name  = "NODE_ENV"
+          value = "production"
+        }
+
+        env {
+          name  = "MCP_GATEWAY_URL"
+          value = google_cloud_run_service.mcp_gateway.status[0].url
+        }
+      }
+
+      service_account_name = var.mcp_gateway_service_account
+      timeout_seconds      = 60
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/minScale"         = var.cloud_run_min_instances
+        "autoscaling.knative.dev/maxScale"         = var.cloud_run_max_instances
+        "run.googleapis.com/execution-environment" = "gen2"
+      }
+
+      labels = {
+        environment = var.environment
+        service     = "mcp-ui"
+      }
+    }
+  }
+
+  traffic {
+    percent         = 100
+    latest_revision = true
+  }
+
+  autogenerate_revision_name = true
+
+  lifecycle {
+    ignore_changes = [
+      template[0].metadata[0].annotations["run.googleapis.com/client-name"],
+      template[0].metadata[0].annotations["run.googleapis.com/client-version"],
+    ]
+  }
+}
+
+# Make MCP UI accessible (internal or public depending on architecture)
+resource "google_cloud_run_service_iam_member" "mcp_ui_public" {
+  count = var.enable_mcp_ui ? 1 : 0
+
+  service  = google_cloud_run_service.mcp_ui[0].name
+  location = google_cloud_run_service.mcp_ui[0].location
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# =============================================================================
+# CUSTOMER PORTAL SERVICE
+# =============================================================================
+# Serves the customer support portal for external customers.
+# Uses tamshai-customers Keycloak realm for authentication.
+
+resource "google_cloud_run_service" "customer_portal" {
+  count = var.enable_customer_portal ? 1 : 0
+
+  name     = "customer-portal"
+  location = var.region
+  project  = var.project_id
+
+  template {
+    spec {
+      containers {
+        image = "${var.region}-docker.pkg.dev/${var.project_id}/tamshai/customer-portal:latest"
+
+        ports {
+          container_port = 80
+        }
+
+        resources {
+          limits = {
+            cpu    = "1000m"
+            memory = "512Mi"
+          }
+        }
+
+        # Environment variables for customer portal
+        env {
+          name  = "MCP_GATEWAY_URL"
+          value = google_cloud_run_service.mcp_gateway.status[0].url
+        }
+      }
+
+      service_account_name = var.web_portal_service_account
+      timeout_seconds      = 60
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/minScale"         = var.cloud_run_min_instances
+        "autoscaling.knative.dev/maxScale"         = var.cloud_run_max_instances
+        "run.googleapis.com/execution-environment" = "gen2"
+      }
+
+      labels = {
+        environment = var.environment
+        service     = "customer-portal"
+      }
+    }
+  }
+
+  traffic {
+    percent         = 100
+    latest_revision = true
+  }
+
+  autogenerate_revision_name = true
+
+  lifecycle {
+    ignore_changes = [
+      template[0].metadata[0].annotations["run.googleapis.com/client-name"],
+      template[0].metadata[0].annotations["run.googleapis.com/client-version"],
+    ]
+  }
+}
+
+# Make Customer Portal publicly accessible
+#checkov:skip=CKV_GCP_102:Customer Portal must be publicly accessible for external customers.
+resource "google_cloud_run_service_iam_member" "customer_portal_public" {
+  count = var.enable_customer_portal ? 1 : 0
+
+  service  = google_cloud_run_service.customer_portal[0].name
+  location = google_cloud_run_service.customer_portal[0].location
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# Domain mapping for Customer Portal
+resource "google_cloud_run_domain_mapping" "customer_portal" {
+  count = var.enable_customer_portal && var.customer_portal_domain != "" ? 1 : 0
+
+  location = var.region
+  name     = var.customer_portal_domain
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_service.customer_portal[0].name
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations,
+    ]
+  }
 }

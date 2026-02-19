@@ -1,5 +1,5 @@
 # Multi-stage build for ALL web apps (Production - Cloud Run)
-# Builds: portal, hr, finance, sales, support
+# Builds: portal, hr, finance, sales, support, payroll, tax
 # Uses Caddy for SPA routing
 
 # Stage 1: Build all apps
@@ -51,6 +51,12 @@ RUN npm run build
 WORKDIR /app/apps/support
 RUN npm run build
 
+WORKDIR /app/apps/payroll
+RUN npm run build
+
+WORKDIR /app/apps/tax
+RUN npm run build
+
 # Stage 2: Production with Caddy
 FROM caddy:2-alpine
 
@@ -63,6 +69,8 @@ COPY --from=builder /app/apps/hr/dist /srv/hr
 COPY --from=builder /app/apps/finance/dist /srv/finance
 COPY --from=builder /app/apps/sales/dist /srv/sales
 COPY --from=builder /app/apps/support/dist /srv/support
+COPY --from=builder /app/apps/payroll/dist /srv/payroll
+COPY --from=builder /app/apps/tax/dist /srv/tax
 
 # Expose port 80 (Cloud Run expects this)
 EXPOSE 80

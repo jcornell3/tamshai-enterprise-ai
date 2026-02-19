@@ -129,4 +129,49 @@
         }
         header @html Cache-Control "no-cache, must-revalidate"
     }
+
+    # Payroll app at /payroll/*
+    handle_path /payroll/* {
+        root * /srv/payroll
+        try_files {path} {path}/ /index.html
+        file_server
+
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+
+    # Tax app at /tax/*
+    handle_path /tax/* {
+        root * /srv/tax
+        try_files {path} {path}/ /index.html
+        file_server
+
+        @static {
+            path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+        }
+        header @static Cache-Control "public, max-age=31536000, immutable"
+
+        @html {
+            path *.html /
+        }
+        header @html Cache-Control "no-cache, must-revalidate"
+    }
+
+    # MCP UI Service (Generative UI Components)
+    # Proxies to MCP UI Cloud Run service for dynamic component rendering
+    handle /mcp-ui/* {
+        reverse_proxy {$MCP_UI_URL} {
+            header_up Host {upstream_hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
 }

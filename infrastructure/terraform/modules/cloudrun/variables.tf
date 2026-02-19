@@ -196,3 +196,29 @@ variable "web_portal_service_account" {
   type        = string
   default     = ""
 }
+
+# =============================================================================
+# MCP UI CONFIGURATION
+# =============================================================================
+
+variable "enable_mcp_ui" {
+  description = "Enable MCP UI Cloud Run service for generative UI components"
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
+# CUSTOMER PORTAL CONFIGURATION
+# =============================================================================
+
+variable "enable_customer_portal" {
+  description = "Enable Customer Portal Cloud Run service"
+  type        = bool
+  default     = false
+}
+
+variable "customer_portal_domain" {
+  description = "Customer portal domain (e.g., customers-prod.tamshai.com). Empty = no domain mapping."
+  type        = string
+  default     = ""
+}
