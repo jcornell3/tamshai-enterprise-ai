@@ -548,6 +548,12 @@ jobs:
             $COMPOSE build $NOCACHE $BATCH
           done
 
+          echo "=== Stopping stale containers ==="
+          # Remove any orphaned or stale containers that may cause "No such container" errors.
+          # This happens when previous deployments leave partial state (e.g., container IDs
+          # that no longer exist but are still referenced by Docker Compose).
+          $COMPOSE down --remove-orphans 2>/dev/null || true
+
           echo "=== Starting services ==="
           $COMPOSE up -d
 
