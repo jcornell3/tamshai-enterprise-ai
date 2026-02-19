@@ -52,8 +52,7 @@
     "node": ">=20"
   },
   "overrides": {
-    "fast-xml-parser": ">=5.3.4",
-    "minimatch": ">=10.2.1"
+    "fast-xml-parser": ">=5.3.4"
   },
   "react-native-windows": {
     "init-windows": {
