@@ -1212,9 +1212,10 @@ jobs:
           fi
 
           echo "Unsealing Vault..."
-          vault operator unseal "$VAULT_UNSEAL_KEY_1" > /dev/null
-          vault operator unseal "$VAULT_UNSEAL_KEY_2" > /dev/null
-          vault operator unseal "$VAULT_UNSEAL_KEY_3" > /dev/null
+          # Use Vault HTTP API instead of CLI (vault CLI not installed on VPS)
+          curl -sf -X PUT \$VAULT_ADDR/v1/sys/unseal -d '{"key":"'"$VAULT_UNSEAL_KEY_1"'"}' > /dev/null
+          curl -sf -X PUT \$VAULT_ADDR/v1/sys/unseal -d '{"key":"'"$VAULT_UNSEAL_KEY_2"'"}' > /dev/null
+          curl -sf -X PUT \$VAULT_ADDR/v1/sys/unseal -d '{"key":"'"$VAULT_UNSEAL_KEY_3"'"}' > /dev/null
 
           # Verify unsealed
           FINAL_STATUS=\$(curl -sf \$VAULT_ADDR/v1/sys/seal-status | jq -r '.sealed')
