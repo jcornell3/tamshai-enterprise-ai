@@ -13,6 +13,8 @@
 #
 # =============================================================================
 
+name: tamshai-monitoring
+
 services:
   stage-monitor:
     build:
