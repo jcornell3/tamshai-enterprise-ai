@@ -49,7 +49,7 @@
                     <h3>Tamshai AI Client</h3>
                     <p>Native application for Windows, Android, macOS, and Linux providing seamless access to Tamshai AI services with secure SSO authentication.</p>
                     <p style="margin-top: 1rem; color: #666;"><strong>Latest:</strong> <span id="latest-version">loading...</span></p>
-                    <a href="https://github.com/jcornell3/tamshai-enterprise-ai/releases/latest" class="btn btn-primary" style="margin-top: 1rem;" target="_blank">Download from GitHub</a>
+                    <a id="download-btn" href="https://github.com/jcornell3/tamshai-enterprise-ai/releases/latest" class="btn btn-primary" style="margin-top: 1rem;" target="_blank">Download from GitHub</a>
                 </div>
 
                 <div class="feature-box">
@@ -80,11 +80,26 @@
     </footer>
 
     <script>
-        // Fetch latest release version from GitHub API
+        // Fetch latest release and assets from GitHub API
         fetch('https://api.github.com/repos/jcornell3/tamshai-enterprise-ai/releases/latest')
             .then(response => response.json())
             .then(data => {
+                // Display version
                 document.getElementById('latest-version').textContent = data.tag_name;
+
+                // Find Windows portable .zip asset and update download link
+                var downloadBtn = document.getElementById('download-btn');
+                if (data.assets && data.assets.length > 0) {
+                    // Look for stage Windows portable zip (primary) or any Windows zip
+                    var windowsAsset = data.assets.find(a => a.name.includes('stage-windows-portable.zip')) ||
+                                       data.assets.find(a => a.name.includes('windows-portable.zip')) ||
+                                       data.assets.find(a => a.name.includes('windows') && a.name.endsWith('.zip'));
+
+                    if (windowsAsset) {
+                        downloadBtn.href = windowsAsset.browser_download_url;
+                        downloadBtn.textContent = 'Download for Windows';
+                    }
+                }
             })
             .catch(() => {
                 document.getElementById('latest-version').textContent = 'See GitHub';
