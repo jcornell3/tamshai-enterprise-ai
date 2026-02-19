@@ -384,13 +384,15 @@ GitHub Secrets (encrypted)
 - [x] Phoenix rebuild works with encrypted secrets
 - [x] Secrets accessible to containers via environment
 - [ ] Key rotation procedure documented (future enhancement)
-- [ ] Monitoring for decryption failures (future enhancement)
+- [x] Monitoring for decryption failures (Discord notifications)
 
 **Implementation (2026-02-18):**
 - Commit `857a0f32`: feat(security): implement C2 - encrypted secrets at rest
-- Files created: `infrastructure/terraform/vps/encryption.tf`, `scripts/secrets/*.sh`
+- Commit `a54551f4`: feat(monitoring): add C2 monitoring with Discord notifications
+- Files created: `infrastructure/terraform/vps/encryption.tf`, `scripts/secrets/*.sh`, `infrastructure/monitoring/*`
 - Files modified: `cloud-init.yaml`, `main.tf`, `deploy-vps.yml`
 - Architecture: Secrets written to RAM (/dev/shm), encrypted with AES-256-CBC, key derived from SHA256(instance_id + salt)
+- Monitoring: Local Docker container + VPS startup notifications → Discord
 
 ---
 
