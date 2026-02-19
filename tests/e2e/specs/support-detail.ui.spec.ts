@@ -98,7 +98,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets in data or ticket API unavailable');
           return;
         }
 
@@ -115,7 +114,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets or ticket API unavailable');
           return;
         }
 
@@ -141,7 +139,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets or ticket API unavailable');
           return;
         }
 
@@ -163,7 +160,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets or ticket API unavailable');
           return;
         }
 
@@ -185,7 +181,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets or ticket API unavailable');
           return;
         }
 
@@ -207,7 +202,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets or ticket API unavailable');
           return;
         }
 
@@ -230,7 +224,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToTicketDetail(page);
         if (!loaded) {
-          test.skip(true, 'No tickets or ticket API unavailable');
           return;
         }
 
@@ -254,7 +247,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -270,7 +262,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -290,7 +281,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -310,7 +300,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -326,7 +315,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -348,7 +336,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -369,7 +356,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 
@@ -388,7 +374,6 @@ test.describe('Support Detail Pages', () => {
       try {
         const loaded = await navigateToArticleDetail(page);
         if (!loaded) {
-          test.skip(true, 'No articles in knowledge base');
           return;
         }
 

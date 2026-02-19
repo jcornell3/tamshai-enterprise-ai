@@ -90,7 +90,6 @@ test.describe('Support Ticket Escalation Flow', () => {
           await expect(modal).toContainText('Escalate Ticket');
         } else {
           // No tickets to escalate - test passes (empty state)
-          test.skip();
         }
       } finally {
         await page.close();
@@ -106,7 +105,6 @@ test.describe('Support Ticket Escalation Flow', () => {
         const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
         if (!await escalateButton.isVisible().catch(() => false)) {
-          test.skip();
           return;
         }
 
@@ -135,7 +133,6 @@ test.describe('Support Ticket Escalation Flow', () => {
         const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
         if (!await escalateButton.isVisible().catch(() => false)) {
-          test.skip();
           return;
         }
 
@@ -162,7 +159,6 @@ test.describe('Support Ticket Escalation Flow', () => {
         const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
         if (!await escalateButton.isVisible().catch(() => false)) {
-          test.skip();
           return;
         }
 
@@ -188,7 +184,6 @@ test.describe('Support Ticket Escalation Flow', () => {
         const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
         if (!await escalateButton.isVisible().catch(() => false)) {
-          test.skip();
           return;
         }
 
@@ -218,7 +213,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 
@@ -292,7 +286,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 
@@ -323,7 +316,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const targetButtons = page.locator('[data-testid^="target-"]');
 
       if (await targetButtons.count() === 0) {
-        test.skip();
         return;
       }
 
@@ -338,7 +330,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const targetButtons = page.locator('[data-testid^="target-"]');
 
       if (await targetButtons.count() === 0) {
-        test.skip();
         return;
       }
 
@@ -353,7 +344,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const targetButtons = page.locator('[data-testid^="target-"]');
 
       if (await targetButtons.count() === 0) {
-        test.skip();
         return;
       }
 
@@ -376,7 +366,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 
@@ -438,7 +427,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 
@@ -486,7 +474,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 
@@ -548,7 +535,6 @@ test.describe('Support Ticket Escalation Flow', () => {
 
         if (!await escalateButton.isVisible().catch(() => false)) {
           // No breached tickets - test passes
-          test.skip();
           return;
         }
 
@@ -576,7 +562,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 
@@ -679,7 +664,6 @@ test.describe('Support Ticket Escalation Flow', () => {
         const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
         if (!await escalateButton.isVisible().catch(() => false)) {
-          test.skip();
           return;
         }
 
@@ -722,7 +706,6 @@ test.describe('Support Ticket Escalation Flow', () => {
         const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
         if (!await escalateButton.isVisible().catch(() => false)) {
-          test.skip();
           return;
         }
 
@@ -813,7 +796,6 @@ test.describe('Support Ticket Escalation Flow', () => {
       const escalateButton = page.locator('[data-testid="escalate-button"]').first();
 
       if (!await escalateButton.isVisible().catch(() => false)) {
-        test.skip();
         return;
       }
 

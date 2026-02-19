@@ -214,7 +214,6 @@ test.describe('Customer Portal Pages', () => {
         const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
-          test.skip(true, 'No tickets available for this customer');
           return;
         }
 
@@ -238,7 +237,6 @@ test.describe('Customer Portal Pages', () => {
         const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
-          test.skip(true, 'No tickets available for this customer');
           return;
         }
 
@@ -272,7 +270,6 @@ test.describe('Customer Portal Pages', () => {
         const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
-          test.skip(true, 'No tickets available for this customer');
           return;
         }
 
@@ -282,7 +279,6 @@ test.describe('Customer Portal Pages', () => {
         // Wait for ticket data to load (Description h2 confirms API returned data)
         const ticketLoaded = await page.locator('h2:has-text("Description")').isVisible({ timeout: 10000 }).catch(() => false);
         if (!ticketLoaded) {
-          test.skip(true, 'Ticket detail API unavailable');
           return;
         }
 
@@ -308,7 +304,6 @@ test.describe('Customer Portal Pages', () => {
         const ticketLink = page.locator('a[href*="/tickets/"]:not([href*="/tickets/new"])').first();
         const hasTickets = await ticketLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTickets) {
-          test.skip(true, 'No tickets available for this customer');
           return;
         }
 

@@ -92,7 +92,6 @@ test.describe('Finance Budgets Page', () => {
         const yearFilter = page.locator('[data-testid="year-filter"]');
         const hasFilter = await yearFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -114,7 +113,6 @@ test.describe('Finance Budgets Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -141,7 +139,6 @@ test.describe('Finance Budgets Page', () => {
         const categoryFilter = page.locator('[data-testid="category-filter"]');
         const hasFilter = await categoryFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -161,7 +158,6 @@ test.describe('Finance Budgets Page', () => {
         const deptFilter = page.locator('[data-testid="department-filter"]');
         const hasFilter = await deptFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -181,7 +177,6 @@ test.describe('Finance Budgets Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -211,7 +206,6 @@ test.describe('Finance Budgets Page', () => {
         const table = page.locator('[data-testid="budget-table"]');
         const hasTable = await table.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTable) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -238,7 +232,6 @@ test.describe('Finance Budgets Page', () => {
         const table = page.locator('[data-testid="budget-table"]');
         const hasTable = await table.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTable) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -265,7 +258,6 @@ test.describe('Finance Budgets Page', () => {
         const bars = page.locator('[data-testid="utilization-bar"]');
         const hasBars = await bars.first().isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasBars) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -296,7 +288,6 @@ test.describe('Finance Budgets Page', () => {
         const deptLink = page.locator('[data-testid="department-link"]').first();
         const hasLink = await deptLink.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasLink) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -331,7 +322,6 @@ test.describe('Finance Budgets Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -346,7 +336,6 @@ test.describe('Finance Budgets Page', () => {
         const rows = page.locator('[data-testid="budget-row"]');
         const rowCount = await rows.count();
         if (rowCount === 0) {
-          test.skip(true, 'No PENDING_APPROVAL budgets in sample data');
           return;
         }
 
@@ -371,7 +360,6 @@ test.describe('Finance Budgets Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 
@@ -386,14 +374,12 @@ test.describe('Finance Budgets Page', () => {
         const rows = page.locator('[data-testid="budget-row"]');
         const rowCount = await rows.count();
         if (rowCount === 0) {
-          test.skip(true, 'No PENDING_APPROVAL budgets in sample data');
           return;
         }
 
         const rejectBtn = rows.first().locator('[data-testid="reject-button"]');
         const hasReject = await rejectBtn.isVisible({ timeout: 3000 }).catch(() => false);
         if (!hasReject) {
-          test.skip(true, 'No reject button (user may lack write role)');
           return;
         }
 
@@ -424,7 +410,6 @@ test.describe('Finance Budgets Page', () => {
         const deptFilter = page.locator('[data-testid="department-filter"]');
         const hasFilter = await deptFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Budgets page not available or no data');
           return;
         }
 

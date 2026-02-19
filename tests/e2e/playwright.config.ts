@@ -99,7 +99,11 @@ export default defineConfig({
     },
     {
       name: 'employee',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Grant microphone permission to prevent popup from voice input features
+        permissions: ['microphone'],
+      },
       testMatch: /^(?!customer-).*\.ui\.spec\.ts/,
       // Employee specs share TOTP — sequential within this worker
     },

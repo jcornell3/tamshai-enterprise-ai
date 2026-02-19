@@ -440,7 +440,6 @@ test.describe('Generative UI - Voice Features', () => {
 
     if (!supportsSpeechRecognition) {
       console.log('Browser does not support SpeechRecognition API');
-      test.skip(true, 'Browser does not support speech recognition');
       return;
     }
 
@@ -674,7 +673,6 @@ test.describe('Generative UI - ComponentRenderer', () => {
 
     // The fallback component is rendered when component.type is not in COMPONENT_MAP
     // This is already unit tested in the component test files
-    test.skip(true, 'Requires mocked MCP response - covered by unit tests');
   });
 });
 

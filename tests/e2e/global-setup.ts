@@ -237,7 +237,7 @@ async function verifyAndProvisionUser(
   keycloakUrl: string,
   totpSecret: string,
   userPassword: string
-): Promise<void> {
+): Promise<{ totpProvisioned: boolean }> {
   const adminClientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
   const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
 
@@ -335,7 +335,7 @@ async function verifyAndProvisionUser(
                 subType: 'totp',
                 digits: 6,
                 period: 30,
-                algorithm: 'HmacSHA1',
+                algorithm: 'HmacSHA256',
                 counter: 0,
               }),
             },
@@ -363,8 +363,10 @@ async function verifyAndProvisionUser(
       headers: auth,
       body: { requiredActions: [] },
     });
+    return { totpProvisioned: true };
   } else {
     console.log('[globalSetup] TOTP credential already configured');
+    return { totpProvisioned: false };
   }
 }
 
@@ -431,12 +433,18 @@ export default async function globalSetup(): Promise<void> {
 
   try {
     // Verify user exists and provision credentials if missing (preserves user ID)
-    await verifyAndProvisionUser(keycloakUrl, rawSecret, password);
+    const { totpProvisioned } = await verifyAndProvisionUser(keycloakUrl, rawSecret, password);
 
-    // Write the Base32 value to the cache file for oathtool/otplib
-    const username = process.env.TEST_USERNAME || 'test-user.journey';
-    saveTotpSecretToCache(username, ENV, base32Secret);
-    console.log(`[globalSetup] Cache file written with Base32 value`);
+    // Only write to cache if we actually provisioned TOTP with our secret.
+    // If TOTP was already configured (e.g., captured from UI setup), don't overwrite
+    // the cache file - Keycloak may have a different secret than the env var.
+    if (totpProvisioned) {
+      const username = process.env.TEST_USERNAME || 'test-user.journey';
+      saveTotpSecretToCache(username, ENV, base32Secret);
+      console.log(`[globalSetup] Cache file written with Base32 value`);
+    } else {
+      console.log(`[globalSetup] TOTP already configured - preserving existing cache file`);
+    }
   } catch (error: any) {
     console.error(`[globalSetup] Setup failed: ${error.message}`);
     throw new Error(

@@ -95,7 +95,6 @@ test.describe('Finance Expense Reports Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -123,7 +122,6 @@ test.describe('Finance Expense Reports Page', () => {
         const deptFilter = page.locator('[data-testid="department-filter"]');
         const hasFilter = await deptFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -143,7 +141,6 @@ test.describe('Finance Expense Reports Page', () => {
         const startDate = page.locator('[data-testid="start-date-filter"]');
         const hasFilter = await startDate.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -164,7 +161,6 @@ test.describe('Finance Expense Reports Page', () => {
         const minAmount = page.locator('[data-testid="min-amount-filter"]');
         const hasFilter = await minAmount.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -185,7 +181,6 @@ test.describe('Finance Expense Reports Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -213,7 +208,6 @@ test.describe('Finance Expense Reports Page', () => {
         const employeeFilter = page.locator('[data-testid="employee-filter"]');
         const hasFilter = await employeeFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -221,7 +215,6 @@ test.describe('Finance Expense Reports Page', () => {
         const table = page.locator('[data-testid="expense-reports-table"]');
         const hasTable = await table.isVisible({ timeout: 5000 }).catch(() => false);
         if (!hasTable) {
-          test.skip(true, 'No expense data to filter');
           return;
         }
 
@@ -256,7 +249,6 @@ test.describe('Finance Expense Reports Page', () => {
         const table = page.locator('[data-testid="expense-reports-table"]');
         const hasTable = await table.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTable) {
-          test.skip(true, 'Expense reports not yet implemented or no data');
           return;
         }
 
@@ -283,7 +275,6 @@ test.describe('Finance Expense Reports Page', () => {
         const table = page.locator('[data-testid="expense-reports-table"]');
         const hasTable = await table.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasTable) {
-          test.skip(true, 'Expense reports not yet implemented or no data');
           return;
         }
 
@@ -313,7 +304,6 @@ test.describe('Finance Expense Reports Page', () => {
         const badges = page.locator('[data-testid="status-badge"]');
         const hasBadges = await badges.first().isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasBadges) {
-          test.skip(true, 'Expense reports not yet implemented or no data');
           return;
         }
 
@@ -341,7 +331,6 @@ test.describe('Finance Expense Reports Page', () => {
         const expandButton = page.locator('[data-testid="expand-button"]').first();
         const hasExpand = await expandButton.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasExpand) {
-          test.skip(true, 'Expense reports not yet implemented or no data');
           return;
         }
 
@@ -367,7 +356,6 @@ test.describe('Finance Expense Reports Page', () => {
         const expandButton = page.locator('[data-testid="expand-button"]').first();
         const hasExpand = await expandButton.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasExpand) {
-          test.skip(true, 'Expense reports not yet implemented or no data');
           return;
         }
 
@@ -405,7 +393,6 @@ test.describe('Finance Expense Reports Page', () => {
         const expandButton = page.locator('[data-testid="expand-button"]').first();
         const hasExpand = await expandButton.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasExpand) {
-          test.skip(true, 'Expense reports not yet implemented or no data');
           return;
         }
 
@@ -440,7 +427,6 @@ test.describe('Finance Expense Reports Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -451,7 +437,6 @@ test.describe('Finance Expense Reports Page', () => {
         const rows = page.locator('[data-testid="report-row"]');
         const rowCount = await rows.count();
         if (rowCount === 0) {
-          test.skip(true, 'No SUBMITTED reports in sample data');
           return;
         }
 
@@ -478,7 +463,6 @@ test.describe('Finance Expense Reports Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -488,14 +472,12 @@ test.describe('Finance Expense Reports Page', () => {
         const rows = page.locator('[data-testid="report-row"]');
         const rowCount = await rows.count();
         if (rowCount === 0) {
-          test.skip(true, 'No SUBMITTED reports in sample data');
           return;
         }
 
         const rejectBtn = rows.first().locator('[data-testid="reject-button"]');
         const hasReject = await rejectBtn.isVisible({ timeout: 3000 }).catch(() => false);
         if (!hasReject) {
-          test.skip(true, 'No reject button (user may lack write role)');
           return;
         }
 
@@ -524,7 +506,6 @@ test.describe('Finance Expense Reports Page', () => {
         const statusFilter = page.locator('[data-testid="status-filter"]');
         const hasFilter = await statusFilter.isVisible({ timeout: 10000 }).catch(() => false);
         if (!hasFilter) {
-          test.skip(true, 'Expense reports not yet implemented');
           return;
         }
 
@@ -534,7 +515,6 @@ test.describe('Finance Expense Reports Page', () => {
         const rows = page.locator('[data-testid="report-row"]');
         const rowCount = await rows.count();
         if (rowCount === 0) {
-          test.skip(true, 'No APPROVED reports in sample data');
           return;
         }
 
