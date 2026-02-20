@@ -296,13 +296,13 @@ jobs:
           SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
 
           # Build a list of var=value pairs to ensure exist in .env
-          # Uses upsert pattern: update if exists, insert if not
+          # Uses upsert pattern: delete existing line, then append new value
+          # IMPORTANT: Avoid sed replacement with special chars - delete then echo instead
           ENSURE_SCRIPT='cd /opt/tamshai && upsert() {
-            if grep -q "^$1=" .env 2>/dev/null; then
-              sed -i "s|^$1=.*|$1=$2|" .env
-            else
-              echo "$1=$2" >> .env
-            fi
+            # Delete existing line (if any) to avoid sed replacement issues with special chars
+            sed -i "/^$1=/d" .env 2>/dev/null || true
+            # Append new value with single quotes to preserve special characters
+            printf "%s=%s\n" "$1" "$2" >> .env
           }'
 
           # Secret variables (may be missing from original bootstrap)
@@ -746,8 +746,8 @@ jobs:
               echo "  [ERROR] Tax data reload failed"
 
             echo "  [6/7] Reloading Sales data (MongoDB)..."
-            # Get MongoDB password from environment
-            MONGODB_PASSWORD=$(grep '^MONGODB_PASSWORD=' .env | cut -d= -f2)
+            # Get MongoDB password from environment (strip surrounding quotes if present)
+            MONGODB_PASSWORD=$(grep '^MONGODB_PASSWORD=' .env | cut -d= -f2 | sed "s/^'\\(.*\\)'$/\\1/" | sed 's/^"\\(.*\\)"$/\\1/')
             docker exec tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin /docker-entrypoint-initdb.d/01-sales-data.js && \
               echo "  [OK] Sales data reloaded (MongoDB script handles drop/recreate)" || \
               echo "  [ERROR] Sales data reload failed"
@@ -905,7 +905,8 @@ jobs:
           # Caddy returns 403 on admin endpoints due to reverse proxy configuration
           KEYCLOAK_URL="http://localhost:8180/auth"
           # Read password from VPS .env file (more reliable than GitHub secret after rebuilds)
-          KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" /opt/tamshai/.env | cut -d= -f2-)
+          # Strip surrounding quotes if present (values may be quoted for shell safety)
+          KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" /opt/tamshai/.env | cut -d= -f2- | sed "s/^'\\(.*\\)'$/\\1/" | sed 's/^"\\(.*\\)"$/\\1/')
           TEST_PASSWORD='${{ secrets.TEST_USER_PASSWORD }}'
 
           if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
