@@ -381,6 +381,7 @@ runcmd:
     PASSWORD_VARS="POSTGRES_PASSWORD TAMSHAI_APP_PASSWORD KEYCLOAK_ADMIN_PASSWORD KC_DB_PASSWORD KEYCLOAK_DB_PASSWORD TAMSHAI_DB_PASSWORD MONGO_INITDB_ROOT_PASSWORD MONGODB_PASSWORD MINIO_ROOT_PASSWORD JWT_SECRET MCP_HR_SERVICE_CLIENT_SECRET MCP_GATEWAY_CLIENT_SECRET REDIS_PASSWORD ELASTIC_PASSWORD VAULT_DEV_ROOT_TOKEN MCP_INTERNAL_SECRET MCP_UI_CLIENT_SECRET E2E_ADMIN_API_KEY TEST_USER_PASSWORD TEST_USER_TOTP_SECRET_RAW STAGE_USER_PASSWORD"
 
     # Decode base64 passwords in RAM
+    # Single-quote password values to prevent shell interpretation of special chars
     while IFS= read -r line; do
       is_password=false
       for var in $PASSWORD_VARS; do
@@ -389,7 +390,8 @@ runcmd:
           is_password=true
           value=$(echo "$line" | cut -d '=' -f 2-)
           decoded_value=$(echo "$value" | base64 -d)
-          echo "$key=$decoded_value" >> "$DECODED_RAM"
+          # Single-quote the value to preserve special characters like ()[]#|&!
+          echo "$key='$decoded_value'" >> "$DECODED_RAM"
           break
         fi
       done
@@ -488,10 +490,11 @@ runcmd:
     cd /opt/tamshai
     docker cp keycloak/scripts tamshai-dev-keycloak:/tmp/keycloak-scripts
     docker exec -u 0 tamshai-dev-keycloak bash -c 'find /tmp/keycloak-scripts -name "*.sh" -exec sed -i "s/\r$//" {} \; && chmod -R 755 /tmp/keycloak-scripts'
-    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env)
-    HR_SECRET=$(sed -n "s/^MCP_HR_SERVICE_CLIENT_SECRET=//p" .env)
-    GW_SECRET=$(sed -n "s/^MCP_GATEWAY_CLIENT_SECRET=//p" .env)
-    UI_SECRET=$(sed -n "s/^MCP_UI_CLIENT_SECRET=//p" .env)
+    # Strip surrounding single quotes from password values
+    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
+    HR_SECRET=$(sed -n "s/^MCP_HR_SERVICE_CLIENT_SECRET=//p" .env | sed "s/^'//;s/'$//")
+    GW_SECRET=$(sed -n "s/^MCP_GATEWAY_CLIENT_SECRET=//p" .env | sed "s/^'//;s/'$//")
+    UI_SECRET=$(sed -n "s/^MCP_UI_CLIENT_SECRET=//p" .env | sed "s/^'//;s/'$//")
     docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KC_PASS" \
       -e MCP_HR_SERVICE_CLIENT_SECRET="$HR_SECRET" \
       -e MCP_GATEWAY_CLIENT_SECRET="$GW_SECRET" \
@@ -509,10 +512,10 @@ runcmd:
     cd /opt/tamshai
     echo "Configuring test-user.journey credentials..."
 
-    # Load credentials from .env
-    TEST_USER_PASSWORD=$(sed -n "s/^TEST_USER_PASSWORD=//p" .env)
-    TEST_USER_TOTP_SECRET_RAW=$(sed -n "s/^TEST_USER_TOTP_SECRET_RAW=//p" .env)
-    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env)
+    # Load credentials from .env (strip surrounding single quotes)
+    TEST_USER_PASSWORD=$(sed -n "s/^TEST_USER_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
+    TEST_USER_TOTP_SECRET_RAW=$(sed -n "s/^TEST_USER_TOTP_SECRET_RAW=//p" .env | sed "s/^'//;s/'$//")
+    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
 
     if [ -z "$TEST_USER_PASSWORD" ]; then
       echo "WARNING: TEST_USER_PASSWORD not set - E2E tests may fail"
