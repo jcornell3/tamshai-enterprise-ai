@@ -718,14 +718,14 @@ jobs:
             echo "  [2/7] Reloading HR data (PostgreSQL)..."
             docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_hr;" && \
             docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_hr OWNER tamshai;" && \
-            docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_hr < sample-data/hr-data.sql && \
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -f /docker-entrypoint-initdb.d/02-hr-data.sql && \
               echo "  [OK] HR database dropped and reloaded" || \
               echo "  [ERROR] HR data reload failed"
 
             echo "  [3/7] Reloading Finance data (PostgreSQL)..."
             docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
             docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
-            docker exec -i tamshai-dev-postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql && \
+            docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_finance -f /docker-entrypoint-initdb.d/03-finance-data.sql && \
               echo "  [OK] Finance database dropped and reloaded" || \
               echo "  [ERROR] Finance data reload failed"
 
@@ -748,7 +748,7 @@ jobs:
             echo "  [6/7] Reloading Sales data (MongoDB)..."
             # Get MongoDB password from environment
             MONGODB_PASSWORD=$(grep '^MONGODB_PASSWORD=' .env | cut -d= -f2)
-            docker exec -i tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin < sample-data/sales-data.js && \
+            docker exec tamshai-dev-mongodb mongosh -u tamshai -p "$MONGODB_PASSWORD" --authenticationDatabase admin /docker-entrypoint-initdb.d/01-sales-data.js && \
               echo "  [OK] Sales data reloaded (MongoDB script handles drop/recreate)" || \
               echo "  [ERROR] Sales data reload failed"
 

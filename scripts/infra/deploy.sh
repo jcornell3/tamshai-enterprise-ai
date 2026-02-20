@@ -152,51 +152,84 @@ cd /opt/tamshai
 echo "=== Loading environment ==="
 export $(cat .env | grep -v '^#' | xargs)
 
-echo "=== [1/5] Stopping MCP services ==="
-docker stop mcp-finance mcp-sales mcp-support 2>/dev/null || true
+echo "=== [1/7] Stopping MCP services ==="
+docker stop tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support tamshai-dev-mcp-payroll tamshai-dev-mcp-tax 2>/dev/null || true
 
-echo "=== [2/5] Reloading Finance data (PostgreSQL) ==="
-if docker exec postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
-   docker exec postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
-   docker exec -i postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql; then
+echo "=== [2/7] Reloading HR data (PostgreSQL) ==="
+if docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_hr;" && \
+   docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_hr OWNER tamshai;" && \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -f /docker-entrypoint-initdb.d/02-hr-data.sql; then
+    echo "[OK] HR database reloaded"
+else
+    echo "[WARN] HR data reload failed"
+fi
+
+echo "=== [3/7] Reloading Finance data (PostgreSQL) ==="
+if docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
+   docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_finance -f /docker-entrypoint-initdb.d/03-finance-data.sql; then
     echo "[OK] Finance database reloaded"
 else
     echo "[WARN] Finance data reload failed"
 fi
 
-echo "=== [3/5] Reloading Sales data (MongoDB) ==="
-MONGO_PASS="${MONGODB_ROOT_PASSWORD:-tamshai_password}"
-if docker exec -i mongodb mongosh -u tamshai -p "$MONGO_PASS" --authenticationDatabase admin < sample-data/sales-data.js; then
+echo "=== [4/7] Reloading Payroll data (PostgreSQL) ==="
+if docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_payroll;" && \
+   docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_payroll OWNER tamshai;" && \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_payroll -f /docker-entrypoint-initdb.d/04-payroll-schema.sql && \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_payroll -f /docker-entrypoint-initdb.d/05-payroll-data.sql; then
+    echo "[OK] Payroll database reloaded"
+else
+    echo "[WARN] Payroll data reload failed"
+fi
+
+echo "=== [5/7] Reloading Tax data (PostgreSQL) ==="
+if docker exec tamshai-dev-postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_tax;" && \
+   docker exec tamshai-dev-postgres psql -U postgres -c "CREATE DATABASE tamshai_tax OWNER tamshai;" && \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_tax -f /docker-entrypoint-initdb.d/06-tax-schema.sql && \
+   docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_tax -f /docker-entrypoint-initdb.d/07-tax-data.sql; then
+    echo "[OK] Tax database reloaded"
+else
+    echo "[WARN] Tax data reload failed"
+fi
+
+echo "=== [6/7] Reloading Sales data (MongoDB) ==="
+MONGO_PASS="${MONGODB_PASSWORD:-tamshai_password}"
+if docker exec tamshai-dev-mongodb mongosh -u tamshai -p "$MONGO_PASS" --authenticationDatabase admin /docker-entrypoint-initdb.d/01-sales-data.js; then
     echo "[OK] Sales data reloaded"
 else
     echo "[WARN] Sales data reload failed"
 fi
 
-echo "=== [4/5] Reloading Support data (Elasticsearch) ==="
-# Get Elasticsearch password
-ES_PASS="${ELASTIC_PASSWORD:-}"
+echo "=== [7/7] Reloading Support data (Elasticsearch) ==="
 # Delete existing indexes
-docker exec elasticsearch curl -u "elastic:$ES_PASS" -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
-# Bulk load fresh data
-if cat sample-data/support-data.ndjson | docker exec -i elasticsearch curl -u "elastic:$ES_PASS" -X POST "http://localhost:9200/_bulk" \
+docker exec tamshai-dev-elasticsearch curl -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
+# Bulk load fresh data from VPS filesystem
+if cat /opt/tamshai/sample-data/support-data.ndjson | docker exec -i tamshai-dev-elasticsearch curl -X POST "http://localhost:9200/_bulk" \
     -H "Content-Type: application/x-ndjson" --data-binary @- >/dev/null 2>&1; then
     echo "[OK] Support data reloaded"
 else
     echo "[WARN] Support data reload failed"
 fi
 
-echo "=== [5/5] Restarting MCP services ==="
-docker start mcp-finance mcp-sales mcp-support 2>/dev/null || true
-docker restart mcp-gateway 2>/dev/null || true
+echo "=== Restarting MCP services ==="
+docker start tamshai-dev-mcp-hr tamshai-dev-mcp-finance tamshai-dev-mcp-sales tamshai-dev-mcp-support tamshai-dev-mcp-payroll tamshai-dev-mcp-tax 2>/dev/null || true
+docker restart tamshai-dev-mcp-gateway 2>/dev/null || true
 sleep 5
 
 echo "=== Verifying data counts ==="
+echo "HR employees:"
+docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_hr -t -c "SELECT COUNT(*) FROM hr.employees;" 2>/dev/null || echo "  (HR DB not available)"
 echo "Finance budgets:"
-docker exec postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" 2>/dev/null || echo "  (Finance DB not available)"
+docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" 2>/dev/null || echo "  (Finance DB not available)"
+echo "Payroll employees:"
+docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_payroll -t -c "SELECT COUNT(*) FROM payroll.employees;" 2>/dev/null || echo "  (Payroll DB not available)"
+echo "Tax filings:"
+docker exec tamshai-dev-postgres psql -U tamshai -d tamshai_tax -t -c "SELECT COUNT(*) FROM tax.tax_filings;" 2>/dev/null || echo "  (Tax DB not available)"
 echo "Sales deals:"
-docker exec mongodb mongosh -u tamshai -p "$MONGO_PASS" --authenticationDatabase admin tamshai_sales --quiet --eval "print(db.deals.countDocuments())" 2>/dev/null || echo "  (MongoDB not available)"
+docker exec tamshai-dev-mongodb mongosh -u tamshai -p "$MONGO_PASS" --authenticationDatabase admin tamshai_sales --quiet --eval "print(db.deals.countDocuments())" 2>/dev/null || echo "  (MongoDB not available)"
 echo "Support tickets:"
-docker exec elasticsearch curl -s -u "elastic:$ES_PASS" "http://localhost:9200/support_tickets/_count" 2>/dev/null | grep -o '"count":[0-9]*' || echo "  (Elasticsearch not available)"
+docker exec tamshai-dev-elasticsearch curl -s "http://localhost:9200/support_tickets/_count" 2>/dev/null | grep -o '"count":[0-9]*' || echo "  (Elasticsearch not available)"
 
 echo "=== Sample data re-seed complete ==="
 RESEED_SCRIPT
