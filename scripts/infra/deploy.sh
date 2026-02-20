@@ -18,6 +18,7 @@
 #   --service=X  Deploy only specific service (e.g., --service=keycloak)
 #   --sync       Run Keycloak sync after deployment
 #   --pull       Pull latest images before deploying
+#   --reseed     Reload all sample data (Finance, Sales, Support, Payroll)
 #
 # Examples:
 #   ./deploy.sh                           # Deploy all services in dev
@@ -25,7 +26,8 @@
 #   ./deploy.sh stage                     # Deploy to stage (requires SSH)
 #   ./deploy.sh dev --service=mcp-gateway # Deploy only MCP Gateway
 #   ./deploy.sh dev --sync                # Deploy and sync Keycloak
-#   ./deploy.sh dev --reseed              # Reload all sample data (Finance, Sales, Support)
+#   ./deploy.sh dev --reseed              # Reload sample data (dev)
+#   ./deploy.sh stage --reseed            # Reload sample data (stage via SSH)
 #
 # Environment Variables (for stage):
 #   VPS_HOST     - VPS IP address or hostname (required for stage deployments)
@@ -130,6 +132,78 @@ reseed_data_dev() {
     log_info "Sample data re-seed complete"
 }
 
+reseed_data_stage() {
+    log_header "Re-seeding Sample Data (Stage)"
+
+    local vps_host="${VPS_HOST:-}"
+    local vps_user="${VPS_SSH_USER:-root}"
+
+    if [ -z "$vps_host" ]; then
+        log_error "VPS_HOST not set for stage reseed"
+        exit 1
+    fi
+
+    log_info "Connecting to $vps_user@$vps_host for data reseed..."
+
+    ssh -o ConnectTimeout=30 "$vps_user@$vps_host" << 'RESEED_SCRIPT'
+set -e
+cd /opt/tamshai
+
+echo "=== Loading environment ==="
+export $(cat .env | grep -v '^#' | xargs)
+
+echo "=== [1/5] Stopping MCP services ==="
+docker stop mcp-finance mcp-sales mcp-support 2>/dev/null || true
+
+echo "=== [2/5] Reloading Finance data (PostgreSQL) ==="
+if docker exec postgres psql -U postgres -c "DROP DATABASE IF EXISTS tamshai_finance;" && \
+   docker exec postgres psql -U postgres -c "CREATE DATABASE tamshai_finance OWNER tamshai;" && \
+   docker exec -i postgres psql -U tamshai -d tamshai_finance < sample-data/finance-data.sql; then
+    echo "[OK] Finance database reloaded"
+else
+    echo "[WARN] Finance data reload failed"
+fi
+
+echo "=== [3/5] Reloading Sales data (MongoDB) ==="
+MONGO_PASS="${MONGODB_ROOT_PASSWORD:-tamshai_password}"
+if docker exec -i mongodb mongosh -u tamshai -p "$MONGO_PASS" --authenticationDatabase admin < sample-data/sales-data.js; then
+    echo "[OK] Sales data reloaded"
+else
+    echo "[WARN] Sales data reload failed"
+fi
+
+echo "=== [4/5] Reloading Support data (Elasticsearch) ==="
+# Get Elasticsearch password
+ES_PASS="${ELASTIC_PASSWORD:-}"
+# Delete existing indexes
+docker exec elasticsearch curl -u "elastic:$ES_PASS" -X DELETE "http://localhost:9200/support_tickets,knowledge_base" 2>/dev/null || true
+# Bulk load fresh data
+if cat sample-data/support-data.ndjson | docker exec -i elasticsearch curl -u "elastic:$ES_PASS" -X POST "http://localhost:9200/_bulk" \
+    -H "Content-Type: application/x-ndjson" --data-binary @- >/dev/null 2>&1; then
+    echo "[OK] Support data reloaded"
+else
+    echo "[WARN] Support data reload failed"
+fi
+
+echo "=== [5/5] Restarting MCP services ==="
+docker start mcp-finance mcp-sales mcp-support 2>/dev/null || true
+docker restart mcp-gateway 2>/dev/null || true
+sleep 5
+
+echo "=== Verifying data counts ==="
+echo "Finance budgets:"
+docker exec postgres psql -U tamshai -d tamshai_finance -c "SELECT fiscal_year, COUNT(*) FROM finance.department_budgets GROUP BY fiscal_year ORDER BY fiscal_year;" 2>/dev/null || echo "  (Finance DB not available)"
+echo "Sales deals:"
+docker exec mongodb mongosh -u tamshai -p "$MONGO_PASS" --authenticationDatabase admin tamshai_sales --quiet --eval "print(db.deals.countDocuments())" 2>/dev/null || echo "  (MongoDB not available)"
+echo "Support tickets:"
+docker exec elasticsearch curl -s -u "elastic:$ES_PASS" "http://localhost:9200/support_tickets/_count" 2>/dev/null | grep -o '"count":[0-9]*' || echo "  (Elasticsearch not available)"
+
+echo "=== Sample data re-seed complete ==="
+RESEED_SCRIPT
+
+    log_info "Stage sample data re-seed complete"
+}
+
 deploy_dev() {
     log_header "Deploying to Dev Environment"
 
@@ -228,6 +302,11 @@ DEPLOY_SCRIPT
     # Sync Keycloak if requested
     if [ "$SYNC_KEYCLOAK" = true ]; then
         sync_keycloak_stage
+    fi
+
+    # Reseed data if requested
+    if [ "$RESEED_DATA" = true ]; then
+        reseed_data_stage
     fi
 
     log_info "Stage deployment complete"
