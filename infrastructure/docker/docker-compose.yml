@@ -897,6 +897,8 @@ services:
       DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-}
       STAGE_USER_PASSWORD: ${STAGE_USER_PASSWORD:-}
       PROD_USER_PASSWORD: ${PROD_USER_PASSWORD:-}
+      # E2E test user password (test-user.journey account)
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-}
     volumes:
       - ../../keycloak/scripts/sync-realm.sh:/scripts/sync-realm.sh:ro
       - ../../keycloak/scripts/lib:/scripts/lib:ro
