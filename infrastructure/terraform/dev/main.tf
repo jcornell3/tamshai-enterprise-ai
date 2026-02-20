@@ -767,9 +767,11 @@ INNEREOF
     EOT
 
     environment = {
-      KC_ADMIN_PASSWORD      = local.keycloak_admin_password
-      CUSTOMER_USER_PASSWORD = try(data.external.github_secrets.result.customer_user_password, "")
-      MSYS_NO_PATHCONV       = "1"
+      KC_ADMIN_PASSWORD         = local.keycloak_admin_password
+      CUSTOMER_USER_PASSWORD    = try(data.external.github_secrets.result.customer_user_password, "")
+      PORT_WEB_CUSTOMER_SUPPORT = local.ports.web_customer_support
+      PORT_CADDY_HTTPS          = local.ports.caddy_https
+      MSYS_NO_PATHCONV          = "1"
     }
   }
 }
@@ -784,10 +786,85 @@ INNEREOF
 #
 # =============================================================================
 
+# =============================================================================
+# KEYCLOAK CUSTOMER USER PASSWORD CONFIGURATION
+# =============================================================================
+#
+# Sets passwords for customer realm users via REST API.
+# This ensures passwords are set correctly even when realm import creates users.
+#
+# =============================================================================
+
+resource "null_resource" "keycloak_set_customer_passwords" {
+  count = var.auto_start_services ? 1 : 0
+
+  depends_on = [null_resource.keycloak_sync_customer_realm]
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      echo "Setting customer realm user passwords via REST API..."
+
+      # Get admin token
+      TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:${local.ports.keycloak}/auth/realms/master/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=admin" \
+        --data-urlencode "password=$KC_ADMIN_PASSWORD" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli")
+
+      TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token // empty')
+
+      if [ -z "$TOKEN" ]; then
+        echo "ERROR: Failed to get admin token"
+        exit 1
+      fi
+
+      if [ -z "$CUSTOMER_USER_PASSWORD" ]; then
+        echo "WARNING: CUSTOMER_USER_PASSWORD not set - customer users will have placeholder passwords"
+        exit 0
+      fi
+
+      # Set passwords for all customer realm users
+      CUSTOMER_COUNT=0
+      for email in jane.smith@acme.com bob.developer@acme.com mike.manager@globex.com sara.support@globex.com peter.principal@initech.com tim.tech@initech.com; do
+        USER_ID=$(curl -s "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-customers/users?username=$email&exact=true" \
+          -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+
+        if [ -n "$USER_ID" ]; then
+          PASSWORD_JSON=$(jq -n --arg pass "$CUSTOMER_USER_PASSWORD" '{"type":"password","value":$pass,"temporary":false}')
+          HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X PUT \
+            "http://localhost:${local.ports.keycloak}/auth/admin/realms/tamshai-customers/users/$USER_ID/reset-password" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PASSWORD_JSON")
+
+          if [ "$HTTP_CODE" = "204" ]; then
+            CUSTOMER_COUNT=$((CUSTOMER_COUNT + 1))
+          else
+            echo "WARNING: Failed to set password for $email (HTTP $HTTP_CODE)"
+          fi
+        fi
+      done
+
+      echo "✓ $CUSTOMER_COUNT customer user passwords set successfully"
+    EOT
+
+    environment = {
+      KC_ADMIN_PASSWORD      = local.keycloak_admin_password
+      CUSTOMER_USER_PASSWORD = try(data.external.github_secrets.result.customer_user_password, "")
+    }
+  }
+}
+
 resource "null_resource" "keycloak_set_client_secrets" {
   count = var.auto_start_services ? 1 : 0
 
-  depends_on = [null_resource.keycloak_verify_totp]
+  depends_on = [null_resource.keycloak_set_customer_passwords]
 
   triggers = {
     always_run = timestamp()

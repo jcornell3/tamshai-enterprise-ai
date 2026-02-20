@@ -210,27 +210,25 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "protocol": "openid-connect",
-      "rootUrl": "http://localhost:4006",
+      "rootUrl": "http://localhost:4007",
       "baseUrl": "/",
       "redirectUris": [
-        "http://localhost:4006/*",
-        "http://127.0.0.1:4017/*",
-        "http://localhost:4017/*",
+        "http://localhost:4007/*",
+        "http://127.0.0.1:4007/*",
         "https://customers.tamshai.local/*",
         "https://customers.tamshai.local:8443/*",
         "https://customers.tamshai.com/*"
       ],
       "webOrigins": [
-        "http://localhost:4006",
-        "http://127.0.0.1:4017",
-        "http://localhost:4017",
+        "http://localhost:4007",
+        "http://127.0.0.1:4007",
         "https://customers.tamshai.local",
         "https://customers.tamshai.local:8443",
         "https://customers.tamshai.com"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4006/*##http://127.0.0.1:4017/*##https://customers.tamshai.local/*##https://customers.tamshai.local:8443/*"
+        "post.logout.redirect.uris": "http://localhost:4007/*##http://127.0.0.1:4007/*##https://customers.tamshai.local/*##https://customers.tamshai.local:8443/*"
       },
       "defaultClientScopes": [
         "openid",

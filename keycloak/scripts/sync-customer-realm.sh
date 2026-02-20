@@ -36,6 +36,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUSTOMER_REALM="tamshai-customers"
 ENV="${1:-dev}"
 
+# Port configuration (from environment variables - set by Terraform from GitHub Variables)
+PORT_WEB_CUSTOMER_SUPPORT="${PORT_WEB_CUSTOMER_SUPPORT:-4007}"
+PORT_CADDY_HTTPS="${PORT_CADDY_HTTPS:-443}"
+
 # =============================================================================
 # Source Library Modules
 # =============================================================================
@@ -237,12 +241,15 @@ create_customer_portal_client() {
     log_info "Creating customer-portal client..."
 
     # Build redirect URIs and web origins per environment
-    # Dev includes Caddy :8443 variants, direct Docker ports, and localhost
+    # Ports are configured via environment variables (from GitHub Variables)
     local redirect_uris web_origins
     case "$ENV" in
         dev)
-            redirect_uris='["http://localhost:4007/*","http://127.0.0.1:4007/*","https://customers.tamshai.local/*"]'
-            web_origins='["http://localhost:4007","http://127.0.0.1:4007","https://customers.tamshai.local"]'
+            # Build redirect URIs using configured ports
+            # PORT_WEB_CUSTOMER_SUPPORT: direct Docker access (default: 4007)
+            # PORT_CADDY_HTTPS: Caddy reverse proxy HTTPS (default: 443)
+            redirect_uris="[\"http://localhost:${PORT_WEB_CUSTOMER_SUPPORT}/*\",\"http://127.0.0.1:${PORT_WEB_CUSTOMER_SUPPORT}/*\",\"https://customers.tamshai.local/*\",\"https://customers.tamshai.local:${PORT_CADDY_HTTPS}/*\"]"
+            web_origins="[\"http://localhost:${PORT_WEB_CUSTOMER_SUPPORT}\",\"http://127.0.0.1:${PORT_WEB_CUSTOMER_SUPPORT}\",\"https://customers.tamshai.local\",\"https://customers.tamshai.local:${PORT_CADDY_HTTPS}\"]"
             ;;
         stage)
             redirect_uris='["https://customers.tamshai.com/*"]'

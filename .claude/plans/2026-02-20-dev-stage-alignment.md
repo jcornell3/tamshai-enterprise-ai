@@ -1,7 +1,7 @@
 # Dev/Stage Realm Export Alignment Plan
 
 **Date**: 2026-02-20
-**Status**: Planning
+**Status**: Phase 1 Complete
 **Goal**: Unify dev and stage approaches to use best practices from each
 
 ## Target Architecture
@@ -12,6 +12,7 @@
 | Passwords | sync-realm.sh | env vars → lib/users.sh |
 | TOTP | Realm export placeholders | Substituted before import |
 | Protocol Mappers | sync-realm.sh | lib/mappers.sh |
+| Redirect URIs | sync-realm.sh | env vars (ports from GitHub Variables) |
 
 ## Current State
 
@@ -19,72 +20,109 @@
 |-----------|-----|-------|
 | Clients | 6 in export, sync-realm.sh creates all | 8 in export, sync-realm.sh updates |
 | Passwords | sync-realm.sh | Placeholders + sync-realm.sh |
-| TOTP | DB insert hack in main.tf | Placeholders in export |
+| TOTP | Placeholder substitution (Phase 1 complete) | Placeholders in export |
 
 ---
 
-## Phase 1: Dev Alignment (Do First)
+## Lessons Learned (Phase 1)
 
-### Task 1.1: Add TOTP placeholder to realm-export-dev.json
+### 1. Terraform Windows Interpreter Issue
 
-**File**: `keycloak/realm-export-dev.json`
+**Problem**: On Windows, Terraform `local-exec` defaults to `cmd.exe` instead of bash.
 
-Add credentials with TOTP placeholder to test-user.journey:
+**Symptom**: Scripts fail with "cmd /C docker compose down..." instead of bash.
 
-```json
-{
-  "username": "test-user.journey",
-  ...
-  "credentials": [
-    {
-      "type": "otp",
-      "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-      "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
-    }
-  ]
-}
-```
-
-**Note**: Do NOT add password placeholder - sync-realm.sh handles passwords.
-
-### Task 1.2: Add placeholder substitution to dev bootstrap
-
-**File**: `infrastructure/terraform/dev/main.tf`
-
-Add a step to substitute `__TEST_USER_TOTP_SECRET__` in realm-export-dev.json before docker compose up:
+**Fix**: Add `interpreter = ["bash", "-c"]` to ALL provisioners that use bash scripts.
 
 ```hcl
-# In the null_resource that runs docker compose
 provisioner "local-exec" {
-  command = <<-EOT
-    # Substitute TOTP placeholder
-    if [ -n "$TEST_USER_TOTP_SECRET_RAW" ]; then
-      sed -i "s/__TEST_USER_TOTP_SECRET__/$TEST_USER_TOTP_SECRET_RAW/g" keycloak/realm-export-dev.json
-      echo "[OK] TEST_USER_TOTP_SECRET placeholder substituted"
-    else
-      echo "[WARN] TEST_USER_TOTP_SECRET_RAW not set"
-    fi
-
-    # Then run docker compose
-    docker compose up -d
+  interpreter = ["bash", "-c"]  # REQUIRED on Windows
+  command     = <<-EOT
+    # bash script here
   EOT
 }
 ```
 
-### Task 1.3: Remove DB insert hack from dev/main.tf
+### 2. Redirect URI Port Mismatch
+
+**Problem**: `sync-customer-realm.sh` was overwriting redirect URIs from realm export without the Caddy HTTPS port.
+
+**Root Cause**: Hardcoded ports (4007) didn't include Caddy HTTPS port (443/8443).
+
+**Impact**: Customer login failed because OAuth redirect didn't match registered URIs.
+
+**Fix**:
+1. Pass `PORT_WEB_CUSTOMER_SUPPORT` and `PORT_CADDY_HTTPS` to sync scripts
+2. Build redirect URIs dynamically using environment variables
+3. Never hardcode ports - derive from GitHub Variables
+
+### 3. `docker compose down -v` Implications
+
+**Problem**: Using `-v` flag wipes ALL volumes including Keycloak database.
+
+**Impact**: Every Phoenix rebuild starts fresh - sync scripts MUST correctly set all credentials.
+
+**Requirements**:
+- All password env vars must be passed correctly
+- Customer realm sync must run AFTER employee realm sync
+- Verify all credentials are set after rebuild
+
+### 4. Environment Variable Passing
+
+**Problem**: `CUSTOMER_USER_PASSWORD` was passed but not sourced correctly due to .env file syntax errors.
+
+**Fix**: Use `grep ... | cut -d'=' -f2-` to extract specific variables instead of sourcing entire .env file.
+
+### 5. Customer Password Setting via kcadm Fails Silently
+
+**Problem**: `sync-customer-realm.sh` uses `kcadm set-password` inside the container, but the `CUSTOMER_USER_PASSWORD` environment variable doesn't reach the script properly.
+
+**Root Cause**: Docker exec with heredoc and environment variables doesn't reliably pass the password.
+
+**Fix**: Added dedicated `keycloak_set_customer_passwords` Terraform provisioner that uses REST API (same pattern as corporate users).
+
+---
+
+## Phase 1: Dev Alignment (COMPLETE)
+
+### Task 1.1: Add TOTP placeholder to realm-export-dev.json ✓
+
+**File**: `keycloak/realm-export-dev.json`
+
+Added credentials with TOTP placeholder to test-user.journey.
+
+### Task 1.2: Add placeholder substitution to dev bootstrap ✓
 
 **File**: `infrastructure/terraform/dev/main.tf`
 
-Remove the entire section that does direct PostgreSQL insert for OTP credentials:
+Added placeholder substitution BEFORE docker compose build, restoration AFTER build.
 
-```hcl
-# DELETE THIS SECTION:
-# docker exec tamshai-dev-postgres psql -U keycloak -d keycloak -qtA -c "
-#   INSERT INTO credential ...
-# "
-```
+**Critical**: Added `interpreter = ["bash", "-c"]` to fix Windows issue.
 
-### Task 1.4: Phoenix Rebuild Dev
+### Task 1.3: Remove DB insert hack from dev/main.tf ✓
+
+Replaced `keycloak_set_totp` (DB insert) with `keycloak_verify_totp` (verification only).
+
+### Task 1.4: Fix Customer Realm Sync ✓
+
+**File**: `keycloak/scripts/sync-customer-realm.sh`
+
+- Added port configuration via environment variables
+- Updated redirect URIs to use `PORT_WEB_CUSTOMER_SUPPORT` and `PORT_CADDY_HTTPS`
+- Removed hardcoded port values
+
+**File**: `infrastructure/terraform/dev/main.tf`
+
+- Added `PORT_WEB_CUSTOMER_SUPPORT` and `PORT_CADDY_HTTPS` to keycloak_sync_customer_realm environment
+
+### Task 1.5: Fix Customer Realm Export ✓
+
+**File**: `keycloak/realm-export-customers-dev.json`
+
+- Fixed incorrect ports (4006/4017 → 4007)
+- Aligned rootUrl, redirectUris, webOrigins, and post.logout.redirect.uris
+
+### Task 1.6: Phoenix Rebuild Dev ✓
 
 ```bash
 cd infrastructure/terraform/dev
@@ -92,67 +130,41 @@ terraform destroy -auto-approve
 terraform apply -auto-approve
 ```
 
-### Task 1.5: Validate Dev
+### Task 1.7: Validate Dev ✓
 
-Verify:
-- [ ] Cloud-init/bootstrap completes without errors
-- [ ] All containers healthy
-- [ ] test-user.journey has OTP credential (via Keycloak Admin API)
-- [ ] test-user.journey can authenticate with TOTP
-- [ ] Corporate users have passwords set (via sync-realm.sh)
-- [ ] All clients exist (created by sync-realm.sh)
+- [x] Bootstrap completes without errors
+- [x] All containers healthy
+- [x] test-user.journey has OTP credential (verified via `keycloak_verify_totp`)
+- [x] test-user.journey can authenticate with TOTP (E2E: login-journey passed)
+- [x] Corporate users have passwords set
+- [x] Customer portal login works (E2E: customer-login-journey 26/26 passed)
+- [x] All redirect URIs correctly include Caddy HTTPS port
+
+### Task 1.8: Fix Customer User Passwords ✓
+
+**Problem**: Customer users created from realm import but passwords not set by sync-customer-realm.sh
+
+**File**: `infrastructure/terraform/dev/main.tf`
+
+- Added `keycloak_set_customer_passwords` provisioner using REST API
+- Uses same pattern as corporate user password setting
+- Runs after `keycloak_sync_customer_realm`
 
 ---
 
-## Phase 2: Stage Alignment (After Dev Validated)
+## Phase 2: Stage Alignment (Pending)
 
-### Task 2.1: Remove redundant clients from realm-export-stage.json
-
-**File**: `keycloak/realm-export-stage.json`
-
-Remove these clients (sync-realm.sh will create them):
-- tamshai-flutter-client
-- tamshai-website
-
-Keep only the minimal clients that stage needs for initial import.
-
-### Task 2.2: Remove password placeholders from realm-export-stage.json
-
-**File**: `keycloak/realm-export-stage.json`
-
-For all users, change credentials to ONLY have OTP (remove password):
-
-```json
-// Before:
-"credentials": [
-  {"type": "password", "value": "__TEST_USER_PASSWORD__", ...},
-  {"type": "otp", "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}", ...}
-]
-
-// After:
-"credentials": [
-  {"type": "otp", "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}", ...}
-]
-```
-
-sync-realm.sh will set passwords via Admin API.
-
-### Task 2.3: Update cloud-init.yaml placeholder substitution
+### Task 2.1: Apply same port variable pattern to stage
 
 **File**: `infrastructure/terraform/vps/cloud-init.yaml`
 
-Remove password placeholder substitution (only keep TOTP):
+Pass port variables to sync-customer-realm.sh when running on VPS.
 
-```bash
-# Remove these lines:
-# sed -i "s/__TEST_USER_PASSWORD__/$TEST_USER_PASSWORD/g" keycloak/realm-export-stage.json
-# sed -i "s/__STAGE_USER_PASSWORD__/$STAGE_USER_PASSWORD/g" keycloak/realm-export-stage.json
+### Task 2.2: Update cloud-init.yaml placeholder substitution
 
-# Keep only:
-sed -i "s/__TEST_USER_TOTP_SECRET__/$TEST_USER_TOTP_SECRET_RAW/g" keycloak/realm-export-stage.json
-```
+Remove password placeholder substitution (only keep TOTP).
 
-### Task 2.4: Phoenix Rebuild Stage
+### Task 2.3: Phoenix Rebuild Stage
 
 ```bash
 cd infrastructure/terraform/vps
@@ -160,15 +172,14 @@ terraform destroy -auto-approve
 terraform apply -auto-approve
 ```
 
-### Task 2.5: Validate Stage
+### Task 2.4: Validate Stage
 
-Verify:
 - [ ] Cloud-init completes without errors
 - [ ] All 27 containers healthy
 - [ ] test-user.journey has password + OTP credentials
 - [ ] Corporate users have passwords set
-- [ ] All clients exist (tamshai-flutter-client, tamshai-website, etc.)
-- [ ] Protocol mappers configured correctly
+- [ ] Customer portal login works
+- [ ] All clients exist
 
 ---
 
@@ -176,19 +187,26 @@ Verify:
 
 ### Task 3.1: Update dev-vs-stage-comparison.md
 
-Document that dev and stage now use the same approach.
+Document unified approach after both phases complete.
 
 ### Task 3.2: Update CLAUDE.md
 
-Update the "Environment Alignment Goals" section to reflect the unified approach.
+Update "Environment Alignment Goals" section.
+
+---
+
+## Key Files Modified (Phase 1)
+
+| File | Change |
+|------|--------|
+| `keycloak/realm-export-dev.json` | Added TOTP placeholder |
+| `keycloak/realm-export-customers-dev.json` | Fixed ports (4007) |
+| `keycloak/scripts/sync-customer-realm.sh` | Dynamic ports via env vars |
+| `infrastructure/terraform/dev/main.tf` | Interpreter fix, port variables, customer passwords provisioner |
 
 ---
 
 ## Rollback Plan
-
-If Phase 1 fails:
-- `git checkout HEAD~1 -- keycloak/realm-export-dev.json infrastructure/terraform/dev/main.tf`
-- Terraform apply to restore working state
 
 If Phase 2 fails:
 - `git checkout HEAD~1 -- keycloak/realm-export-stage.json infrastructure/terraform/vps/cloud-init.yaml`
@@ -204,27 +222,19 @@ After both phases complete:
    - TOTP: Placeholder substitution in realm export
    - Passwords: sync-realm.sh via Admin API
    - Clients: sync-realm.sh creates all
+   - Redirect URIs: Built from port env vars
 
-2. **Realm exports are minimal**:
-   - Users with OTP placeholders only
-   - No password placeholders
-   - No client definitions (or minimal)
+2. **No hardcoded ports**:
+   - All ports derived from GitHub Variables
+   - Passed via environment variables to sync scripts
 
 3. **sync-realm.sh is authoritative for**:
    - All client configurations
+   - All redirect URIs
    - All password setting
    - All protocol mappers
 
 ---
 
-## Estimated Effort
-
-| Phase | Tasks | Estimate |
-|-------|-------|----------|
-| Phase 1 | 5 tasks | Dev Phoenix rebuild + validation |
-| Phase 2 | 5 tasks | Stage Phoenix rebuild + validation |
-| Phase 3 | 2 tasks | Documentation |
-
----
-
 *Created: 2026-02-20*
+*Phase 1 Completed: 2026-02-20*
