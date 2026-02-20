@@ -354,8 +354,41 @@ upsert() {
 3. **abc12345** - Accept both "stage" and "staging" environment values in lib/users.sh
 4. **def67890** - Add TEST_USER_PASSWORD to keycloak-sync container
 5. **b92d9529** - Add REDIS_PASSWORD to identity-sync container
-6. **TBD** - Remove base64 encoding from ALL passwords in main.tf
-7. **TBD** - Preserve .env symlink in deploy-vps.yml
+6. **2cdd97d1** - Remove base64 encoding from ALL passwords in main.tf
+7. **2cdd97d1** - Preserve .env symlink in deploy-vps.yml
+8. **TBD** - URL-encode passwords in curl commands (cloud-init.yaml)
+
+### Fix 10: URL-Encode Passwords in curl Commands
+
+**File**: `infrastructure/terraform/vps/cloud-init.yaml` (line 581)
+
+**Problem**: The admin token request used `-d "password=$KC_PASS"` which doesn't URL-encode special characters. Passwords with `#`, `<`, `+`, `)` fail because:
+- `#` is interpreted as URL fragment
+- `+` is interpreted as space in URL encoding
+- `<` and `)` may cause parsing issues
+
+**Evidence**: Cloud-init logs showed:
+```
+Getting admin token...
+ERROR: Failed to get admin token
+Response: {"error":"invalid_grant","error_description":"Invalid user credentials"}
+```
+
+The password `C#ZAqeCBAQ<pOvq+Uj-O)Pnb` wasn't being sent correctly.
+
+**Before**:
+```bash
+curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
+  -d "password=$KC_PASS" \
+```
+
+**After**:
+```bash
+curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
+  --data-urlencode "password=$KC_PASS" \
+```
+
+The `--data-urlencode` option properly encodes special characters before sending.
 
 ## Lessons for Future
 
@@ -370,6 +403,7 @@ upsert() {
 9. **Symlink-safe editing**: NEVER use `sed -i` on symlinks - it destroys them. Always resolve symlinks first with `readlink -f`
 10. **Terraform ↔ CI/CD alignment**: Terraform bootstrap and CI/CD deploy must use the SAME encoding/format for secrets. If Terraform base64-encodes, CI/CD must too (or neither should)
 11. **Complete fixes**: When fixing encoding issues, audit ALL variables - partial fixes create mismatches between old and new deployments
+12. **URL-encode passwords in curl**: Use `--data-urlencode` instead of `-d` for password fields in curl commands - special characters like `#`, `<`, `+` will break authentication otherwise
 
 ## Related Files
 

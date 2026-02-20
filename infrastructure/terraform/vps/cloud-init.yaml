@@ -573,11 +573,12 @@ runcmd:
       echo "WARNING: TEST_USER_PASSWORD not set - E2E tests may fail"
     else
       # Get admin token from Keycloak
+      # Use --data-urlencode for password to handle special characters (#, <, +, etc.)
       echo "Getting admin token..."
       TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=admin" \
-        -d "password=$KC_PASS" \
+        --data-urlencode "password=$KC_PASS" \
         -d "grant_type=password" \
         -d "client_id=admin-cli")
 
