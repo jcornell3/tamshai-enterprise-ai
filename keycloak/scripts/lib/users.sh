@@ -207,10 +207,10 @@ get_test_user_password() {
 # This is the password for all corporate users (alice.chen, bob.martinez, etc.)
 get_corporate_user_password() {
     case "${ENV:-dev}" in
-        prod)
+        prod|production)
             echo "${PROD_USER_PASSWORD:-}"
             ;;
-        stage)
+        stage|staging)
             echo "${STAGE_USER_PASSWORD:-}"
             ;;
         *)
@@ -266,9 +266,9 @@ set_corporate_user_passwords() {
     # Determine which variable name to show in logs
     local password_var_name
     case "${ENV:-dev}" in
-        prod)  password_var_name="PROD_USER_PASSWORD" ;;
-        stage) password_var_name="STAGE_USER_PASSWORD" ;;
-        *)     password_var_name="DEV_USER_PASSWORD" ;;
+        prod|production) password_var_name="PROD_USER_PASSWORD" ;;
+        stage|staging)   password_var_name="STAGE_USER_PASSWORD" ;;
+        *)               password_var_name="DEV_USER_PASSWORD" ;;
     esac
 
     if [ -z "$corp_password" ]; then
