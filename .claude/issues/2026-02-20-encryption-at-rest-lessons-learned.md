@@ -284,6 +284,69 @@ After these fixes, a full audit of docker-compose.yml confirmed all passwords ar
 | keycloak-sync | N/A | N/A | ✅ All 3 | ✅ DEV/STAGE/PROD/TEST |
 | identity-sync | ✅ **FIXED** | ✅ TAMSHAI_DB | ✅ MCP_HR_SERVICE | ✅ DEV/STAGE/PROD |
 
+### Fix 8: Remove base64 Encoding from ALL Passwords in main.tf
+
+**File**: `infrastructure/terraform/vps/main.tf` (lines 519-539)
+
+**Problem**: The earlier fix (c8bb4202) only removed base64 encoding from 4 variables. ALL OTHER passwords were still being base64-encoded:
+- postgres_password, tamshai_app_password, keycloak_admin_pass, keycloak_db_password
+- mongodb_password, minio_password, jwt_secret
+- mcp_gateway_client_secret, mcp_hr_service_client_secret
+- redis_password, elastic_password, vault_dev_root_token
+- mcp_internal_secret, mcp_ui_client_secret, e2e_admin_api_key
+
+**Root Cause Flow**:
+1. Phoenix rebuild: Terraform creates .env with `TAMSHAI_APP_PASSWORD='Mm10...'` (base64)
+2. PostgreSQL init: Creates user with password `Mm10...` (base64 string)
+3. deploy-vps workflow: OVERWRITES .env with raw value from GitHub Secrets
+4. MCP services restart: Try to connect with raw password
+5. **PASSWORD MISMATCH!** PostgreSQL has base64, container has raw
+
+**Fix**: Remove `base64encode()` from ALL password variables:
+```hcl
+# Before:
+postgres_password = base64encode(random_password.postgres_password.result)
+tamshai_app_password = base64encode(local.tamshai_app_password)
+# ... (13 more variables)
+
+# After:
+postgres_password = random_password.postgres_password.result
+tamshai_app_password = local.tamshai_app_password
+# ... (all passwords now plaintext)
+```
+
+### Fix 9: Preserve .env Symlink in deploy-vps.yml
+
+**File**: `.github/workflows/deploy-vps.yml` (lines 301-314)
+
+**Problem**: The `sed -i` command destroys symlinks and creates regular files. This broke the RAM-based .env architecture:
+1. Cloud-init creates symlink: `/opt/tamshai/.env` → `/dev/shm/tamshai-boot.env`
+2. deploy-vps runs `sed -i "/^VAR=/d" .env`
+3. `sed -i` creates a NEW regular file, replacing the symlink
+4. `/opt/tamshai/.env` is now a regular file (NEW passwords)
+5. `/opt/tamshai/infrastructure/docker/.env` still points to RAM (OLD passwords)
+6. **MISMATCH!** Root .env has new values, docker-compose uses old values
+
+**Fix**: Resolve symlink before editing:
+```bash
+# Before:
+upsert() {
+  sed -i "/^$1=/d" .env 2>/dev/null || true
+  printf "%s=%s\n" "$1" "$2" >> .env
+}
+
+# After:
+if [ -L .env ]; then
+  ENV_FILE=$(readlink -f .env)
+else
+  ENV_FILE=".env"
+fi
+upsert() {
+  sed -i "/^$1=/d" "$ENV_FILE" 2>/dev/null || true
+  printf "%s='%s'\n" "$1" "$2" >> "$ENV_FILE"
+}
+```
+
 ## Commits
 
 1. **c8bb4202** - Remove base64 encoding from main.tf, add STAGE_USER_PASSWORD
@@ -291,6 +354,8 @@ After these fixes, a full audit of docker-compose.yml confirmed all passwords ar
 3. **abc12345** - Accept both "stage" and "staging" environment values in lib/users.sh
 4. **def67890** - Add TEST_USER_PASSWORD to keycloak-sync container
 5. **b92d9529** - Add REDIS_PASSWORD to identity-sync container
+6. **TBD** - Remove base64 encoding from ALL passwords in main.tf
+7. **TBD** - Preserve .env symlink in deploy-vps.yml
 
 ## Lessons for Future
 
@@ -302,10 +367,15 @@ After these fixes, a full audit of docker-compose.yml confirmed all passwords ar
 6. **Docker-compose variable escaping**: Use `$$VAR` to escape variables for runtime evaluation, not `$VAR` which is substituted at parse time
 7. **Password audit**: When adding new services or modifying container configs, audit all required passwords to ensure they're passed through the environment
 8. **YAML anchors**: Use YAML anchors (`&anchor`) for shared configurations like Redis/PostgreSQL credentials to avoid duplication and ensure consistency
+9. **Symlink-safe editing**: NEVER use `sed -i` on symlinks - it destroys them. Always resolve symlinks first with `readlink -f`
+10. **Terraform ↔ CI/CD alignment**: Terraform bootstrap and CI/CD deploy must use the SAME encoding/format for secrets. If Terraform base64-encodes, CI/CD must too (or neither should)
+11. **Complete fixes**: When fixing encoding issues, audit ALL variables - partial fixes create mismatches between old and new deployments
 
 ## Related Files
 
-- `infrastructure/terraform/vps/main.tf` - Terraform VPS configuration
+- `infrastructure/terraform/vps/main.tf` - Terraform VPS configuration (password encoding)
 - `infrastructure/terraform/vps/cloud-init.yaml` - Cloud-init bootstrap script
+- `.github/workflows/deploy-vps.yml` - CI/CD deploy workflow (symlink-safe editing)
 - `keycloak/scripts/lib/users.sh` - User provisioning (expects STAGE_USER_PASSWORD)
+- `infrastructure/docker/docker-compose.yml` - Container environment variables
 - `.claude/vps-access-and-phoenix.md` - VPS access and Phoenix rebuild procedures

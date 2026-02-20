@@ -516,25 +516,27 @@ locals {
     github_branch                = var.github_branch
     claude_api_key               = replace(var.claude_api_key_stage, "$", "$$") # User-provided, may have special chars
     gemini_api_key               = replace(var.gemini_api_key_stage, "$", "$$") # User-provided, may have special chars
-    postgres_password            = base64encode(random_password.postgres_password.result)
-    tamshai_app_password         = base64encode(local.tamshai_app_password)
-    keycloak_admin_pass          = base64encode(random_password.keycloak_admin_password.result)
-    keycloak_db_password         = base64encode(random_password.keycloak_db_password.result)
-    mongodb_password             = base64encode(random_password.mongodb_password.result)
-    minio_password               = base64encode(random_password.minio_password.result)
-    jwt_secret                   = base64encode(random_password.jwt_secret.result)
+    # Passwords are passed as plaintext - cloud-init single-quotes them to preserve special chars
+    # DO NOT base64-encode: deploy-vps.yml uses raw values from GitHub Secrets
+    postgres_password            = random_password.postgres_password.result
+    tamshai_app_password         = local.tamshai_app_password
+    keycloak_admin_pass          = random_password.keycloak_admin_password.result
+    keycloak_db_password         = random_password.keycloak_db_password.result
+    mongodb_password             = random_password.mongodb_password.result
+    minio_password               = random_password.minio_password.result
+    jwt_secret                   = random_password.jwt_secret.result
     root_password                = random_password.root_password.result
-    mcp_gateway_client_secret    = base64encode(var.mcp_gateway_client_secret)
-    mcp_hr_service_client_secret = base64encode(local.mcp_hr_service_secret)
+    mcp_gateway_client_secret    = var.mcp_gateway_client_secret
+    mcp_hr_service_client_secret = local.mcp_hr_service_secret
     stage_user_password          = local.stage_user_password_resolved
     test_user_password           = local.test_user_password
     test_user_totp_secret_raw    = local.test_user_totp_secret_raw
-    redis_password               = base64encode(random_password.redis_password.result)
-    elastic_password             = base64encode(random_password.elastic_password.result)
-    vault_dev_root_token         = base64encode(random_password.vault_dev_root_token.result)
-    mcp_internal_secret          = base64encode(random_password.mcp_internal_secret.result)
-    mcp_ui_client_secret         = base64encode(random_password.mcp_ui_client_secret.result)
-    e2e_admin_api_key            = base64encode(random_password.e2e_admin_api_key.result)
+    redis_password               = random_password.redis_password.result
+    elastic_password             = random_password.elastic_password.result
+    vault_dev_root_token         = random_password.vault_dev_root_token.result
+    mcp_internal_secret          = random_password.mcp_internal_secret.result
+    mcp_ui_client_secret         = random_password.mcp_ui_client_secret.result
+    e2e_admin_api_key            = random_password.e2e_admin_api_key.result
     # C2 Security: Encryption salt for secrets at rest
     encryption_salt              = random_password.encryption_salt.result
     # C2 Monitoring: Discord webhook for startup notifications
