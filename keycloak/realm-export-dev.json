@@ -391,7 +391,14 @@
         "department": ["Testing"],
         "title": ["Journey Test Account"]
       },
-      "groups": ["/All-Employees", "/C-Suite"]
+      "groups": ["/All-Employees", "/C-Suite"],
+      "credentials": [
+        {
+          "type": "otp",
+          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+        }
+      ]
     }
   ],
   "clients": [
