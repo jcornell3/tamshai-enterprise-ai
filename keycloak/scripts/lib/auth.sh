@@ -57,12 +57,12 @@ configure_environment() {
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required - set in .env file}"
             ;;
-        stage)
+        stage|staging)
             KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required for stage}"
             ;;
-        prod)
+        prod|production)
             KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required for prod}"

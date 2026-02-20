@@ -56,13 +56,13 @@ configure_customer_environment() {
             ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
             CUSTOMER_PORTAL_URL="http://localhost:4006"
             ;;
-        stage)
+        stage|staging)
             KEYCLOAK_URL="${KEYCLOAK_URL:-https://www.tamshai.com}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:?Stage requires KEYCLOAK_ADMIN_PASSWORD}"
             CUSTOMER_PORTAL_URL="https://customers.tamshai.com"
             ;;
-        prod)
+        prod|production)
             KEYCLOAK_URL="${KEYCLOAK_URL:-https://keycloak.tamshai.com}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:?Prod requires KEYCLOAK_ADMIN_PASSWORD}"

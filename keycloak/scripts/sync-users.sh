@@ -53,7 +53,7 @@ configure_environment() {
             # Dev password for synced users (from DEV_USER_PASSWORD)
             DEFAULT_PASSWORD="${USER_PASSWORD:?USER_PASSWORD required - set DEV_USER_PASSWORD in environment}"
             ;;
-        stage)
+        stage|staging)
             KEYCLOAK_URL="http://localhost:8080/auth"  # Inside container
             POSTGRES_HOST="postgres"  # Docker network
             POSTGRES_PORT="5432"
