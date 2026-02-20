@@ -208,7 +208,7 @@ return $default(_that.issuer,_that.clientId,_that.redirectUrl,_that.scopes,_that
 @JsonSerializable()
 
 class _KeycloakConfig implements KeycloakConfig {
-  const _KeycloakConfig({required this.issuer, required this.clientId, required this.redirectUrl, final  List<String> scopes = const ['openid', 'profile', 'email', 'offline_access'], this.discoveryUrl, this.endSessionRedirectUrl}): _scopes = scopes;
+  const _KeycloakConfig({required this.issuer, required this.clientId, required this.redirectUrl, final  List<String> scopes = const ['openid', 'profile', 'email', 'roles'], this.discoveryUrl, this.endSessionRedirectUrl}): _scopes = scopes;
   factory _KeycloakConfig.fromJson(Map<String, dynamic> json) => _$KeycloakConfigFromJson(json);
 
 @override final  String issuer;

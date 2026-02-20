@@ -15,7 +15,7 @@ _KeycloakConfig _$KeycloakConfigFromJson(Map<String, dynamic> json) =>
           (json['scopes'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
-          const ['openid', 'profile', 'email', 'offline_access'],
+          const ['openid', 'profile', 'email', 'roles'],
       discoveryUrl: json['discoveryUrl'] as String?,
       endSessionRedirectUrl: json['endSessionRedirectUrl'] as String?,
     );

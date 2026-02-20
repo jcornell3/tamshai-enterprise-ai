@@ -1,7 +1,7 @@
 name: unified_flutter
 description: Tamshai Enterprise AI Platform - Flutter Application
 publish_to: 'none'
-version: 1.0.6+7
+version: 1.0.7+8
 
 environment:
   sdk: ^3.8.0
@@ -39,6 +39,9 @@ dependencies:
   # Desktop OAuth support
   url_launcher: ^6.2.5
   crypto: ^3.0.3
+
+  # App info (version display)
+  package_info_plus: ^8.0.0
 
   # Voice Input (v1.5)
   speech_to_text: ^7.0.0

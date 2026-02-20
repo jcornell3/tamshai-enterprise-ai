@@ -103,7 +103,7 @@ class SecureStorageService {
       final expiryString = tokens.accessTokenExpirationDateTime.toIso8601String();
       final currentIssuer = EnvironmentConfig.current.keycloakIssuer;
       _logger.i('Storing tokens:');
-      _logger.i('  - access_token: ${tokens.accessToken.substring(0, 20)}...');
+      _logger.i('  - access_token: ${tokens.accessToken.length > 20 ? '${tokens.accessToken.substring(0, 20)}...' : tokens.accessToken}');
       _logger.i('  - refresh_token present: ${tokens.refreshToken != null}');
       _logger.i('  - expiry: $expiryString');
       _logger.i('  - issuer: $currentIssuer');

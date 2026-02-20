@@ -17,7 +17,7 @@ sealed class KeycloakConfig with _$KeycloakConfig {
     required String issuer,
     required String clientId,
     required String redirectUrl,
-    @Default(['openid', 'profile', 'email', 'offline_access']) List<String> scopes,
+    @Default(['openid', 'profile', 'email', 'roles']) List<String> scopes,
     String? discoveryUrl,
     String? endSessionRedirectUrl,
   }) = _KeycloakConfig;

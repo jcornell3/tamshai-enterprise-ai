@@ -45,7 +45,7 @@ class EnvironmentConfig {
     // Use tamshaiauth scheme for mobile, desktop uses DesktopOAuthService with dynamic port
     redirectUrl: 'tamshaiauth://callback',
     endSessionRedirectUrl: 'tamshaiauth://logout',
-    scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
+    scopes: ['openid', 'profile', 'email', 'roles'],
   );
 
   /// Stage environment - VPS at www.tamshai.com
@@ -60,7 +60,7 @@ class EnvironmentConfig {
     // Mobile deep links for OAuth callback (simple scheme without dots for Android compatibility)
     redirectUrl: 'tamshaiauth://callback',
     endSessionRedirectUrl: 'tamshaiauth://logout',
-    scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
+    scopes: ['openid', 'profile', 'email', 'roles'],
   );
 
   /// Production environment - GCP
@@ -75,7 +75,7 @@ class EnvironmentConfig {
     // Desktop uses DesktopOAuthService with dynamic port override
     redirectUrl: 'tamshaiauth://callback',
     endSessionRedirectUrl: 'tamshaiauth://logout',
-    scopes: ['openid', 'profile', 'email', 'offline_access', 'roles'],
+    scopes: ['openid', 'profile', 'email', 'roles'],
   );
 
   /// Get configuration for current environment

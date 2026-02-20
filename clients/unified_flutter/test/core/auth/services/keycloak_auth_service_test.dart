@@ -283,8 +283,8 @@ void main() {
       expect(config.issuer, 'http://localhost:8180/realms/test');
       expect(config.clientId, 'test-client');
       expect(config.redirectUrl, 'app://callback');
-      // Default scopes include offline_access for refresh tokens
-      expect(config.scopes, ['openid', 'profile', 'email', 'offline_access']);
+      // Default scopes include roles for RBAC
+      expect(config.scopes, ['openid', 'profile', 'email', 'roles']);
     });
 
     test('creates config with all fields', () {

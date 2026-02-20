@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/auth/providers/auth_provider.dart';
 import '../../core/auth/models/auth_state.dart';
+
+/// Provider for package info (version, build number)
+final packageInfoProvider = FutureProvider<PackageInfo>((ref) async {
+  return await PackageInfo.fromPlatform();
+});
 
 /// Login screen with Keycloak authentication
 /// 
@@ -15,6 +21,7 @@ class LoginScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authNotifierProvider);
+    final packageInfoAsync = ref.watch(packageInfoProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -32,13 +39,29 @@ class LoginScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 32),
 
-                // App Title
-                Text(
-                  'Tamshai Enterprise AI',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                  textAlign: TextAlign.center,
+                // App Title with dynamic version
+                packageInfoAsync.when(
+                  data: (info) => Text(
+                    'Tamshai AI v${info.version}',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  loading: () => Text(
+                    'Tamshai AI',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                  error: (_, __) => Text(
+                    'Tamshai AI',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: 8),
 
