@@ -119,7 +119,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: tamshai-dev-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     ports:
       - "${PORT_REDIS:?PORT_REDIS is required}:6379"
     environment:
