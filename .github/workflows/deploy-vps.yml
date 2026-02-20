@@ -107,10 +107,7 @@ jobs:
   # =============================================================================
   # PRE-DEPLOYMENT CHECKS
   # =============================================================================
-  # TEMPORARILY DISABLED: Workflow disabled during Phoenix rebuild testing (2026-02-20)
-  # Remove 'if: false' to re-enable
   pre-deploy:
-    if: false  # DISABLED - remove this line to re-enable workflow
     name: Pre-deployment Checks
     runs-on: ubuntu-latest
     permissions:
