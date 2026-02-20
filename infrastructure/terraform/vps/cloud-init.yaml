@@ -5,6 +5,13 @@
 package_update: true
 package_upgrade: true
 
+# Swap configuration - critical for 8GB VPS running 20+ containers
+# Without swap, memory pressure causes system freeze instead of graceful degradation
+swap:
+  filename: /swapfile
+  size: 4294967296  # 4GB swap
+  maxsize: 4294967296
+
 packages:
   - apt-transport-https
   - ca-certificates
