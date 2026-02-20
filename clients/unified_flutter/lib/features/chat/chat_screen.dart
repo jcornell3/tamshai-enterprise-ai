@@ -78,7 +78,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           tooltip: 'Back to Home',
-          onPressed: () => context.go('/home'),
+          onPressed: () => context.go('/'),
         ),
         title: const Text('AI Assistant'),
         actions: [

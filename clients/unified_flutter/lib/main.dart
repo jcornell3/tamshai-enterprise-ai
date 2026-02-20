@@ -111,6 +111,10 @@ class _TamshaiAppState extends ConsumerState<TamshaiApp> {
           builder: (context, state) => const HomeScreen(),
         ),
         GoRoute(
+          path: '/home',
+          redirect: (context, state) => '/',  // Alias for root route
+        ),
+        GoRoute(
           path: '/login',
           builder: (context, state) => _isMobilePlatform
               ? const NativeLoginScreen()
