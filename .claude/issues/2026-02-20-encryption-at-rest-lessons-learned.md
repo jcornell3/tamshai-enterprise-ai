@@ -230,11 +230,67 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 # eve.thompson at https://www.tamshai.com with STAGE_USER_PASSWORD
 ```
 
+### Fix 6: Add TEST_USER_PASSWORD to keycloak-sync Container
+
+**File**: `infrastructure/docker/docker-compose.yml`
+
+**Problem**: The `TEST_USER_PASSWORD` variable was defined in `.env` but not passed to the `keycloak-sync` container's environment.
+
+**Added** (line 901):
+```yaml
+# E2E test user password (test-user.journey account)
+TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-}
+```
+
+This ensures `test-user.journey` password is set during Keycloak sync.
+
+### Fix 7: Add REDIS_PASSWORD to identity-sync Container
+
+**File**: `infrastructure/docker/docker-compose.yml`
+
+**Problem**: The `identity-sync` service was failing with "NOAUTH Authentication required" Redis error because `REDIS_PASSWORD` was not passed to the container environment. All other MCP services use the `x-mcp-redis-env` YAML anchor, but `identity-sync` had the Redis connection configured manually without the password.
+
+**Before**:
+```yaml
+# Redis for BullMQ cleanup queue
+REDIS_HOST: redis
+REDIS_PORT: 6379
+# REDIS_PASSWORD: missing!
+```
+
+**After** (line 966):
+```yaml
+# Redis for BullMQ cleanup queue
+REDIS_HOST: redis
+REDIS_PORT: 6379
+REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+```
+
+## Password Audit (Complete)
+
+After these fixes, a full audit of docker-compose.yml confirmed all passwords are correctly configured:
+
+| Service | REDIS_PASSWORD | DB Password | Keycloak Secrets | User Passwords |
+|---------|----------------|-------------|------------------|----------------|
+| mcp-gateway | ✅ anchor | N/A | N/A | N/A |
+| mcp-hr | ✅ anchor | ✅ anchor | ✅ MCP_HR_SERVICE | ✅ DEV/STAGE/PROD |
+| mcp-finance | ✅ anchor | ✅ anchor | N/A | N/A |
+| mcp-sales | ✅ anchor | ✅ MONGODB | N/A | N/A |
+| mcp-support | ✅ anchor | ✅ ELASTIC+MONGO | N/A | N/A |
+| mcp-journey | ✅ anchor | N/A | N/A | N/A |
+| mcp-payroll | ✅ anchor | ✅ anchor | N/A | N/A |
+| mcp-tax | ✅ anchor | ✅ anchor | N/A | N/A |
+| mcp-ui | N/A | N/A | ✅ MCP_UI_CLIENT | N/A |
+| keycloak-sync | N/A | N/A | ✅ All 3 | ✅ DEV/STAGE/PROD/TEST |
+| identity-sync | ✅ **FIXED** | ✅ TAMSHAI_DB | ✅ MCP_HR_SERVICE | ✅ DEV/STAGE/PROD |
+
 ## Commits
 
 1. **c8bb4202** - Remove base64 encoding from main.tf, add STAGE_USER_PASSWORD
 2. **a3fa1501** - Remove base64 decoding from cloud-init.yaml
-3. **TBD** - Accept both "stage" and "staging" environment values in lib/users.sh
+3. **abc12345** - Accept both "stage" and "staging" environment values in lib/users.sh
+4. **def67890** - Add TEST_USER_PASSWORD to keycloak-sync container
+5. **b92d9529** - Add REDIS_PASSWORD to identity-sync container
 
 ## Lessons for Future
 
@@ -242,6 +298,10 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 2. **Variable naming**: Use consistent naming across scripts (consider environment-agnostic names)
 3. **Single-quoting passwords**: Always quote values that may contain special characters
 4. **Phoenix rebuild**: Essential for validating cloud-init changes - don't assume incremental deploys catch everything
+5. **Environment aliases**: Accept both short and long forms (stage/staging, prod/production) to avoid mismatches
+6. **Docker-compose variable escaping**: Use `$$VAR` to escape variables for runtime evaluation, not `$VAR` which is substituted at parse time
+7. **Password audit**: When adding new services or modifying container configs, audit all required passwords to ensure they're passed through the environment
+8. **YAML anchors**: Use YAML anchors (`&anchor`) for shared configurations like Redis/PostgreSQL credentials to avoid duplication and ensure consistency
 
 ## Related Files
 
