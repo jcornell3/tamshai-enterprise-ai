@@ -194,7 +194,7 @@ write_files:
       set -e
       set +H  # Disable history expansion to handle passwords with special characters like !
 
-      TAMSHAI_ROOT="${TAMSHAI_ROOT:-/opt/tamshai}"
+      TAMSHAI_ROOT="$${TAMSHAI_ROOT:-/opt/tamshai}"
       cd "$TAMSHAI_ROOT"
 
       echo "=== Tamshai Deployment $(date) ==="
@@ -410,7 +410,7 @@ runcmd:
 
     # Read encryption salt
     ENCRYPTION_SALT=$(cat "$SALT_FILE")
-    echo "Encryption salt loaded (length: ${#ENCRYPTION_SALT})"
+    echo "Encryption salt loaded (length: $${#ENCRYPTION_SALT})"
 
     # Derive encryption key: SHA256(instance_id + salt)
     ENCRYPTION_KEY=$(echo -n "$${INSTANCE_ID}$${ENCRYPTION_SALT}" | sha256sum | cut -d' ' -f1)

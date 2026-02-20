@@ -45,35 +45,9 @@ locals {
   # The key itself is NEVER stored - only the salt is stored
   encryption_key_derivation = "sha256(server_id + salt)"
 
-  # Plaintext secrets content (will be encrypted)
-  # This is assembled from variables and used to create the encrypted blob
-  # Quote all password values to prevent shell interpretation of special chars
-  # Single quotes prevent expansion of $, `, \, etc.
-  plaintext_secrets_content = <<-EOT
-ENVIRONMENT=${var.environment}
-DOMAIN=${var.domain}
-KEYCLOAK_ADMIN=admin
-KEYCLOAK_ADMIN_PASSWORD='${var.keycloak_admin_password}'
-KEYCLOAK_DB_PASSWORD='${var.keycloak_db_password}'
-POSTGRES_PASSWORD='${var.postgres_password}'
-MONGODB_PASSWORD='${var.mongodb_password}'
-REDIS_PASSWORD='${var.redis_password}'
-CLAUDE_API_KEY='${var.claude_api_key}'
-MCP_GATEWAY_CLIENT_SECRET='${var.mcp_gateway_client_secret}'
-MCP_HR_SERVICE_CLIENT_SECRET='${var.mcp_hr_service_client_secret}'
-MCP_INTEGRATION_RUNNER_SECRET='${var.mcp_integration_runner_secret}'
-MCP_UI_CLIENT_SECRET='${var.mcp_ui_client_secret}'
-KEYCLOAK_ADMIN_CLIENT_SECRET='${var.keycloak_admin_client_secret}'
-ELASTIC_PASSWORD='${var.elastic_password}'
-MINIO_ROOT_PASSWORD='${var.minio_root_password}'
-VAULT_TOKEN='${var.vault_token}'
-JWT_SECRET='${var.jwt_secret}'
-E2E_TEST_USER_PASSWORD='${var.e2e_test_user_password}'
-STAGE_USER_PASSWORD='${var.stage_user_password}'
-TEST_USER_TOTP_SECRET_RAW='${var.test_user_totp_secret_raw}'
-CUSTOMER_USER_PASSWORD='${var.customer_user_password}'
-LOG_LEVEL=${var.log_level}
-EOT
+  # NOTE: Secrets are assembled and encrypted in cloud-init.yaml
+  # The actual secret values are passed as base64-encoded templatefile variables
+  # This local just documents the derivation approach
 }
 
 # Output the encryption salt (for CI/CD to use)
