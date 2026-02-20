@@ -387,6 +387,7 @@ resource "null_resource" "docker_compose_up" {
     # 4. Restore realm export to original state (keep placeholder for git)
     # 5. Start all services
     # This prevents race conditions and ensures Keycloak imports fresh realm config
+    interpreter = ["bash", "-c"]
     command     = <<-EOT
       docker compose down -v --remove-orphans 2>/dev/null || true
 
@@ -426,6 +427,7 @@ resource "null_resource" "wait_for_services" {
   depends_on = [null_resource.docker_compose_up]
 
   provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
     command = <<-EOT
       echo "Waiting for services to be healthy..."
 
