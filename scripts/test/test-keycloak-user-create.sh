@@ -27,7 +27,7 @@ echo ""
 
 # Get admin password from .env
 if [ -f /opt/tamshai/.env ]; then
-    KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" /opt/tamshai/.env | cut -d= -f2-)
+    KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" /opt/tamshai/.env | cut -d= -f2- | sed "s/^'//;s/'$//")
 elif [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
     echo "Using KEYCLOAK_ADMIN_PASSWORD from environment"
 else

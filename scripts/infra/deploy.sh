@@ -84,7 +84,7 @@ reseed_data_dev() {
 
     # Get MongoDB password from .env
     local mongo_pass
-    mongo_pass=$(grep '^MONGODB_ROOT_PASSWORD=' infrastructure/docker/.env 2>/dev/null | cut -d= -f2) || mongo_pass="tamshai_password"
+    mongo_pass=$(grep '^MONGODB_ROOT_PASSWORD=' infrastructure/docker/.env 2>/dev/null | cut -d= -f2 | sed "s/^'//;s/'$//") || mongo_pass="tamshai_password"
 
     log_info "[1/4] Stopping MCP services..."
     docker stop tamshai-mcp-finance tamshai-mcp-sales tamshai-mcp-support 2>/dev/null || true
