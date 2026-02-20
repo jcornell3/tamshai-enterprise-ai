@@ -617,57 +617,31 @@ runcmd:
             echo "ERROR: Failed to set test-user.journey password (HTTP $HTTP_CODE)"
           fi
 
-          # Configure TOTP if secret is provided
-          if [ -n "$TEST_USER_TOTP_SECRET_RAW" ]; then
-            echo "Configuring TOTP for test-user.journey..."
+          # Verify TOTP credential exists (should be set via realm-export-stage.json substitution)
+          # The TOTP secret is substituted in realm-export-stage.json BEFORE docker build,
+          # so Keycloak imports it during startup. We don't need to create it via API.
+          echo "Checking TOTP credential for test-user.journey..."
+          EXISTING_CREDS=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
+            -H "Authorization: Bearer $TOKEN")
 
-            # Delete existing OTP credentials
-            EXISTING_CREDS=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
-              -H "Authorization: Bearer $TOKEN")
+          OTP_COUNT=$(echo "$EXISTING_CREDS" | jq -r '[.[] | select(.type=="otp")] | length')
 
-            for CRED_ID in $(echo "$EXISTING_CREDS" | jq -r '.[] | select(.type=="otp") | .id'); do
-              echo "Deleting existing OTP credential: $CRED_ID"
-              curl -s -X DELETE "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials/$CRED_ID" \
-                -H "Authorization: Bearer $TOKEN"
-            done
-
-            # Create new OTP credential with the known secret
-            echo "Creating OTP credential..."
-            CREDENTIAL_JSON=$(cat <<EOF
-    {
-      "type": "otp",
-      "userLabel": "Terraform Provisioned",
-      "secretData": "{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}",
-      "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\",\"counter\":0}"
-    }
-    EOF
-    )
-
-            HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X POST \
-              "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID/credentials" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "$CREDENTIAL_JSON")
-
-            if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-              echo "✓ OTP credential created successfully (HTTP $HTTP_CODE)"
-            else
-              echo "WARNING: OTP credential creation returned HTTP $HTTP_CODE"
-              echo "TOTP may need to be auto-captured by E2E tests"
-            fi
-
-            # Clear required actions to prevent TOTP setup prompt
-            echo "Clearing required actions..."
-            curl -s -X PUT \
-              "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d '{"requiredActions":[]}' > /dev/null
-
-            echo "✓ TOTP configuration complete"
+          if [ "$OTP_COUNT" -gt "0" ]; then
+            echo "✓ OTP credential exists (imported from realm export)"
           else
-            echo "WARNING: TEST_USER_TOTP_SECRET_RAW not set - TOTP will be auto-captured by E2E tests"
+            echo "WARNING: No OTP credential found - realm export may not have included TOTP"
+            echo "E2E tests will auto-capture TOTP during first login"
           fi
+
+          # Clear required actions to prevent TOTP setup prompt
+          echo "Clearing required actions..."
+          curl -s -X PUT \
+            "http://localhost:8180/auth/admin/realms/tamshai-corp/users/$USER_ID" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"requiredActions":[]}' > /dev/null
+
+          echo "✓ TOTP configuration complete"
         fi
       fi
     fi

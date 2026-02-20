@@ -357,6 +357,7 @@ upsert() {
 6. **2cdd97d1** - Remove base64 encoding from ALL passwords in main.tf
 7. **2cdd97d1** - Preserve .env symlink in deploy-vps.yml
 8. **0a445eed** - URL-encode passwords in curl commands (cloud-init.yaml)
+9. **TBD** - Don't delete OTP credential imported from realm export (cloud-init.yaml)
 
 ### Fix 10: URL-Encode Passwords in curl Commands
 
@@ -390,6 +391,40 @@ curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connec
 
 The `--data-urlencode` option properly encodes special characters before sending.
 
+### Fix 11: Don't Delete OTP Credential Imported from Realm Export
+
+**File**: `infrastructure/terraform/vps/cloud-init.yaml` (lines 620-644)
+
+**Problem**: The cloud-init script was deleting the OTP credential that was correctly imported from `realm-export-stage.json`, then trying to recreate it via `POST /users/{id}/credentials` which returns 404 (endpoint doesn't support credential creation).
+
+**Evidence**: Cloud-init logs showed:
+```
+Configuring TOTP for test-user.journey...
+Deleting existing OTP credential: 6644253c-1248-41fc-b3b9-5a42d3b8f6de
+Creating OTP credential...
+WARNING: OTP credential creation returned HTTP 404
+```
+
+**Root Cause Flow**:
+1. `realm-export-stage.json` has `__TEST_USER_TOTP_SECRET__` placeholder
+2. Cloud-init substitutes it with actual TOTP secret BEFORE docker build
+3. Keycloak imports realm and creates OTP credential ✅
+4. Cloud-init then DELETES the OTP credential ❌
+5. Tries to POST new credential (API doesn't support this) → 404 ❌
+
+**Fix**: Changed the logic to verify OTP exists rather than delete/recreate:
+```bash
+# Before: Delete all OTP credentials then try to create new one (fails with 404)
+for CRED_ID in $(jq...); do curl -X DELETE ...; done
+curl -X POST ... # Returns 404!
+
+# After: Just verify OTP exists from realm import
+OTP_COUNT=$(jq '[.[] | select(.type=="otp")] | length')
+if [ "$OTP_COUNT" -gt "0" ]; then
+  echo "✓ OTP credential exists (imported from realm export)"
+fi
+```
+
 ## Lessons for Future
 
 1. **End-to-end testing**: When changing encoding/decoding, test the entire flow
@@ -404,6 +439,7 @@ The `--data-urlencode` option properly encodes special characters before sending
 10. **Terraform ↔ CI/CD alignment**: Terraform bootstrap and CI/CD deploy must use the SAME encoding/format for secrets. If Terraform base64-encodes, CI/CD must too (or neither should)
 11. **Complete fixes**: When fixing encoding issues, audit ALL variables - partial fixes create mismatches between old and new deployments
 12. **URL-encode passwords in curl**: Use `--data-urlencode` instead of `-d` for password fields in curl commands - special characters like `#`, `<`, `+` will break authentication otherwise
+13. **Don't delete imported credentials**: If credentials are configured via realm import (placeholder substitution), don't delete them in post-import scripts - Keycloak's Admin API may not support recreating certain credential types (OTP POST returns 404)
 
 ## Related Files
 
