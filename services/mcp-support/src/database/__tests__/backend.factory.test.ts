@@ -87,4 +87,47 @@ describe('createSupportBackend', () => {
     expect(backend).toBeInstanceOf(ElasticsearchBackend);
     // Default is http://localhost:9201, validated by ElasticsearchBackend tests
   });
+
+  describe('URL encoding for special characters', () => {
+    it('should URL-encode password with @ symbol in ELASTICSEARCH_URL', () => {
+      process.env.SUPPORT_DATA_BACKEND = 'elasticsearch';
+      // Password: @test123 (starts with @)
+      process.env.ELASTICSEARCH_URL = 'http://elastic:@test123@elasticsearch:9200';
+
+      // Should not throw - special chars are encoded
+      const backend = createSupportBackend();
+      expect(backend).toBeInstanceOf(ElasticsearchBackend);
+    });
+
+    it('should URL-encode password with multiple special chars', () => {
+      process.env.SUPPORT_DATA_BACKEND = 'elasticsearch';
+      // Password with @, {, }, ?, > chars
+      process.env.ELASTICSEARCH_URL = 'http://elastic:@ft{Sy!>Cp?BUXXB}VEvJH_1@elasticsearch:9200';
+
+      // Should not throw - special chars are encoded
+      const backend = createSupportBackend();
+      expect(backend).toBeInstanceOf(ElasticsearchBackend);
+    });
+
+    it('should use ES_HOST and ELASTIC_PASSWORD when provided', () => {
+      process.env.SUPPORT_DATA_BACKEND = 'elasticsearch';
+      process.env.ES_HOST = 'elasticsearch:9200';
+      process.env.ELASTIC_PASSWORD = '@ft{Sy!>Cp?BUXXB}VEvJH_1';
+      delete process.env.ELASTICSEARCH_URL;
+
+      const backend = createSupportBackend();
+      expect(backend).toBeInstanceOf(ElasticsearchBackend);
+    });
+
+    it('should prefer ES_HOST over ELASTICSEARCH_URL when both provided', () => {
+      process.env.SUPPORT_DATA_BACKEND = 'elasticsearch';
+      process.env.ES_HOST = 'custom-host:9200';
+      process.env.ELASTIC_PASSWORD = 'test-password';
+      process.env.ELASTICSEARCH_URL = 'http://elastic:wrong@other-host:9200';
+
+      const backend = createSupportBackend();
+      expect(backend).toBeInstanceOf(ElasticsearchBackend);
+      // ES_HOST takes precedence
+    });
+  });
 });
