@@ -222,12 +222,16 @@ services:
   # IDENTITY PROVIDER
   # =============================================================================
   keycloak:
-    # Build from Dockerfile.dev to bake realm-export-dev.json into image
+    # Build from Dockerfile.dev to bake realm export into image
     # This avoids Docker Desktop volume mount sync issues on Windows
     # Use `docker compose build --no-cache keycloak` to force rebuild with latest realm
+    # Build args select dev vs stage realm exports (defaults to dev)
     build:
       context: ../../keycloak
       dockerfile: Dockerfile.dev
+      args:
+        REALM_EXPORT_FILE: ${REALM_EXPORT_FILE:-realm-export-dev.json}
+        REALM_CUSTOMERS_FILE: ${REALM_CUSTOMERS_FILE:-realm-export-customers-dev.json}
     container_name: tamshai-dev-keycloak
     restart: unless-stopped
     environment:

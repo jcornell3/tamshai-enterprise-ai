@@ -1,9 +1,15 @@
-# Keycloak for Local Development (tamshai-dev)
+# Keycloak for Local Development (tamshai-dev) and Stage (tamshai-vps)
 # Bakes realm exports into the image to avoid Docker Desktop volume mount issues
 #
 # Usage:
 #   docker compose build keycloak  (rebuilds with latest realm export)
 #   docker compose up -d keycloak
+#
+# Build arguments:
+#   REALM_EXPORT_FILE: Which realm export to use (default: realm-export-dev.json)
+#   REALM_CUSTOMERS_FILE: Which customers realm to use (default: realm-export-customers-dev.json)
+#
+#   For stage/VPS: pass --build-arg REALM_EXPORT_FILE=realm-export-stage.json
 #
 # Why not volume mount?
 #   Docker Desktop on Windows has known issues where mounted files don't reflect
@@ -11,6 +17,10 @@
 #   we ensure `docker compose build --no-cache` always includes the latest config.
 
 FROM quay.io/keycloak/keycloak:26.0.7
+
+# Build arguments for realm file selection (allows dev vs stage)
+ARG REALM_EXPORT_FILE=realm-export-dev.json
+ARG REALM_CUSTOMERS_FILE=realm-export-customers-dev.json
 
 # Install jq and curl for realm sync scripts (Authorization Services configuration)
 # Download as static binaries (ADD supports URLs, works with minimal base images)
@@ -28,8 +38,9 @@ RUN chmod +x /usr/local/bin/curl
 # Copy realm exports into the image (not mounted as volume)
 # This ensures terraform destroy + apply always uses the latest files
 # Keycloak imports all JSON files in /opt/keycloak/data/import/ on startup
-COPY realm-export-dev.json /opt/keycloak/data/import/01-realm-tamshai-corp.json
-COPY realm-export-customers-dev.json /opt/keycloak/data/import/02-realm-tamshai-customers.json
+# Use build args to select dev vs stage realm exports
+COPY ${REALM_EXPORT_FILE} /opt/keycloak/data/import/01-realm-tamshai-corp.json
+COPY ${REALM_CUSTOMERS_FILE} /opt/keycloak/data/import/02-realm-tamshai-customers.json
 
 # Security: Explicitly run as keycloak user (UID 1000, inherited from base image)
 # This makes the non-root user explicit for security scanners

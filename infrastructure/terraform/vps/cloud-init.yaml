@@ -101,9 +101,9 @@ write_files:
       KEYCLOAK_URL=https://${domain}/auth
       KEYCLOAK_ISSUER=https://${domain}/auth/realms/tamshai-corp
       JWKS_URI=http://keycloak:8080/auth/realms/tamshai-corp/protocol/openid-connect/certs
-      # KEYCLOAK_REALM is the path to realm export file (used in docker-compose volumes)
-      # Stage uses pre-seeded users with group assignments for Phoenix architecture
-      KEYCLOAK_REALM=./keycloak/realm-export-stage.json
+      # Realm export file selection for docker build (stage uses pre-seeded users)
+      REALM_EXPORT_FILE=realm-export-stage.json
+      REALM_CUSTOMERS_FILE=realm-export-customers-dev.json
 
       # MCP Journey (Project History Agent)
       GEMINI_API_KEY=${gemini_api_key}
@@ -471,6 +471,46 @@ runcmd:
   - openssl rand -hex 32 > /opt/tamshai/.webhook-secret
   - chmod 600 /opt/tamshai/.webhook-secret
   - chown tamshai:tamshai /opt/tamshai/.webhook-secret
+
+  # ==========================================================================
+  # PHOENIX: Substitute secrets in realm-export-stage.json BEFORE docker build
+  # This mirrors the logic in deploy-vps.yml for CI/CD deployments
+  # Placeholders:
+  #   __TEST_USER_PASSWORD__ - for test-user.journey (E2E testing)
+  #   __TEST_USER_TOTP_SECRET__ - TOTP secret for test-user.journey
+  #   __STAGE_USER_PASSWORD__ - for corporate users (eve.thompson, alice.chen, etc.)
+  # ==========================================================================
+  - |
+    cd /opt/tamshai
+    echo "=== Substituting secrets in realm-export-stage.json ==="
+
+    # Load credentials from .env (strip surrounding single quotes)
+    TEST_USER_PASSWORD=$(sed -n "s/^TEST_USER_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
+    TEST_USER_TOTP_SECRET_RAW=$(sed -n "s/^TEST_USER_TOTP_SECRET_RAW=//p" .env | sed "s/^'//;s/'$//")
+    STAGE_USER_PASSWORD=$(sed -n "s/^USER_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
+
+    if [ -n "$TEST_USER_PASSWORD" ]; then
+      sed -i "s/__TEST_USER_PASSWORD__/$TEST_USER_PASSWORD/g" keycloak/realm-export-stage.json
+      echo "[OK] TEST_USER_PASSWORD placeholder substituted"
+    else
+      echo "[WARN] TEST_USER_PASSWORD not set - test-user.journey will have placeholder password"
+    fi
+
+    if [ -n "$TEST_USER_TOTP_SECRET_RAW" ]; then
+      sed -i "s/__TEST_USER_TOTP_SECRET__/$TEST_USER_TOTP_SECRET_RAW/g" keycloak/realm-export-stage.json
+      echo "[OK] TEST_USER_TOTP_SECRET placeholder substituted"
+    else
+      echo "[WARN] TEST_USER_TOTP_SECRET_RAW not set - TOTP will use placeholder"
+    fi
+
+    if [ -n "$STAGE_USER_PASSWORD" ]; then
+      sed -i "s/__STAGE_USER_PASSWORD__/$STAGE_USER_PASSWORD/g" keycloak/realm-export-stage.json
+      echo "[OK] STAGE_USER_PASSWORD placeholder substituted"
+    else
+      echo "[WARN] STAGE_USER_PASSWORD not set - corporate users will have placeholder passwords"
+    fi
+
+    echo "=== Placeholder substitution complete ==="
 
   # Start services (build from source with no cache, pull base images)
   # Uses infrastructure/docker/docker-compose.yml with .env symlinked
