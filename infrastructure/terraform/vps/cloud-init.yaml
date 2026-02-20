@@ -388,11 +388,11 @@ runcmd:
       exit 1
     fi
 
-    # List of password variables to decode (space-separated for POSIX compatibility)
+    # List of password variables that need single-quoting (space-separated for POSIX compatibility)
     PASSWORD_VARS="POSTGRES_PASSWORD TAMSHAI_APP_PASSWORD KEYCLOAK_ADMIN_PASSWORD KC_DB_PASSWORD KEYCLOAK_DB_PASSWORD TAMSHAI_DB_PASSWORD MONGO_INITDB_ROOT_PASSWORD MONGODB_PASSWORD MINIO_ROOT_PASSWORD JWT_SECRET MCP_HR_SERVICE_CLIENT_SECRET MCP_GATEWAY_CLIENT_SECRET REDIS_PASSWORD ELASTIC_PASSWORD VAULT_DEV_ROOT_TOKEN MCP_INTERNAL_SECRET MCP_UI_CLIENT_SECRET E2E_ADMIN_API_KEY TEST_USER_PASSWORD TEST_USER_TOTP_SECRET_RAW STAGE_USER_PASSWORD"
 
-    # Decode base64 passwords in RAM
     # Single-quote password values to prevent shell interpretation of special chars
+    # NOTE: Passwords are now passed as plaintext (not base64 encoded) from Terraform
     while IFS= read -r line; do
       is_password=false
       for var in $PASSWORD_VARS; do
@@ -400,9 +400,8 @@ runcmd:
         if [ "$key" = "$var" ]; then
           is_password=true
           value=$(echo "$line" | cut -d '=' -f 2-)
-          decoded_value=$(echo "$value" | base64 -d)
           # Single-quote the value to preserve special characters like ()[]#|&!
-          echo "$key='$decoded_value'" >> "$DECODED_RAM"
+          echo "$key='$value'" >> "$DECODED_RAM"
           break
         fi
       done
