@@ -356,7 +356,7 @@ upsert() {
 5. **b92d9529** - Add REDIS_PASSWORD to identity-sync container
 6. **2cdd97d1** - Remove base64 encoding from ALL passwords in main.tf
 7. **2cdd97d1** - Preserve .env symlink in deploy-vps.yml
-8. **TBD** - URL-encode passwords in curl commands (cloud-init.yaml)
+8. **0a445eed** - URL-encode passwords in curl commands (cloud-init.yaml)
 
 ### Fix 10: URL-Encode Passwords in curl Commands
 
