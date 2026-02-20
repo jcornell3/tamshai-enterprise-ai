@@ -212,6 +212,17 @@ void main() {
           roles: ['hr-read'],
         );
 
+        // Store a valid (non-expired) token expiry in the mock storage
+        // This prevents the proactive refresh path from triggering
+        final storage = container.read(secureStorageProvider);
+        final futureExpiry = DateTime.now().add(const Duration(hours: 1));
+        await storage.storeTokens(StoredTokens(
+          accessToken: 'test-access-token',
+          idToken: 'test-id-token',
+          refreshToken: 'test-refresh-token',
+          accessTokenExpirationDateTime: futureExpiry,
+        ));
+
         await getNotifier().initialize();
 
         expect(getNotifier().isAuthenticated, true);
@@ -221,6 +232,17 @@ void main() {
       test('handles missing user profile gracefully', () async {
         mockAuthService.hasValidSessionResult = true;
         mockAuthService.currentUserResult = null;
+
+        // Store a valid (non-expired) token expiry in the mock storage
+        // This ensures we test the "no user profile" path, not the proactive refresh path
+        final storage = container.read(secureStorageProvider);
+        final futureExpiry = DateTime.now().add(const Duration(hours: 1));
+        await storage.storeTokens(StoredTokens(
+          accessToken: 'test-access-token',
+          idToken: 'test-id-token',
+          refreshToken: 'test-refresh-token',
+          accessTokenExpirationDateTime: futureExpiry,
+        ));
 
         await getNotifier().initialize();
 
