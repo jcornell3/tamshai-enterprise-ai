@@ -523,12 +523,12 @@ locals {
     mongodb_password             = base64encode(random_password.mongodb_password.result)
     minio_password               = base64encode(random_password.minio_password.result)
     jwt_secret                   = base64encode(random_password.jwt_secret.result)
-    root_password                = base64encode(random_password.root_password.result)
+    root_password                = random_password.root_password.result
     mcp_gateway_client_secret    = base64encode(var.mcp_gateway_client_secret)
     mcp_hr_service_client_secret = base64encode(local.mcp_hr_service_secret)
-    stage_user_password          = base64encode(local.stage_user_password_resolved)
-    test_user_password           = base64encode(local.test_user_password)
-    test_user_totp_secret_raw    = base64encode(local.test_user_totp_secret_raw)
+    stage_user_password          = local.stage_user_password_resolved
+    test_user_password           = local.test_user_password
+    test_user_totp_secret_raw    = local.test_user_totp_secret_raw
     redis_password               = base64encode(random_password.redis_password.result)
     elastic_password             = base64encode(random_password.elastic_password.result)
     vault_dev_root_token         = base64encode(random_password.vault_dev_root_token.result)

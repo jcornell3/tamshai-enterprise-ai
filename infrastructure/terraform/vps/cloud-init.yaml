@@ -179,7 +179,11 @@ write_files:
       ENABLE_RATE_LIMITING=true
 
       # User Password - Fixed password for synced users (from STAGE_USER_PASSWORD secret)
+      # Both USER_PASSWORD and STAGE_USER_PASSWORD are set for compatibility:
+      # - USER_PASSWORD: used by identity-sync
+      # - STAGE_USER_PASSWORD: used by sync-realm.sh lib/users.sh
       USER_PASSWORD=${stage_user_password}
+      STAGE_USER_PASSWORD=${stage_user_password}
 
       # Test User Credentials (from GitHub Secrets - Phoenix Architecture)
       # Used by Keycloak Admin API to set test-user.journey password and TOTP
