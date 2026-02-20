@@ -154,17 +154,54 @@ terraform apply -auto-approve
 
 ## Phase 2: Stage Alignment (Pending)
 
-### Task 2.1: Apply same port variable pattern to stage
+**Lessons to Apply from Phase 1:**
+- Port variables must be passed to sync-customer-realm.sh
+- Customer passwords must be set via REST API (not kcadm inside container)
+- Realm exports should NOT have password placeholders (passwords set via API)
+
+### Task 2.1: Pass port variables to sync-customer-realm.sh
 
 **File**: `infrastructure/terraform/vps/cloud-init.yaml`
 
-Pass port variables to sync-customer-realm.sh when running on VPS.
+Update the customer realm sync step to pass port environment variables:
 
-### Task 2.2: Update cloud-init.yaml placeholder substitution
+```bash
+# Before sync-customer-realm.sh call, export:
+export PORT_WEB_CUSTOMER_SUPPORT="${PORT_WEB_CUSTOMER_SUPPORT:-4007}"
+export PORT_CADDY_HTTPS="${PORT_CADDY_HTTPS:-443}"
+```
 
-Remove password placeholder substitution (only keep TOTP).
+### Task 2.2: Add customer password setting via REST API
 
-### Task 2.3: Phoenix Rebuild Stage
+**File**: `infrastructure/terraform/vps/cloud-init.yaml`
+
+Add a new step AFTER sync-customer-realm.sh to set customer passwords via REST API:
+
+```bash
+# Set customer passwords via REST API (same pattern as dev)
+KC_TOKEN=$(curl -s -X POST "http://localhost:8080/auth/realms/master/protocol/openid-connect/token" \
+  -d "username=admin" --data-urlencode "password=$KEYCLOAK_ADMIN_PASSWORD" \
+  -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
+
+for email in jane.smith@acme.com bob.developer@acme.com mike.manager@globex.com \
+             sara.support@globex.com peter.principal@initech.com tim.tech@initech.com; do
+  USER_ID=$(curl -s "http://localhost:8080/auth/admin/realms/tamshai-customers/users?username=$email&exact=true" \
+    -H "Authorization: Bearer $KC_TOKEN" | jq -r '.[0].id // empty')
+  if [ -n "$USER_ID" ]; then
+    curl -s -X PUT "http://localhost:8080/auth/admin/realms/tamshai-customers/users/$USER_ID/reset-password" \
+      -H "Authorization: Bearer $KC_TOKEN" -H "Content-Type: application/json" \
+      -d "{\"type\":\"password\",\"value\":\"$CUSTOMER_USER_PASSWORD\",\"temporary\":false}"
+  fi
+done
+```
+
+### Task 2.3: Verify stage realm export has correct ports
+
+**File**: `keycloak/realm-export-customers-stage.json` (if exists) or use dev export
+
+Ensure redirect URIs include both standard and Caddy HTTPS ports.
+
+### Task 2.4: Phoenix Rebuild Stage
 
 ```bash
 cd infrastructure/terraform/vps
@@ -172,14 +209,15 @@ terraform destroy -auto-approve
 terraform apply -auto-approve
 ```
 
-### Task 2.4: Validate Stage
+### Task 2.5: Validate Stage
 
 - [ ] Cloud-init completes without errors
 - [ ] All 27 containers healthy
 - [ ] test-user.journey has password + OTP credentials
 - [ ] Corporate users have passwords set
-- [ ] Customer portal login works
-- [ ] All clients exist
+- [ ] **Customer users have passwords set** (verify via login)
+- [ ] Customer portal OAuth redirect works (no URI mismatch)
+- [ ] All clients exist with correct redirect URIs
 
 ---
 
