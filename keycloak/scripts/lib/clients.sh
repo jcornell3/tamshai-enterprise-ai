@@ -405,10 +405,12 @@ _pre_sync_hr_service() {
     return 0
 }
 
-# T3: mcp-integration-runner is a test-only client, guarded to dev/ci environments.
+# T3: mcp-integration-runner is a test client for dev/ci/stage environments.
+# It's used for integration tests and token exchange for user impersonation.
+# NOT synced in prod (production doesn't need test infrastructure).
 _pre_sync_integration_runner() {
-    if [ "${ENV:-dev}" != "dev" ] && [ "${ENV:-dev}" != "ci" ]; then
-        log_info "Skipping mcp-integration-runner client (test environments only)"
+    if [ "${ENV:-dev}" = "prod" ]; then
+        log_info "Skipping mcp-integration-runner client (not needed in production)"
         return 1
     fi
     return 0

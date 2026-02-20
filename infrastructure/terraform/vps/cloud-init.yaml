@@ -495,10 +495,12 @@ runcmd:
     HR_SECRET=$(sed -n "s/^MCP_HR_SERVICE_CLIENT_SECRET=//p" .env | sed "s/^'//;s/'$//")
     GW_SECRET=$(sed -n "s/^MCP_GATEWAY_CLIENT_SECRET=//p" .env | sed "s/^'//;s/'$//")
     UI_SECRET=$(sed -n "s/^MCP_UI_CLIENT_SECRET=//p" .env | sed "s/^'//;s/'$//")
+    INT_SECRET=$(sed -n "s/^MCP_INTERNAL_SECRET=//p" .env | sed "s/^'//;s/'$//")
     docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KC_PASS" \
       -e MCP_HR_SERVICE_CLIENT_SECRET="$HR_SECRET" \
       -e MCP_GATEWAY_CLIENT_SECRET="$GW_SECRET" \
       -e MCP_UI_CLIENT_SECRET="$UI_SECRET" \
+      -e MCP_INTEGRATION_RUNNER_SECRET="$INT_SECRET" \
       tamshai-dev-keycloak /tmp/keycloak-scripts/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
   # NOTE: Identity sync is now handled by mcp-hr on startup (Phoenix Architecture)
