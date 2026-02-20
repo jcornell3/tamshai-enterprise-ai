@@ -5,180 +5,202 @@
 
 ## Summary
 
-| Aspect | Dev | Stage | Notes |
-|--------|-----|-------|-------|
-| Realm Export | realm-export-dev.json (862 lines) | realm-export-stage.json (1027 lines) | Stage is larger |
-| Users | 9 users, NO credentials | 9 users, ALL have credentials | Critical difference |
-| Clients | 6 clients | 8 clients (+flutter, +website) | Stage has more |
-| Protocol Mappers | 0 total | 2 (on flutter/website) | mcp-gateway-audience |
-| Credential Placeholders | None | `__TEST_USER_PASSWORD__`, `__TEST_USER_TOTP_SECRET__`, `__STAGE_USER_PASSWORD__` | Stage uses substitution |
+| Aspect | Dev | Stage |
+|--------|-----|-------|
+| **Realm Export** | realm-export-dev.json | realm-export-stage.json |
+| **Credentials in Export** | None (set post-import) | Placeholders (substituted pre-import) |
+| **Clients in Export** | 6 clients | 8 clients (+flutter, +website) |
+| **Client Creation** | sync-realm.sh creates ALL | sync-realm.sh creates ALL |
+| **Password Setting** | sync-realm.sh via Admin API | Placeholder substitution + sync-realm.sh |
+| **TOTP Setting** | Direct DB insert (main.tf) | Placeholder substitution in realm export |
+| **Bootstrap** | terraform apply → docker compose | terraform apply → cloud-init |
+
+**Key Point**: Both environments end up with the same credentials set. The mechanism differs but the result is the same.
 
 ---
 
 ## 1. User Credentials
 
-### Dev (realm-export-dev.json)
-- **NO users have credentials** in the realm export
-- Passwords are set via:
-  - sync-realm.sh (post-import)
-  - identity-sync service
-  - Environment variable `DEV_USER_PASSWORD`
+### Dev Mechanism
+```
+1. Keycloak imports realm-export-dev.json (users exist, NO credentials)
+2. keycloak-sync container runs sync-realm.sh
+3. sync-realm.sh calls set_test_user_password() and set_corporate_user_passwords()
+4. Passwords set via Keycloak Admin API using DEV_USER_PASSWORD env var
+5. TOTP set via direct PostgreSQL insert in dev/main.tf null_resource
+```
 
-### Stage (realm-export-stage.json)
-- **ALL users have 2 credentials each** (password + OTP)
-- Uses placeholder substitution BEFORE docker build:
-  - `__TEST_USER_PASSWORD__` → `TEST_USER_PASSWORD` env var
-  - `__TEST_USER_TOTP_SECRET__` → `TEST_USER_TOTP_SECRET_RAW` env var
-  - `__STAGE_USER_PASSWORD__` → `STAGE_USER_PASSWORD` env var
+### Stage Mechanism
+```
+1. Cloud-init substitutes placeholders in realm-export-stage.json:
+   - __TEST_USER_PASSWORD__ → TEST_USER_PASSWORD env var
+   - __TEST_USER_TOTP_SECRET__ → TEST_USER_TOTP_SECRET_RAW env var
+   - __STAGE_USER_PASSWORD__ → STAGE_USER_PASSWORD env var
+2. Keycloak imports realm WITH credentials already set
+3. sync-realm.sh runs (may update passwords again)
+4. cloud-init verifies TOTP exists (does NOT delete/recreate)
+```
 
-**Impact**: Dev relies on post-import scripts; Stage bakes credentials into realm import.
+### Environment Variables
+
+| Variable | Dev Source | Stage Source |
+|----------|------------|--------------|
+| DEV_USER_PASSWORD | GitHub Secret → Terraform → .env | N/A |
+| STAGE_USER_PASSWORD | N/A | GitHub Secret → cloud-init → .env |
+| TEST_USER_PASSWORD | GitHub Secret → Terraform → .env | GitHub Secret → cloud-init → .env |
+| TEST_USER_TOTP_SECRET_RAW | GitHub Secret → Terraform | GitHub Secret → cloud-init → .env |
 
 ---
 
 ## 2. Clients
 
-### Dev Only
-```
-ai-desktop
-ai-mobile
-hr-app
-finance-app
-sales-app
-support-app
+### Realm Export Contents
+
+**Dev (realm-export-dev.json)**:
+- ai-desktop
+- ai-mobile
+- hr-app
+- finance-app
+- sales-app
+- support-app
+
+**Stage (realm-export-stage.json)**:
+- ai-desktop
+- ai-mobile
+- hr-app
+- finance-app
+- sales-app
+- support-app
+- **tamshai-flutter-client** (additional)
+- **tamshai-website** (additional)
+
+### sync-realm.sh Creates ALL Clients
+
+Regardless of what's in the realm export, `sync-realm.sh` creates/updates ALL clients via `sync_all_clients()`:
+
+```bash
+# From keycloak/scripts/lib/clients.sh
+declare -A CLIENT_IDS=(
+    [website]="tamshai-website"
+    [flutter]="tamshai-flutter-client"
+    [portal]="web-portal"
+    [gateway]="mcp-gateway"
+    [ui]="mcp-ui"
+    [hr_service]="mcp-hr-service"
+    [integration_runner]="mcp-integration-runner"
+)
 ```
 
-### Stage Additional Clients
-```
-tamshai-flutter-client  (with mcp-gateway-audience mapper)
-tamshai-website         (with mcp-gateway-audience mapper)
-```
-
-**Missing in Dev**:
-- `tamshai-flutter-client` - Cross-platform Flutter app
-- `tamshai-website` - Main web portal
+**Result**: Both dev and stage end up with ALL clients created by sync-realm.sh.
 
 ---
 
-## 3. Redirect URIs
+## 3. TOTP Configuration
+
+### Dev: Direct Database Insert
+
+```hcl
+# From infrastructure/terraform/dev/main.tf
+docker exec tamshai-dev-postgres psql -U keycloak -d keycloak -qtA -c "
+  INSERT INTO credential (id, user_id, type, user_label, secret_data, credential_data, priority, created_date)
+  VALUES (
+    gen_random_uuid()::text,
+    '$USER_ID',
+    'otp',
+    'Terraform Provisioned',
+    '{\"value\":\"$TEST_USER_TOTP_SECRET_RAW\"}',
+    ...
+  );
+"
+```
+
+**Why Direct DB**: Keycloak Admin API doesn't support POST to `/users/{id}/credentials` for OTP.
+
+### Stage: Realm Import
+
+```json
+// From realm-export-stage.json (before substitution)
+{
+  "type": "otp",
+  "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
+  "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
+}
+```
+
+Cloud-init substitutes `__TEST_USER_TOTP_SECRET__` with actual value before docker build.
+
+---
+
+## 4. Redirect URIs
 
 ### Dev
-- Only localhost URLs (`http://localhost:400X/*`)
+- Localhost only: `http://localhost:400X/*`
 
 ### Stage
-- Localhost URLs PLUS production URLs:
+- Localhost + Production:
+  - `http://localhost:400X/*`
   - `https://www.tamshai.com/*`
   - `https://prod.tamshai.com/*`
 
 ---
 
-## 4. Protocol Mappers
+## 5. Protocol Mappers
 
-### Dev
-- No protocol mappers on any client
-
-### Stage
-- `tamshai-flutter-client`: `mcp-gateway-audience` mapper
-- `tamshai-website`: `mcp-gateway-audience` mapper
-
-**Purpose**: Adds `mcp-gateway` to the token audience claim for API access.
-
----
-
-## 5. Cloud-Init Differences
-
-### Dev (terraform/dev/)
-- Uses local docker-compose
-- No cloud-init script
-- No placeholder substitution
-- Credentials set via identity-sync
-
-### Stage (terraform/vps/cloud-init.yaml)
-- Full cloud-init bootstrap
-- Placeholder substitution in realm-export-stage.json:
-  ```bash
-  sed -i "s/__TEST_USER_PASSWORD__/$TEST_USER_PASSWORD/g" keycloak/realm-export-stage.json
-  sed -i "s/__TEST_USER_TOTP_SECRET__/$TEST_USER_TOTP_SECRET_RAW/g" keycloak/realm-export-stage.json
-  sed -i "s/__STAGE_USER_PASSWORD__/$STAGE_USER_PASSWORD/g" keycloak/realm-export-stage.json
-  ```
-- Post-import credential verification (not creation)
-
----
-
-## 6. Environment Variable Differences
-
-### Dev (.env)
-```
-REALM_EXPORT_FILE=realm-export-dev.json
-DEV_USER_PASSWORD=<set locally>
-```
-
-### Stage (.env via cloud-init)
-```
-REALM_EXPORT_FILE=realm-export-stage.json
-STAGE_USER_PASSWORD=<from GitHub Secret>
-TEST_USER_PASSWORD=<from GitHub Secret>
-TEST_USER_TOTP_SECRET_RAW=<from GitHub Secret>
-```
-
----
-
-## 7. Credential Flow Comparison
-
-### Dev Flow
-```
-1. Keycloak imports realm-export-dev.json (no credentials)
-2. sync-realm.sh runs and creates roles/groups
-3. identity-sync provisions users from HR database
-4. Passwords set via DEV_USER_PASSWORD env var
-5. TOTP: Not pre-configured (auto-captured on first login)
-```
-
-### Stage Flow
-```
-1. Cloud-init substitutes placeholders in realm-export-stage.json
-2. Docker builds Keycloak with substituted realm
-3. Keycloak imports realm WITH credentials (password + TOTP)
-4. sync-realm.sh runs for additional config
-5. Cloud-init verifies TOTP exists (doesn't recreate)
-```
-
----
-
-## 8. Issues Caused by Differences
-
-### Issue: OTP Credential Deleted
-**Symptom**: test-user.journey lost TOTP after Phoenix rebuild
-**Cause**: Cloud-init was deleting the OTP credential that was correctly imported from realm export
-**Fix**: Changed to verify-only mode (don't delete imported credentials)
-
-### Issue: Dev Missing Clients
-**Symptom**: Flutter app and website won't work in dev
-**Cause**: realm-export-dev.json missing `tamshai-flutter-client` and `tamshai-website`
-**Fix**: Need to add these clients to dev realm export
-
----
-
-## 9. Recommendations
-
-### Align Dev with Stage
-1. Add `tamshai-flutter-client` and `tamshai-website` to realm-export-dev.json
-2. Add protocol mappers (mcp-gateway-audience) to dev clients
-3. Consider using credential placeholders in dev (optional)
-
-### Keep Intentionally Different
-1. Redirect URIs (localhost vs production)
-2. Environment-specific passwords (DEV vs STAGE)
-3. TOTP auto-capture in dev (simpler for local testing)
-
----
-
-## 10. File Checksums
+Both environments get protocol mappers via `sync-realm.sh`:
 
 ```bash
-# Current state
-md5sum keycloak/realm-export-dev.json    # <hash>
-md5sum keycloak/realm-export-stage.json  # <hash>
+# From keycloak/scripts/lib/mappers.sh
+add_audience_mapper_to_client "tamshai-website"
+add_audience_mapper_to_client "tamshai-flutter-client"
+add_sub_claim_mapper_to_client "tamshai-website"
+add_sub_claim_mapper_to_client "tamshai-flutter-client"
 ```
+
+---
+
+## 6. Bootstrap Process
+
+### Dev (Terraform Local)
+```
+terraform apply
+  → docker-compose.yml
+  → keycloak imports realm-export-dev.json
+  → keycloak-sync runs sync-realm.sh dev
+  → identity-sync provisions users
+  → null_resource sets TOTP via DB
+```
+
+### Stage (Terraform + Cloud-Init)
+```
+terraform apply
+  → creates VPS with cloud-init
+  → cloud-init substitutes placeholders in realm-export-stage.json
+  → docker compose build & up
+  → keycloak imports realm WITH credentials
+  → mcp-integration-runner runs sync-realm.sh stage
+  → cloud-init verifies TOTP exists
+```
+
+---
+
+## 7. Key Files
+
+| Purpose | Dev | Stage |
+|---------|-----|-------|
+| Terraform | infrastructure/terraform/dev/main.tf | infrastructure/terraform/vps/main.tf |
+| Bootstrap | Docker Compose | cloud-init.yaml |
+| Realm Export | keycloak/realm-export-dev.json | keycloak/realm-export-stage.json |
+| Password Setting | sync-realm.sh + null_resource | Placeholder substitution + sync-realm.sh |
+| TOTP Setting | null_resource (DB insert) | Placeholder substitution |
+
+---
+
+## 8. Lessons Learned
+
+1. **Both methods work**: Dev and stage use different mechanisms but achieve the same result
+2. **sync-realm.sh is idempotent**: Creates/updates all clients regardless of realm export contents
+3. **TOTP cannot be set via Admin API**: Must use realm import or direct DB insert
+4. **Don't delete imported credentials**: Cloud-init was incorrectly deleting TOTP that was correctly imported
 
 ---
 

@@ -357,7 +357,7 @@ upsert() {
 6. **2cdd97d1** - Remove base64 encoding from ALL passwords in main.tf
 7. **2cdd97d1** - Preserve .env symlink in deploy-vps.yml
 8. **0a445eed** - URL-encode passwords in curl commands (cloud-init.yaml)
-9. **TBD** - Don't delete OTP credential imported from realm export (cloud-init.yaml)
+9. **601abbeb** - Don't delete OTP credential imported from realm export (cloud-init.yaml)
 
 ### Fix 10: URL-Encode Passwords in curl Commands
 
