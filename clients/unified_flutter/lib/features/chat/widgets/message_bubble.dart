@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/chat/models/chat_state.dart';
 import '../../../core/theme/color_extensions.dart';
+import '../../../core/utils/directive_parser.dart';
+import '../../generative/widgets/directive_component_loader.dart';
 
 /// Message bubble widget for displaying chat messages
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends ConsumerWidget {
   final ChatMessage message;
   final VoidCallback? onCopy;
 
@@ -14,10 +17,15 @@ class MessageBubble extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isUser = message.role == MessageRole.user;
     final isSystem = message.role == MessageRole.system;
+
+    // Check for display directive in assistant messages
+    final directiveContext = !isUser && !isSystem && !message.isStreaming
+        ? DirectiveParser.extractContext(message.content)
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -90,17 +98,45 @@ class MessageBubble extends StatelessWidget {
                           ),
                         ),
 
-                      // Message content
-                      SelectableText(
-                        message.content.isEmpty && message.isStreaming
-                            ? '...'
-                            : message.content,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isUser
-                              ? theme.colorScheme.onPrimary
-                              : theme.colorScheme.onSurface,
+                      // Message content with directive detection
+                      if (directiveContext != null) ...[
+                        // Text before directive (if any)
+                        if (directiveContext.hasTextBefore)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: SelectableText(
+                              directiveContext.textBefore,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        // Render the component
+                        DirectiveComponentLoader(
+                          directive: directiveContext.directive,
                         ),
-                      ),
+                        // Text after directive (if any)
+                        if (directiveContext.hasTextAfter)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: SelectableText(
+                              directiveContext.textAfter,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                      ] else
+                        SelectableText(
+                          message.content.isEmpty && message.isStreaming
+                              ? '...'
+                              : message.content,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: isUser
+                                ? theme.colorScheme.onPrimary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
 
                       // Streaming indicator
                       if (message.isStreaming)
