@@ -153,6 +153,29 @@ esac
 
 Now both `ENVIRONMENT=stage` and `ENVIRONMENT=staging` will correctly use `STAGE_USER_PASSWORD`.
 
+### Fix 5: Escape ENV Variable in docker-compose.yml
+
+**File**: `infrastructure/docker/docker-compose.yml`
+
+**Problem**: The `$ENV` variable in the keycloak-sync command was being substituted by docker-compose at parse time (on the host), not at container runtime.
+
+**Before** (line 915):
+```yaml
+cd /scripts && bash sync-realm.sh $ENV
+```
+
+Docker-compose substitutes `$ENV` with the host's `ENV` value (empty), resulting in:
+```bash
+cd /scripts && bash sync-realm.sh   # Empty argument!
+```
+
+**After**:
+```yaml
+cd /scripts && bash sync-realm.sh $$ENV
+```
+
+The `$$` escapes the variable so docker-compose passes it literally, and bash evaluates it at container runtime.
+
 ## Current Encryption Flow (After Fix)
 
 1. **Terraform generates passwords** using `random_password` resources
