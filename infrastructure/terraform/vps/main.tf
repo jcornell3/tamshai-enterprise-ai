@@ -496,6 +496,7 @@ locals {
   # Do NOT use coalesce with variables - that allows env vars to override
   test_user_password        = data.external.github_secrets.result.test_user_password
   test_user_totp_secret_raw = data.external.github_secrets.result.test_user_totp_secret_raw
+  customer_user_password    = data.external.github_secrets.result.customer_user_password
 
   # Stage user password (corporate users) from GitHub Secrets
   # Falls back to variable only if external data returns empty (shouldn't happen)
@@ -531,6 +532,7 @@ locals {
     stage_user_password          = local.stage_user_password_resolved
     test_user_password           = local.test_user_password
     test_user_totp_secret_raw    = local.test_user_totp_secret_raw
+    customer_user_password       = local.customer_user_password
     redis_password               = random_password.redis_password.result
     elastic_password             = random_password.elastic_password.result
     vault_dev_root_token         = random_password.vault_dev_root_token.result

@@ -61,13 +61,15 @@ configure_customer_environment() {
             CUSTOMER_PORTAL_URL="http://localhost:4006"
             ;;
         stage|staging)
-            KEYCLOAK_URL="${KEYCLOAK_URL:-https://www.tamshai.com}"
+            # Use internal URL - script runs inside Keycloak container via docker exec
+            KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:?Stage requires KEYCLOAK_ADMIN_PASSWORD}"
             CUSTOMER_PORTAL_URL="https://customers.tamshai.com"
             ;;
         prod|production)
-            KEYCLOAK_URL="${KEYCLOAK_URL:-https://keycloak.tamshai.com}"
+            # Use internal URL - script runs inside Keycloak container via docker exec
+            KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"
             ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
             ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:?Prod requires KEYCLOAK_ADMIN_PASSWORD}"
             CUSTOMER_PORTAL_URL="https://customers.tamshai.com"

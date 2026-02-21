@@ -33,6 +33,7 @@ $output = @{
     "test_user_password" = ""
     "test_user_totp_secret_raw" = ""
     "tamshai_app_password" = ""
+    "customer_user_password" = ""
 }
 
 try {
@@ -98,6 +99,12 @@ try {
     $tamshaiAppPwdFile = Join-Path $tempDir "${environment}_TAMSHAI_APP_PASSWORD"
     if (Test-Path $tamshaiAppPwdFile) {
         $output["tamshai_app_password"] = (Get-Content $tamshaiAppPwdFile -Raw).Trim()
+    }
+
+    # Read customer user password (same across all environments)
+    $customerPwdFile = Join-Path $tempDir "CUSTOMER_USER_PASSWORD"
+    if (Test-Path $customerPwdFile) {
+        $output["customer_user_password"] = (Get-Content $customerPwdFile -Raw).Trim()
     }
 
     # Cleanup temp directory

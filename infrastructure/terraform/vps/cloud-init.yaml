@@ -190,6 +190,10 @@ write_files:
       TEST_USER_PASSWORD=${test_user_password}
       TEST_USER_TOTP_SECRET_RAW=${test_user_totp_secret_raw}
 
+      # Customer User Password (from GitHub Secrets)
+      # Used by REST API to set customer realm user passwords after sync
+      CUSTOMER_USER_PASSWORD=${customer_user_password}
+
   # NOTE: Caddyfile is NOT embedded here (Phoenix principle: single source of truth)
   # Instead, it's copied from infrastructure/docker/Caddyfile.stage in runcmd section
   # See: https://github.com/jcornell3/tamshai-enterprise-ai/blob/main/infrastructure/docker/Caddyfile.stage
@@ -553,6 +557,27 @@ runcmd:
       -e MCP_INTEGRATION_RUNNER_SECRET="$INT_SECRET" \
       tamshai-dev-keycloak /tmp/keycloak-scripts/sync-realm.sh stage || echo "Keycloak sync failed - may need manual configuration"
 
+  # Sync Customer Realm Configuration (creates clients, sets redirect URIs)
+  # This runs AFTER corporate realm sync and uses PORT_* env vars for redirect URIs
+  - |
+    cd /opt/tamshai
+    echo "Syncing customer realm configuration..."
+
+    # Extract port variables from .env
+    PORT_WEB_CUSTOMER_SUPPORT=$(grep '^PORT_WEB_CUSTOMER_SUPPORT=' .env | cut -d'=' -f2 || echo "4007")
+    PORT_CADDY_HTTPS=$(grep '^PORT_CADDY_HTTPS=' .env | cut -d'=' -f2 || echo "443")
+    KC_PASS=$(sed -n "s/^KEYCLOAK_ADMIN_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
+    CUSTOMER_PWD=$(sed -n "s/^CUSTOMER_USER_PASSWORD=//p" .env | sed "s/^'//;s/'$//")
+
+    # Run customer realm sync with port variables
+    docker exec -e KEYCLOAK_ADMIN_PASSWORD="$KC_PASS" \
+      -e PORT_WEB_CUSTOMER_SUPPORT="$PORT_WEB_CUSTOMER_SUPPORT" \
+      -e PORT_CADDY_HTTPS="$PORT_CADDY_HTTPS" \
+      -e CUSTOMER_USER_PASSWORD="$CUSTOMER_PWD" \
+      tamshai-dev-keycloak /tmp/keycloak-scripts/sync-customer-realm.sh stage || echo "Customer realm sync failed - may need manual configuration"
+
+    echo "Customer realm sync complete!"
+
   # NOTE: Identity sync is now handled by mcp-hr on startup (Phoenix Architecture)
   # The mcp-hr service automatically reconciles HR employees to Keycloak users
   # when it starts. This is self-healing and runs on every boot/restart.
@@ -647,6 +672,66 @@ runcmd:
     fi
 
     echo "test-user.journey credential configuration complete!"
+
+  # Set customer realm user passwords via REST API
+  # This runs AFTER sync-customer-realm.sh to ensure users exist
+  - |
+    echo "Setting customer user passwords via REST API..."
+    cd /opt/tamshai
+
+    # Source .env to get passwords
+    if [ -f .env ]; then
+      CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' .env | cut -d'=' -f2- | tr -d "'\"")
+      KEYCLOAK_ADMIN_PASSWORD=$(grep '^KEYCLOAK_ADMIN_PASSWORD=' .env | cut -d'=' -f2- | tr -d "'\"")
+    fi
+
+    if [ -z "$CUSTOMER_USER_PASSWORD" ]; then
+      echo "WARNING: CUSTOMER_USER_PASSWORD not set, skipping customer password configuration"
+    else
+      # Wait for Keycloak to be ready
+      echo "Waiting for Keycloak..."
+      for i in {1..30}; do
+        if curl -s -f http://localhost:8180/auth/realms/tamshai-customers > /dev/null 2>&1; then
+          echo "Keycloak customer realm is ready"
+          break
+        fi
+        sleep 2
+      done
+
+      # Get admin token
+      echo "Getting admin token..."
+      KC_TOKEN=$(curl -s -X POST "http://localhost:8180/auth/realms/master/protocol/openid-connect/token" \
+        -d "username=admin" \
+        --data-urlencode "password=$KEYCLOAK_ADMIN_PASSWORD" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" | jq -r '.access_token')
+
+      if [ -z "$KC_TOKEN" ] || [ "$KC_TOKEN" = "null" ]; then
+        echo "ERROR: Failed to get Keycloak admin token"
+      else
+        echo "Setting passwords for customer users..."
+
+        # Set password for each customer user
+        for email in jane.smith@acme.com bob.developer@acme.com mike.manager@globex.com \
+                     sara.support@globex.com peter.principal@initech.com tim.tech@initech.com; do
+
+          USER_ID=$(curl -s "http://localhost:8180/auth/admin/realms/tamshai-customers/users?username=$email&exact=true" \
+            -H "Authorization: Bearer $KC_TOKEN" | jq -r '.[0].id // empty')
+
+          if [ -n "$USER_ID" ] && [ "$USER_ID" != "null" ]; then
+            curl -s -X PUT "http://localhost:8180/auth/admin/realms/tamshai-customers/users/$USER_ID/reset-password" \
+              -H "Authorization: Bearer $KC_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"type\":\"password\",\"value\":\"$CUSTOMER_USER_PASSWORD\",\"temporary\":false}"
+            echo "  ✓ Password set for $email"
+          else
+            echo "  ⚠ User not found: $email"
+          fi
+        done
+
+        echo "Customer user password configuration complete!"
+      fi
+    fi
 
   # Enable fail2ban
   - systemctl enable fail2ban
