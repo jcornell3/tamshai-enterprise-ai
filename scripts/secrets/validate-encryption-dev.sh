@@ -32,17 +32,17 @@ WARN=0
 # Helper function for results
 pass() {
     echo "[PASS] $1"
-    ((PASS++))
+    PASS=$((PASS + 1))
 }
 
 fail() {
     echo "[FAIL] $1"
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 }
 
 warn() {
     echo "[WARN] $1"
-    ((WARN++))
+    WARN=$((WARN + 1))
 }
 
 # =============================================================================
