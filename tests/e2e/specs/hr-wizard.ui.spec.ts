@@ -10,6 +10,10 @@
  * Architecture v1.5 - Enterprise UX Hardening
  *
  * Following Gusto-style time-off request patterns.
+ *
+ * This test temporarily grants 'hr-read' and 'hr-write' roles to test-user.journey,
+ * runs the tests, then revokes the roles. These roles are required for RLS policies
+ * to allow access to time-off balances and request submission.
  */
 
 import { test, expect, BrowserContext, Page } from '@playwright/test';
@@ -36,9 +40,13 @@ import {
   BASE_URLS,
   ENV,
   TEST_USER,
+  grantRealmRole,
+  revokeRealmRole,
 } from '../utils';
 
 const HR_TIME_OFF_URL = `${BASE_URLS[ENV]}/hr/time-off`;
+const HR_READ_ROLE = 'hr-read';
+const HR_WRITE_ROLE = 'hr-write';
 
 let authenticatedContext: BrowserContext | null = null;
 
@@ -48,6 +56,12 @@ test.describe('HR Time-Off Request Wizard', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
+    // Grant HR roles BEFORE authentication so JWT includes the roles
+    console.log(`[hr-wizard] Granting '${HR_READ_ROLE}' and '${HR_WRITE_ROLE}' roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+
+    // Now authenticate - the JWT will include the HR roles
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/hr/`);
     authCreatedAt = Date.now();
@@ -55,6 +69,15 @@ test.describe('HR Time-Off Request Wizard', () => {
   });
 
   test.afterAll(async () => {
+    // Always revoke the roles, even if tests fail
+    try {
+      console.log(`[hr-wizard] Revoking '${HR_READ_ROLE}' and '${HR_WRITE_ROLE}' roles from '${TEST_USER.username}'...`);
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[hr-wizard] Failed to revoke roles: ${error}`);
+    }
+
     await authenticatedContext?.close();
   });
 

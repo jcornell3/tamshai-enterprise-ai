@@ -10,6 +10,10 @@
  * Architecture v1.5 - Enterprise UX Hardening
  *
  * Following Salesforce Lightning patterns for bulk operations.
+ *
+ * This test temporarily grants 'finance-write' role to test-user.journey,
+ * runs the tests, then revokes the role. The finance-write role is required
+ * for RLS policies to allow invoice approval operations.
  */
 
 import { test, expect, BrowserContext } from '@playwright/test';
@@ -32,9 +36,12 @@ import {
   BASE_URLS,
   ENV,
   TEST_USER,
+  grantRealmRole,
+  revokeRealmRole,
 } from '../utils';
 
 const INVOICES_URL = `${BASE_URLS[ENV]}/finance/invoices`;
+const FINANCE_WRITE_ROLE = 'finance-write';
 
 let authenticatedContext: BrowserContext | null = null;
 
@@ -42,6 +49,11 @@ test.describe('Finance Invoice Bulk Operations', () => {
   let authCreatedAt: number;
 
   test.beforeAll(async ({ browser }) => {
+    // Grant finance-write role BEFORE authentication so JWT includes the role
+    console.log(`[finance-bulk] Granting '${FINANCE_WRITE_ROLE}' role to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, FINANCE_WRITE_ROLE);
+
+    // Now authenticate - the JWT will include the finance-write role
     authenticatedContext = await createAuthenticatedContext(browser);
     await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
     authCreatedAt = Date.now();
@@ -50,6 +62,14 @@ test.describe('Finance Invoice Bulk Operations', () => {
   });
 
   test.afterAll(async () => {
+    // Always revoke the role, even if tests fail
+    try {
+      console.log(`[finance-bulk] Revoking '${FINANCE_WRITE_ROLE}' role from '${TEST_USER.username}'...`);
+      await revokeRealmRole(TEST_USER.username, FINANCE_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[finance-bulk] Failed to revoke role: ${error}`);
+    }
+
     await authenticatedContext?.close();
   });
 
