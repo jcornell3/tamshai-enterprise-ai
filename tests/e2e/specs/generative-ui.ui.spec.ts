@@ -25,7 +25,15 @@ import {
   BASE_URLS,
   ENV,
   TEST_USER,
+  grantRealmRole,
+  revokeRealmRole,
 } from '../utils';
+
+// Roles needed for generative UI tests (HR and Finance apps)
+const HR_READ_ROLE = 'hr-read';
+const HR_WRITE_ROLE = 'hr-write';
+const FINANCE_READ_ROLE = 'finance-read';
+const FINANCE_WRITE_ROLE = 'finance-write';
 
 /**
  * Warm up an authenticated context by visiting the app URL once.
@@ -37,12 +45,26 @@ test.describe('Generative UI - Display Directives', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
+    // Grant roles BEFORE authentication so JWT includes them
+    console.log(`[gen-ui] Granting HR roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
   });
 
   test.afterAll(async () => {
+    // Always revoke roles, even if tests fail
+    try {
+      console.log(`[gen-ui] Revoking HR roles from '${TEST_USER.username}'...`);
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[gen-ui] Failed to revoke roles: ${error}`);
+    }
+
     if (sharedContext) await sharedContext.close();
   });
 
@@ -244,12 +266,29 @@ test.describe('Generative UI - Component Interactions', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
+    // Grant HR and Finance roles (this suite tests both apps)
+    console.log(`[gen-ui] Granting HR and Finance roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    await grantRealmRole(TEST_USER.username, FINANCE_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, FINANCE_WRITE_ROLE);
+
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
   });
 
   test.afterAll(async () => {
+    try {
+      console.log(`[gen-ui] Revoking HR and Finance roles from '${TEST_USER.username}'...`);
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+      await revokeRealmRole(TEST_USER.username, FINANCE_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, FINANCE_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[gen-ui] Failed to revoke roles: ${error}`);
+    }
+
     if (sharedContext) await sharedContext.close();
   });
 
@@ -382,12 +421,23 @@ test.describe('Generative UI - Voice Features', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
+    console.log(`[gen-ui] Granting HR roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
   });
 
   test.afterAll(async () => {
+    try {
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[gen-ui] Failed to revoke roles: ${error}`);
+    }
+
     if (sharedContext) await sharedContext.close();
   });
 
@@ -472,12 +522,23 @@ test.describe('Generative UI - Loading and Error States', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
+    console.log(`[gen-ui] Granting HR roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
   });
 
   test.afterAll(async () => {
+    try {
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[gen-ui] Failed to revoke roles: ${error}`);
+    }
+
     if (sharedContext) await sharedContext.close();
   });
 
@@ -597,12 +658,23 @@ test.describe('Generative UI - ComponentRenderer', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
+    console.log(`[gen-ui] Granting HR roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
   });
 
   test.afterAll(async () => {
+    try {
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[gen-ui] Failed to revoke roles: ${error}`);
+    }
+
     if (sharedContext) await sharedContext.close();
   });
 
@@ -681,12 +753,23 @@ test.describe('Generative UI - SSE Streaming', () => {
   let sharedPage: Page;
 
   test.beforeAll(async ({ browser }) => {
+    console.log(`[gen-ui] Granting HR roles to '${TEST_USER.username}'...`);
+    await grantRealmRole(TEST_USER.username, HR_READ_ROLE);
+    await grantRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+
     sharedContext = await createAuthenticatedContext(browser);
     await warmUpContext(sharedContext, `${BASE_URLS[ENV]}/hr/`);
     sharedPage = await sharedContext.newPage();
   });
 
   test.afterAll(async () => {
+    try {
+      await revokeRealmRole(TEST_USER.username, HR_READ_ROLE);
+      await revokeRealmRole(TEST_USER.username, HR_WRITE_ROLE);
+    } catch (error) {
+      console.error(`[gen-ui] Failed to revoke roles: ${error}`);
+    }
+
     if (sharedContext) await sharedContext.close();
   });
 
