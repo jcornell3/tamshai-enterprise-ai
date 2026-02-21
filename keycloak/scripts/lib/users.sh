@@ -23,6 +23,19 @@ source "$SCRIPT_LIB_DIR/common.sh"
 # Test User Provisioning
 # =============================================================================
 
+# Get test-user email based on environment
+# Dev uses .local (matches HR sample data), Stage uses .com (matches stage HR data)
+get_test_user_email() {
+    case "${ENV:-dev}" in
+        dev|ci)
+            echo "test-user@tamshai.local"
+            ;;
+        *)
+            echo "test-user@tamshai.com"
+            ;;
+    esac
+}
+
 # Provision test-user.journey for E2E testing
 # Skips in production (user imported from realm-export.json with TOTP)
 # PHOENIX: Never delete existing user - update instead to preserve any existing config
@@ -40,12 +53,17 @@ provision_test_user() {
     # Check if user already exists
     local user_id=$(_kcadm get users -r "$REALM" -q username=test-user.journey --fields id 2>/dev/null | grep -o '"id" : "[^"]*"' | cut -d'"' -f4 | head -1)
 
+    # Get environment-appropriate email
+    local test_email
+    test_email=$(get_test_user_email)
+    log_info "  Using email: $test_email (ENV=$ENV)"
+
     if [ -n "$user_id" ]; then
         # PHOENIX: User exists - update instead of delete/recreate
         # This preserves TOTP credentials and avoids the delete-then-fail-to-create race condition
         log_info "  User already exists (ID: $user_id), updating properties..."
         _kcadm update "users/$user_id" -r "$REALM" \
-            -s email=test-user@tamshai.com \
+            -s "email=$test_email" \
             -s firstName=Test \
             -s lastName=User \
             -s enabled=true \
@@ -61,7 +79,7 @@ provision_test_user() {
         _kcadm create users -r "$REALM" \
             -s id=e2e00001-0000-0000-0000-000000000001 \
             -s username=test-user.journey \
-            -s email=test-user@tamshai.com \
+            -s "email=$test_email" \
             -s firstName=Test \
             -s lastName=User \
             -s enabled=true \
@@ -79,7 +97,7 @@ provision_test_user() {
             log_info "  Retrying without explicit ID..."
             _kcadm create users -r "$REALM" \
                 -s username=test-user.journey \
-                -s email=test-user@tamshai.com \
+                -s "email=$test_email" \
                 -s firstName=Test \
                 -s lastName=User \
                 -s enabled=true \
