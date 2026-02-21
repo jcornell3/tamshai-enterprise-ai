@@ -57,6 +57,16 @@ variable "auto_remove_volumes" {
 }
 
 # =============================================================================
+# Encryption at Rest Configuration
+# =============================================================================
+
+variable "enable_encryption" {
+  description = "Enable encryption at rest for .env file using AES-256-CBC"
+  type        = bool
+  default     = true
+}
+
+# =============================================================================
 # NOTE: All credentials come from GitHub Secrets via external data source
 # =============================================================================
 #

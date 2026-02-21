@@ -1,0 +1,34 @@
+# =============================================================================
+# Infrastructure Docker - Git Ignore
+# =============================================================================
+# Sensitive files that should never be committed to version control.
+# =============================================================================
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Encrypted secrets (should stay on deployer's machine only)
+.env.enc
+
+# Encryption salt (machine-specific, used for key derivation)
+.encryption-salt
+
+# Terraform state (if any local state exists here)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini

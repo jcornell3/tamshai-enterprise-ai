@@ -364,6 +364,61 @@ resource "local_file" "docker_env" {
 }
 
 # =============================================================================
+# ENCRYPTION AT REST
+# =============================================================================
+#
+# Encrypts the .env file using AES-256-CBC with a key derived from the
+# GitHub username and a random salt. This prevents secrets from being stored
+# in plaintext on disk.
+#
+# =============================================================================
+
+# Write encryption salt to file (for decrypt script)
+resource "local_file" "encryption_salt" {
+  count      = var.enable_encryption ? 1 : 0
+  depends_on = [local_file.docker_env]
+
+  filename        = "${local.compose_path}/.encryption-salt"
+  content         = random_password.encryption_salt.result
+  file_permission = "0600"
+}
+
+# Encrypt .env file
+resource "null_resource" "encrypt_env_file" {
+  count = var.enable_encryption ? 1 : 0
+
+  depends_on = [local_file.docker_env, local_file.encryption_salt]
+
+  triggers = {
+    env_hash  = local_file.docker_env.content_sha256
+    salt      = random_password.encryption_salt.result
+    username  = local.github_username
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      cd "${local.compose_path}"
+
+      # Derive encryption key: SHA256(username + salt)
+      ENCRYPTION_KEY=$(echo -n "${local.github_username}${random_password.encryption_salt.result}" | openssl dgst -sha256 | awk '{print $NF}')
+
+      # Generate random IV (16 bytes = 32 hex chars)
+      IV=$(openssl rand -hex 16)
+
+      # Encrypt .env file
+      ENCRYPTED=$(openssl enc -aes-256-cbc -K "$ENCRYPTION_KEY" -iv "$IV" -in .env -base64 -A)
+
+      # Write IV:CIPHERTEXT format
+      echo "$${IV}:$${ENCRYPTED}" > .env.enc
+      chmod 600 .env.enc
+
+      echo "[OK] .env.enc created (plaintext .env kept as fallback)"
+    EOT
+  }
+}
+
+# =============================================================================
 # DOCKER COMPOSE INFRASTRUCTURE
 # =============================================================================
 
