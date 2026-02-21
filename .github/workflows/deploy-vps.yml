@@ -110,9 +110,7 @@ jobs:
   pre-deploy:
     name: Pre-deployment Checks
     runs-on: ubuntu-latest
-    # TEMPORARILY DISABLED - Re-enable after Phoenix rebuild validates fixes
-    # Fixes pending: base64 encoding removal, symlink preservation
-    if: false
+    # Re-enabled after Phase 2 alignment completed with 32/32 E2E tests passing (2026-02-21)
     permissions:
       contents: read
     outputs:

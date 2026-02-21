@@ -204,4 +204,39 @@ terraform apply
 
 ---
 
+## 9. Phase 2 Customer Realm Alignment (2026-02-21)
+
+### Customer Realm Sync
+
+| Aspect | Dev | Stage |
+|--------|-----|-------|
+| **Realm Name** | tamshai-customers | tamshai-customers |
+| **Script** | sync-customer-realm.sh | sync-customer-realm.sh |
+| **Password Setting** | REST API (Terraform) | REST API (cloud-init) |
+| **Port Configuration** | Environment variables | Environment variables |
+
+### Key Changes Made
+
+1. **sync-customer-realm.sh URL Fix**:
+   - Both dev and stage now use `http://localhost:8080/auth` (internal URL)
+   - Scripts run inside container via `docker exec`, so external URLs don't work
+
+2. **Customer Password Provisioning (Stage)**:
+   - Added `sync-customer-realm.sh` call to cloud-init with port variables
+   - Added REST API step to set customer user passwords (defense in depth)
+
+3. **GitHub Secrets Pipeline**:
+   - Added `CUSTOMER_USER_PASSWORD` flow: workflow → PowerShell → Terraform → cloud-init
+
+### Phase 2 Lessons
+
+5. **Scripts inside containers use internal URLs**: When running via `docker exec`, always use `http://localhost:8080/auth`, not external URLs like `https://www.tamshai.com`
+
+6. **REST API is more reliable than env vars via docker exec**: Environment variables passed through `docker exec -e` don't handle special characters reliably. Use REST API calls from cloud-init (outside container) instead.
+
+7. **Defense in depth for password setting**: Even when one mechanism fails (sync-customer-realm.sh auth failure), the backup mechanism (REST API) can succeed.
+
+---
+
 *Generated: 2026-02-20*
+*Updated: 2026-02-21 (Phase 2 Complete)*

@@ -4373,4 +4373,124 @@ return {
 
 ---
 
-*Last updated: December 24, 2025*
+## Dev/Stage Environment Alignment (February 2026)
+
+### Lesson: Script URL Configuration for Container Execution
+
+**Issue Discovered**: Customer realm sync failing on stage with authentication errors
+
+**Date**: February 20-21, 2026
+
+**What Happened**:
+- `sync-customer-realm.sh` used external URLs (`https://www.tamshai.com`) for stage/prod environments
+- The script runs inside the Keycloak container via `docker exec`
+- Inside the container, external URLs require TLS and go through Caddy/Cloudflare
+- But Keycloak is accessible internally at `http://localhost:8080/auth`
+
+**Symptom**:
+```
+[ERROR] Failed to authenticate to Keycloak
+```
+
+**Root Cause**:
+- External URL requires TLS certificate validation
+- Container doesn't have access to Cloudflare certificates
+- Internal URL bypasses all proxy layers
+
+**Resolution**:
+Changed `sync-customer-realm.sh` to use internal URL for ALL environments:
+```bash
+# Before (wrong for container execution)
+KEYCLOAK_URL="${KEYCLOAK_URL:-https://www.tamshai.com}"
+
+# After (correct - internal URL)
+KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080/auth}"
+```
+
+**Key Learning**:
+Scripts that run inside containers via `docker exec` should ALWAYS use internal/localhost URLs, regardless of the environment (dev, stage, prod).
+
+---
+
+### Lesson: REST API Password Setting Over Docker Exec Environment Variables
+
+**Issue Discovered**: Customer user passwords not being set reliably via docker exec
+
+**Date**: February 20-21, 2026
+
+**What Happened**:
+- `sync-customer-realm.sh` tried to set passwords using `kcadm set-password` inside container
+- `CUSTOMER_USER_PASSWORD` environment variable passed via `docker exec -e VAR=value`
+- Passwords with special characters weren't reaching the script correctly
+
+**Root Cause**:
+- Docker exec with heredoc and environment variables doesn't reliably pass passwords
+- Shell escaping, quoting, and special character handling cause issues
+- Multiple layers of quoting (cloud-init YAML → shell → docker exec → container shell)
+
+**Resolution**:
+Added dedicated REST API step in cloud-init that runs OUTSIDE the container:
+```bash
+# Extract password from .env (handles quotes)
+CUSTOMER_USER_PASSWORD=$(grep '^CUSTOMER_USER_PASSWORD=' .env | cut -d'=' -f2- | tr -d "'\"")
+
+# Get admin token
+KC_TOKEN=$(curl -s -X POST "http://localhost:8180/auth/realms/master/..." | jq -r '.access_token')
+
+# Set password via REST API
+curl -s -X PUT "http://localhost:8180/auth/admin/realms/tamshai-customers/users/$USER_ID/reset-password" \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"password","value":"'"$CUSTOMER_USER_PASSWORD"'","temporary":false}'
+```
+
+**Benefits**:
+1. REST API runs outside container - no docker exec escaping issues
+2. Uses `grep | cut` to extract password from .env - handles special chars better
+3. JSON payload built directly with proper quoting
+4. Provides defense in depth (works even if sync script fails)
+
+**Key Learning**:
+For reliable password/secret setting, prefer REST API calls from the host system rather than passing env vars through docker exec.
+
+---
+
+### Lesson: GitHub Secrets Pipeline for VPS Deployments
+
+**Issue Discovered**: New secrets not reaching VPS deployments
+
+**Date**: February 20-21, 2026
+
+**Context**:
+`CUSTOMER_USER_PASSWORD` was defined as a GitHub Secret but wasn't being fetched for stage VPS deployments.
+
+**Pipeline Architecture**:
+```
+GitHub Secrets
+    ↓
+export-test-secrets.yml workflow (exports to artifact)
+    ↓
+fetch-github-secrets.ps1 (PowerShell - downloads artifact)
+    ↓
+Terraform locals (reads PowerShell output)
+    ↓
+templatefile("cloud-init.yaml", ...)
+    ↓
+cloud-init.yaml (.env section)
+    ↓
+VPS runtime environment
+```
+
+**Files Modified for Each New Secret**:
+1. **GitHub Secret**: Add secret in repository settings
+2. **export-test-secrets.yml**: Export secret to artifact (if not already)
+3. **fetch-github-secrets.ps1**: Add to `$output` object and read from artifact
+4. **main.tf (VPS)**: Add to `locals` and `templatefile` call
+5. **cloud-init.yaml**: Add to `.env` section using `${secret_name}`
+
+**Key Learning**:
+VPS secrets don't automatically flow from GitHub. Each new secret needs explicit additions to 4-5 files in the pipeline.
+
+---
+
+*Last updated: February 21, 2026*
