@@ -10,7 +10,7 @@
 
 set -e
 
-KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180}"
+KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8180/auth}"
 REALM="${KEYCLOAK_REALM:-tamshai-corp}"
 CLIENT_ID="${KEYCLOAK_CLIENT_ID:-mcp-gateway}"
 CLIENT_SECRET="${MCP_GATEWAY_CLIENT_SECRET:-}"
@@ -39,7 +39,7 @@ OPTIONS:
   -r, --realm REALM       Keycloak realm (default: tamshai-corp)
   -c, --client CLIENT     Client ID (default: mcp-gateway)
   -p, --password PASS     User password (ROPC fallback only)
-  -u, --url URL           Keycloak URL (default: http://localhost:8180)
+  -u, --url URL           Keycloak URL (default: http://localhost:8180/auth)
   -j, --json              Output full JSON response (default: token only)
   -v, --verbose           Show detailed information
 
