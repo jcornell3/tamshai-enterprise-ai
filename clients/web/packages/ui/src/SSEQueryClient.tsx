@@ -158,7 +158,7 @@ export function SSEQueryClient({
   }, [autoStart, query]);
 
   return (
-    <div className="sse-query-client">
+    <div className="sse-query-client" data-testid="sse-query-client">
       {/* Query Input */}
       <div className="mb-4">
         <div className="flex items-center gap-2 text-sm text-secondary-600">
@@ -184,7 +184,7 @@ export function SSEQueryClient({
       <div className="card min-h-[200px] relative">
         {isStreaming && !response && (
           // Loading state (before first chunk)
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-12" data-testid="sse-loading">
             <div className="text-center">
               <div className="spinner mb-4"></div>
               <p className="text-secondary-600">
@@ -196,7 +196,7 @@ export function SSEQueryClient({
 
         {response && (
           // Streaming response
-          <div className="prose prose-sm max-w-none">
+          <div className="prose prose-sm max-w-none" data-testid="sse-response">
             <div className="whitespace-pre-wrap text-secondary-900">
               {response}
             </div>
@@ -208,7 +208,7 @@ export function SSEQueryClient({
 
         {error && (
           // Error state
-          <div className="alert-danger">
+          <div className="alert-danger" data-testid="sse-error">
             <p className="font-medium">Error: {error}</p>
             <button
               onClick={retryQuery}
@@ -243,7 +243,7 @@ export function SSEQueryClient({
           </span>
         )}
         {!isStreaming && response && (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1" data-testid="sse-complete">
             <span className="inline-block w-2 h-2 bg-secondary-400 rounded-full"></span>
             Stream complete
           </span>

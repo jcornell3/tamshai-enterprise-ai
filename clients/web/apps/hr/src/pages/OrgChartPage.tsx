@@ -144,7 +144,7 @@ export default function OrgChartPage() {
       </div>
 
       {/* Org Chart */}
-      <div className="card overflow-x-auto">
+      <div className="card overflow-x-auto" data-testid="org-chart">
         {isLoading ? (
           <div className="py-12 text-center">
             <div className="spinner mb-4"></div>
@@ -222,6 +222,10 @@ function OrgNode({
 
       {/* Node Card */}
       <div
+        data-testid={`employee-card-${node.employee_id}`}
+        role="button"
+        aria-label={`${node.name}, ${node.title}`}
+        tabIndex={0}
         className={`relative rounded-lg border-2 p-4 min-w-[200px] transition-all ${
           directMatch
             ? 'border-primary-500 bg-primary-50 shadow-md'

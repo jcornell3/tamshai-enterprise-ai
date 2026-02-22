@@ -199,9 +199,85 @@ export function useAIQuery({ domain }: UseAIQueryOptions): UseAIQueryReturn {
     setDirectiveError(null);
   }, []);
 
-  const handleComponentAction = useCallback((action: unknown) => {
+  /**
+   * Handle component actions (approve/reject/drilldown)
+   * Routes to appropriate MCP gateway endpoints
+   */
+  const handleComponentAction = useCallback(async (action: unknown) => {
     console.log('Component action:', action);
-  }, []);
+
+    // Type guard for action object
+    if (!action || typeof action !== 'object') return;
+    const typedAction = action as { type: string; params?: Record<string, unknown> };
+    if (!typedAction.type || !typedAction.params) return;
+
+    const { type, params } = typedAction;
+    const { approvalType, id, reason } = params as { approvalType?: string; id?: string; reason?: string };
+
+    if (!approvalType || !id) return;
+
+    const token = getAccessToken();
+    if (!token) {
+      console.error('Not authenticated for action');
+      return;
+    }
+
+    // Map approval type to API endpoint and request body
+    let endpoint: string;
+    let body: Record<string, unknown>;
+
+    switch (approvalType) {
+      case 'time-off':
+        endpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/hr/tools/approve_time_off_request`;
+        body = { requestId: id, approved: type === 'approve' };
+        break;
+      case 'expense':
+        endpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/tools/approve_expense_report`;
+        body = { reportId: id, approved: type === 'approve' };
+        break;
+      case 'budget':
+        endpoint = `${apiConfig.mcpGatewayUrl}/api/mcp/finance/tools/approve_budget`;
+        body = { budgetId: id, approved: type === 'approve' };
+        break;
+      default:
+        console.warn('Unknown approval type:', approvalType);
+        return;
+    }
+
+    // Add rejection reason if provided
+    if (type === 'reject' && reason) {
+      body.rejectionReason = reason;
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Approval action failed:', errorData);
+        alert(`Action failed: ${errorData.message || response.statusText}`);
+        return;
+      }
+
+      const result = await response.json();
+      console.log('Approval action result:', result);
+
+      // Show success message
+      alert(result.message || `${type === 'approve' ? 'Approved' : 'Rejected'} successfully`);
+
+      // Could trigger a refresh of the approvals queue here if needed
+    } catch (error) {
+      console.error('Error performing approval action:', error);
+      alert('Failed to perform action. Please try again.');
+    }
+  }, [getAccessToken]);
 
   return {
     query,
