@@ -1,7 +1,7 @@
 # Tamshai Corp Website
 # Static site served via Nginx
 
-FROM nginx:1.25-alpine
+FROM nginx:1.29-alpine3.23
 
 # Add labels for container metadata
 LABEL org.opencontainers.image.title="Tamshai Website"
