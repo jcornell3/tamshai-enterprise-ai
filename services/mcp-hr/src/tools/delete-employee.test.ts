@@ -31,6 +31,7 @@ describe('delete-employee tool', () => {
   const mockHrWriteUser: UserContext = {
     userId: '423e4567-e89b-12d3-a456-426614174000',
     username: 'alice.chen',
+    email: 'alice.chen@tamshai.com',
     roles: ['hr-write'],
   };
 
@@ -144,7 +145,7 @@ describe('delete-employee tool', () => {
         expect(result.message).toContain('Termination due to restructuring');
         expect(result.confirmationData.action).toBe('delete_employee');
         expect(result.confirmationData.mcpServer).toBe('hr');
-        expect(result.confirmationData.userId).toBe('423e4567-e89b-12d3-a456-426614174000');
+        expect(result.confirmationData.userEmail).toBe(mockHrWriteUser.email);
       }
     });
 
@@ -169,7 +170,7 @@ describe('delete-employee tool', () => {
         expect.objectContaining({
           action: 'delete_employee',
           mcpServer: 'hr',
-          userId: '423e4567-e89b-12d3-a456-426614174000',
+          userEmail: mockHrWriteUser.email,
           employeeId: '123e4567-e89b-12d3-a456-426614174000',
           employeeName: 'John Doe',
           employeeEmail: 'john.doe@test.com',
@@ -506,7 +507,7 @@ describe('delete-employee tool', () => {
       expect(mockStorePendingConfirmation).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          userId: '423e4567-e89b-12d3-a456-426614174000',
+          userEmail: mockHrWriteUser.email,
           timestamp: expect.any(Number),
         }),
         300

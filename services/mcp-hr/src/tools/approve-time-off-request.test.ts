@@ -542,58 +542,21 @@ describe('executeApproveTimeOffRequest', () => {
   });
 
   describe('Approval execution', () => {
-    it('looks up approver employee ID', async () => {
+    // v1.5: Implementation now uses approver_email directly (no lookup needed)
+    it('updates request status to approved with approver email', async () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }) // update request
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }); // update balances
 
       await executeApproveTimeOffRequest(mockExecutionData, mockManagerContext);
 
       expect(mockQueryWithRLS).toHaveBeenNthCalledWith(
         1,
         mockManagerContext,
-        expect.stringContaining('work_email = $1'),
-        ['jane.manager@test.com']
-      );
-    });
-
-    it('returns error when approver not found', async () => {
-      const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
-
-      mockQueryWithRLS.mockResolvedValueOnce({
-        rows: [],
-        rowCount: 0,
-        command: '',
-        oid: 0,
-        fields: [],
-      });
-
-      const result = await executeApproveTimeOffRequest(mockExecutionData, mockManagerContext);
-
-      expect(result.status).toBe('error');
-      if (result.status === 'error') {
-        expect(result.code).toBe('APPROVER_NOT_FOUND');
-      }
-    });
-
-    it('updates request status to approved', async () => {
-      const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
-
-      mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
-
-      await executeApproveTimeOffRequest(mockExecutionData, mockManagerContext);
-
-      expect(mockQueryWithRLS).toHaveBeenNthCalledWith(
-        2,
-        mockManagerContext,
         expect.stringContaining('UPDATE hr.time_off_requests'),
-        expect.arrayContaining(['approved', mockApproverRecord.id, mockExecutionData.approverNotes, mockExecutionData.requestId])
+        expect.arrayContaining(['approved', mockManagerContext.email, mockExecutionData.approverNotes, mockExecutionData.requestId])
       );
     });
 
@@ -601,14 +564,13 @@ describe('executeApproveTimeOffRequest', () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }) // update request
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }); // update balances
 
       await executeApproveTimeOffRequest(mockExecutionData, mockManagerContext);
 
       expect(mockQueryWithRLS).toHaveBeenNthCalledWith(
-        3,
+        2,
         mockManagerContext,
         expect.stringContaining('pending = pending - $1, used = used + $1'),
         expect.arrayContaining([mockExecutionData.totalDays, mockExecutionData.employeeId, mockExecutionData.typeCode, 2026])
@@ -619,9 +581,8 @@ describe('executeApproveTimeOffRequest', () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }) // update request
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }); // update balances
 
       const result = await executeApproveTimeOffRequest(mockExecutionData, mockManagerContext);
 
@@ -641,21 +602,20 @@ describe('executeApproveTimeOffRequest', () => {
       approverNotes: 'Sorry, we need coverage during this period.',
     };
 
-    it('updates request status to rejected', async () => {
+    it('updates request status to rejected with approver email', async () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }) // update request
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }); // update balances
 
       await executeApproveTimeOffRequest(rejectionData, mockManagerContext);
 
       expect(mockQueryWithRLS).toHaveBeenNthCalledWith(
-        2,
+        1,
         mockManagerContext,
         expect.stringContaining('UPDATE hr.time_off_requests'),
-        expect.arrayContaining(['rejected', mockApproverRecord.id, rejectionData.approverNotes, rejectionData.requestId])
+        expect.arrayContaining(['rejected', mockManagerContext.email, rejectionData.approverNotes, rejectionData.requestId])
       );
     });
 
@@ -663,15 +623,14 @@ describe('executeApproveTimeOffRequest', () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }) // update request
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }); // update balances
 
       await executeApproveTimeOffRequest(rejectionData, mockManagerContext);
 
       // Should only update pending, not used
       expect(mockQueryWithRLS).toHaveBeenNthCalledWith(
-        3,
+        2,
         mockManagerContext,
         expect.stringMatching(/pending = pending - \$1(?!.*used = used)/),
         expect.arrayContaining([rejectionData.totalDays, rejectionData.employeeId, rejectionData.typeCode, 2026])
@@ -682,9 +641,8 @@ describe('executeApproveTimeOffRequest', () => {
       const mockQueryWithRLS = jest.spyOn(dbConnection, 'queryWithRLS');
 
       mockQueryWithRLS
-        .mockResolvedValueOnce({ rows: [mockApproverRecord], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] })
-        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] });
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }) // update request
+        .mockResolvedValueOnce({ rows: [], rowCount: 1, command: '', oid: 0, fields: [] }); // update balances
 
       const result = await executeApproveTimeOffRequest(rejectionData, mockManagerContext);
 

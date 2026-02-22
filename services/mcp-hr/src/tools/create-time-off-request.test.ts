@@ -336,7 +336,7 @@ describe('create-time-off-request tool', () => {
         expect.objectContaining({
           action: 'create_time_off_request',
           mcpServer: 'hr',
-          userId: 'user-123',
+          userEmail: mockUserContext.email,
           employeeId: mockEmployee.id,
           typeCode: 'VACATION',
           startDate: '2026-03-02',

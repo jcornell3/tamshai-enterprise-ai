@@ -31,6 +31,7 @@ describe('update-salary tool', () => {
   const mockHrWriteUser: UserContext = {
     userId: '423e4567-e89b-12d3-a456-426614174000',
     username: 'alice.chen',
+    email: 'alice.chen@tamshai.com',
     roles: ['hr-write'],
   };
 
@@ -155,7 +156,7 @@ describe('update-salary tool', () => {
         expect(result.message).toContain('$85,000');
         expect(result.confirmationData.action).toBe('update_salary');
         expect(result.confirmationData.mcpServer).toBe('hr');
-        expect(result.confirmationData.userId).toBe('423e4567-e89b-12d3-a456-426614174000');
+        expect(result.confirmationData.userEmail).toBe(mockHrWriteUser.email);
       }
     });
 
@@ -512,7 +513,7 @@ describe('update-salary tool', () => {
       const result = await updateSalary(input, mockHrWriteUser);
 
       if (result.status === 'pending_confirmation') {
-        expect(result.confirmationData.userId).toBe(mockHrWriteUser.userId);
+        expect(result.confirmationData.userEmail).toBe(mockHrWriteUser.email);
       }
     });
 

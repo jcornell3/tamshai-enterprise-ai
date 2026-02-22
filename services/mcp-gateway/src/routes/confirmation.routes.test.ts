@@ -153,7 +153,7 @@ describe('Confirmation Routes', () => {
 
     it('should return 403 when confirming user differs from initiating user', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: 'different-user-id',
+        userEmail: 'different-user@tamshai.com',
         action: 'delete_employee',
         mcpServer: 'hr',
       });
@@ -169,8 +169,8 @@ describe('Confirmation Routes', () => {
         'Confirmation user mismatch',
         expect.objectContaining({
           confirmationId: 'test-confirmation-id',
-          initiatingUser: 'different-user-id',
-          confirmingUser: TEST_USERS.hrManager.userId,
+          initiatingUser: 'different-user@tamshai.com',
+          confirmingUser: TEST_USERS.hrManager.email,
         })
       );
     });
@@ -192,7 +192,7 @@ describe('Confirmation Routes', () => {
 
     it('should cancel action when approved is false', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'delete_employee',
         mcpServer: 'hr',
       });
@@ -234,7 +234,7 @@ describe('Confirmation Routes', () => {
 
     it('should execute action when approved is true', async () => {
       const pendingAction = {
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'delete_employee',
         mcpServer: 'hr',
         employeeId: 'emp-123',
@@ -287,7 +287,7 @@ describe('Confirmation Routes', () => {
 
     it('should execute action on finance server', async () => {
       const pendingAction = {
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'approve_expense',
         mcpServer: 'finance',
         expenseId: 'exp-456',
@@ -327,7 +327,7 @@ describe('Confirmation Routes', () => {
 
     it('should return 500 for invalid mcpServer name', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'malicious_action',
         mcpServer: 'invalid-server',
       });
@@ -352,7 +352,7 @@ describe('Confirmation Routes', () => {
 
     it('should return 500 for missing mcpServer', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'some_action',
         mcpServer: '',
       });
@@ -367,7 +367,7 @@ describe('Confirmation Routes', () => {
 
     it('should return 500 for non-string mcpServer', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'some_action',
         mcpServer: { malicious: true },
       });
@@ -397,7 +397,7 @@ describe('Confirmation Routes', () => {
 
     it('should return 500 when MCP execution fails', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'delete_employee',
         mcpServer: 'hr',
       });
@@ -447,7 +447,7 @@ describe('Confirmation Routes', () => {
 
     it('should log confirmation request', async () => {
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'test_action',
         mcpServer: 'hr',
       });
@@ -488,7 +488,7 @@ describe('Confirmation Routes', () => {
       app.use('/api', createConfirmationRoutes(customDeps));
 
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'test_action',
         mcpServer: 'hr',
       });
@@ -524,7 +524,7 @@ describe('Confirmation Routes', () => {
       app.use('/api', createConfirmationRoutes(depsWithoutTimeout));
 
       (redisUtils.getPendingConfirmation as jest.Mock).mockResolvedValue({
-        userId: TEST_USERS.hrManager.userId,
+        userEmail: TEST_USERS.hrManager.email,
         action: 'test_action',
         mcpServer: 'hr',
       });
