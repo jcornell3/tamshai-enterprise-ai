@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS hr.time_off_requests (
     end_date DATE NOT NULL,
     total_days DECIMAL(4,2) NOT NULL,    -- Calculated days (accounting for weekends)
     status VARCHAR(20) DEFAULT 'pending',  -- pending, approved, rejected, cancelled
-    approver_id UUID REFERENCES hr.employees(id),
+    approver_email VARCHAR(255),         -- Email of approving user (human-readable audit trail)
     approved_at TIMESTAMP,
     notes TEXT,                          -- Employee's notes/reason
     approver_notes TEXT,                 -- Manager's notes on approval/rejection
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS hr.time_off_requests (
 CREATE INDEX IF NOT EXISTS idx_time_off_requests_employee ON hr.time_off_requests(employee_id);
 CREATE INDEX IF NOT EXISTS idx_time_off_requests_status ON hr.time_off_requests(status);
 CREATE INDEX IF NOT EXISTS idx_time_off_requests_dates ON hr.time_off_requests(start_date, end_date);
-CREATE INDEX IF NOT EXISTS idx_time_off_requests_approver ON hr.time_off_requests(approver_id);
+CREATE INDEX IF NOT EXISTS idx_time_off_requests_approver ON hr.time_off_requests(approver_email);
 
 -- =============================================================================
 -- HELPER FUNCTIONS

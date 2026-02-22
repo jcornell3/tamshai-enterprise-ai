@@ -118,7 +118,7 @@ export async function approveInvoice(
       const confirmationData = {
         action: 'approve_invoice',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         invoiceId: invoice.id,
         vendor: invoice.vendor_name,
@@ -170,9 +170,8 @@ export async function executeApproveInvoice(
     const approverNotes = confirmationData.approverNotes as string | null;
 
     try {
-      // Get approver's employee ID from HR database (if available)
-      // For now, we'll use the user ID directly
-      const approverId = userContext.userId;
+      // Use approver's email for human-readable audit trail
+      const approverEmail = userContext.email;
 
       // Update invoice status to APPROVED
       const result = await queryWithRLS(
@@ -187,7 +186,7 @@ export async function executeApproveInvoice(
           AND status = 'PENDING'
         RETURNING id, invoice_number, vendor_name, amount, currency
         `,
-        [invoiceId, approverId]
+        [invoiceId, approverEmail]
       );
 
       if (result.rowCount === 0) {

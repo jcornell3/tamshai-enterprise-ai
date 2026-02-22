@@ -116,7 +116,7 @@ export async function reimburseExpenseReport(
       const confirmationData = {
         action: 'reimburse_expense_report',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         reportId: report.id,
         reportNumber: report.report_number,
@@ -170,7 +170,7 @@ export async function executeReimburseExpenseReport(
     const paymentReference = confirmationData.paymentReference as string | null;
 
     try {
-      const reimburserId = userContext.userId;
+      const reimburserEmail = userContext.email;
 
       // Update expense report status to REIMBURSED
       const result = await queryWithRLS(
@@ -186,7 +186,7 @@ export async function executeReimburseExpenseReport(
           AND status = 'APPROVED'
         RETURNING id, report_number, title, total_amount
         `,
-        [reportId, reimburserId, paymentReference]
+        [reportId, reimburserEmail, paymentReference]
       );
 
       if (result.rowCount === 0) {

@@ -121,7 +121,7 @@ export async function rejectBudget(
       const confirmationData = {
         action: 'reject_budget',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         // Internal UUID for database operations
         budgetUUID: budget.id,
@@ -200,10 +200,10 @@ export async function executeRejectBudget(
         userContext,
         `
         INSERT INTO finance.budget_approval_history
-          (budget_id, action, actor_id, action_at, comments)
-        VALUES ($1::uuid, 'REJECTED', $2::uuid, NOW(), $3::text)
+          (budget_id, action, actor_email, action_at, comments)
+        VALUES ($1::uuid, 'REJECTED', $2, NOW(), $3::text)
         `,
-        [budgetUUID, userContext.userId, rejectionReason]
+        [budgetUUID, userContext.email, rejectionReason]
       );
 
       return createSuccessResponse({

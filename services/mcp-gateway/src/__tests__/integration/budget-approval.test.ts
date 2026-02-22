@@ -193,9 +193,10 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       expect(result.rows.length).toBeGreaterThanOrEqual(0);
     });
 
-    test('should have approved_by column referencing hr.employees', async () => {
+    test('should have approved_by column for approver email', async () => {
       // TDD RED: This column DOES NOT EXIST in v1.3
       // Expected error: "column \"approved_by\" does not exist"
+      // v1.5: Changed from UUID to VARCHAR(255) to store human-readable email
 
       const result = await client.query(`
         SELECT approved_by FROM finance.department_budgets LIMIT 1

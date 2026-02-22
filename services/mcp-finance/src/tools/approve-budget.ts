@@ -122,12 +122,12 @@ export async function approveBudget(
       }
 
       // 3b. Separation of duties: submitter cannot approve their own budget
-      if (budget.submitted_by && budget.submitted_by === userContext.userId) {
+      if (budget.submitted_by && budget.submitted_by === userContext.email) {
         return createErrorResponse(
           'SEPARATION_OF_DUTIES',
           `You cannot approve your own submitted budget. A different finance team member must approve this budget.`,
           'Request another finance-write user to approve this budget.',
-          { budgetId, submittedBy: budget.submitted_by, approverId: userContext.userId }
+          { budgetId, submittedBy: budget.submitted_by, approverEmail: userContext.email }
         );
       }
 
@@ -140,7 +140,7 @@ export async function approveBudget(
       const confirmationData = {
         action: 'approve_budget',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         // Internal UUID for database operations
         budgetUUID: budget.id,
@@ -201,8 +201,8 @@ export async function executeApproveBudget(
     const approverNotes = confirmationData.approverNotes as string | null;
 
     try {
-      // Get approver's ID
-      const approverId = userContext.userId;
+      // Use approver's email for human-readable audit trail
+      const approverEmail = userContext.email;
 
       // Update budget status to APPROVED
       const result = await queryWithRLS(
@@ -210,7 +210,7 @@ export async function executeApproveBudget(
         `
         UPDATE finance.department_budgets
         SET status = 'APPROVED',
-            approved_by = $2::uuid,
+            approved_by = $2,
             approved_at = NOW(),
             notes = CASE WHEN $3::text IS NOT NULL THEN COALESCE(notes || E'\\n', '') || 'Approver: ' || $3::text ELSE notes END,
             updated_at = NOW()
@@ -218,7 +218,7 @@ export async function executeApproveBudget(
           AND status = 'PENDING_APPROVAL'
         RETURNING id, budget_id, department, department_code, fiscal_year, budgeted_amount
         `,
-        [budgetUUID, approverId, approverNotes]
+        [budgetUUID, approverEmail, approverNotes]
       );
 
       if (result.rowCount === 0) {

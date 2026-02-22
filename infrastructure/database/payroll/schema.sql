@@ -59,9 +59,9 @@ CREATE TABLE IF NOT EXISTS payroll.pay_runs (
     employer_taxes DECIMAL(14, 2) DEFAULT 0,
     employer_benefits DECIMAL(14, 2) DEFAULT 0,
     employee_count INTEGER DEFAULT 0,
-    created_by UUID,
-    approved_by UUID,
-    processed_by UUID,
+    created_by VARCHAR(255),   -- Email of creating user (human-readable audit trail)
+    approved_by VARCHAR(255),  -- Email of approving user (human-readable audit trail)
+    processed_by VARCHAR(255), -- Email of processing user (human-readable audit trail)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     approved_at TIMESTAMP WITH TIME ZONE,
     processed_at TIMESTAMP WITH TIME ZONE,

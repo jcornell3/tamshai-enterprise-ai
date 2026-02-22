@@ -225,9 +225,9 @@ CREATE TABLE IF NOT EXISTS finance.department_budgets (
     notes TEXT,
     -- v1.5 Approval Workflow Columns (Issue #78)
     status finance.budget_status DEFAULT 'DRAFT',
-    submitted_by UUID,  -- FK to hr.employees (cross-database reference, not enforced)
+    submitted_by VARCHAR(255),  -- Email of submitting user (human-readable audit trail)
     submitted_at TIMESTAMP,
-    approved_by UUID,   -- FK to hr.employees (cross-database reference, not enforced)
+    approved_by VARCHAR(255),   -- Email of approving user (human-readable audit trail)
     approved_at TIMESTAMP,
     rejection_reason TEXT,
     version INTEGER DEFAULT 1,
@@ -248,7 +248,7 @@ BEGIN
     -- Add submitted_by column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                    WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'submitted_by') THEN
-        ALTER TABLE finance.department_budgets ADD COLUMN submitted_by UUID;
+        ALTER TABLE finance.department_budgets ADD COLUMN submitted_by VARCHAR(255);
     END IF;
 
     -- Add submitted_at column if it doesn't exist
@@ -260,7 +260,7 @@ BEGIN
     -- Add approved_by column if it doesn't exist
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                    WHERE table_schema = 'finance' AND table_name = 'department_budgets' AND column_name = 'approved_by') THEN
-        ALTER TABLE finance.department_budgets ADD COLUMN approved_by UUID;
+        ALTER TABLE finance.department_budgets ADD COLUMN approved_by VARCHAR(255);
     END IF;
 
     -- Add approved_at column if it doesn't exist
@@ -550,7 +550,7 @@ CREATE TABLE IF NOT EXISTS finance.budget_approval_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     budget_id UUID NOT NULL REFERENCES finance.department_budgets(id) ON DELETE CASCADE,
     action finance.budget_approval_action NOT NULL,
-    actor_id UUID NOT NULL,  -- FK to hr.employees (cross-database reference, not enforced)
+    actor_email VARCHAR(255) NOT NULL,  -- Email of acting user (human-readable audit trail)
     action_at TIMESTAMP DEFAULT NOW(),
     comments TEXT
 );
@@ -558,7 +558,7 @@ CREATE TABLE IF NOT EXISTS finance.budget_approval_history (
 -- Index for efficient history lookups
 CREATE INDEX IF NOT EXISTS idx_budget_approval_history_budget_id ON finance.budget_approval_history(budget_id);
 CREATE INDEX IF NOT EXISTS idx_budget_approval_history_action_at ON finance.budget_approval_history(action_at);
-CREATE INDEX IF NOT EXISTS idx_budget_approval_history_actor ON finance.budget_approval_history(actor_id);
+CREATE INDEX IF NOT EXISTS idx_budget_approval_history_actor ON finance.budget_approval_history(actor_email);
 
 -- =============================================================================
 -- FINANCIAL REPORTS (Metadata - actual documents in MinIO)
@@ -746,7 +746,7 @@ CREATE TABLE IF NOT EXISTS finance.expenses (
     status finance.expense_status DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    approved_by UUID,
+    approved_by VARCHAR(255),  -- Email of approving user (human-readable audit trail)
     approved_at TIMESTAMP,
     receipt_path VARCHAR(500)
 );
@@ -756,7 +756,7 @@ DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                    WHERE table_schema = 'finance' AND table_name = 'expenses' AND column_name = 'approved_by') THEN
-        ALTER TABLE finance.expenses ADD COLUMN approved_by UUID;
+        ALTER TABLE finance.expenses ADD COLUMN approved_by VARCHAR(255);
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
@@ -1281,12 +1281,12 @@ CREATE TABLE IF NOT EXISTS finance.expense_reports (
     submission_date DATE,
     submitted_at TIMESTAMP,
     approved_at TIMESTAMP,
-    approved_by UUID,
+    approved_by VARCHAR(255),   -- Email of approving user (human-readable audit trail)
     rejected_at TIMESTAMP,
-    rejected_by UUID,
+    rejected_by VARCHAR(255),   -- Email of rejecting user (human-readable audit trail)
     rejection_reason TEXT,
     reimbursed_at TIMESTAMP,
-    reimbursed_by UUID,
+    reimbursed_by VARCHAR(255), -- Email of reimbursing user (human-readable audit trail)
     payment_reference VARCHAR(100),
     notes TEXT,
     created_at TIMESTAMP DEFAULT NOW(),

@@ -125,7 +125,7 @@ export async function bulkApproveInvoices(
       const confirmationData = {
         action: 'bulk_approve_invoices',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         invoiceIds: pendingInvoices.map((inv: any) => inv.id),
         invoiceCount: pendingInvoices.length,
@@ -171,7 +171,7 @@ export async function executeBulkApproveInvoices(
 ): Promise<MCPToolResponse> {
   return withErrorHandling('execute_bulk_approve_invoices', async () => {
     const invoiceIds = confirmationData.invoiceIds as string[];
-    const approverId = userContext.userId;
+    const approverEmail = userContext.email;
 
     try {
       const placeholders = invoiceIds.map((_, i) => `$${i + 2}`).join(', ');
@@ -186,7 +186,7 @@ export async function executeBulkApproveInvoices(
           AND status = 'PENDING'
         RETURNING id, invoice_number, vendor_name, amount, currency
         `,
-        [approverId, ...invoiceIds]
+        [approverEmail, ...invoiceIds]
       );
 
       if (result.rowCount === 0) {

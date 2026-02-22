@@ -183,7 +183,7 @@ async function resetExpenseReportFixtures(): Promise<void> {
   await pool.query(`
     UPDATE finance.expense_reports
     SET status = 'APPROVED',
-        approved_by = '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1'::uuid,
+        approved_by = 'bob.martinez@tamshai.com',
         approved_at = NOW() - interval '2 days',
         reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
     WHERE id IN ($1, $2)
@@ -193,7 +193,7 @@ async function resetExpenseReportFixtures(): Promise<void> {
   await pool.query(`
     UPDATE finance.expense_reports
     SET status = 'REJECTED',
-        rejected_by = '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1'::uuid,
+        rejected_by = 'bob.martinez@tamshai.com',
         rejected_at = NOW() - interval '3 days',
         rejection_reason = 'Missing receipts for online course purchases. Please upload all receipts and resubmit.',
         approved_by = NULL, approved_at = NULL,
@@ -205,9 +205,9 @@ async function resetExpenseReportFixtures(): Promise<void> {
   await pool.query(`
     UPDATE finance.expense_reports
     SET status = 'REIMBURSED',
-        approved_by = '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1'::uuid,
+        approved_by = 'bob.martinez@tamshai.com',
         approved_at = NOW() - interval '6 days',
-        reimbursed_by = '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1'::uuid,
+        reimbursed_by = 'bob.martinez@tamshai.com',
         reimbursed_at = NOW() - interval '2 days',
         payment_reference = 'ACH-20260118-001'
     WHERE id = $1
@@ -258,7 +258,7 @@ async function resetExpenseReportFixtures(): Promise<void> {
     SET status = 'APPROVED',
         submission_date = '2026-02-01',
         submitted_at = '2026-02-01 14:00:00',
-        approved_by = 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b'::uuid,
+        approved_by = 'eve.thompson@tamshai.com',
         approved_at = '2026-02-02 10:00:00',
         rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
         reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL

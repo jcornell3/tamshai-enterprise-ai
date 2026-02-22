@@ -110,7 +110,7 @@ export async function deleteExpenseReport(
       const confirmationData = {
         action: 'delete_expense_report',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         reportId: report.id,
         reportNumber: report.report_number,

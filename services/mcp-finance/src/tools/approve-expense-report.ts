@@ -113,7 +113,7 @@ export async function approveExpenseReport(
       const confirmationData = {
         action: 'approve_expense_report',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         reportId: report.id,
         reportNumber: report.report_number,
@@ -163,7 +163,7 @@ export async function executeApproveExpenseReport(
     const reportId = confirmationData.reportId as string;
 
     try {
-      const approverId = userContext.userId;
+      const approverEmail = userContext.email;
 
       // Update expense report status to APPROVED
       const result = await queryWithRLS(
@@ -178,7 +178,7 @@ export async function executeApproveExpenseReport(
           AND (status = 'SUBMITTED' OR status = 'UNDER_REVIEW')
         RETURNING id, report_number, title, total_amount
         `,
-        [reportId, approverId]
+        [reportId, approverEmail]
       );
 
       if (result.rowCount === 0) {

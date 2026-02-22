@@ -87,7 +87,7 @@ export async function createPayRun(
     const confirmationData = {
       action: 'create_pay_run',
       mcpServer: 'payroll',
-      userId: userContext.userId,
+      userEmail: userContext.email,
       timestamp: Date.now(),
       period_start,
       period_end,
@@ -136,7 +136,7 @@ export async function executeCreatePayRun(
       period_end,
       pay_date,
       employeeCount: employees.length,
-      userId: userContext.userId,
+      userEmail: userContext.email,
     });
 
     const payRunId = uuidv4();
@@ -161,7 +161,7 @@ export async function executeCreatePayRun(
       pay_date,
       totalGross,
       employees.length,
-      userContext.userId,
+      userContext.email,
     ]);
 
     // Insert pay stubs for each employee

@@ -78,13 +78,13 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
         return;
       }
 
-      // Verify user is the same one who initiated the request
-      if (pendingAction.userId !== userContext.userId) {
+      // Verify user is the same one who initiated the request (by email)
+      if (pendingAction.userEmail !== userContext.email) {
         logger.warn('Confirmation user mismatch', {
           requestId,
           confirmationId,
-          initiatingUser: pendingAction.userId,
-          confirmingUser: userContext.userId,
+          initiatingUser: pendingAction.userEmail,
+          confirmingUser: userContext.email,
         });
         res.status(403).json({ error: 'Confirmation can only be completed by the initiating user' });
         return;

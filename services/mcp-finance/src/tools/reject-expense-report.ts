@@ -114,7 +114,7 @@ export async function rejectExpenseReport(
       const confirmationData = {
         action: 'reject_expense_report',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         reportId: report.id,
         reportNumber: report.report_number,
@@ -168,7 +168,7 @@ export async function executeRejectExpenseReport(
     const rejectionReason = confirmationData.rejectionReason as string;
 
     try {
-      const rejecterId = userContext.userId;
+      const rejecterEmail = userContext.email;
 
       // Update expense report status to REJECTED
       const result = await queryWithRLS(
@@ -184,7 +184,7 @@ export async function executeRejectExpenseReport(
           AND (status = 'SUBMITTED' OR status = 'UNDER_REVIEW')
         RETURNING id, report_number, title, total_amount
         `,
-        [reportId, rejecterId, rejectionReason]
+        [reportId, rejecterEmail, rejectionReason]
       );
 
       if (result.rowCount === 0) {

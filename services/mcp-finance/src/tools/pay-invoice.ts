@@ -132,7 +132,7 @@ export async function payInvoice(
       const confirmationData = {
         action: 'pay_invoice',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         invoiceId: invoice.id,
         vendor: invoice.vendor_name,

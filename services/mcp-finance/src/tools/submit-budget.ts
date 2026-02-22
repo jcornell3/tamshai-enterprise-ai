@@ -148,7 +148,7 @@ export async function submitBudget(
           AND (status = 'DRAFT' OR status = 'REJECTED')
         RETURNING id, budget_id, department, department_code, fiscal_year, budgeted_amount, status, submitted_by, submitted_at
         `,
-        [budget.id, userContext.userId]
+        [budget.id, userContext.email]
       );
 
       if (updateResult.rowCount === 0) {
@@ -167,10 +167,10 @@ export async function submitBudget(
         userContext,
         `
         INSERT INTO finance.budget_approval_history
-          (budget_id, action, actor_id, action_at, comments)
+          (budget_id, action, actor_email, action_at, comments)
         VALUES ($1, 'SUBMITTED', $2, NOW(), $3)
         `,
-        [budget.id, userContext.userId, comments || null]
+        [budget.id, userContext.email, comments || null]
       );
 
       // 6. Return success response

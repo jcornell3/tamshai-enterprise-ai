@@ -138,7 +138,7 @@ export async function approveTimeOffRequest(
       await storePendingConfirmation(confirmationId, {
         action: 'approve_time_off_request',
         mcpServer: 'hr',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         requestId,
         employeeId: request.employee_id,
         approved,
@@ -166,7 +166,7 @@ Do you want to ${action.toLowerCase()} this request?`;
       return createPendingConfirmationResponse(confirmationId, message, {
         action: 'approve_time_off_request',
         mcpServer: 'hr',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         requestId,
         employeeName: request.employee_name,
         approved,
@@ -197,31 +197,17 @@ export async function executeApproveTimeOffRequest(
     const { requestId, employeeId, approved, approverNotes, totalDays, typeCode, startDate } = data;
 
     try {
-      // Get approver's employee ID
-      const approverLookup = await queryWithRLS(
-        userContext,
-        'SELECT id FROM hr.employees WHERE work_email = $1',
-        [userContext.email]
-      );
-
-      if (approverLookup.rows.length === 0) {
-        return createErrorResponse(
-          'APPROVER_NOT_FOUND',
-          'Could not find your employee record',
-          'Please try again or contact support'
-        );
-      }
-
-      const approverId = approverLookup.rows[0].id;
+      // Use approver's email directly for human-readable audit trail
+      const approverEmail = userContext.email;
       const newStatus = approved ? 'approved' : 'rejected';
 
       // Update the request
       await queryWithRLS(
         userContext,
         `UPDATE hr.time_off_requests
-        SET status = $1, approver_id = $2, approved_at = NOW(), approver_notes = $3, updated_at = NOW()
+        SET status = $1, approver_email = $2, approved_at = NOW(), approver_notes = $3, updated_at = NOW()
         WHERE id = $4`,
-        [newStatus, approverId, approverNotes, requestId]
+        [newStatus, approverEmail, approverNotes, requestId]
       );
 
       // Update balances

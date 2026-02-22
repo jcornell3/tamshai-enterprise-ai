@@ -111,7 +111,7 @@ export async function deleteInvoice(
       const confirmationData = {
         action: 'delete_invoice',
         mcpServer: 'finance',
-        userId: userContext.userId,
+        userEmail: userContext.email,
         timestamp: Date.now(),
         invoiceId,
         vendor: invoice.vendor_name,  // Actual column: vendor_name
