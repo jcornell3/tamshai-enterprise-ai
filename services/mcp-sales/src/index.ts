@@ -347,7 +347,7 @@ async function deleteOpportunity(input: any, userContext: UserContext): Promise<
     const confirmationData = {
       action: 'delete_opportunity',
       mcpServer: 'sales',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       opportunityId,
       customerName: opportunity.customer_name,
@@ -442,7 +442,7 @@ async function closeOpportunity(input: any, userContext: UserContext): Promise<M
     const confirmationData = {
       action: 'close_opportunity',
       mcpServer: 'sales',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       opportunityId,
       customerName: opportunity.customer_name,
@@ -532,7 +532,7 @@ async function deleteCustomer(input: any, userContext: UserContext): Promise<MCP
     const confirmationData = {
       action: 'delete_customer',
       mcpServer: 'sales',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       customerId,
       customerName: customer.company_name,
@@ -740,7 +740,7 @@ async function convertLead(input: any, userContext: UserContext): Promise<MCPToo
     const confirmationData = {
       action: 'convert_lead',
       mcpServer: 'sales',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       leadId,
       leadCompany: lead.company,
