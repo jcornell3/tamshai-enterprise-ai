@@ -125,7 +125,7 @@ describe('MCP Response Helpers', () => {
       const confirmationData = {
         action: 'delete_employee',
         mcpServer: 'hr',
-        userId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'alice.chen@tamshai.com',
         timestamp: Date.now(),
         employeeId: '223e4567-e89b-12d3-a456-426614174000',
         employeeName: 'John Doe',
@@ -147,7 +147,7 @@ describe('MCP Response Helpers', () => {
       const confirmationData = {
         action: 'update_employee',
         mcpServer: 'hr',
-        userId: '123e4567-e89b-12d3-a456-426614174000',
+        userEmail: 'bob.martinez@tamshai.com',
         timestamp: 1234567890,
       };
 
@@ -167,7 +167,7 @@ describe('MCP Response Helpers', () => {
       const confirmationData = {
         action: 'delete_employee',
         mcpServer: 'hr',
-        userId: 'user-123',
+        userEmail: 'carol.johnson@tamshai.com',
         timestamp: Date.now(),
         customField1: 'value1',
         customField2: { nested: 'data' },
@@ -189,7 +189,7 @@ describe('MCP Response Helpers', () => {
       const confirmationData = {
         action: 'test_action',
         mcpServer: 'hr',
-        userId: 'user-id',
+        userEmail: 'test.user@tamshai.com',
         timestamp: 123,
       };
 
@@ -218,7 +218,7 @@ describe('MCP Response Helpers', () => {
       const pendingResponse = createPendingConfirmationResponse(
         'id',
         'msg',
-        { action: 'test', mcpServer: 'hr', userId: 'user', timestamp: 123 }
+        { action: 'test', mcpServer: 'hr', userEmail: 'user@tamshai.com', timestamp: 123 }
       );
 
       expect(pendingResponse.status).toBe('pending_confirmation');
