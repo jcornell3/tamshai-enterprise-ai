@@ -55,6 +55,7 @@ export interface MCPErrorResponse {
 
 /**
  * Pending confirmation response for write operations (Section 5.6)
+ * Changed from userId to userEmail for human-readable audit trails
  */
 export interface MCPPendingConfirmationResponse {
   status: 'pending_confirmation';
@@ -63,7 +64,7 @@ export interface MCPPendingConfirmationResponse {
   confirmationData: {
     action: string;
     mcpServer: string;
-    userId: string;
+    userEmail: string;  // Human-readable email for audit trail
     timestamp: number;
     [key: string]: unknown;
   };

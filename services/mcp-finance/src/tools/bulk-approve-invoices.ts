@@ -125,7 +125,7 @@ export async function bulkApproveInvoices(
       const confirmationData = {
         action: 'bulk_approve_invoices',
         mcpServer: 'finance',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         invoiceIds: pendingInvoices.map((inv: any) => inv.id),
         invoiceCount: pendingInvoices.length,

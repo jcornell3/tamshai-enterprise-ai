@@ -144,7 +144,7 @@ export async function createTimeOffRequest(
       await storePendingConfirmation(confirmationId, {
         action: 'create_time_off_request',
         mcpServer: 'hr',
-        userId: userContext.userId,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         employeeId,
         typeCode,
         startDate,
@@ -169,7 +169,7 @@ Do you want to submit this time-off request?`;
       return createPendingConfirmationResponse(confirmationId, message, {
         action: 'create_time_off_request',
         mcpServer: 'hr',
-        userId: userContext.userId,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         employeeId,
         employeeName,
         typeCode,

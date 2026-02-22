@@ -138,7 +138,7 @@ export async function approveTimeOffRequest(
       await storePendingConfirmation(confirmationId, {
         action: 'approve_time_off_request',
         mcpServer: 'hr',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         requestId,
         employeeId: request.employee_id,
         approved,
@@ -166,7 +166,7 @@ Do you want to ${action.toLowerCase()} this request?`;
       return createPendingConfirmationResponse(confirmationId, message, {
         action: 'approve_time_off_request',
         mcpServer: 'hr',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         requestId,
         employeeName: request.employee_name,
         approved,

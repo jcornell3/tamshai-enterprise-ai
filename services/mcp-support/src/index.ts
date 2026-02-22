@@ -278,7 +278,7 @@ async function closeTicket(input: any, userContext: UserContext): Promise<MCPToo
     const confirmationData = {
       action: 'close_ticket',
       mcpServer: 'support',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       ticketId,
       ticketTitle: ticket.title,
@@ -809,7 +809,7 @@ async function escalateTicket(input: any, userContext: UserContext): Promise<MCP
     const confirmationData = {
       action: 'escalate_ticket',
       mcpServer: 'support',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       ticketId,
       ticketTitle: ticket.title,

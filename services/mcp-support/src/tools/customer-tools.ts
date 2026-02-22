@@ -585,7 +585,7 @@ export async function customerInviteContact(
     const confirmationData = {
       action: 'invite_contact',
       mcpServer: 'support',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       organizationId: userContext.organizationId,
       timestamp: Date.now(),
       contactData: parsed,
@@ -686,7 +686,7 @@ export async function customerTransferLead(
     const confirmationData = {
       action: 'transfer_lead',
       mcpServer: 'support',
-      userId: userContext.userId,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       organizationId: userContext.organizationId,
       timestamp: Date.now(),
       currentLeadId: userContext.userId,

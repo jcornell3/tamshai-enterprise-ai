@@ -113,7 +113,7 @@ export async function approveExpenseReport(
       const confirmationData = {
         action: 'approve_expense_report',
         mcpServer: 'finance',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         reportId: report.id,
         reportNumber: report.report_number,

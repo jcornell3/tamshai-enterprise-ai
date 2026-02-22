@@ -525,7 +525,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
         expect(executeResponse.data.data).toMatchObject({
           budgetId: 'BUD-TEST-PENDING-1',
           status: 'APPROVED',
-          approvedBy: TEST_USERS.financeWrite.userId,
+          approvedBy: TEST_USERS.financeWrite.email,
         });
       });
 
@@ -623,7 +623,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
 
           expect(historyResult.rows.length).toBe(1);
           expect(historyResult.rows[0].action).toBe('APPROVED');
-          expect(historyResult.rows[0].actor_id).toBe(TEST_USERS.financeWrite.userId);
+          expect(historyResult.rows[0].actor_email).toBe(TEST_USERS.financeWrite.email);
         } finally {
           await client.end();
         }
@@ -734,8 +734,8 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           expect(historyResult.rows.length).toBe(1);
           const record = historyResult.rows[0];
 
-          // Verify actor_id
-          expect(record.actor_id).toBe(TEST_USERS.financeWrite.userId);
+          // Verify actor_email (human-readable approver)
+          expect(record.actor_email).toBe(TEST_USERS.financeWrite.email);
 
           // Verify timestamp is reasonable (allow 12-hour tolerance for timezone differences between test and DB)
           const actionTime = new Date(record.action_at);
@@ -802,6 +802,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
         await financeClient.post<MCPToolResponse>('/tools/submit_budget', {
           userContext: {
             userId: TEST_USERS.manager.userId,
+            email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
           },
           budgetId: 'BUD-HR-2024-SAL', // DRAFT budget
@@ -813,7 +814,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           WHERE budget_id = 'BUD-HR-2024-SAL'
         `);
 
-        expect(result.rows[0].submitted_by).toBe(TEST_USERS.manager.userId);
+        expect(result.rows[0].submitted_by).toBe(TEST_USERS.manager.email);
       } finally {
         await client.end();
       }
@@ -836,6 +837,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
         await financeClient.post<MCPToolResponse>('/tools/submit_budget', {
           userContext: {
             userId: TEST_USERS.manager.userId,
+            email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
           },
           budgetId: 'BUD-FIN-2024-SAL', // DRAFT budget
@@ -954,6 +956,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
         {
           userContext: {
             userId: TEST_USERS.manager.userId,
+            email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
           },
           budgetId: 'BUD-MKT-2024-MKT', // DRAFT budget
@@ -1028,14 +1031,14 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       try {
         const testBudgetId = `test-sep-duties-${Date.now()}`;
 
-        // Insert a test budget with bob.martinez as submitter
+        // Insert a test budget with bob.martinez as submitter (using email)
         await client.query(`
           INSERT INTO finance.department_budgets
             (budget_id, department_code, department, fiscal_year, budgeted_amount, amount,
              status, submitted_by, submitted_at)
           VALUES ($1, 'FIN', 'Finance', 2026, 500000, 500000,
                   'PENDING_APPROVAL', $2, NOW())
-        `, [testBudgetId, TEST_USERS.financeWrite.userId]);
+        `, [testBudgetId, TEST_USERS.financeWrite.email]);
 
         // Bob tries to approve his own submission
         const response = await financeClient.post<MCPToolResponse>(
@@ -1043,6 +1046,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             budgetId: testBudgetId,
@@ -1098,6 +1102,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.manager.userId,
+              email: TEST_USERS.manager.email,
               roles: TEST_USERS.manager.roles,
             },
             budgetId: testBudgetId,
@@ -1129,14 +1134,14 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       try {
         const testBudgetId = `test-version-${Date.now()}`;
 
-        // Create an approved budget with version 1
+        // Create an approved budget with version 1 (using email for approved_by)
         await client.query(`
           INSERT INTO finance.department_budgets
             (budget_id, department_code, department, fiscal_year, budgeted_amount, amount,
              status, approved_by, approved_at, version)
           VALUES ($1, 'SALES', 'Sales', 2026, 1000000, 1000000,
                   'APPROVED', $2, NOW(), 1)
-        `, [testBudgetId, TEST_USERS.financeWrite.userId]);
+        `, [testBudgetId, TEST_USERS.financeWrite.email]);
 
         // Make changes to approved budget (triggers new version)
         await client.query(`

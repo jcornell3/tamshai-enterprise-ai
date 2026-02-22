@@ -106,7 +106,7 @@ export async function updateSalary(
       const confirmationData = {
         action: 'update_salary',
         mcpServer: 'hr',
-        userId: userContext.userId,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         employeeId,
         employeeName: `${employee.first_name} ${employee.last_name}`,

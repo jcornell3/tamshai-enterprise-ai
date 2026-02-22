@@ -118,7 +118,7 @@ export async function approveInvoice(
       const confirmationData = {
         action: 'approve_invoice',
         mcpServer: 'finance',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         invoiceId: invoice.id,
         vendor: invoice.vendor_name,

@@ -87,7 +87,7 @@ export async function createPayRun(
     const confirmationData = {
       action: 'create_pay_run',
       mcpServer: 'payroll',
-      userEmail: userContext.email,
+      userEmail: userContext.email || 'unknown@tamshai.com',
       timestamp: Date.now(),
       period_start,
       period_end,

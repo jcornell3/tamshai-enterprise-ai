@@ -121,7 +121,7 @@ export async function rejectBudget(
       const confirmationData = {
         action: 'reject_budget',
         mcpServer: 'finance',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         // Internal UUID for database operations
         budgetUUID: budget.id,

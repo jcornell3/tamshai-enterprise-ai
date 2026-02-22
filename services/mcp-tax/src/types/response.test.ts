@@ -100,7 +100,7 @@ describe('createPendingConfirmationResponse', () => {
     const confirmationData = {
       action: 'update_tax_rate',
       mcpServer: 'mcp-tax',
-      userId: 'user-123',
+      userEmail: 'user@tamshai.com',
       timestamp: Date.now(),
       rateId: 'rate-001',
     };
@@ -120,7 +120,7 @@ describe('createPendingConfirmationResponse', () => {
     const confirmationData = {
       action: 'delete_filing',
       mcpServer: 'mcp-tax',
-      userId: 'user-456',
+      userEmail: 'user456@tamshai.com',
       timestamp: 1234567890,
       filingId: 'filing-001',
       filingYear: 2025,
@@ -133,7 +133,7 @@ describe('createPendingConfirmationResponse', () => {
 
     expect(result.confirmationData.action).toBe('delete_filing');
     expect(result.confirmationData.mcpServer).toBe('mcp-tax');
-    expect(result.confirmationData.userId).toBe('user-456');
+    expect(result.confirmationData.userEmail).toBe('user456@tamshai.com');
     expect(result.confirmationData.filingId).toBe('filing-001');
     expect(result.confirmationData.filingYear).toBe(2025);
   });

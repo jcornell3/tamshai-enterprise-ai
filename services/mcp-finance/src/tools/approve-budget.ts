@@ -140,7 +140,7 @@ export async function approveBudget(
       const confirmationData = {
         action: 'approve_budget',
         mcpServer: 'finance',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         // Internal UUID for database operations
         budgetUUID: budget.id,
@@ -227,15 +227,15 @@ export async function executeApproveBudget(
 
       const approved = result.rows[0];
 
-      // Create audit trail entry
+      // Create audit trail entry (actor_email stores human-readable approver)
       await queryWithRLS(
         userContext,
         `
         INSERT INTO finance.budget_approval_history
-          (budget_id, action, actor_id, action_at, comments)
-        VALUES ($1::uuid, 'APPROVED', $2::uuid, NOW(), $3::text)
+          (budget_id, action, actor_email, action_at, comments)
+        VALUES ($1::uuid, 'APPROVED', $2::text, NOW(), $3::text)
         `,
-        [budgetUUID, approverId, approverNotes || null]
+        [budgetUUID, approverEmail, approverNotes || null]
       );
 
       return createSuccessResponse({
@@ -244,7 +244,7 @@ export async function executeApproveBudget(
         budgetId: approved.budget_id,
         budgetUUID: approved.id,
         status: 'APPROVED',
-        approvedBy: approverId,
+        approvedBy: approverEmail,
       });
     } catch (error) {
       return handleDatabaseError(error as Error, 'execute_approve_budget');

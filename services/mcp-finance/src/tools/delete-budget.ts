@@ -119,7 +119,7 @@ export async function deleteBudget(
       const confirmationData = {
         action: 'delete_budget',
         mcpServer: 'finance',
-        userEmail: userContext.email,
+        userEmail: userContext.email || 'unknown@tamshai.com',
         timestamp: Date.now(),
         budgetId: budget.id,
         budgetDisplayId: budget.budget_id,
