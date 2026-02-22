@@ -196,6 +196,7 @@ export async function executeRejectBudget(
       const rejected = result.rows[0];
 
       // Create audit trail entry
+      const rejectorEmail = userContext.email || 'unknown@tamshai.com';
       await queryWithRLS(
         userContext,
         `
@@ -203,7 +204,7 @@ export async function executeRejectBudget(
           (budget_id, action, actor_email, action_at, comments)
         VALUES ($1::uuid, 'REJECTED', $2, NOW(), $3::text)
         `,
-        [budgetUUID, userContext.email, rejectionReason]
+        [budgetUUID, rejectorEmail, rejectionReason]
       );
 
       return createSuccessResponse({

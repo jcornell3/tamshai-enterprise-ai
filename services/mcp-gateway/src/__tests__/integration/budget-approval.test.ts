@@ -404,6 +404,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId, // bob.martinez
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles, // finance-write
             },
             budgetId: 'BUD-TEST-SOD', // Budget submitted by bob.martinez
@@ -432,6 +433,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             budgetId: 'BUD-TEST-PENDING-1',
@@ -451,6 +453,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             budgetId: 'BUD-TEST-PENDING-1',
@@ -472,6 +475,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             budgetId: 'BUD-TEST-PENDING-1',
@@ -498,6 +502,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             budgetId: 'BUD-TEST-PENDING-1',
@@ -514,6 +519,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             confirmationId,
@@ -538,6 +544,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             budgetId: 'BUD-TEST-REJECT-1',
@@ -554,6 +561,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           {
             userContext: {
               userId: TEST_USERS.financeWrite.userId,
+              email: TEST_USERS.financeWrite.email,
               roles: TEST_USERS.financeWrite.roles,
             },
             confirmationId,
@@ -593,6 +601,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             {
               userContext: {
                 userId: TEST_USERS.financeWrite.userId,
+                email: TEST_USERS.financeWrite.email,
                 roles: TEST_USERS.financeWrite.roles,
               },
               budgetId: 'BUD-TEST-AUDIT-1',
@@ -605,6 +614,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             await financeClient.post('/execute', {
               userContext: {
                 userId: TEST_USERS.financeWrite.userId,
+                email: TEST_USERS.financeWrite.email,
                 roles: TEST_USERS.financeWrite.roles,
               },
               confirmationId: approvalResponse.data.confirmationId,
@@ -645,6 +655,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             {
               userContext: {
                 userId: TEST_USERS.financeWrite.userId,
+                email: TEST_USERS.financeWrite.email,
                 roles: TEST_USERS.financeWrite.roles,
               },
               budgetId: 'BUD-TEST-AUDIT-2',
@@ -657,6 +668,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             await financeClient.post('/execute', {
               userContext: {
                 userId: TEST_USERS.financeWrite.userId,
+                email: TEST_USERS.financeWrite.email,
                 roles: TEST_USERS.financeWrite.roles,
               },
               confirmationId: approvalResponse.data.confirmationId,
@@ -700,6 +712,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             {
               userContext: {
                 userId: TEST_USERS.financeWrite.userId,
+                email: TEST_USERS.financeWrite.email,
                 roles: TEST_USERS.financeWrite.roles,
               },
               budgetId: 'BUD-TEST-AUDIT-3',
@@ -713,6 +726,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             await financeClient.post('/execute', {
               userContext: {
                 userId: TEST_USERS.financeWrite.userId,
+                email: TEST_USERS.financeWrite.email,
                 roles: TEST_USERS.financeWrite.roles,
               },
               confirmationId: approvalResponse.data.confirmationId,
@@ -773,6 +787,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
         {
           userContext: {
             userId: TEST_USERS.manager.userId, // Department head
+            email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
           },
           budgetId: 'BUD-ENG-2024-SAL', // DRAFT budget
@@ -1007,6 +1022,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
         {
           userContext: {
             userId: TEST_USERS.financeWrite.userId,
+            email: TEST_USERS.financeWrite.email,
             roles: TEST_USERS.financeWrite.roles,
           },
           budgetId: 'BUD-TEST-RULES-1',

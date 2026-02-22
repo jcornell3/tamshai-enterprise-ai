@@ -202,7 +202,7 @@ export async function executeApproveBudget(
 
     try {
       // Use approver's email for human-readable audit trail
-      const approverEmail = userContext.email;
+      const approverEmail = userContext.email || 'unknown@tamshai.com';
 
       // Update budget status to APPROVED
       const result = await queryWithRLS(

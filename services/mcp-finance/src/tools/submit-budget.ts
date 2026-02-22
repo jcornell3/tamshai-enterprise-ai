@@ -136,6 +136,7 @@ export async function submitBudget(
       const previousStatus = budget.status;
 
       // 4. Update status to PENDING_APPROVAL and set submitted_by/submitted_at
+      const submitterEmail = userContext.email || 'unknown@tamshai.com';
       const updateResult = await queryWithRLS(
         userContext,
         `
@@ -148,7 +149,7 @@ export async function submitBudget(
           AND (status = 'DRAFT' OR status = 'REJECTED')
         RETURNING id, budget_id, department, department_code, fiscal_year, budgeted_amount, status, submitted_by, submitted_at
         `,
-        [budget.id, userContext.email]
+        [budget.id, submitterEmail]
       );
 
       if (updateResult.rowCount === 0) {
@@ -170,7 +171,7 @@ export async function submitBudget(
           (budget_id, action, actor_email, action_at, comments)
         VALUES ($1, 'SUBMITTED', $2, NOW(), $3)
         `,
-        [budget.id, userContext.email, comments || null]
+        [budget.id, submitterEmail, comments || null]
       );
 
       // 6. Return success response

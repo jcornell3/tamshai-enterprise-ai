@@ -637,15 +637,15 @@ export async function resetBudgetTestFixtures(): Promise<void> {
   // Use admin pool with BYPASSRLS to reset fixtures
   const pool = getAdminPoolFinanceReset();
 
-  // User IDs (from TEST_USERS)
-  const ninaPatelId = 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d'; // manager
-  const bobMartinezId = '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1'; // financeWrite
+  // User emails (from TEST_USERS) - v1.5 uses email instead of UUID for submitted_by
+  const ninaPatelEmail = TEST_USERS.manager.email; // nina.p@tamshai.local
+  const bobMartinezEmail = TEST_USERS.financeWrite.email; // bob@tamshai.local
 
   // Reset PENDING_APPROVAL fixtures (submitted by nina.patel)
   await pool.query(`
     UPDATE finance.department_budgets
     SET status = 'PENDING_APPROVAL',
-        submitted_by = $1::uuid,
+        submitted_by = $1,
         submitted_at = NOW() - interval '1 day',
         approved_by = NULL,
         approved_at = NULL,
@@ -656,20 +656,20 @@ export async function resetBudgetTestFixtures(): Promise<void> {
       'BUD-TEST-REJECT-1', 'BUD-TEST-AUDIT-1', 'BUD-TEST-AUDIT-2',
       'BUD-TEST-AUDIT-3', 'BUD-TEST-RULES-1'
     )
-  `, [ninaPatelId]);
+  `, [ninaPatelEmail]);
 
   // Reset SOD fixture (submitted by bob.martinez for separation of duties test)
   await pool.query(`
     UPDATE finance.department_budgets
     SET status = 'PENDING_APPROVAL',
-        submitted_by = $1::uuid,
+        submitted_by = $1,
         submitted_at = NOW() - interval '2 days',
         approved_by = NULL,
         approved_at = NULL,
         rejection_reason = NULL,
         version = 1
     WHERE budget_id = 'BUD-TEST-SOD'
-  `, [bobMartinezId]);
+  `, [bobMartinezEmail]);
 
   // Reset DRAFT fixtures (2024 budgets used in submit_budget tests)
   await pool.query(`
