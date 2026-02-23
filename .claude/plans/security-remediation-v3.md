@@ -559,13 +559,15 @@ The following recommendations were identified during a third-party security revi
 
 ---
 
-### F1: Enforce mTLS by Default (P2)
+### F1: Enforce mTLS + Database SSL by Default (P2)
 
-**Current State**: mTLS infrastructure exists but requires opt-in via `docker-compose.mtls.yml`. Internal VPS traffic defaults to HTTP.
+**Current State**: mTLS infrastructure exists but requires opt-in via `docker-compose.mtls.yml`. Internal VPS traffic defaults to HTTP. Database connections are unencrypted.
 
-**Risk**: An attacker with network access inside the Docker network could intercept unencrypted service-to-service traffic.
+**Risk**: An attacker with network access inside the Docker network could intercept unencrypted service-to-service traffic or database credentials.
 
-**Goal**: All internal service-to-service communication uses mTLS by default, with certificates auto-generated during deployment.
+**Goal**: All internal communication uses TLS/mTLS by default:
+- MCP service-to-service: mTLS with mutual certificate verification
+- Database connections: SSL with server certificates
 
 #### Implementation Plan
 
@@ -600,6 +602,14 @@ done
 - Alert 14 days before expiry
 - Add `audit.certExpiringSoon()` event
 
+**Phase 5: Database SSL (H3 Activation)**
+- Generate PostgreSQL server certificate (signed by internal CA)
+- Generate MongoDB server certificate (signed by internal CA)
+- Configure PostgreSQL container: `-c ssl=on -c ssl_cert_file=/certs/server.crt`
+- Configure MongoDB container: `--tlsMode requireTLS --tlsCertificateKeyFile /certs/server.pem`
+- Enable client SSL: `POSTGRES_SSL=require`, `MONGODB_SSL=true`
+- Update `docker-compose.yml` with certificate volume mounts
+
 #### Files to Modify
 | File | Change |
 |------|--------|
@@ -615,6 +625,9 @@ done
 - [ ] `curl http://mcp-hr:3101` fails (HTTP disabled)
 - [ ] `curl --cacert ca.crt https://mcp-hr:3101` succeeds
 - [ ] Certificate rotation works without service downtime
+- [ ] PostgreSQL accepts only SSL connections (`sslmode=require`)
+- [ ] MongoDB accepts only TLS connections (`--tlsMode requireTLS`)
+- [ ] MCP services connect to databases over SSL/TLS
 
 #### Risks & Mitigations
 | Risk | Mitigation |
@@ -766,7 +779,7 @@ mTLS (F1) can be done in parallel or after, as the current Docker network isolat
 
 2. **Internal traffic is currently unencrypted** - Traffic within Docker networks (`frontend-network`, `gateway-network`) uses plain HTTP. While isolated by Docker networking, this lacks defense-in-depth.
 
-3. **mTLS and Database SSL are ready for activation** - The code infrastructure exists (H3 complete), just needs enforcement via environment variables.
+3. **mTLS and Database SSL have client-side support** - The code infrastructure exists (H3 complete) but both require server-side certificate configuration before they can be enabled.
 
 4. **Outbound traffic is secure** - LLM providers (Anthropic/Claude, Google/Gemini) and Better Stack all use HTTPS with proper authentication.
 
@@ -774,9 +787,15 @@ mTLS (F1) can be done in parallel or after, as the current Docker network isolat
 
 | Recommendation | Status | Hardening Item |
 |----------------|--------|----------------|
-| Database SSL Enforcement | ✅ **Already Implemented** | H3 (set `POSTGRES_SSL=require`, `MONGODB_SSL=true`) |
+| Database SSL Enforcement | ⚠️ **Client Ready, Server Needs Config** | H3 client code done; requires F1 certificates |
 | Global mTLS Enforcement | 📋 Planned | F1 (merge `docker-compose.mtls.yml` into main) |
 | Internal HTTPS for Gateway | 📋 **New: F3** | Caddy → Kong → MCP Gateway HTTPS |
+
+**Important Note on Database SSL**: The H3 implementation added client-side SSL support (`getSSLConfig()` in shared library). However, enabling `POSTGRES_SSL=require` or `MONGODB_SSL=true` requires the database servers to accept SSL connections, which needs:
+1. Server-side SSL certificates
+2. PostgreSQL/MongoDB containers configured to use those certificates
+
+This server-side configuration should be implemented as part of F1 (mTLS) when certificate infrastructure is created.
 
 ---
 
@@ -828,17 +847,14 @@ mTLS (F1) can be done in parallel or after, as the current Docker network isolat
 
 | Item | Priority | Effort | Dependencies | Target |
 |------|----------|--------|--------------|--------|
-| **H3 Activation** | **P0** | Low | None | Immediate |
 | F2: Vault Production Mode | **P1** | Medium | None | Q1 2026 |
-| F1: Enforce mTLS (Service Mesh) | **P2** | Medium | F2 (optional) | Q2 2026 |
+| F1: Enforce mTLS + Database SSL | **P2** | Medium | F2 (optional) | Q2 2026 |
 | F3: Internal HTTPS (Gateway Path) | **P3** | Low | F1 | Q2 2026 |
 
-**Immediate Action (H3 Activation)**:
-Set these environment variables in VPS to enable database encryption:
-```bash
-# In .env or GitHub Secrets
-POSTGRES_SSL=require
-MONGODB_SSL=true
-```
+**Note on Database SSL (H3)**: The client-side code exists but cannot be activated until database servers are configured with SSL certificates. This should be done as part of F1 when certificate infrastructure is created.
 
-**Note**: The code for database SSL already exists (H3 complete). This is purely a configuration change to enforce encryption.
+**F1 Scope Expansion**: F1 should include:
+1. MCP service mTLS (original scope)
+2. PostgreSQL SSL configuration (server-side)
+3. MongoDB TLS configuration (server-side)
+4. Certificate auto-generation in cloud-init

@@ -85,6 +85,8 @@ write_files:
       # tamshai_app user for MCP servers (enforces RLS - no BYPASSRLS)
       # The main 'tamshai' user has BYPASSRLS for identity-sync
       TAMSHAI_APP_PASSWORD=${tamshai_app_password}
+      # NOTE: POSTGRES_SSL and MONGODB_SSL require server-side certificates (see F1 in security plan)
+      # They will be enabled after F1 (mTLS) certificate infrastructure is in place
 
       # MongoDB
       MONGO_INITDB_ROOT_USERNAME=tamshai
