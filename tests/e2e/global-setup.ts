@@ -239,7 +239,16 @@ async function verifyAndProvisionUser(
   userPassword: string
 ): Promise<{ totpProvisioned: boolean }> {
   const adminClientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
-  const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+  // Check environment-specific admin password first, then fall back to generic
+  const env = process.env.TEST_ENV || 'dev';
+  const envSpecificPassword =
+    env === 'stage'
+      ? process.env.STAGE_KEYCLOAK_ADMIN_PASSWORD
+      : env === 'prod'
+        ? process.env.PROD_KEYCLOAK_ADMIN_PASSWORD
+        : process.env.DEV_KEYCLOAK_ADMIN_PASSWORD;
+  const adminPassword =
+    envSpecificPassword || process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
 
   // 1. Authenticate to Admin API (prefer client credentials over ROPC)
   const formBody = adminClientSecret
@@ -425,6 +434,22 @@ export default async function globalSetup(): Promise<void> {
     console.log(
       `[globalSetup] Detected raw TEST_USER_TOTP_SECRET — encoded to Base32 for cache`
     );
+  }
+
+  // Stage and prod environments block admin API externally for security.
+  // The test user is pre-provisioned via sync-realm.sh during deployment.
+  // Skip admin verification and trust the user exists with correct credentials.
+  if (ENV === 'stage' || ENV === 'prod') {
+    console.log(
+      `[globalSetup] Skipping admin verification for ${ENV} (admin API blocked externally)`
+    );
+    console.log(`[globalSetup] Trusting test-user.journey is pre-provisioned with TOTP`);
+
+    // Ensure cache file exists for TOTP generation
+    const username = process.env.TEST_USERNAME || 'test-user.journey';
+    saveTotpSecretToCache(username, ENV, base32Secret);
+    console.log(`[globalSetup] Cache file written with Base32 value`);
+    return;
   }
 
   console.log(

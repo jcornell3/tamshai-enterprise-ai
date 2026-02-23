@@ -342,7 +342,8 @@ resource "null_resource" "update_github_ssh_secret" {
   depends_on = [local_sensitive_file.deploy_private_key]
 }
 
-# Auto-update KEYCLOAK_VPS_ADMIN_PASSWORD when it changes (Phoenix compliance)
+# Auto-update Keycloak admin password secrets when it changes (Phoenix compliance)
+# Sets both KEYCLOAK_VPS_ADMIN_PASSWORD and STAGE_KEYCLOAK_ADMIN_PASSWORD for E2E tests
 resource "null_resource" "update_github_keycloak_secret" {
   count = var.auto_update_github_secrets ? 1 : 0
 
@@ -355,7 +356,9 @@ resource "null_resource" "update_github_keycloak_secret" {
     command = <<-EOT
       echo "Updating GitHub secret KEYCLOAK_VPS_ADMIN_PASSWORD..."
       echo "${random_password.keycloak_admin_password.result}" | gh secret set KEYCLOAK_VPS_ADMIN_PASSWORD --repo "${var.github_repo}"
-      echo "GitHub secret updated successfully"
+      echo "Updating GitHub secret STAGE_KEYCLOAK_ADMIN_PASSWORD (for E2E tests)..."
+      echo "${random_password.keycloak_admin_password.result}" | gh secret set STAGE_KEYCLOAK_ADMIN_PASSWORD --repo "${var.github_repo}"
+      echo "GitHub secrets updated successfully"
     EOT
 
     interpreter = ["bash", "-c"]
