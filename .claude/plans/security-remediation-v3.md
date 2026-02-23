@@ -742,3 +742,103 @@ Three options, in order of preference:
 3. Foundation for proper secret management
 
 mTLS (F1) can be done in parallel or after, as the current Docker network isolation provides reasonable protection for internal traffic.
+
+---
+
+## Encryption in Motion Security Review (2026-02-23)
+
+**Review Scope**: Stage/VPS Environment
+**Status**: 📋 Assessment Complete
+
+### Current State Assessment
+
+| Layer | Status | Details |
+|-------|--------|---------|
+| **Edge Security** (Internet ↔ Caddy) | ✅ Fully Encrypted | Caddy with Let's Encrypt, secure headers enforced |
+| **Internal API Path** (Caddy ↔ Kong ↔ MCP Gateway) | ⚠️ Unencrypted | HTTP within Docker networks |
+| **Service Mesh** (MCP Gateway ↔ MCP Services) | 🛡️ mTLS Supported | Opt-in via `docker-compose.mtls.yml` |
+| **Database Layer** (Services ↔ PostgreSQL/MongoDB) | 🛡️ SSL Supported | Opt-in via environment variables (H3 complete) |
+| **Outbound Traffic** (Services ↔ External APIs) | ✅ Fully Encrypted | HTTPS to Anthropic, Google, Better Stack |
+
+### Key Findings
+
+1. **Edge TLS is well-managed** - Caddy handles TLS termination with Let's Encrypt certificates. `Caddyfile.stage` enforces secure headers (X-Content-Type-Options, Referrer-Policy) and blocks public Keycloak Admin access.
+
+2. **Internal traffic is currently unencrypted** - Traffic within Docker networks (`frontend-network`, `gateway-network`) uses plain HTTP. While isolated by Docker networking, this lacks defense-in-depth.
+
+3. **mTLS and Database SSL are ready for activation** - The code infrastructure exists (H3 complete), just needs enforcement via environment variables.
+
+4. **Outbound traffic is secure** - LLM providers (Anthropic/Claude, Google/Gemini) and Better Stack all use HTTPS with proper authentication.
+
+### Mapping to Existing Hardening Items
+
+| Recommendation | Status | Hardening Item |
+|----------------|--------|----------------|
+| Database SSL Enforcement | ✅ **Already Implemented** | H3 (set `POSTGRES_SSL=require`, `MONGODB_SSL=true`) |
+| Global mTLS Enforcement | 📋 Planned | F1 (merge `docker-compose.mtls.yml` into main) |
+| Internal HTTPS for Gateway | 📋 **New: F3** | Caddy → Kong → MCP Gateway HTTPS |
+
+---
+
+### F3: Internal HTTPS for Gateway Path (P3)
+
+**Current State**: HTTP used between Caddy → Kong (port 8000) and Kong → MCP Gateway (port 3100) within Docker network.
+
+**Risk**: An attacker with access to the Docker network could intercept authentication tokens or API requests in transit.
+
+**Goal**: Full HTTPS encryption from Caddy through Kong to MCP Gateway.
+
+#### Implementation Plan
+
+**Phase 1: Kong Upstream HTTPS**
+- Configure Kong to connect to MCP Gateway via HTTPS
+- Update Kong service configuration: `url: https://mcp-gateway:3100`
+- Enable certificate verification against internal CA
+
+**Phase 2: Caddy to Kong HTTPS**
+- Configure Caddy reverse proxy to use HTTPS for Kong upstream
+- Update `Caddyfile.stage`: `reverse_proxy https://kong:8443`
+- Enable Kong's HTTPS listener on port 8443
+
+**Phase 3: Certificate Management**
+- Integrate with F1 certificate auto-generation
+- Kong and MCP Gateway share the same internal CA
+- Add certificate volume mounts to both services
+
+#### Files to Modify
+| File | Change |
+|------|--------|
+| `infrastructure/docker/Caddyfile.stage` | Use HTTPS upstream for Kong |
+| `infrastructure/docker/kong/kong.yml` | Add HTTPS upstream for mcp-gateway |
+| `infrastructure/docker/docker-compose.yml` | Add certificate mounts to Kong |
+
+#### Acceptance Criteria
+- [ ] Kong connects to MCP Gateway via HTTPS
+- [ ] Caddy connects to Kong via HTTPS
+- [ ] Certificate verification enabled (not just encryption)
+- [ ] No HTTP fallback paths exist
+
+#### Dependency
+- Depends on F1 (mTLS) for certificate generation infrastructure
+- Can be implemented as part of F1 Phase 2
+
+---
+
+### Updated Priority & Timeline
+
+| Item | Priority | Effort | Dependencies | Target |
+|------|----------|--------|--------------|--------|
+| **H3 Activation** | **P0** | Low | None | Immediate |
+| F2: Vault Production Mode | **P1** | Medium | None | Q1 2026 |
+| F1: Enforce mTLS (Service Mesh) | **P2** | Medium | F2 (optional) | Q2 2026 |
+| F3: Internal HTTPS (Gateway Path) | **P3** | Low | F1 | Q2 2026 |
+
+**Immediate Action (H3 Activation)**:
+Set these environment variables in VPS to enable database encryption:
+```bash
+# In .env or GitHub Secrets
+POSTGRES_SSL=require
+MONGODB_SSL=true
+```
+
+**Note**: The code for database SSL already exists (H3 complete). This is purely a configuration change to enforce encryption.
