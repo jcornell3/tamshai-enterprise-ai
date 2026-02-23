@@ -45,12 +45,14 @@ class BetterStackTransport extends Transport {
     });
 
     // Fire-and-forget HTTP request to Better Stack
+    // Destructure to avoid TypeScript duplicate property errors
+    const { level, message, timestamp, ...rest } = info;
     const payload = {
-      dt: info.timestamp || new Date().toISOString(),
-      level: info.level,
-      message: info.message,
+      ...rest,
+      dt: timestamp || new Date().toISOString(),
+      level,
+      message,
       service: SERVICE_NAME,
-      ...info,
     };
 
     fetch(BETTER_STACK_ENDPOINT, {
