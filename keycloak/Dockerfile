@@ -27,7 +27,7 @@ RUN curl -L -o /usr/local/bin/curl https://github.com/moparisthebest/static-curl
 # =============================================================================
 # Stage 2: Build Optimized Keycloak with PostgreSQL Driver
 # =============================================================================
-FROM quay.io/keycloak/keycloak:26.0.7 AS builder
+FROM quay.io/keycloak/keycloak:26.5.3 AS builder
 
 # Copy Cloud SQL Socket Factory JARs to providers directory
 COPY --from=deps /libs/postgres-socket-factory.jar /opt/keycloak/providers/
@@ -47,12 +47,13 @@ ENV KC_HTTP_ENABLED=true
 ENV KC_HTTP_RELATIVE_PATH=/auth
 
 # Build optimized Keycloak (generates runtime optimizations and caches)
-RUN /opt/keycloak/bin/kc.sh build --verbose
+# Enable token-exchange and admin-fine-grained-authz:v1 (V2 doesn't support token exchange)
+RUN /opt/keycloak/bin/kc.sh build --verbose --features=token-exchange,admin-fine-grained-authz:v1
 
 # =============================================================================
 # Stage 3: Final Production Image (UBI-based)
 # =============================================================================
-FROM quay.io/keycloak/keycloak:26.0.7
+FROM quay.io/keycloak/keycloak:26.5.3
 
 # Copy optimized Keycloak from builder stage (build-time config already baked in)
 COPY --from=builder /opt/keycloak/ /opt/keycloak/

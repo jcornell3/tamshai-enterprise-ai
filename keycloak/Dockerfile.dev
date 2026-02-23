@@ -16,7 +16,7 @@
 #   changes made after container creation. By copying the file into the image,
 #   we ensure `docker compose build --no-cache` always includes the latest config.
 
-FROM quay.io/keycloak/keycloak:26.0.7
+FROM quay.io/keycloak/keycloak:26.5.3
 
 # Build arguments for realm file selection (allows dev vs stage)
 ARG REALM_EXPORT_FILE=realm-export-dev.json
@@ -48,6 +48,6 @@ USER 1000
 
 # Default command for dev mode with realm import
 # Enable token-exchange feature for RFC 8693 (OAuth 2.0 Token Exchange)
-# Enable admin-fine-grained-authz for impersonation permissions
+# Enable admin-fine-grained-authz:v1 for impersonation permissions (V2 doesn't support token exchange)
 ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
-CMD ["start-dev", "--import-realm", "--features=token-exchange,admin-fine-grained-authz"]
+CMD ["start-dev", "--import-realm", "--features=token-exchange,admin-fine-grained-authz:v1"]
