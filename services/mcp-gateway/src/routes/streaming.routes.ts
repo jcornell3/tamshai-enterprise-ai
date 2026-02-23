@@ -28,6 +28,7 @@ import { UserContext } from '../test-utils/mock-user-context';
 import { scrubPII } from '../utils/pii-scrubber';
 import { sanitizeForLog, MCPServerConfig } from '../utils/gateway-utils';
 import { promptDefense } from '../ai/prompt-defense';
+import { audit } from '../utils/audit';
 
 // =============================================================================
 // CONNECTION TRACKING (Phase 4 - Graceful Shutdown)
@@ -188,12 +189,20 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
       // Use requestId as session ID for dynamic delimiters (per-session security)
       safeQuery = promptDefense.sanitize(query, requestId);
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
       logger.warn('Blocked a suspicious query due to prompt injection defenses.', {
         requestId,
         username: sanitizeForLog(userContext.username),
         originalQuery: scrubPII(query.substring(0, 200)),
-        error: error instanceof Error ? error.message : String(error),
+        error: reason,
       });
+      // H5: Audit log for security violation
+      audit.promptInjectionBlocked(
+        userContext.userId,
+        reason,
+        requestId,
+        req.ip
+      );
       res.status(400).json({ error: 'Invalid query.' });
       return;
     }
@@ -518,6 +527,9 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
           dataRedactions,
           queryRedactions,
         });
+        // H5: Audit log for PII redaction
+        const allRedactions = [...dataRedactions, ...queryRedactions];
+        audit.piiRedacted(userContext.userId, allRedactions, 'input', requestId);
       }
 
       // v1.4: Build pagination instructions for Claude
