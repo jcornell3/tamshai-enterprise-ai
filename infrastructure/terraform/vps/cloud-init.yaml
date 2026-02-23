@@ -465,7 +465,15 @@ runcmd:
       -iv "$DEC_IV" \
       -base64 -A > "$TEMP_ENV"
 
-    # Symlink for docker compose
+    # Set restrictive permissions on RAM-backed secrets
+    chmod 600 "$TEMP_ENV"
+
+    # IMPORTANT: Remove any existing .env files before creating symlinks
+    # This prevents plaintext files from persisting across Phoenix rebuilds
+    # See: .claude/plans/enumerated-purring-castle.md (Plaintext .env Persistence Fix)
+    rm -f /opt/tamshai/.env /opt/tamshai/infrastructure/docker/.env
+
+    # Symlink for docker compose - points to RAM-backed decrypted secrets
     ln -sf "$TEMP_ENV" /opt/tamshai/.env
     ln -sf "$TEMP_ENV" /opt/tamshai/infrastructure/docker/.env
 

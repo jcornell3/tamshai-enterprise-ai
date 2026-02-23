@@ -119,18 +119,33 @@ else
 fi
 
 # =============================================================================
-# CHECK 5: Plaintext .env status
+# CHECK 5: Plaintext .env status (should be symlink to RAM, not real file)
 # =============================================================================
 
-if [ -f "$TAMSHAI_ROOT/.env" ]; then
-    fail "Plaintext .env exists (SECURITY RISK in production)"
-    echo "       Remove with: rm $TAMSHAI_ROOT/.env"
-elif [ -f "$TAMSHAI_ROOT/infrastructure/docker/.env" ]; then
-    fail "Plaintext .env exists in docker directory (SECURITY RISK)"
-    echo "       Remove with: rm $TAMSHAI_ROOT/infrastructure/docker/.env"
-else
-    pass "No plaintext .env (good security practice)"
-fi
+check_env_file() {
+    local file_path="$1"
+    local name="$2"
+
+    if [ -L "$file_path" ]; then
+        # It's a symlink - check if it points to /dev/shm (RAM)
+        TARGET=$(readlink -f "$file_path" 2>/dev/null || readlink "$file_path" 2>/dev/null || echo "unknown")
+        if [[ "$TARGET" == /dev/shm/* ]]; then
+            pass "$name is a symlink to RAM ($TARGET)"
+        else
+            warn "$name is a symlink but not to /dev/shm: $TARGET"
+        fi
+    elif [ -f "$file_path" ]; then
+        # It's a real file - this is a security issue
+        FILE_SIZE=$(stat -c%s "$file_path" 2>/dev/null || stat -f%z "$file_path" 2>/dev/null || echo "0")
+        fail "$name is a real file (${FILE_SIZE} bytes) - SECURITY RISK"
+        echo "       Plaintext secrets on disk! Remove with: rm $file_path"
+    else
+        pass "$name does not exist (good - no plaintext on disk)"
+    fi
+}
+
+check_env_file "$TAMSHAI_ROOT/.env" "Root .env"
+check_env_file "$TAMSHAI_ROOT/infrastructure/docker/.env" "Docker .env"
 
 # =============================================================================
 # CHECK 6: File permissions
