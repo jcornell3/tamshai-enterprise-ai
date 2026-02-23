@@ -29,6 +29,7 @@ import { scrubPII } from '../utils/pii-scrubber';
 import { sanitizeForLog, MCPServerConfig } from '../utils/gateway-utils';
 import { promptDefense } from '../ai/prompt-defense';
 import { audit } from '../utils/audit';
+import { getMCPContext, storeMCPContext, invalidateMCPContext } from '../utils/redis';
 
 // =============================================================================
 // CONNECTION TRACKING (Phase 4 - Graceful Shutdown)
@@ -335,6 +336,58 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
       const year = extractYear(query, 2025);
       displayDirective = `display:finance:quarterly_report:quarter=${quarter},year=${year}`;
     }
+    // P4: Support tickets (NEW)
+    else if (
+      queryLower.includes('tickets') ||
+      queryLower.includes('support tickets') ||
+      queryLower.includes('open tickets') ||
+      queryLower.includes('my tickets') ||
+      queryLower.includes('customer issues') ||
+      queryLower.includes('support queue') ||
+      queryLower.includes('help desk')
+    ) {
+      // Extract status filter if mentioned
+      const statusMatch = query.match(/\b(open|closed|pending|resolved|in progress)\b/i);
+      const status = statusMatch ? statusMatch[1].toLowerCase().replace(' ', '_') : 'open';
+      displayDirective = `display:support:tickets:status=${status}`;
+    }
+    // P4: Payroll pay runs (NEW)
+    else if (
+      queryLower.includes('pay runs') ||
+      queryLower.includes('payroll runs') ||
+      queryLower.includes('upcoming payroll') ||
+      queryLower.includes('process payroll') ||
+      queryLower.includes('payroll schedule')
+    ) {
+      // Extract status filter if mentioned
+      const statusMatch = query.match(/\b(pending|processing|completed|draft)\b/i);
+      const status = statusMatch ? statusMatch[1].toLowerCase() : 'all';
+      displayDirective = `display:payroll:pay_runs:status=${status}`;
+    }
+    // P4: Payroll pay stub (NEW)
+    else if (
+      queryLower.includes('pay stub') ||
+      queryLower.includes('my paycheck') ||
+      queryLower.includes('my pay') ||
+      queryLower.includes('earnings statement') ||
+      queryLower.includes('my salary') ||
+      queryLower.includes('pay slip')
+    ) {
+      displayDirective = `display:payroll:pay_stub:payStubId=latest`;
+    }
+    // P4: Tax quarterly estimate (NEW)
+    else if (
+      queryLower.includes('tax estimate') ||
+      queryLower.includes('quarterly taxes') ||
+      queryLower.includes('estimated taxes') ||
+      queryLower.includes('tax payment') ||
+      queryLower.includes('tax liability') ||
+      queryLower.includes('tax due')
+    ) {
+      const quarter = extractQuarter(query, 'current');
+      const year = extractYear(query);
+      displayDirective = `display:tax:quarterly_estimate:quarter=${quarter},year=${year}`;
+    }
 
     // If directive matched, send it immediately and skip Claude API call
     if (displayDirective) {
@@ -412,11 +465,53 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
       // Determine accessible MCP servers
       const accessibleServers = getAccessibleServers(userContext.roles);
 
-      // Query all accessible MCP servers in parallel (with cursor for pagination)
-      const mcpPromises = accessibleServers.map((server) =>
-        queryMCPServer(server, safeQuery, userContext, cursor)
-      );
-      const mcpResults = await Promise.all(mcpPromises);
+      // P3: Generate cache key based on user ID and accessible servers
+      const serverNames = accessibleServers.map(s => s.name).sort().join(',');
+      const cacheKey = `${userContext.userId}:${serverNames}`;
+
+      let mcpResults: MCPQueryResult[];
+
+      // P3: Check cache for follow-up queries (no cursor = not paginating, eligible for cache)
+      if (!cursor) {
+        const cachedContext = await getMCPContext(cacheKey);
+        if (cachedContext) {
+          try {
+            mcpResults = JSON.parse(cachedContext);
+            logger.info('MCP context cache HIT', { requestId, cacheKey, serverCount: mcpResults.length });
+          } catch (parseError) {
+            logger.warn('MCP context cache parse error, fetching fresh', { requestId, cacheKey });
+            mcpResults = await fetchMCPDataFresh();
+          }
+        } else {
+          logger.debug('MCP context cache MISS', { requestId, cacheKey });
+          mcpResults = await fetchMCPDataFresh();
+        }
+      } else {
+        // Pagination request - always fetch fresh
+        mcpResults = await fetchMCPDataFresh();
+      }
+
+      // P3: Helper function to fetch MCP data and cache successful results
+      async function fetchMCPDataFresh(): Promise<MCPQueryResult[]> {
+        const mcpPromises = accessibleServers.map((server) =>
+          queryMCPServer(server, safeQuery, userContext, cursor)
+        );
+        const results = await Promise.all(mcpPromises);
+
+        // Cache successful results (only if all succeeded and no pagination cursor)
+        const allSuccessful = results.every(r => r.status === 'success');
+        if (allSuccessful && !cursor) {
+          try {
+            await storeMCPContext(cacheKey, JSON.stringify(results), 300); // 5 minute TTL
+            logger.debug('MCP context cached', { requestId, cacheKey, resultCount: results.length });
+          } catch (cacheError) {
+            // Non-fatal: log and continue
+            logger.warn('Failed to cache MCP context', { requestId, cacheKey, error: String(cacheError) });
+          }
+        }
+
+        return results;
+      }
 
       // Check if client disconnected during MCP queries
       if (streamClosed) {

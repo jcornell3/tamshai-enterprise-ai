@@ -12,7 +12,7 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { Logger } from 'winston';
-import { getPendingConfirmation } from '../utils/redis';
+import { getPendingConfirmation, invalidateMCPContext } from '../utils/redis';
 import { UserContext } from '../test-utils/mock-user-context';
 import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
 
@@ -151,6 +151,22 @@ export function createConfirmationRoutes(deps: ConfirmationRoutesDependencies): 
         confirmationId,
         action: pendingAction.action,
       });
+
+      // P3: Invalidate MCP context cache after successful write operation
+      // This ensures follow-up queries see fresh data
+      try {
+        await invalidateMCPContext(userContext.userId);
+        logger.debug('MCP context cache invalidated after confirmation', {
+          requestId,
+          userId: userContext.userId,
+        });
+      } catch (cacheError) {
+        // Non-fatal: log and continue (stale data will expire via TTL)
+        logger.warn('Failed to invalidate MCP context cache', {
+          requestId,
+          error: String(cacheError),
+        });
+      }
 
       res.json({
         status: 'success',

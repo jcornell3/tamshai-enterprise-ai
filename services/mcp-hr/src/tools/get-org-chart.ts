@@ -64,15 +64,31 @@ export type GetOrgChartInput = z.input<typeof GetOrgChartInputSchema>;
 
 /**
  * Build hierarchical tree from flat employee list
+ *
+ * P2 Performance Optimization: O(N) algorithm
+ * - Pre-builds parent → children lookup Map in single O(N) pass
+ * - Tree construction uses O(1) lookups instead of O(N) filters
+ * - Total complexity: O(N) instead of O(N²)
  */
 function buildOrgTree(
   employees: OrgChartRow[],
   parentId: string | null
 ): OrgChartNode[] {
-  return employees
-    .filter((emp) => emp.manager_id === parentId)
-    .map((emp) => {
-      const directReports = buildOrgTree(employees, emp.employee_id);
+  // P2: Pre-build parent → children lookup Map (single O(N) pass)
+  const childrenByManagerId = new Map<string | null, OrgChartRow[]>();
+  for (const emp of employees) {
+    const key = emp.manager_id;
+    if (!childrenByManagerId.has(key)) {
+      childrenByManagerId.set(key, []);
+    }
+    childrenByManagerId.get(key)!.push(emp);
+  }
+
+  // P2: Build tree with O(1) lookups (total O(N) for full tree)
+  function buildSubtree(managerId: string | null): OrgChartNode[] {
+    const children = childrenByManagerId.get(managerId) || [];
+    return children.map((emp) => {
+      const directReports = buildSubtree(emp.employee_id);
       const fullName = `${emp.first_name} ${emp.last_name}`;
       return {
         employee_id: emp.employee_id,
@@ -89,6 +105,9 @@ function buildOrgTree(
         direct_reports: directReports,
       };
     });
+  }
+
+  return buildSubtree(parentId);
 }
 
 /**
