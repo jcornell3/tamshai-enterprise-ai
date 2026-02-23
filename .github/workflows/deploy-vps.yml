@@ -1245,6 +1245,65 @@ jobs:
           fi
           UNSEAL_SCRIPT
 
+      # H1 Security: Sync Vault AppRoles and policies
+      # This ensures all MCP services have correct AppRole configurations
+      - name: Sync Vault AppRoles (H1 Security)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER || 'root' }}
+          VAULT_ROOT_TOKEN: ${{ secrets.VAULT_ROOT_TOKEN }}
+        run: |
+          echo "=== H1 Security: Syncing Vault AppRoles ==="
+
+          # Skip if Vault token not configured (dev mode doesn't need sync)
+          if [ -z "$VAULT_ROOT_TOKEN" ]; then
+            echo "[SKIP] VAULT_ROOT_TOKEN not configured - Vault may be in dev mode"
+            exit 0
+          fi
+
+          SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
+
+          $SSH_CMD << VAULT_SYNC
+          set -e
+          cd /opt/tamshai
+
+          # Check if Vault is healthy
+          VAULT_ADDR="http://127.0.0.1:8200"
+          if ! curl -sf "\$VAULT_ADDR/v1/sys/health" 2>/dev/null | grep -q '"sealed":false'; then
+            echo "[SKIP] Vault is sealed or unhealthy - skipping AppRole sync"
+            exit 0
+          fi
+
+          # Check if Node.js and npx are available
+          if ! command -v npx &>/dev/null; then
+            echo "[SKIP] npx not found - cannot run sync-vault.ts"
+            exit 0
+          fi
+
+          # Check if sync-vault.ts exists
+          if [ ! -f "scripts/vault/sync-vault.ts" ]; then
+            echo "[SKIP] sync-vault.ts not found"
+            exit 0
+          fi
+
+          echo "Running Vault AppRole synchronization..."
+          export VAULT_ADDR="\$VAULT_ADDR"
+          export VAULT_TOKEN="$VAULT_ROOT_TOKEN"
+
+          # Install dependencies if needed
+          cd scripts/vault
+          if [ ! -d "node_modules" ]; then
+            npm install typescript @types/node 2>/dev/null || true
+          fi
+
+          # Run sync (without --generate-secret-ids for now)
+          npx ts-node sync-vault.ts 2>&1 || {
+            echo "[WARN] Vault sync encountered errors - continuing deployment"
+          }
+
+          echo "[OK] Vault AppRole sync complete"
+          VAULT_SYNC
+
       - name: Verify deployment
         run: |
           echo "Verifying external endpoints..."

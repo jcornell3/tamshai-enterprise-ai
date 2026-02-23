@@ -235,8 +235,8 @@ This plan builds upon the completed remediations in `v2` to transition the Tamsh
 | C1 | Vault Production Mode | **P0** | Medium | None | ✅ Complete (dev mode) |
 | H1 | Phoenix Vault AppRoles | **P0** | High | C1 ✅ | ✅ **Complete (Core)** (2026-02-22) |
 | H2 | Advanced AI Guardrails | **P1** | Medium | None | ✅ **Complete** (2026-02-22) |
-| H3 | Mandatory mTLS | **P1** | Medium | None (phased) | 🔄 Phase 1 Complete |
-| H4 | Automated Rotation | **P2** | High | H1 ✅ | Ready to start |
+| H3 | Mandatory mTLS | **P1** | Medium | None (phased) | ✅ **Complete** (2026-02-23) |
+| H4 | Automated Rotation | **P2** | High | H1 ✅ | ✅ **Complete** (2026-02-23) |
 | H5 | Immutable Audit | **P2** | Medium | None | ✅ **Complete (Code)** |
 
 ### Recommended Implementation Order:
@@ -245,8 +245,8 @@ This plan builds upon the completed remediations in `v2` to transition the Tamsh
 3. ~~**H3 Phase 1**~~ ✅ Complete (2026-02-22) - Database SSL support
 4. ~~**H5**~~ ✅ Complete (2026-02-22) - Structured audit logging with SIEM support
 5. ~~**H1**~~ ✅ Complete (2026-02-22) - Idempotent Vault AppRole sync, ephemeral SecretIDs
-6. **H3 Phase 2-3** (Full mTLS)
-7. **H4** (H1 prerequisite now satisfied)
+6. ~~**H3 Phase 2-3**~~ ✅ Complete (2026-02-23) - Full mTLS for MCP servers, TLS utility in shared package
+7. ~~**H4**~~ ✅ Complete (2026-02-23) - Keycloak secret rotation script, sync-vault.ts integration in deploy-vps.yml
 
 ---
 
