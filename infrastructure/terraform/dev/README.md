@@ -240,7 +240,7 @@ Keycloak realm is loaded via Docker's `--import-realm` flag from:
 
 Terraform waits for critical services:
 - PostgreSQL: `pg_isready -U postgres`
-- Keycloak: `http://localhost:8180/health/ready`
+- Keycloak: `http://localhost:8180/auth/realms/tamshai-corp/.well-known/openid-configuration` (OIDC discovery)
 - Kong: `http://localhost:8100`
 - MCP Gateway: `http://localhost:3100/health`
 

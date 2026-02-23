@@ -496,9 +496,9 @@ resource "null_resource" "wait_for_services" {
         sleep 2
       done
 
-      # Wait for Keycloak (port ${local.ports.keycloak} for playground)
+      # Wait for Keycloak (check OIDC discovery - health endpoint is on port 9000, not exposed)
       for i in {1..60}; do
-        if curl -sf http://localhost:${local.ports.keycloak}/health/ready > /dev/null 2>&1; then
+        if curl -sf http://localhost:${local.ports.keycloak}/auth/realms/tamshai-corp/.well-known/openid-configuration > /dev/null 2>&1; then
           echo "Keycloak ready!"
           break
         fi

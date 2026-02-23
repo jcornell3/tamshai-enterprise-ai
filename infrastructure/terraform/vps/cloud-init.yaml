@@ -524,17 +524,18 @@ runcmd:
   - cd /opt/tamshai/infrastructure/docker && docker compose --env-file ../../.env build --no-cache && docker compose --env-file ../../.env up -d
 
   # Wait for Keycloak to be healthy before syncing
+  # Check OIDC discovery endpoint (exposed via port 8180)
   - |
     echo "Waiting for Keycloak to be ready..."
     for i in 1 2 3 4 5 6 7 8 9 10; do
-      if curl -sf http://localhost:8180/auth/health/ready >/dev/null 2>&1; then
-        echo "Keycloak health check passed, waiting for admin API..."
-        sleep 30
+      if curl -sf http://localhost:8180/auth/realms/tamshai-corp/.well-known/openid-configuration >/dev/null 2>&1; then
+        echo "Keycloak OIDC endpoint ready, waiting for admin API..."
+        sleep 5
         echo "Keycloak is ready"
         break
       fi
       echo "Waiting for Keycloak... attempt $i/10"
-      sleep 30
+      sleep 10
     done
 
   # Sync Keycloak realm configuration (creates clients, roles, mappers)
