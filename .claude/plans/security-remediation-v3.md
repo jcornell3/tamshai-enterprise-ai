@@ -348,5 +348,129 @@ All 5 hardening items are now complete:
 | H2 | `services/mcp-gateway/src/ai/prompt-defense.ts` | 5-layer prompt injection defense |
 | H3 | `services/shared/src/utils/tls.ts` | TLS/mTLS utility for all MCP services |
 | H3 | `services/shared/src/database/postgres.ts` | PostgreSQL SSL configuration |
+| H3+ | `services/shared/src/database/mongodb.ts` | MongoDB SSL configuration |
 | H4 | `scripts/secrets/rotate-keycloak-secrets.sh` | Keycloak client secret rotation |
+| H4+ | `.github/workflows/rotate-secrets.yml` | Scheduled monthly secret rotation |
 | H5 | `services/mcp-gateway/src/utils/audit.ts` | Structured audit logging with SIEM support |
+| H5+ | `infrastructure/database/vault-user.sql` | PostgreSQL vault user for credential rotation |
+| H5+ | `scripts/vault/sync-vault.ts` | Extended with database secrets engine |
+
+---
+
+## Additional Hardening Enhancements (v3+)
+
+**Implemented**: 2026-02-23
+
+Three additional hardening enhancements were implemented to further improve the security posture:
+
+### H3+ MongoDB SSL/TLS Support ✅ COMPLETE
+
+**Risk**: MongoDB connections between services use unencrypted traffic.
+
+**Implementation**:
+- Created `services/shared/src/database/mongodb.ts` with SSL configuration utilities
+- Pattern matches PostgreSQL SSL implementation from H3
+- Environment variables: `MONGODB_SSL`, `MONGODB_SSL_CA`, `MONGODB_SSL_REJECT_UNAUTHORIZED`
+- Integrated into `mcp-sales` and `mcp-support` connection modules
+- Unit tests created in `mongodb.test.ts`
+
+**Files Created/Modified**:
+| File | Change |
+|------|--------|
+| `services/shared/src/database/mongodb.ts` | New SSL configuration module |
+| `services/shared/src/database/mongodb.test.ts` | Unit tests |
+| `services/shared/src/database/index.ts` | Export MongoDB SSL utilities |
+| `services/mcp-sales/src/database/connection.ts` | Integrated `withMongoSSL()` |
+| `services/mcp-support/src/database/connection.ts` | Integrated `withMongoSSL()` |
+| `infrastructure/docker/.env.example` | Added MongoDB SSL variables |
+
+### H4+ Scheduled Secret Rotation ✅ COMPLETE
+
+**Risk**: Manual secret rotation may be forgotten, leading to long-lived credentials.
+
+**Implementation**:
+- Created `.github/workflows/rotate-secrets.yml` with:
+  - Monthly cron schedule (1st of month, 3:00 AM UTC)
+  - Manual dispatch with dry-run mode
+  - SSH to VPS for Keycloak API access
+  - Auto-triggers `deploy-vps.yml` after rotation
+  - Discord notification on completion
+- Updated `rotate-keycloak-secrets.sh` to detect VPS environment and use internal Keycloak URL
+
+**Workflow Features**:
+| Feature | Description |
+|---------|-------------|
+| Schedule | `0 3 1 * *` (monthly) |
+| Manual trigger | `workflow_dispatch` with dry_run option |
+| Environment support | stage, dev |
+| Notifications | Discord webhook on success/failure |
+| Auto-deploy | Triggers deploy-vps.yml after rotation |
+
+### H5+ Vault Database Secrets Engine ✅ COMPLETE
+
+**Risk**: Database passwords are static and may remain unchanged for extended periods.
+
+**Implementation**:
+- Created `infrastructure/database/vault-user.sql` for PostgreSQL vault user
+- Extended `scripts/vault/sync-vault.ts` with database secrets engine support:
+  - Database connections for tamshai_hr, tamshai_finance, tamshai_payroll, tamshai_tax
+  - Static role `tamshai-app` with 30-day rotation period
+  - NOBYPASSRLS maintained during password rotation
+- Added CLI flags: `--sync-database`, `--read-db-creds`
+
+**Configuration**:
+| Database | Connection Name | Status |
+|----------|-----------------|--------|
+| tamshai_hr | postgresql-tamshai_hr | ✅ Configured |
+| tamshai_finance | postgresql-tamshai_finance | ✅ Configured |
+| tamshai_payroll | postgresql-tamshai_payroll | ✅ Configured |
+| tamshai_tax | postgresql-tamshai_tax | ✅ Configured |
+
+**Static Role**:
+| Setting | Value |
+|---------|-------|
+| Role Name | tamshai-app |
+| Username | tamshai_app |
+| Rotation Period | 720h (30 days) |
+| Rotation Statement | `ALTER ROLE "{{name}}" WITH PASSWORD '{{password}}' NOBYPASSRLS;` |
+
+**Implementation Experience (2026-02-23)**:
+
+1. **PostgreSQL vault user creation**: Required superuser (`postgres`) access, not just `tamshai` user
+   - `CREATE USER vault WITH CREATEROLE` requires CREATEROLE attribute
+   - `GRANT tamshai_app TO vault WITH ADMIN OPTION` required for password rotation
+
+2. **Vault database engine configuration**: Required SSH tunnel for local execution, but easier via Vault CLI on VPS
+   - Initial attempt via sync-vault.ts over SSH tunnel failed (Vault connects to `postgres` container, not tunnel)
+   - Successful approach: Install Node.js on VPS, then use `vault write` CLI commands
+
+3. **Permission issue resolution**:
+   - Static role creation failed with "permission denied to alter role"
+   - Fixed by running `vault write -f database/rotate-root/postgresql-tamshai_hr` to refresh connection
+   - Root cause: Vault's cached connection may have used stale credentials
+
+4. **GitHub Secrets saved**:
+   - `VAULT_POSTGRES_USER=vault`
+   - `VAULT_POSTGRES_PASSWORD` (note: Vault rotates this, so value may change)
+
+**Verification**:
+```
+=== Vault Static Role Credentials ===
+username               tamshai_app
+password               [REDACTED - managed by Vault]
+rotation_period        720h
+last_vault_rotation    2026-02-23T18:33:22Z
+
+=== PostgreSQL Role Status ===
+rolname     | rolbypassrls
+------------+--------------
+tamshai_app | f            (RLS enforced ✓)
+vault       | f
+```
+
+**Files Created/Modified**:
+| File | Change |
+|------|--------|
+| `infrastructure/database/vault-user.sql` | New PostgreSQL vault user setup |
+| `scripts/vault/sync-vault.ts` | Extended with database secrets engine |
+| `infrastructure/docker/.env.example` | Added VAULT_POSTGRES_* variables |
