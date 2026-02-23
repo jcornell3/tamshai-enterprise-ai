@@ -118,21 +118,21 @@ ON CONFLICT (employee_id, type_code, fiscal_year) DO NOTHING;
 -- =============================================================================
 
 -- Approved vacation requests (past)
-INSERT INTO hr.time_off_requests (employee_id, type_code, start_date, end_date, total_days, status, approver_id, approved_at, notes, approver_notes)
+INSERT INTO hr.time_off_requests (employee_id, type_code, start_date, end_date, total_days, status, approver_email, approved_at, notes, approver_notes)
 VALUES
     -- Marcus Johnson took vacation in December 2025
     ('e1000000-0000-0000-0000-000000000052', 'VACATION', '2025-12-20', '2025-12-31', 8, 'approved',
-     'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', '2025-12-01 10:00:00',
+     'nina.patel@tamshai.com', '2025-12-01 10:00:00',
      'Holiday vacation with family', 'Approved. Enjoy your holidays!'),
 
     -- Sophia Wang took sick leave
     ('e1000000-0000-0000-0000-000000000053', 'SICK', '2025-11-15', '2025-11-17', 2, 'approved',
-     'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', '2025-11-15 08:00:00',
+     'nina.patel@tamshai.com', '2025-11-15 08:00:00',
      'Flu symptoms, doctor appointment', 'Get well soon!'),
 
     -- Tyler Scott personal day
     ('e1000000-0000-0000-0000-000000000054', 'PERSONAL', '2025-10-25', '2025-10-25', 1, 'approved',
-     'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d', '2025-10-20 14:00:00',
+     'nina.patel@tamshai.com', '2025-10-20 14:00:00',
      'Moving to new apartment', NULL)
 ON CONFLICT DO NOTHING;
 
@@ -161,11 +161,11 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- Rejected request (for testing rejection flow)
-INSERT INTO hr.time_off_requests (employee_id, type_code, start_date, end_date, total_days, status, approver_id, approved_at, notes, approver_notes)
+INSERT INTO hr.time_off_requests (employee_id, type_code, start_date, end_date, total_days, status, approver_email, approved_at, notes, approver_notes)
 VALUES
     -- Chris Taylor request rejected due to team coverage
     ('e1000000-0000-0000-0000-000000000033', 'VACATION', '2025-12-26', '2025-12-31', 4, 'rejected',
-     'e1000000-0000-0000-0000-000000000031', '2025-12-10 09:00:00',
+     'carol.johnson@tamshai.com', '2025-12-10 09:00:00',
      'End of year vacation', 'Unfortunately we need coverage during this critical sales period. Please request alternative dates.')
 ON CONFLICT DO NOTHING;
 
