@@ -2,7 +2,7 @@
 
 **Created**: 2026-02-18
 **Updated**: 2026-02-23
-**Status**: ✅ Complete (5 core + 4 additional hardening items complete)
+**Status**: ✅ Complete (5 core + 4 additional hardening items + 2 security fixes)
 **Target Environment**: VPS / Staging (Phoenix Architecture)
 
 ---
@@ -520,15 +520,23 @@ After completing all H3+, H4+, and H5+ enhancements, E2E tests were run on stage
 ## Better Stack Integration (H5++ - Audit Log Forwarding)
 
 **Implemented**: 2026-02-23
+**Updated**: 2026-02-23 (removed vulnerable dependencies)
 
-**Purpose**: Forward audit events to Better Stack (Logtail) for centralized log management, search, and alerting.
+**Purpose**: Forward audit events and warn/error logs to Better Stack (Logtail) for centralized log management, search, and alerting.
 
 **Implementation**:
-- Updated `services/mcp-gateway/src/utils/audit.ts` with:
-  - `sendToBetterStack()` function for HTTP ingestion
-  - Bearer token authentication support
-  - Automatic forwarding when `BETTER_STACK_SOURCE_TOKEN` is set
-- Updated `infrastructure/docker/.env.example` with documentation
+
+*Audit Events* (`audit.ts`):
+- `sendToBetterStack()` function for HTTP ingestion
+- Bearer token authentication support
+- Automatic forwarding when `BETTER_STACK_SOURCE_TOKEN` is set
+
+*Warn/Error Logs* (`logger.ts`):
+- Custom `BetterStackTransport` Winston transport using native `fetch`
+- Only forwards warn and error level logs (not info/debug noise)
+- Non-blocking, fire-and-forget
+
+**Note**: Originally implemented using `@logtail/node` and `@logtail/winston` packages, but these were removed due to a transitive `minimatch` vulnerability (GHSA-3ppc-4f35-3m26). Replaced with a custom HTTP transport using native `fetch` (Node 18+).
 
 **Configuration**:
 ```bash
@@ -537,16 +545,59 @@ BETTER_STACK_SOURCE_TOKEN=<your-source-token>
 ```
 
 **How It Works**:
-1. Audit events are logged to stdout (for Docker)
-2. If `BETTER_STACK_SOURCE_TOKEN` is set, events are also POSTed to `https://in.logs.betterstack.com`
-3. Events include: timestamp (`dt`), severity (`level`), and full audit payload
+1. Audit events and warn/error logs are logged to stdout (for Docker)
+2. If `BETTER_STACK_SOURCE_TOKEN` is set, they are also POSTed to `https://in.logs.betterstack.com`
+3. Events include: timestamp (`dt`), severity (`level`), service name, and full payload
 4. Non-blocking, fire-and-forget (won't slow down requests)
 
 **Files Modified**:
 | File | Change |
 |------|--------|
-| `services/mcp-gateway/src/utils/audit.ts` | Added Better Stack HTTP integration |
+| `services/mcp-gateway/src/utils/audit.ts` | Better Stack HTTP integration for audit events |
+| `services/mcp-gateway/src/utils/logger.ts` | Custom BetterStackTransport for warn/error logs |
 | `infrastructure/docker/.env.example` | Added BETTER_STACK_SOURCE_TOKEN documentation |
+
+---
+
+## Security Fixes (2026-02-23)
+
+### CodeQL Alert 167: Insecure Temporary File
+
+**Severity**: High
+**File**: `services/shared/src/database/mongodb.ts`
+**Issue**: Predictable filename `/tmp/mongodb-ca-${process.pid}.crt` vulnerable to symlink attacks
+
+**Fix**:
+- Use `fs.mkdtempSync()` to create secure random temporary directory
+- Use `crypto.randomBytes(16)` for random filename suffix
+- Apply restrictive permissions (`mode: 0o600`)
+
+```typescript
+// Before (vulnerable)
+const tempPath = `/tmp/mongodb-ca-${process.pid}.crt`;
+fs.writeFileSync(tempPath, caCertPath);
+
+// After (secure)
+const randomSuffix = crypto.randomBytes(16).toString('hex');
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mongodb-ssl-'));
+const tempPath = path.join(tempDir, `ca-${randomSuffix}.crt`);
+fs.writeFileSync(tempPath, caCertPath, { mode: 0o600 });
+```
+
+### Minimatch ReDoS Vulnerability (GHSA-3ppc-4f35-3m26)
+
+**Severity**: High
+**Source**: Transitive dependency via `@logtail/node` → `minimatch@9.0.5`
+**Issue**: ReDoS via repeated wildcards with non-matching literal in pattern
+
+**Fix**:
+- Removed `@logtail/node` and `@logtail/winston` packages
+- Implemented custom `BetterStackTransport` using native `fetch`
+- Production dependencies now have **0 vulnerabilities**
+
+**Commits**:
+- `9d577bf9` - Initial security fixes
+- `c9459f99` - TypeScript duplicate property fix
 
 ---
 
@@ -858,3 +909,42 @@ This server-side configuration should be implemented as part of F1 (mTLS) when c
 2. PostgreSQL SSL configuration (server-side)
 3. MongoDB TLS configuration (server-side)
 4. Certificate auto-generation in cloud-init
+
+---
+
+## Next Steps
+
+### Immediate (No Code Changes Required)
+1. **Verify CI Workflows** - Confirm all workflows pass after security fixes (`c9459f99`)
+2. **Monitor Better Stack** - Verify audit events and warn/error logs appear in Better Stack dashboard
+3. **Review Dependabot PR** - `@anthropic-ai/sdk` bump from 0.74.0 to 0.78.0
+
+### Short-Term (Q1 2026)
+1. **F2: Vault Production Mode** (P1)
+   - Migrate from `--dev` mode to production mode
+   - Configure Shamir unseal with GitHub Secrets
+   - Enable Vault audit logging
+   - Test Phoenix rebuild with unsealing workflow
+
+### Medium-Term (Q2 2026)
+2. **F1: Enforce mTLS + Database SSL** (P2)
+   - Generate internal CA and service certificates in cloud-init
+   - Configure PostgreSQL and MongoDB for TLS
+   - Merge `docker-compose.mtls.yml` into main compose file
+   - Enable `POSTGRES_SSL=require` and `MONGODB_SSL=true`
+
+3. **F3: Internal HTTPS for Gateway Path** (P3)
+   - Configure Kong upstream to use HTTPS for MCP Gateway
+   - Configure Caddy to use HTTPS for Kong
+   - Depends on F1 certificate infrastructure
+
+### Completed Today (2026-02-23)
+- ✅ Encryption in Motion security review documented
+- ✅ CodeQL Alert 167 fixed (insecure temp file)
+- ✅ Minimatch vulnerability resolved (removed @logtail packages)
+- ✅ Better Stack integration updated (custom HTTP transport)
+- ✅ Database SSL clarified (requires F1 for server-side certificates)
+
+---
+
+*Last Updated: 2026-02-23*
