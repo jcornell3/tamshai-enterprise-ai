@@ -172,6 +172,7 @@ write_files:
 
       # Logging
       LOG_LEVEL=info
+      BETTER_STACK_SOURCE_TOKEN=${better_stack_source_token}
 
       # MCP Support Backend Selection
       SUPPORT_DATA_BACKEND=elasticsearch

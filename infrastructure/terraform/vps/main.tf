@@ -172,6 +172,13 @@ variable "discord_webhook_url" {
   default     = ""
 }
 
+variable "better_stack_source_token" {
+  description = "Better Stack (Logtail) source token for audit and error log forwarding"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # =============================================================================
 # PROVIDERS
 # =============================================================================
@@ -512,6 +519,18 @@ locals {
   # Fetch tamshai_app_password from GitHub Secrets (required for RLS enforcement)
   tamshai_app_password = data.external.github_secrets.result.tamshai_app_password
 
+  # Observability secrets - auto-fetched from GitHub Secrets with variable fallback
+  better_stack_source_token_resolved = coalesce(
+    data.external.github_secrets.result.better_stack_source_token,
+    var.better_stack_source_token,
+    ""
+  )
+  discord_webhook_url_resolved = coalesce(
+    data.external.github_secrets.result.discord_webhook_url,
+    var.discord_webhook_url,
+    ""
+  )
+
   cloud_init_config = templatefile("${path.module}/cloud-init.yaml", {
     domain                       = var.domain
     email                        = var.email
@@ -545,7 +564,9 @@ locals {
     # C2 Security: Encryption salt for secrets at rest
     encryption_salt              = random_password.encryption_salt.result
     # C2 Monitoring: Discord webhook for startup notifications
-    discord_webhook_url          = var.discord_webhook_url
+    discord_webhook_url          = local.discord_webhook_url_resolved
+    # C2 Observability: Better Stack for log aggregation
+    better_stack_source_token    = local.better_stack_source_token_resolved
   })
 }
 

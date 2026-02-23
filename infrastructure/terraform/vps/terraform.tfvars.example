@@ -52,6 +52,10 @@ email = "admin@example-domain.com"
 #   TF_VAR_mcp_gateway_client_secret     - MCP Gateway Keycloak client secret (from STAGE_MCP_GATEWAY_CLIENT_SECRET)
 #   TF_VAR_mcp_hr_service_client_secret  - Identity sync service account secret
 #
+# Optional secrets (auto-fetched from GitHub Secrets if workflow exports them):
+#   TF_VAR_better_stack_source_token     - Better Stack (Logtail) source token for log aggregation
+#   TF_VAR_discord_webhook_url           - Discord webhook for startup/failure notifications
+#
 # IMPORTANT: Use a SEPARATE Claude API key for stage vs dev!
 # Create keys at: https://console.anthropic.com/settings/keys
 # Name them "Tamshai Dev" and "Tamshai Stage" to distinguish.

@@ -34,6 +34,8 @@ $output = @{
     "test_user_totp_secret_raw" = ""
     "tamshai_app_password" = ""
     "customer_user_password" = ""
+    "better_stack_source_token" = ""
+    "discord_webhook_url" = ""
 }
 
 try {
@@ -105,6 +107,17 @@ try {
     $customerPwdFile = Join-Path $tempDir "CUSTOMER_USER_PASSWORD"
     if (Test-Path $customerPwdFile) {
         $output["customer_user_password"] = (Get-Content $customerPwdFile -Raw).Trim()
+    }
+
+    # Read observability secrets (global, not environment-specific)
+    $betterStackFile = Join-Path $tempDir "BETTER_STACK_SOURCE_TOKEN"
+    if (Test-Path $betterStackFile) {
+        $output["better_stack_source_token"] = (Get-Content $betterStackFile -Raw).Trim()
+    }
+
+    $discordWebhookFile = Join-Path $tempDir "DISCORD_WEBHOOK_URL"
+    if (Test-Path $discordWebhookFile) {
+        $output["discord_webhook_url"] = (Get-Content $discordWebhookFile -Raw).Trim()
     }
 
     # Cleanup temp directory

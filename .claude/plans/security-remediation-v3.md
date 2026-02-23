@@ -557,6 +557,25 @@ BETTER_STACK_SOURCE_TOKEN=<your-source-token>
 | `services/mcp-gateway/src/utils/logger.ts` | Custom BetterStackTransport for warn/error logs |
 | `infrastructure/docker/.env.example` | Added BETTER_STACK_SOURCE_TOKEN documentation |
 
+**VPS Deployment Integration (2026-02-23)**:
+
+The token is now automatically fetched and passed to the VPS via Terraform cloud-init:
+
+| File | Change |
+|------|--------|
+| `infrastructure/terraform/vps/main.tf` | Added `better_stack_source_token` variable and locals |
+| `infrastructure/terraform/vps/cloud-init.yaml` | Added `BETTER_STACK_SOURCE_TOKEN` to .env |
+| `infrastructure/terraform/vps/scripts/fetch-github-secrets.ps1` | Auto-fetches token from GitHub Secrets |
+| `.github/workflows/export-test-secrets.yml` | Exports `BETTER_STACK_SOURCE_TOKEN` |
+
+**Token Flow**:
+1. `BETTER_STACK_SOURCE_TOKEN` stored in GitHub Secrets
+2. `export-test-secrets.yml` exports token to artifact (when `secret_type=all`)
+3. `fetch-github-secrets.ps1` downloads and extracts token during `terraform apply`
+4. `main.tf` passes token to `cloud-init.yaml` template
+5. `cloud-init.yaml` writes token to `.env` on VPS
+6. MCP Gateway reads token and forwards warn/error logs to Better Stack
+
 ---
 
 ## Security Fixes (2026-02-23)
@@ -944,6 +963,7 @@ This server-side configuration should be implemented as part of F1 (mTLS) when c
 - ✅ Minimatch vulnerability resolved (removed @logtail packages)
 - ✅ Better Stack integration updated (custom HTTP transport)
 - ✅ Database SSL clarified (requires F1 for server-side certificates)
+- ✅ Better Stack VPS deployment integration (token now auto-fetched and passed to cloud-init)
 
 ---
 
