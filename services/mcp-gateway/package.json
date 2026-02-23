@@ -16,7 +16,7 @@
     "type-coverage:report": "type-coverage --detail --json-output > type-coverage.json"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
+    "@anthropic-ai/sdk": "^0.78.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@tamshai/shared": "file:../shared",
     "axios": "^1.13.5",
