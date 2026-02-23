@@ -83,6 +83,9 @@ jest.mock('@tamshai/shared', () => ({
     CUSTOMER_NOT_FOUND: 'CUSTOMER_NOT_FOUND',
     CANNOT_DELETE_WON_OPPORTUNITY: 'CANNOT_DELETE_WON_OPPORTUNITY',
   },
+  // Cursor encoding/decoding for pagination
+  encodeGenericCursor: <T>(data: T): string => Buffer.from(JSON.stringify(data)).toString('base64'),
+  decodeGenericCursor: <T>(encoded: string): T => JSON.parse(Buffer.from(encoded, 'base64').toString()),
 }));
 
 // Mock dependencies before importing app
