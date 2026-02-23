@@ -547,3 +547,198 @@ BETTER_STACK_SOURCE_TOKEN=<your-source-token>
 |------|--------|
 | `services/mcp-gateway/src/utils/audit.ts` | Added Better Stack HTTP integration |
 | `infrastructure/docker/.env.example` | Added BETTER_STACK_SOURCE_TOKEN documentation |
+
+---
+
+## Future Hardening (Third-Party Review Recommendations)
+
+**Review Date**: 2026-02-23
+**Status**: 📋 Planned
+
+The following recommendations were identified during a third-party security review. They represent additional hardening beyond the current "Hardened-by-Design" baseline.
+
+---
+
+### F1: Enforce mTLS by Default (P2)
+
+**Current State**: mTLS infrastructure exists but requires opt-in via `docker-compose.mtls.yml`. Internal VPS traffic defaults to HTTP.
+
+**Risk**: An attacker with network access inside the Docker network could intercept unencrypted service-to-service traffic.
+
+**Goal**: All internal service-to-service communication uses mTLS by default, with certificates auto-generated during deployment.
+
+#### Implementation Plan
+
+**Phase 1: Certificate Auto-Generation**
+- Modify `cloud-init.yaml` to generate CA and service certificates during Phoenix rebuild
+- Store CA cert in `/opt/tamshai/certs/ca.crt`
+- Generate per-service certs: `mcp-gateway.crt`, `mcp-hr.crt`, etc.
+- Certificates valid for 90 days (rotation handled in Phase 3)
+
+```bash
+# Example: Auto-generate certs in cloud-init
+openssl req -x509 -newkey rsa:4096 -keyout ca.key -out ca.crt -days 365 -nodes -subj "/CN=Tamshai-CA"
+for svc in mcp-gateway mcp-hr mcp-finance mcp-sales mcp-support mcp-payroll mcp-tax; do
+  openssl req -newkey rsa:2048 -keyout ${svc}.key -out ${svc}.csr -nodes -subj "/CN=${svc}"
+  openssl x509 -req -in ${svc}.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out ${svc}.crt -days 90
+done
+```
+
+**Phase 2: Merge mTLS into Default Compose**
+- Merge `docker-compose.mtls.yml` into main `docker-compose.yml`
+- Add volume mounts for certificates
+- Set `MCP_TLS_ENABLED=true` by default in stage/prod
+- Update `start-services.sh` to use mTLS configuration
+
+**Phase 3: Certificate Rotation**
+- Add cron job or systemd timer for certificate renewal (every 60 days)
+- Implement graceful reload (SIGHUP) for services to pick up new certs
+- Alternative: Use cert-manager or step-ca for automated certificate lifecycle
+
+**Phase 4: Monitoring**
+- Add certificate expiry monitoring to Better Stack
+- Alert 14 days before expiry
+- Add `audit.certExpiringSoon()` event
+
+#### Files to Modify
+| File | Change |
+|------|--------|
+| `infrastructure/terraform/vps/cloud-init.yaml` | Add certificate generation |
+| `infrastructure/docker/docker-compose.yml` | Merge mTLS configuration |
+| `infrastructure/docker/docker-compose.mtls.yml` | Deprecate (merged into main) |
+| `scripts/secrets/start-services.sh` | Enable mTLS by default |
+| `.github/workflows/deploy-vps.yml` | Verify mTLS is active |
+
+#### Acceptance Criteria
+- [ ] Certificates auto-generated during Phoenix rebuild
+- [ ] All MCP services communicate over HTTPS/mTLS
+- [ ] `curl http://mcp-hr:3101` fails (HTTP disabled)
+- [ ] `curl --cacert ca.crt https://mcp-hr:3101` succeeds
+- [ ] Certificate rotation works without service downtime
+
+#### Risks & Mitigations
+| Risk | Mitigation |
+|------|------------|
+| Certificate expiry causes outage | 14-day advance alerting, 90-day validity |
+| Debugging harder with encryption | Keep HTTP enabled in dev environment only |
+| Performance overhead | Minimal (<5ms per request), acceptable for security |
+
+---
+
+### F2: Vault Production Mode (P1)
+
+**Current State**: Vault runs in `--dev` mode which stores data in-memory and auto-unseals. This is convenient but not production-grade.
+
+**Risk**:
+- Dev mode data is lost on container restart
+- No audit logging of Vault operations
+- Unsealed by default (no protection of secrets at rest)
+
+**Goal**: Run Vault in production mode with persistent storage, manual/auto-unseal, and audit logging.
+
+#### Implementation Plan
+
+**Phase 1: Production Configuration**
+- Use existing `vault/config-stage/vault-stage.hcl` configuration
+- Configure file storage backend (or migrate to Raft for HA)
+- Enable audit logging to file
+
+```hcl
+# vault-stage.hcl (already exists)
+storage "file" {
+  path = "/vault/data"
+}
+
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = 1  # TLS handled by Docker network / mTLS
+}
+
+api_addr = "http://vault:8200"
+ui = true
+
+# Audit logging
+audit {
+  type = "file"
+  path = "file"
+  options = {
+    file_path = "/vault/logs/audit.log"
+  }
+}
+```
+
+**Phase 2: Unseal Strategy**
+
+Three options, in order of preference:
+
+| Option | Pros | Cons | Effort |
+|--------|------|------|--------|
+| **A: Auto-unseal (Cloud KMS)** | Automatic, secure | Requires cloud provider, cost | Medium |
+| **B: Shamir + GitHub Secrets** | No cloud dependency | Manual unseal on restart | Low |
+| **C: Transit Auto-unseal** | Self-hosted, automatic | Requires second Vault | High |
+
+**Recommended: Option B (Shamir + GitHub Secrets)** for VPS:
+- 5 unseal keys, threshold of 3
+- Keys stored in GitHub Secrets (`VAULT_UNSEAL_KEY_1` through `VAULT_UNSEAL_KEY_5`)
+- `deploy-vps.yml` already has unseal step using these keys
+- Unseal required after container restart (acceptable for staging)
+
+**Phase 3: Data Migration**
+- Export existing secrets from dev mode Vault
+- Initialize production Vault with Shamir keys
+- Import secrets to production Vault
+- Update `sync-vault.ts` to work with sealed Vault (wait for unseal)
+
+**Phase 4: Audit Integration**
+- Forward Vault audit logs to Better Stack
+- Monitor for suspicious access patterns
+- Alert on failed authentication attempts
+
+#### Files to Modify
+| File | Change |
+|------|--------|
+| `infrastructure/docker/docker-compose.yml` | Remove `--dev` flag, add volumes |
+| `infrastructure/docker/vault/config-stage/vault-stage.hcl` | Verify production config |
+| `.github/workflows/deploy-vps.yml` | Add unseal step (already exists) |
+| `scripts/vault/sync-vault.ts` | Handle sealed Vault gracefully |
+| `infrastructure/terraform/vps/cloud-init.yaml` | Initialize Vault on first boot |
+
+#### Acceptance Criteria
+- [ ] Vault starts in production mode (not dev)
+- [ ] Vault data persists across container restarts
+- [ ] Unseal keys stored securely in GitHub Secrets
+- [ ] `deploy-vps.yml` successfully unseals Vault
+- [ ] Vault audit logs captured
+- [ ] `sync-vault.ts` waits for Vault to be unsealed before syncing
+
+#### Risks & Mitigations
+| Risk | Mitigation |
+|------|------------|
+| Forgetting to unseal after restart | Automated unseal in deploy workflow |
+| Losing unseal keys | Keys stored in GitHub Secrets (backed up) |
+| Migration data loss | Export/backup before migration |
+| Sealed Vault blocks deployment | `sync-vault.ts` retries with backoff |
+
+#### Migration Checklist
+1. [ ] Backup current Vault secrets (export to JSON)
+2. [ ] Update docker-compose.yml for production mode
+3. [ ] Initialize Vault and save unseal keys to GitHub Secrets
+4. [ ] Import secrets to production Vault
+5. [ ] Test full Phoenix rebuild with unseal workflow
+6. [ ] Verify all services can authenticate via AppRole
+
+---
+
+### Priority & Timeline
+
+| Item | Priority | Effort | Dependencies | Target |
+|------|----------|--------|--------------|--------|
+| F2: Vault Production Mode | **P1** | Medium | None | Q1 2026 |
+| F1: Enforce mTLS | **P2** | Medium | F2 (optional) | Q2 2026 |
+
+**Rationale**: Vault Production Mode (F2) should be done first because:
+1. Higher security impact (secrets at rest protection)
+2. Independent of other changes
+3. Foundation for proper secret management
+
+mTLS (F1) can be done in parallel or after, as the current Docker network isolation provides reasonable protection for internal traffic.
