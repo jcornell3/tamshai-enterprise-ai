@@ -59,7 +59,7 @@
     "tsx": "^4.6.0",
     "type-coverage": "^2.27.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.36.0"
+    "typescript-eslint": "^8.56.1"
   },
   "engines": {
     "node": ">=20.0.0"
