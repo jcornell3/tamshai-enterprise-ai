@@ -185,7 +185,8 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
 
     let safeQuery: string;
     try {
-      safeQuery = promptDefense.sanitize(query);
+      // Use requestId as session ID for dynamic delimiters (per-session security)
+      safeQuery = promptDefense.sanitize(query, requestId);
     } catch (error) {
       logger.warn('Blocked a suspicious query due to prompt injection defenses.', {
         requestId,
@@ -506,6 +507,19 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
         .map((d) => `[Data from ${d.server}]:\n${JSON.stringify(d.data, null, 2)}`)
         .join('\n\n');
 
+      // Pre-LLM PII redaction: Sanitize data before sending to external LLM
+      // This prevents accidental PII leakage to Claude API (defense layer 5c)
+      const { text: sanitizedDataContext, redactions: dataRedactions } = promptDefense.sanitizeForLLM(dataContext);
+      const { text: sanitizedQuery, redactions: queryRedactions } = promptDefense.sanitizeForLLM(safeQuery);
+
+      if (dataRedactions.length > 0 || queryRedactions.length > 0) {
+        logger.info('PII redacted before LLM call', {
+          requestId,
+          dataRedactions,
+          queryRedactions,
+        });
+      }
+
       // v1.4: Build pagination instructions for Claude
       let paginationInstructions = '';
       if (hasPagination) {
@@ -513,7 +527,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
         paginationInstructions = `\n\nPAGINATION INFO: More data is available. ${hints.join(' ')} You MUST inform the user that they are viewing a partial result set and can request more data.`;
       }
 
-      const systemPrompt = buildSystemPrompt(userContext, dataContext, paginationInstructions, truncationWarnings);
+      const systemPrompt = buildSystemPrompt(userContext, sanitizedDataContext, paginationInstructions, truncationWarnings);
 
       // Check if client disconnected before expensive Claude call (ADDENDUM #6 - cost savings)
       if (streamClosed) {
@@ -535,7 +549,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
         });
 
         const successfulServers = mcpResults.filter(r => r.status === 'success').map(r => r.server);
-        writeMockStream(res, safeQuery, userContext, successfulServers);
+        writeMockStream(res, sanitizedQuery, userContext, successfulServers);
       } else {
         // Stream Claude response
         const stream = await anthropic.messages.stream({
@@ -545,7 +559,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
           messages: [
             {
               role: 'user',
-              content: safeQuery,
+              content: sanitizedQuery,
             },
           ],
         });
