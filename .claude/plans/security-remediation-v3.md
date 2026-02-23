@@ -507,3 +507,36 @@ After completing all H3+, H4+, and H5+ enhancements, E2E tests were run on stage
 - Health endpoints, authentication, and security checks all operational
 
 **Conclusion**: Security hardening changes (H3+, H4+, H5+) did not introduce any regressions in the stage environment.
+
+---
+
+## Better Stack Integration (H5++ - Audit Log Forwarding)
+
+**Implemented**: 2026-02-23
+
+**Purpose**: Forward audit events to Better Stack (Logtail) for centralized log management, search, and alerting.
+
+**Implementation**:
+- Updated `services/mcp-gateway/src/utils/audit.ts` with:
+  - `sendToBetterStack()` function for HTTP ingestion
+  - Bearer token authentication support
+  - Automatic forwarding when `BETTER_STACK_SOURCE_TOKEN` is set
+- Updated `infrastructure/docker/.env.example` with documentation
+
+**Configuration**:
+```bash
+# Set in GitHub Secrets or .env
+BETTER_STACK_SOURCE_TOKEN=<your-source-token>
+```
+
+**How It Works**:
+1. Audit events are logged to stdout (for Docker)
+2. If `BETTER_STACK_SOURCE_TOKEN` is set, events are also POSTed to `https://in.logs.betterstack.com`
+3. Events include: timestamp (`dt`), severity (`level`), and full audit payload
+4. Non-blocking, fire-and-forget (won't slow down requests)
+
+**Files Modified**:
+| File | Change |
+|------|--------|
+| `services/mcp-gateway/src/utils/audit.ts` | Added Better Stack HTTP integration |
+| `infrastructure/docker/.env.example` | Added BETTER_STACK_SOURCE_TOKEN documentation |

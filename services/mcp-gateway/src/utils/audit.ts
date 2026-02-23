@@ -13,9 +13,15 @@
  * - Human-in-the-loop confirmations
  *
  * Environment Variables:
- *   AUDIT_LOG_ENABLED=true          - Enable audit logging (default: true in prod)
- *   AUDIT_LOG_ENDPOINT=https://...  - External SIEM webhook (optional)
- *   AUDIT_LOG_LEVEL=info            - Minimum severity to log
+ *   AUDIT_LOG_ENABLED=true              - Enable audit logging (default: true in prod)
+ *   AUDIT_LOG_ENDPOINT=https://...      - External SIEM webhook (optional)
+ *   AUDIT_LOG_LEVEL=info                - Minimum severity to log
+ *   BETTER_STACK_SOURCE_TOKEN=xxx       - Better Stack (Logtail) source token (optional)
+ *
+ * Better Stack Integration:
+ *   If BETTER_STACK_SOURCE_TOKEN is set, logs are automatically sent to
+ *   Better Stack's HTTP ingestion endpoint (https://in.logs.betterstack.com).
+ *   This takes precedence over AUDIT_LOG_ENDPOINT.
  */
 
 import { logger } from './logger';
@@ -84,7 +90,11 @@ interface AuditConfig {
   serviceName: string;
   environment: string;
   externalEndpoint?: string;
+  betterStackToken?: string;
 }
+
+/** Better Stack HTTP ingestion endpoint */
+const BETTER_STACK_ENDPOINT = 'https://in.logs.betterstack.com';
 
 const severityOrder: AuditSeverity[] = [
   'emergency', 'alert', 'critical', 'error', 'warning', 'notice', 'info', 'debug'
@@ -108,11 +118,47 @@ function getAuditConfig(): AuditConfig {
     serviceName: 'mcp-gateway',
     environment: process.env.NODE_ENV || 'development',
     externalEndpoint: process.env.AUDIT_LOG_ENDPOINT,
+    betterStackToken: process.env.BETTER_STACK_SOURCE_TOKEN,
   };
 }
 
 /**
- * Send audit event to external SIEM endpoint (if configured)
+ * Send audit event to Better Stack (Logtail)
+ * Non-blocking, fire-and-forget with error logging
+ */
+async function sendToBetterStack(event: AuditEvent, token: string): Promise<void> {
+  try {
+    const response = await fetch(BETTER_STACK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        dt: event.timestamp,
+        level: event.severity,
+        ...event,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      logger.warn('Failed to send audit event to Better Stack', {
+        eventId: event.eventId,
+        status: response.status,
+        statusText: response.statusText,
+      });
+    }
+  } catch (error) {
+    logger.warn('Error sending audit event to Better Stack', {
+      eventId: event.eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Send audit event to external SIEM endpoint (generic webhook)
  * Non-blocking, fire-and-forget with error logging
  */
 async function sendToExternalSIEM(event: AuditEvent, endpoint: string): Promise<void> {
@@ -124,7 +170,7 @@ async function sendToExternalSIEM(event: AuditEvent, endpoint: string): Promise<
         'X-Audit-Event-Id': event.eventId,
       },
       body: JSON.stringify(event),
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {
@@ -135,7 +181,6 @@ async function sendToExternalSIEM(event: AuditEvent, endpoint: string): Promise<
       });
     }
   } catch (error) {
-    // Don't let SIEM failures block the request flow
     logger.warn('Error sending audit event to SIEM', {
       eventId: event.eventId,
       error: error instanceof Error ? error.message : String(error),
@@ -180,8 +225,12 @@ export function logAuditEvent(
     ...event,
   });
 
-  // Send to external SIEM if configured (fire-and-forget)
-  if (config.externalEndpoint) {
+  // Send to Better Stack if configured (takes precedence)
+  if (config.betterStackToken) {
+    void sendToBetterStack(event, config.betterStackToken);
+  }
+  // Otherwise, send to generic SIEM endpoint if configured
+  else if (config.externalEndpoint) {
     void sendToExternalSIEM(event, config.externalEndpoint);
   }
 }
