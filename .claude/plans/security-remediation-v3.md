@@ -2,7 +2,7 @@
 
 **Created**: 2026-02-18
 **Updated**: 2026-02-23
-**Status**: ✅ Complete (5 core + 3 additional hardening items complete)
+**Status**: ✅ Complete (5 core + 4 additional hardening items complete)
 **Target Environment**: VPS / Staging (Phoenix Architecture)
 
 ---
@@ -24,6 +24,7 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 | **H3+** | MongoDB SSL/TLS Support | 2026-02-23 |
 | **H4+** | Scheduled Secret Rotation (monthly cron) | 2026-02-23 |
 | **H5+** | Vault Database Secrets Engine (PostgreSQL) | 2026-02-23 |
+| **H5++** | Better Stack Integration (audit + error logs) | 2026-02-23 |
 
 **Key Achievements**:
 - Idempotent Vault AppRole synchronization via `sync-vault.ts`
@@ -32,9 +33,9 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 - Keycloak client secret rotation script with GitHub Secrets integration
 - Scheduled monthly secret rotation via GitHub Actions
 - Vault Database Secrets Engine with 30-day PostgreSQL credential rotation
-- Structured audit logging with external SIEM webhook support
+- Structured audit logging with Better Stack integration (audit events + warn/error logs)
 
-> **Note**: Some optional infrastructure items remain (certificate auto-rotation, external log collector). These improve security posture but are not blockers for the "Hardened-by-Design" milestone.
+> **Note**: One optional infrastructure item remains (certificate auto-rotation). This improves security posture but is not a blocker for the "Hardened-by-Design" milestone.
 
 ---
 
@@ -254,7 +255,7 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 
 - [x] Vault Database Secrets Engine for dynamic PostgreSQL credentials (H5+ - 2026-02-23)
 - [x] Scheduled rotation via GitHub Actions cron job (H4+ - 2026-02-23)
-- [ ] Secret rotation audit logging
+- [x] Secret rotation audit logging (via GitHub Actions workflow logs - 2026-02-23)
 
 **Acceptance Criteria**:
 - [x] Keycloak client secrets can be rotated without service downtime
@@ -264,14 +265,15 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 
 ---
 
-## 5. Audit Logging & Governance (H5) ✅ COMPLETE (Code)
+## 5. Audit Logging & Governance (H5) ✅ COMPLETE
 
 **Risk**: Local Docker logs can be deleted by an attacker; lack of formal Phoenix validation.
 
 ### Current State:
 - ✅ Kong logs to stdout (captured by Docker)
 - ✅ `mcp-gateway` has structured audit logging (audit.ts - 2026-02-22)
-- ✅ External SIEM webhook support configured
+- ✅ Better Stack (Logtail) integration for external log forwarding (2026-02-23)
+- ✅ Warn/error logs forwarded for troubleshooting (2026-02-23)
 - C2 monitoring sends Discord alerts (not audit-grade)
 - RLS is enforced but not continuously verified
 
@@ -285,17 +287,20 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 - Convenience functions: `audit.authSuccess()`, `audit.promptInjectionBlocked()`, etc.
 - 20 unit tests
 
-**Integration**:
-- Prompt injection attempts logged as security alerts
-- PII redaction events tracked for compliance
+**Better Stack Integration (2026-02-23)**:
+- Audit events forwarded via HTTP API (`audit.ts` → `https://in.logs.betterstack.com`)
+- Warn/error logs forwarded via Winston transport (`logger.ts` → Better Stack)
+- Environment variable: `BETTER_STACK_SOURCE_TOKEN`
+- Only errors/warnings sent (not info/debug noise)
 
-### Remaining Work (Infrastructure):
-> **Cost-Effective Options**:
-> - **Grafana Loki** (self-hosted): Free, but requires additional VPS resources
-> - **Papertrail** (SaaS): ~$7/mo for 1GB/mo, easy Docker integration
-> - **AWS CloudWatch Logs**: Pay-per-use, integrates with S3 for long-term storage
-> - **Better Stack (Logtail)**: Free tier available, 1GB/mo
+**What Gets Forwarded**:
+| Type | Destination | Purpose |
+|------|-------------|---------|
+| Audit events (all) | Better Stack | Security compliance, access tracking |
+| Warn/error logs | Better Stack | Troubleshooting auth issues, service failures |
+| Info/debug logs | Docker only | Local debugging (not forwarded) |
 
+### Remaining Work (Optional):
 > **Phoenix Drill Automation**: Consider a GitHub Actions workflow that:
 > 1. Runs `terraform destroy` on a test VPS
 > 2. Runs `terraform apply` to recreate
@@ -305,7 +310,7 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 **Acceptance Criteria**:
 - [x] Structured audit logging implemented with SIEM support
 - [x] Security events (injection, PII) logged to audit trail
-- [ ] Audit logs are successfully received by external collector (infra)
+- [x] Audit logs are successfully received by external collector (Better Stack - 2026-02-23)
 - [ ] Recovery Drill restores the environment in < 15 minutes
 - [ ] Deployment fails if a database user is found with excessive permissions
 
@@ -320,10 +325,11 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 | H2 | Advanced AI Guardrails | **P1** | Medium | None | ✅ **Complete** (2026-02-22) |
 | H3 | Mandatory mTLS | **P1** | Medium | None (phased) | ✅ **Complete** (2026-02-23) |
 | H4 | Automated Rotation | **P2** | High | H1 ✅ | ✅ **Complete** (2026-02-23) |
-| H5 | Immutable Audit | **P2** | Medium | None | ✅ **Complete (Code)** |
+| H5 | Immutable Audit | **P2** | Medium | None | ✅ **Complete** (2026-02-23) |
 | H3+ | MongoDB SSL/TLS | **P3** | Low | H3 ✅ | ✅ **Complete** (2026-02-23) |
 | H4+ | Scheduled Rotation | **P3** | Medium | H4 ✅ | ✅ **Complete** (2026-02-23) |
 | H5+ | Vault DB Secrets Engine | **P3** | High | H1 ✅ | ✅ **Complete** (2026-02-23) |
+| H5++ | Better Stack Integration | **P3** | Low | H5 ✅ | ✅ **Complete** (2026-02-23) |
 
 ### Recommended Implementation Order:
 1. ~~**C1**~~ ✅ Complete (2026-02-19)
@@ -336,6 +342,7 @@ All 5 core hardening items + 3 additional enhancements are now complete:
 8. ~~**H3+**~~ ✅ Complete (2026-02-23) - MongoDB SSL/TLS support following PostgreSQL pattern
 9. ~~**H4+**~~ ✅ Complete (2026-02-23) - Scheduled monthly rotation via GitHub Actions cron
 10. ~~**H5+**~~ ✅ Complete (2026-02-23) - Vault Database Secrets Engine with 30-day PostgreSQL rotation
+11. ~~**H5++**~~ ✅ Complete (2026-02-23) - Better Stack integration for audit events and warn/error logs
 
 ---
 
