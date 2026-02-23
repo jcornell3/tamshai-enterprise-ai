@@ -6,9 +6,15 @@
  *
  * Environment variables:
  *   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+ *
+ * SSL Configuration (H3 Phase 1):
+ *   POSTGRES_SSL=true|require     - Enable SSL (true/require enables, false/prefer disables)
+ *   POSTGRES_SSL_CA               - CA certificate content or path (optional)
+ *   POSTGRES_SSL_REJECT_UNAUTHORIZED - Reject untrusted certs (default: true in prod)
  */
 
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { readFileSync } from 'fs';
 import { UserContext } from '../middleware/authorize';
 
 /**
@@ -54,6 +60,53 @@ const noopLogger: PostgresLogger = {
 };
 
 /**
+ * SSL Configuration for PostgreSQL connections (H3 Phase 1)
+ *
+ * @returns SSL config object for pg.Pool, or false if SSL disabled
+ */
+function getSSLConfig(): false | { rejectUnauthorized: boolean; ca?: string } {
+  const sslMode = process.env.POSTGRES_SSL?.toLowerCase();
+
+  // Check if SSL is explicitly enabled
+  // - 'true' or 'require' enables SSL
+  // - 'false', 'prefer', empty, or undefined disables SSL
+  const sslEnabled = sslMode === 'true' || sslMode === 'require';
+
+  if (!sslEnabled) {
+    return false;
+  }
+
+  // In production, reject unauthorized certificates by default
+  const rejectUnauthorized =
+    process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED?.toLowerCase() !== 'false' &&
+    process.env.NODE_ENV === 'production';
+
+  const sslConfig: { rejectUnauthorized: boolean; ca?: string } = {
+    rejectUnauthorized,
+  };
+
+  // Load CA certificate if provided
+  const caCert = process.env.POSTGRES_SSL_CA;
+  if (caCert) {
+    // Check if it's a file path or raw certificate content
+    if (caCert.startsWith('/') || caCert.includes(':\\')) {
+      // It's a file path
+      try {
+        sslConfig.ca = readFileSync(caCert, 'utf-8');
+      } catch {
+        // If file read fails, assume it's the certificate content
+        sslConfig.ca = caCert;
+      }
+    } else if (caCert.includes('-----BEGIN')) {
+      // It's raw certificate content
+      sslConfig.ca = caCert;
+    }
+  }
+
+  return sslConfig;
+}
+
+/**
  * Create a PostgreSQL client with RLS support.
  *
  * @param logger - Optional logger instance (defaults to no-op)
@@ -71,6 +124,15 @@ const noopLogger: PostgresLogger = {
 export function createPostgresClient(logger?: PostgresLogger): PostgresClient {
   const log = logger || noopLogger;
 
+  // Get SSL configuration (H3 Phase 1)
+  const sslConfig = getSSLConfig();
+  if (sslConfig) {
+    log.info('PostgreSQL SSL enabled', {
+      rejectUnauthorized: String(sslConfig.rejectUnauthorized),
+      hasCACert: String(!!sslConfig.ca),
+    });
+  }
+
   const pool = new Pool({
     host: process.env.POSTGRES_HOST,
     port: parseInt(process.env.POSTGRES_PORT!, 10),
@@ -81,6 +143,7 @@ export function createPostgresClient(logger?: PostgresLogger): PostgresClient {
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
+    ssl: sslConfig,
   });
 
   pool.on('error', (err) => {
