@@ -23,6 +23,9 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as crypto from 'crypto';
 
 /**
  * MongoDB SSL configuration options compatible with MongoClientOptions
@@ -103,9 +106,12 @@ export function getMongoSSLConfig(): MongoSSLConfig | null {
       console.warn(
         '[WARN] MONGODB_SSL_CA contains PEM content. For best compatibility, use a file path.'
       );
-      // Write to temp file
-      const tempPath = `/tmp/mongodb-ca-${process.pid}.crt`;
-      fs.writeFileSync(tempPath, caCertPath);
+      // Write to secure temp file (random name in temp directory, restrictive permissions)
+      // Uses crypto.randomBytes to prevent predictable filename attacks
+      const randomSuffix = crypto.randomBytes(16).toString('hex');
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mongodb-ssl-'));
+      const tempPath = path.join(tempDir, `ca-${randomSuffix}.crt`);
+      fs.writeFileSync(tempPath, caCertPath, { mode: 0o600 });
       tlsCAFile = tempPath;
     } else {
       // Verify file exists

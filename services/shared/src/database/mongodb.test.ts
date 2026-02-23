@@ -23,6 +23,19 @@ jest.mock('fs', () => ({
   readFileSync: jest.fn(),
   writeFileSync: jest.fn(),
   existsSync: jest.fn(),
+  mkdtempSync: jest.fn().mockReturnValue('/tmp/mongodb-ssl-abc123'),
+}));
+
+// Mock crypto module
+jest.mock('crypto', () => ({
+  randomBytes: jest.fn().mockReturnValue({
+    toString: () => 'deadbeef12345678',
+  }),
+}));
+
+// Mock os module
+jest.mock('os', () => ({
+  tmpdir: jest.fn().mockReturnValue('/tmp'),
 }));
 
 describe('MongoDB SSL Configuration', () => {
@@ -124,15 +137,23 @@ describe('MongoDB SSL Configuration', () => {
       expect(() => getMongoSSLConfig()).toThrow('MongoDB SSL CA certificate not found');
     });
 
-    it('should handle PEM content as CA', () => {
+    it('should handle PEM content as CA securely', () => {
       process.env.MONGODB_SSL = 'true';
       process.env.MONGODB_SSL_CA = '-----BEGIN CERTIFICATE-----\nMOCK_CERT\n-----END CERTIFICATE-----';
       (fs.writeFileSync as jest.Mock).mockImplementation();
+      (fs.mkdtempSync as jest.Mock).mockReturnValue('/tmp/mongodb-ssl-secure123');
 
       const config = getMongoSSLConfig();
 
-      expect(config?.tlsCAFile).toMatch(/^\/tmp\/mongodb-ca-/);
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      // Verify secure temp file path (random directory + random filename)
+      // Use path separator agnostic check for cross-platform compatibility
+      expect(config?.tlsCAFile).toMatch(/mongodb-ssl-secure123.*ca-deadbeef12345678\.crt$/);
+      // Verify restrictive file permissions (0o600)
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        { mode: 0o600 }
+      );
       expect(mockConsoleWarn).toHaveBeenCalledWith(
         expect.stringContaining('MONGODB_SSL_CA contains PEM content')
       );
