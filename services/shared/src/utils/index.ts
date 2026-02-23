@@ -4,3 +4,4 @@
 
 export * from './internal-token';
 export * from './logger';
+export * from './tls';

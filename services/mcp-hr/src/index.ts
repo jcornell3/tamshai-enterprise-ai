@@ -14,7 +14,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import { Queue } from 'bullmq';
 import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { createLogger, requireGatewayAuth, createHealthRoutes, createDomainAuthMiddleware, MCPToolResponse } from '@tamshai/shared';
+import { createLogger, requireGatewayAuth, createHealthRoutes, createDomainAuthMiddleware, MCPToolResponse, createServer, isTLSEnabled } from '@tamshai/shared';
 import pool, { UserContext, checkConnection, closePool, queryWithRLS } from './database/connection';
 import {
   IdentityService,
@@ -887,8 +887,12 @@ async function closeQueue(queue: CleanupQueue): Promise<void> {
 // SERVER STARTUP
 // =============================================================================
 
-const server = app.listen(PORT, async () => {
-  logger.info(`MCP HR Server listening on port ${PORT}`);
+// Create HTTP or HTTPS server based on TLS configuration (H3 - Zero-Trust Network)
+const server = createServer(app, PORT, 'MCP HR', logger);
+
+server.listen(PORT, async () => {
+  const protocol = isTLSEnabled() ? 'https' : 'http';
+  logger.info(`MCP HR Server listening on ${protocol}://0.0.0.0:${PORT}`);
   logger.info('Architecture version: 1.4 (Phoenix self-healing)');
 
   // Check database connection

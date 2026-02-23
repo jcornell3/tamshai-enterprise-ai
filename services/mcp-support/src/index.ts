@@ -14,7 +14,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { requireGatewayAuth, createLogger, createHealthRoutes, hasDomainWriteAccess, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, createDomainAuthMiddleware } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, createHealthRoutes, hasDomainWriteAccess, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, createDomainAuthMiddleware, createServer, isTLSEnabled } from '@tamshai/shared';
 import { storePendingConfirmation } from './utils/redis';
 import { ISupportBackend, UserContext } from './database/types';
 import { createSupportBackend } from './database/backend.factory';
@@ -1290,8 +1290,12 @@ app.post('/tools/customer_transfer_lead', async (req: Request, res: Response) =>
 // SERVER STARTUP
 // =============================================================================
 
-const server = app.listen(PORT, async () => {
-  logger.info(`MCP Support Server listening on port ${PORT}`);
+// Create HTTP or HTTPS server based on TLS configuration (H3 - Zero-Trust Network)
+const server = createServer(app, PORT, 'MCP Support', logger);
+
+server.listen(PORT, async () => {
+  const protocol = isTLSEnabled() ? 'https' : 'http';
+  logger.info(`MCP Support Server listening on ${protocol}://0.0.0.0:${PORT}`);
   logger.info('Architecture version: 1.4');
   logger.info(`Backend: ${backendType}`);
 

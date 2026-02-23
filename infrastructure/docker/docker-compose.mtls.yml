@@ -16,19 +16,117 @@
 
 services:
   # ===========================================================================
-  # MCP Gateway with mTLS
+  # MCP Gateway with mTLS (Client Mode - connects to MCP servers)
   # ===========================================================================
   mcp-gateway:
     environment:
       # Enable TLS for outbound connections to MCP servers
-      NODE_TLS_REJECT_UNAUTHORIZED: "1"
+      MCP_TLS_ENABLED: "true"
       MCP_CA_CERT: /certs/ca.crt
       MCP_CLIENT_CERT: /certs/mcp-gateway.crt
       MCP_CLIENT_KEY: /certs/mcp-gateway.key
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+      # Update MCP server URLs to use HTTPS
+      MCP_HR_URL: https://mcp-hr:3101
+      MCP_FINANCE_URL: https://mcp-finance:3102
+      MCP_SALES_URL: https://mcp-sales:3103
+      MCP_SUPPORT_URL: https://mcp-support:3104
+      MCP_PAYROLL_URL: https://mcp-payroll:3106
+      MCP_TAX_URL: https://mcp-tax:3107
     volumes:
       - ./certs/ca.crt:/certs/ca.crt:ro
       - ./certs/mcp-gateway.crt:/certs/mcp-gateway.crt:ro
       - ./certs/mcp-gateway.key:/certs/mcp-gateway.key:ro
+
+  # ===========================================================================
+  # MCP HR Server with mTLS (Server Mode)
+  # ===========================================================================
+  mcp-hr:
+    environment:
+      MCP_TLS_ENABLED: "true"
+      MCP_SERVER_CERT: /certs/mcp-hr.crt
+      MCP_SERVER_KEY: /certs/mcp-hr.key
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-hr.crt:/certs/mcp-hr.crt:ro
+      - ./certs/mcp-hr.key:/certs/mcp-hr.key:ro
+
+  # ===========================================================================
+  # MCP Finance Server with mTLS (Server Mode)
+  # ===========================================================================
+  mcp-finance:
+    environment:
+      MCP_TLS_ENABLED: "true"
+      MCP_SERVER_CERT: /certs/mcp-finance.crt
+      MCP_SERVER_KEY: /certs/mcp-finance.key
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-finance.crt:/certs/mcp-finance.crt:ro
+      - ./certs/mcp-finance.key:/certs/mcp-finance.key:ro
+
+  # ===========================================================================
+  # MCP Sales Server with mTLS (Server Mode)
+  # ===========================================================================
+  mcp-sales:
+    environment:
+      MCP_TLS_ENABLED: "true"
+      MCP_SERVER_CERT: /certs/mcp-sales.crt
+      MCP_SERVER_KEY: /certs/mcp-sales.key
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-sales.crt:/certs/mcp-sales.crt:ro
+      - ./certs/mcp-sales.key:/certs/mcp-sales.key:ro
+
+  # ===========================================================================
+  # MCP Support Server with mTLS (Server Mode)
+  # ===========================================================================
+  mcp-support:
+    environment:
+      MCP_TLS_ENABLED: "true"
+      MCP_SERVER_CERT: /certs/mcp-support.crt
+      MCP_SERVER_KEY: /certs/mcp-support.key
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-support.crt:/certs/mcp-support.crt:ro
+      - ./certs/mcp-support.key:/certs/mcp-support.key:ro
+
+  # ===========================================================================
+  # MCP Payroll Server with mTLS (Server Mode)
+  # ===========================================================================
+  mcp-payroll:
+    environment:
+      MCP_TLS_ENABLED: "true"
+      MCP_SERVER_CERT: /certs/mcp-payroll.crt
+      MCP_SERVER_KEY: /certs/mcp-payroll.key
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-payroll.crt:/certs/mcp-payroll.crt:ro
+      - ./certs/mcp-payroll.key:/certs/mcp-payroll.key:ro
+
+  # ===========================================================================
+  # MCP Tax Server with mTLS (Server Mode)
+  # ===========================================================================
+  mcp-tax:
+    environment:
+      MCP_TLS_ENABLED: "true"
+      MCP_SERVER_CERT: /certs/mcp-tax.crt
+      MCP_SERVER_KEY: /certs/mcp-tax.key
+      MCP_CA_CERT: /certs/ca.crt
+      MCP_TLS_REJECT_UNAUTHORIZED: "true"
+    volumes:
+      - ./certs/ca.crt:/certs/ca.crt:ro
+      - ./certs/mcp-tax.crt:/certs/mcp-tax.crt:ro
+      - ./certs/mcp-tax.key:/certs/mcp-tax.key:ro
 
   # ===========================================================================
   # PostgreSQL with TLS

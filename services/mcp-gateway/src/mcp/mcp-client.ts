@@ -14,7 +14,12 @@ import {
   MCPToolResponse,
   isSuccessResponse,
 } from '../types/mcp-response';
-import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
+import {
+  generateInternalToken,
+  INTERNAL_TOKEN_HEADER,
+  createTLSHttpsAgent,
+  isTLSEnabled,
+} from '@tamshai/shared';
 
 export interface MCPClientConfig {
   readTimeout: number;   // Timeout for read operations (ms)
@@ -70,8 +75,19 @@ export class MCPClient {
       internalSecret: config.internalSecret ?? process.env.MCP_INTERNAL_SECRET,
     };
     this.logger = logger;
-    this.axios = axiosInstance || axios;
     this.internalSecret = this.config.internalSecret;
+
+    // Configure axios with TLS/mTLS support (H3 - Zero-Trust Network)
+    if (axiosInstance) {
+      this.axios = axiosInstance;
+    } else if (isTLSEnabled()) {
+      const httpsAgent = createTLSHttpsAgent();
+      this.axios = axios.create({ httpsAgent });
+      this.logger.info('MCP mTLS enabled - using HTTPS with client certificates');
+    } else {
+      this.axios = axios;
+      this.logger.debug('MCP TLS disabled - using plain HTTP');
+    }
 
     // Warn if internal secret is not configured (security risk)
     if (!this.internalSecret) {

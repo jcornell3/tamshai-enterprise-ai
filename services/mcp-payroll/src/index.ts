@@ -6,7 +6,7 @@
  */
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
-import { requireGatewayAuth, createDomainAuthMiddleware, createHealthRoutes } from '@tamshai/shared';
+import { requireGatewayAuth, createDomainAuthMiddleware, createHealthRoutes, createServer, isTLSEnabled } from '@tamshai/shared';
 import { UserContext, checkConnection } from './database/connection';
 import { checkRedisConnection } from './utils/redis';
 import { logger } from './utils/logger';
@@ -200,10 +200,14 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server (H3 - Zero-Trust Network: HTTP or HTTPS based on TLS configuration)
+const server = createServer(app, PORT, 'MCP Payroll', logger);
+
+server.listen(PORT, () => {
+  const protocol = isTLSEnabled() ? 'https' : 'http';
   logger.info(`MCP Payroll server started`, {
     port: PORT,
+    protocol,
     environment: process.env.NODE_ENV || 'development',
   });
 });

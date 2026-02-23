@@ -15,7 +15,7 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { ObjectId } from 'mongodb';
-import { requireGatewayAuth, createLogger, createHealthRoutes, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, hasDomainWriteAccess, createDomainAuthMiddleware, encodeGenericCursor, decodeGenericCursor } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, createHealthRoutes, MCPToolResponse, createSuccessResponse, createPendingConfirmationResponse, createErrorResponse, PaginationMetadata, hasDomainWriteAccess, createDomainAuthMiddleware, encodeGenericCursor, decodeGenericCursor, createServer, isTLSEnabled } from '@tamshai/shared';
 import { UserContext, checkConnection, closeConnection, getCollection, buildRoleFilter } from './database/connection';
 import { handleOpportunityNotFound, handleCustomerNotFound, handleInsufficientPermissions, handleCannotDeleteWonOpportunity, handleDatabaseError, withErrorHandling } from './utils/error-handler';
 import { storePendingConfirmation } from './utils/redis';
@@ -1230,8 +1230,12 @@ app.post('/execute', async (req: Request, res: Response) => {
 
 // Only start server when run directly, not when imported for testing
 if (require.main === module) {
-  const server = app.listen(PORT, async () => {
-    logger.info(`MCP Sales Server listening on port ${PORT}`);
+  // Create HTTP or HTTPS server based on TLS configuration (H3 - Zero-Trust Network)
+  const server = createServer(app, PORT, 'MCP Sales', logger);
+
+  server.listen(PORT, async () => {
+    const protocol = isTLSEnabled() ? 'https' : 'http';
+    logger.info(`MCP Sales Server listening on ${protocol}://0.0.0.0:${PORT}`);
     logger.info('Architecture version: 1.4');
     const dbHealthy = await checkConnection();
     if (dbHealthy) {

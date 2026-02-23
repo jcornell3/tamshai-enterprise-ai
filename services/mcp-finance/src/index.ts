@@ -12,7 +12,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import { requireGatewayAuth, createLogger, createHealthRoutes, createFinanceTierAuthMiddleware, createFinanceWriteAuthMiddleware, hasDomainWriteAccess } from '@tamshai/shared';
+import { requireGatewayAuth, createLogger, createHealthRoutes, createFinanceTierAuthMiddleware, createFinanceWriteAuthMiddleware, hasDomainWriteAccess, createServer, isTLSEnabled } from '@tamshai/shared';
 import { UserContext, checkConnection, closePool } from './database/connection';
 import { getBudget, GetBudgetInputSchema } from './tools/get-budget';
 import { listBudgets, ListBudgetsInputSchema } from './tools/list-budgets';
@@ -1042,8 +1042,12 @@ app.post('/execute', async (req: Request, res: Response) => {
 // SERVER STARTUP
 // =============================================================================
 
-const server = app.listen(PORT, async () => {
-  logger.info(`MCP Finance Server listening on port ${PORT}`);
+// Create HTTP or HTTPS server based on TLS configuration (H3 - Zero-Trust Network)
+const server = createServer(app, PORT, 'MCP Finance', logger);
+
+server.listen(PORT, async () => {
+  const protocol = isTLSEnabled() ? 'https' : 'http';
+  logger.info(`MCP Finance Server listening on ${protocol}://0.0.0.0:${PORT}`);
   logger.info('Architecture version: 1.4');
 
   // Check database connection
