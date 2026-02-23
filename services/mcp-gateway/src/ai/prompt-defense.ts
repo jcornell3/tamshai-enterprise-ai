@@ -122,7 +122,7 @@ function getSessionDelimiters(sessionId: string): { open: string; close: string 
  * Clear all session delimiters and their cleanup timeouts.
  * Used for testing to prevent open handles.
  */
-function clearAllSessions(): void {
+export function clearAllSessions(): void {
   for (const timeout of sessionTimeouts.values()) {
     clearTimeout(timeout);
   }

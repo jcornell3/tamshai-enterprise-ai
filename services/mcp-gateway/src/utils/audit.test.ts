@@ -2,7 +2,7 @@
  * Audit Logging Utility Tests (H5 - Security Governance)
  */
 
-import { audit, logAuditEvent, AuditCategory, AuditSeverity } from './audit';
+import { audit, logAuditEvent, AuditSeverity } from './audit';
 import { logger } from './logger';
 
 // Mock the logger

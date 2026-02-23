@@ -17,6 +17,7 @@ import {
 import { createMockLogger } from '../test-utils/mock-logger';
 import { TEST_USERS } from '../test-utils/mock-user-context';
 import { MCPServerConfig } from '../utils/gateway-utils';
+import { clearAllSessions } from '../ai/prompt-defense';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RouteLayer = any;
@@ -120,6 +121,7 @@ describe('Streaming Routes', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    clearAllSessions(); // Clean up session timeouts to prevent open handles
   });
 
   describe('createStreamingRoutes', () => {
@@ -248,10 +250,11 @@ describe('Streaming Routes', () => {
       await handler(req, res, next);
 
       // Cursor should have been passed to MCP query
-      // Note: Query is wrapped in XML tags by prompt defense Layer 3
+      // Note: Query is wrapped in dynamic XML tags by prompt defense Layer 3
+      // Dynamic delimiters use format: <query_[random_hex]>...</query_[random_hex]>
       expect(mockQueryMCPServer).toHaveBeenCalledWith(
         mockHRServer,
-        '<user_query>list employees</user_query>',
+        expect.stringMatching(/^<query_[a-f0-9]+>list employees<\/query_[a-f0-9]+>$/),
         expect.objectContaining({ userId: TEST_USERS.hrManager.userId }),
         'page-2-cursor'
       );
