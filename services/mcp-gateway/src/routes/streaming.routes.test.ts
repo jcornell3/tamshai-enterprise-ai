@@ -19,6 +19,12 @@ import { TEST_USERS } from '../test-utils/mock-user-context';
 import { MCPServerConfig } from '../utils/gateway-utils';
 import { clearAllSessions } from '../ai/prompt-defense';
 
+// Mock redis utilities for MCP context caching (P3)
+jest.mock('../utils/redis', () => ({
+  getMCPContext: jest.fn().mockResolvedValue(null), // Always cache miss in tests
+  storeMCPContext: jest.fn().mockResolvedValue(undefined),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RouteLayer = any;
 

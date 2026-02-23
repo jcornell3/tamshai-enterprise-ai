@@ -29,7 +29,7 @@ import { scrubPII } from '../utils/pii-scrubber';
 import { sanitizeForLog, MCPServerConfig } from '../utils/gateway-utils';
 import { promptDefense } from '../ai/prompt-defense';
 import { audit } from '../utils/audit';
-import { getMCPContext, storeMCPContext, invalidateMCPContext } from '../utils/redis';
+import { getMCPContext, storeMCPContext } from '../utils/redis';
 
 // =============================================================================
 // CONNECTION TRACKING (Phase 4 - Graceful Shutdown)
@@ -478,7 +478,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
           try {
             mcpResults = JSON.parse(cachedContext);
             logger.info('MCP context cache HIT', { requestId, cacheKey, serverCount: mcpResults.length });
-          } catch (parseError) {
+          } catch {
             logger.warn('MCP context cache parse error, fetching fresh', { requestId, cacheKey });
             mcpResults = await fetchMCPDataFresh();
           }
