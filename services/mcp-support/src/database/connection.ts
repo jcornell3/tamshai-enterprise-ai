@@ -5,11 +5,14 @@
  * for Support ticket data access. Mirrors the pattern from MCP Sales.
  */
 
-import { MongoClient, Db, Collection, Filter } from 'mongodb';
-import { createLogger } from '@tamshai/shared';
+import { MongoClient, Db, Collection, Filter, MongoClientOptions } from 'mongodb';
+import { createLogger, withMongoSSL, logMongoSSLStatus } from '@tamshai/shared';
 import { UserContext } from './types';
 
 const logger = createLogger('mcp-support');
+
+// Log SSL status on module load
+logMongoSSLStatus(logger);
 
 // Support both MONGODB_URI and MONGODB_URL (CI uses MONGODB_URL)
 // NOTE: MongoDB is optional for MCP Support when using Elasticsearch backend.
@@ -63,10 +66,15 @@ async function connect(): Promise<Db> {
   const databaseName = process.env.MONGODB_DB || extractDatabaseFromUrl(MONGODB_URL) || 'tamshai_support';
 
   try {
-    client = new MongoClient(MONGODB_URL);
+    // Apply SSL configuration if enabled (H3 Phase 2)
+    const options: MongoClientOptions = withMongoSSL({});
+    client = new MongoClient(MONGODB_URL, options);
     await client.connect();
     db = client.db(databaseName);
-    logger.info('Connected to MongoDB', { database: databaseName });
+    logger.info('Connected to MongoDB', {
+      database: databaseName,
+      ssl: Object.keys(options).length > 0,
+    });
     return db;
   } catch (error) {
     logger.error('Failed to connect to MongoDB', error);

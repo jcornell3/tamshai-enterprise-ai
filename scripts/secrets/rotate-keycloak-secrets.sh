@@ -259,7 +259,16 @@ main() {
             admin_password="${KEYCLOAK_DEV_ADMIN_PASSWORD:-admin}"
             ;;
         stage)
-            keycloak_url="https://www.tamshai.com/auth"
+            # Use internal URL when running from VPS (detected by presence of /opt/tamshai)
+            # This allows the script to work both from CI/CD (external) and from VPS (internal)
+            if [ -d "/opt/tamshai" ]; then
+                # Running on VPS - use internal Docker network URL
+                keycloak_url="http://keycloak:8080"
+                log_info "Detected VPS environment, using internal Keycloak URL"
+            else
+                # Running externally (CI/CD, local) - use public URL
+                keycloak_url="https://www.tamshai.com/auth"
+            fi
             admin_password="${KEYCLOAK_VPS_ADMIN_PASSWORD:-}"
 
             # Try to get from GitHub secrets if not set

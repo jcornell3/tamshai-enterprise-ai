@@ -1,21 +1,34 @@
 #!/usr/bin/env npx ts-node
 /**
- * Vault AppRole Synchronization Script (H1 - Phoenix Vault AppRoles)
+ * Vault Synchronization Script (H1 + H5+ Security Hardening)
  *
- * Idempotent script that ensures Vault is configured with correct policies,
- * AppRole roles, and generates ephemeral SecretIDs for deployments.
+ * Idempotent script that ensures Vault is configured with:
+ * - H1: AppRole authentication for Phoenix Vault
+ * - H5+: Database secrets engine for automatic password rotation
  *
  * This script is designed to run during every Phoenix rebuild:
  * 1. After Vault is unsealed
  * 2. Before services are started
  * 3. Generates one-time-use SecretIDs with short TTL
+ * 4. Configures database credential rotation (optional)
  *
  * Usage:
- *   npx ts-node scripts/vault/sync-vault.ts [--generate-secret-ids]
+ *   npx ts-node scripts/vault/sync-vault.ts [options]
  *
- * Environment:
- *   VAULT_ADDR - Vault server address (e.g., http://localhost:8200)
+ * Options:
+ *   --generate-secret-ids  Generate ephemeral SecretIDs for services
+ *   --sync-database        Explicitly enable database secrets engine
+ *   --read-db-creds        Read and display current database credentials
+ *
+ * Environment (required):
+ *   VAULT_ADDR  - Vault server address (e.g., http://localhost:8200)
  *   VAULT_TOKEN - Root/admin token with policy management permissions
+ *
+ * Environment (optional - H5+ database secrets engine):
+ *   VAULT_POSTGRES_USER     - Vault user for PostgreSQL (e.g., vault)
+ *   VAULT_POSTGRES_PASSWORD - Password for the vault PostgreSQL user
+ *   POSTGRES_HOST           - PostgreSQL host (default: postgres)
+ *   POSTGRES_PORT           - PostgreSQL port (default: 5432)
  *
  * Output:
  *   When --generate-secret-ids is passed, outputs JSON with generated SecretIDs
@@ -32,6 +45,12 @@ import * as http from 'http';
 const VAULT_ADDR = process.env.VAULT_ADDR || 'http://localhost:8200';
 const VAULT_TOKEN = process.env.VAULT_TOKEN || process.env.VAULT_DEV_ROOT_TOKEN;
 const VAULT_NAMESPACE = process.env.VAULT_NAMESPACE || '';
+
+// Database secrets engine configuration (H5+ enhancement)
+const VAULT_POSTGRES_USER = process.env.VAULT_POSTGRES_USER;
+const VAULT_POSTGRES_PASSWORD = process.env.VAULT_POSTGRES_PASSWORD;
+const POSTGRES_HOST = process.env.POSTGRES_HOST || 'postgres';
+const POSTGRES_PORT = process.env.POSTGRES_PORT || '5432';
 
 // AppRole configuration - Static RoleIDs (stable identifiers)
 // These are hardcoded so services can be configured with them
@@ -116,6 +135,23 @@ path "tamshai/data/databases" {
   capabilities = ["read"]
 }
 `,
+};
+
+// =============================================================================
+// Database Secrets Engine Configuration (H5+)
+// =============================================================================
+
+const DATABASE_CONFIG = {
+  databases: ['tamshai_hr', 'tamshai_finance', 'tamshai_payroll', 'tamshai_tax'],
+  staticRoles: {
+    'tamshai-app': {
+      username: 'tamshai_app',
+      rotationPeriod: '720h',  // 30 days
+      rotationStatements: [
+        "ALTER USER \"{{name}}\" WITH PASSWORD '{{password}}' NOBYPASSRLS;"
+      ]
+    }
+  }
 };
 
 // =============================================================================
@@ -354,15 +390,120 @@ async function generateSecretIds(): Promise<Record<string, { roleId: string; sec
 }
 
 // =============================================================================
+// Database Secrets Engine (H5+)
+// =============================================================================
+
+async function syncDatabaseEngine(): Promise<void> {
+  // Skip if database credentials not configured
+  if (!VAULT_POSTGRES_USER || !VAULT_POSTGRES_PASSWORD) {
+    console.log('[INFO] Skipping database secrets engine (VAULT_POSTGRES_USER/PASSWORD not set)');
+    console.log('[INFO] To enable automatic password rotation, set these environment variables');
+    return;
+  }
+
+  console.log('[INFO] Configuring database secrets engine (H5+)...');
+
+  // Enable database secrets engine
+  try {
+    await vaultRequest('POST', '/v1/sys/mounts/database', {
+      type: 'database',
+      description: 'PostgreSQL credential rotation for Tamshai services',
+    });
+    console.log('[OK] Database secrets engine enabled');
+  } catch (error) {
+    if (String(error).includes('path is already in use')) {
+      console.log('[INFO] Database secrets engine already enabled');
+    } else {
+      throw error;
+    }
+  }
+
+  // Configure PostgreSQL connections for each database
+  for (const dbName of DATABASE_CONFIG.databases) {
+    const configPath = `/v1/database/config/postgresql-${dbName}`;
+    const connectionUrl = `postgresql://{{username}}:{{password}}@${POSTGRES_HOST}:${POSTGRES_PORT}/${dbName}?sslmode=disable`;
+
+    try {
+      await vaultRequest('POST', configPath, {
+        plugin_name: 'postgresql-database-plugin',
+        connection_url: connectionUrl,
+        username: VAULT_POSTGRES_USER,
+        password: VAULT_POSTGRES_PASSWORD,
+        allowed_roles: Object.keys(DATABASE_CONFIG.staticRoles),
+      });
+      console.log(`[OK] Database connection configured: ${dbName}`);
+    } catch (error) {
+      console.error(`[ERROR] Failed to configure database ${dbName}:`, error);
+      throw error;
+    }
+  }
+
+  // Configure static roles for credential rotation
+  for (const [roleName, roleConfig] of Object.entries(DATABASE_CONFIG.staticRoles)) {
+    // Use the first database for the static role (credentials work across all)
+    const primaryDb = DATABASE_CONFIG.databases[0];
+    const rolePath = `/v1/database/static-roles/${roleName}`;
+
+    try {
+      await vaultRequest('POST', rolePath, {
+        db_name: `postgresql-${primaryDb}`,
+        username: roleConfig.username,
+        rotation_period: roleConfig.rotationPeriod,
+        rotation_statements: roleConfig.rotationStatements,
+      });
+      console.log(`[OK] Static role configured: ${roleName} (rotation: ${roleConfig.rotationPeriod})`);
+    } catch (error) {
+      console.error(`[ERROR] Failed to configure static role ${roleName}:`, error);
+      throw error;
+    }
+  }
+
+  console.log('[OK] Database secrets engine configuration complete');
+}
+
+/**
+ * Read current database credentials from Vault
+ * Useful for debugging and verification
+ */
+async function readDatabaseCredentials(roleName: string): Promise<{ username: string; password: string } | null> {
+  try {
+    const response = await vaultRequest<{
+      username: string;
+      password: string;
+      last_vault_rotation: string;
+      ttl: number;
+    }>('GET', `/v1/database/static-creds/${roleName}`);
+
+    if (response.data) {
+      console.log(`[INFO] Credentials for ${roleName}:`);
+      console.log(`  Username: ${response.data.username}`);
+      console.log(`  Last Rotation: ${response.data.last_vault_rotation}`);
+      console.log(`  TTL: ${response.data.ttl}s`);
+      return {
+        username: response.data.username,
+        password: response.data.password,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error(`[ERROR] Failed to read credentials for ${roleName}:`, error);
+    return null;
+  }
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
 async function main(): Promise<void> {
   const generateSecrets = process.argv.includes('--generate-secret-ids');
+  const syncDatabase = process.argv.includes('--sync-database');
+  const readDbCreds = process.argv.includes('--read-db-creds');
 
-  console.log('=== Vault AppRole Synchronization (H1) ===');
+  console.log('=== Vault Synchronization (H1 + H5+) ===');
   console.log(`Vault Address: ${VAULT_ADDR}`);
   console.log(`Generate SecretIDs: ${generateSecrets}`);
+  console.log(`Sync Database Engine: ${syncDatabase}`);
   console.log('');
 
   if (!VAULT_TOKEN) {
@@ -389,6 +530,11 @@ async function main(): Promise<void> {
   // Sync AppRole roles
   await syncAppRoles();
 
+  // Sync database secrets engine if requested or if credentials are available
+  if (syncDatabase || (VAULT_POSTGRES_USER && VAULT_POSTGRES_PASSWORD)) {
+    await syncDatabaseEngine();
+  }
+
   // Generate SecretIDs if requested
   if (generateSecrets) {
     const secretIds = await generateSecretIds();
@@ -405,6 +551,13 @@ async function main(): Promise<void> {
       console.log(`export VAULT_${envName}_ROLE_ID="${creds.roleId}"`);
       console.log(`export VAULT_${envName}_SECRET_ID="${creds.secretId}"`);
     }
+  }
+
+  // Read database credentials if requested (for verification)
+  if (readDbCreds) {
+    console.log('');
+    console.log('=== Database Credentials ===');
+    await readDatabaseCredentials('tamshai-app');
   }
 
   console.log('');

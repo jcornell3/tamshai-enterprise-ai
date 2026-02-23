@@ -5,10 +5,13 @@
  * for CRM data access.
  */
 
-import { MongoClient, Db, Collection, Filter } from 'mongodb';
-import { createLogger } from '@tamshai/shared';
+import { MongoClient, Db, Collection, Filter, MongoClientOptions } from 'mongodb';
+import { createLogger, withMongoSSL, logMongoSSLStatus } from '@tamshai/shared';
 
 const logger = createLogger('mcp-sales');
+
+// Log SSL status on module load
+logMongoSSLStatus(logger);
 
 // Support both MONGODB_URI and MONGODB_URL (CI uses MONGODB_URL) - required
 const RAW_MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI;
@@ -62,10 +65,15 @@ async function connect(): Promise<Db> {
   }
 
   try {
-    client = new MongoClient(MONGODB_URI);
+    // Apply SSL configuration if enabled (H3 Phase 2)
+    const options: MongoClientOptions = withMongoSSL({});
+    client = new MongoClient(MONGODB_URI, options);
     await client.connect();
     db = client.db(DATABASE_NAME);
-    logger.info('Connected to MongoDB', { database: DATABASE_NAME });
+    logger.info('Connected to MongoDB', {
+      database: DATABASE_NAME,
+      ssl: Object.keys(options).length > 0,
+    });
     return db;
   } catch (error) {
     logger.error('Failed to connect to MongoDB', error);
