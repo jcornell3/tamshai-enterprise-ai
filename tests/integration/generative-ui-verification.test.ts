@@ -54,7 +54,7 @@ describe('Generative UI - Full Verification Suite', () => {
     authProvider.clearCache();
 
     // Reset any approved items back to pending status for future test runs
-    // Uses E2E admin API key for privileged database operations
+    // Uses E2E admin API key for privileged database operations (mapped to ADMIN_API_KEY in container)
     const adminApiKey = process.env.E2E_ADMIN_API_KEY;
     if (adminApiKey && approvedItems.length > 0) {
       console.log(`[CLEANUP] Resetting ${approvedItems.length} approved items...`);
@@ -63,7 +63,7 @@ describe('Generative UI - Full Verification Suite', () => {
           await axios.post(
             `${MCP_GATEWAY_URL}/api/admin/reset-test-fixture`,
             { type: item.type, id: item.id },
-            { headers: { 'X-Admin-API-Key': adminApiKey } }
+            { headers: { 'X-Admin-Key': adminApiKey } }
           );
           console.log(`[CLEANUP] Reset ${item.type} ${item.id}`);
         } catch (error) {

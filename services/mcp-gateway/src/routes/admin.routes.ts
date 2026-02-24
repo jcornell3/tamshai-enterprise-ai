@@ -16,10 +16,32 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Pool } from 'pg';
 import { createLogger } from '@tamshai/shared';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+// PostgreSQL connection pools for test fixture reset
+const pgPools: Record<string, Pool> = {};
+
+/**
+ * Get or create a PostgreSQL connection pool for a specific database
+ */
+function getPgPool(database: string): Pool {
+  if (!pgPools[database]) {
+    pgPools[database] = new Pool({
+      host: process.env.POSTGRES_HOST || 'postgres',
+      port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+      user: process.env.POSTGRES_USER || 'postgres',
+      password: process.env.POSTGRES_PASSWORD,
+      database,
+      max: 2,
+      idleTimeoutMillis: 30000,
+    });
+  }
+  return pgPools[database];
+}
 
 // Logger setup
 const logger = createLogger('mcp-gateway');
@@ -501,6 +523,92 @@ router.post('/clear/:domain', async (req: Request, res: Response) => {
     domain,
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * POST /api/admin/reset-test-fixture
+ * Reset a specific test fixture item back to its pending state
+ * Used by integration tests for cleanup after approval tests
+ */
+router.post('/reset-test-fixture', async (req: Request, res: Response) => {
+  const { type, id } = req.body;
+
+  if (!type || !id) {
+    return res.status(400).json({
+      status: 'error',
+      code: 'MISSING_PARAMS',
+      message: 'Both type and id are required',
+    });
+  }
+
+  logger.info('Resetting test fixture', { type: sanitizeForLog(type), id: sanitizeForLog(id) });
+
+  try {
+    let result: { rowCount: number | null };
+    let resetTo: string;
+
+    // Normalize type names (accept both short and full names)
+    const normalizedType = type.replace('_report', '').replace('_request', '').replace('time_off', 'timeoff');
+
+    switch (normalizedType) {
+      case 'budget': {
+        // Reset budget to PENDING_APPROVAL status
+        const pool = getPgPool('tamshai_finance');
+        result = await pool.query(
+          'UPDATE finance.department_budgets SET status = $1 WHERE id = $2',
+          ['PENDING_APPROVAL', id]
+        );
+        resetTo = 'PENDING_APPROVAL';
+        break;
+      }
+      case 'expense': {
+        // Reset expense report to SUBMITTED status
+        const pool = getPgPool('tamshai_finance');
+        result = await pool.query(
+          'UPDATE finance.expense_reports SET status = $1 WHERE id = $2',
+          ['SUBMITTED', id]
+        );
+        resetTo = 'SUBMITTED';
+        break;
+      }
+      case 'timeoff': {
+        // Reset time-off request to pending status
+        const pool = getPgPool('tamshai_hr');
+        result = await pool.query(
+          'UPDATE hr.time_off_requests SET status = $1 WHERE id = $2',
+          ['pending', id]
+        );
+        resetTo = 'pending';
+        break;
+      }
+      default:
+        return res.status(400).json({
+          status: 'error',
+          code: 'INVALID_TYPE',
+          message: `Unknown fixture type: ${type}. Valid types: budget, expense/expense_report, timeoff/time_off_request`,
+        });
+    }
+
+    logger.info('Test fixture reset complete', { type, id, rowsAffected: result.rowCount });
+
+    res.json({
+      status: 'success',
+      data: {
+        type,
+        id,
+        resetTo,
+        rowsAffected: result.rowCount,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to reset test fixture:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'RESET_FAILED',
+      message: error instanceof Error ? error.message : 'Failed to reset test fixture',
+    });
+  }
 });
 
 /**
