@@ -35,6 +35,9 @@ RUN chmod +x /usr/local/bin/jq
 ADD https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-amd64 /usr/local/bin/curl
 RUN chmod +x /usr/local/bin/curl
 
+# Copy custom Tamshai theme for branded login page
+COPY themes/tamshai /opt/keycloak/themes/tamshai
+
 # Copy realm exports into the image (not mounted as volume)
 # This ensures terraform destroy + apply always uses the latest files
 # Keycloak imports all JSON files in /opt/keycloak/data/import/ on startup

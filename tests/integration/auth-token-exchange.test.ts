@@ -287,8 +287,10 @@ describe('Token Exchange Integration', () => {
   describe('Error Recovery', () => {
     it('should handle network errors gracefully', async () => {
       // Override Keycloak URL to invalid endpoint
+      // Use 127.0.0.1 instead of hostname to avoid DNS resolution issues in CI
+      // (DNS lookups for non-existent hostnames can cause EAI_AGAIN/EAGAIN flaky errors)
       const originalUrl = process.env.KEYCLOAK_URL;
-      process.env.KEYCLOAK_URL = 'http://invalid-keycloak:9999/auth';
+      process.env.KEYCLOAK_URL = 'http://127.0.0.1:9999/auth';
       resetTestAuthProvider();
 
       const authProvider = getTestAuthProvider();

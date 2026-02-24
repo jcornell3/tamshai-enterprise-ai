@@ -1,0 +1,131 @@
+/**
+ * Tamshai Corp - Custom Keycloak Login Theme
+ *
+ * Brand colors (from emblem):
+ * - Primary Blue: #1a5276
+ * - Accent Teal: #17a2b8
+ * - Bronze/Gold: #b87333
+ * - Dark Background: #1a1a2e
+ */
+
+/* Background styling */
+.login-pf body {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background-attachment: fixed;
+}
+
+/* Logo replacement */
+.login-pf .kc-logo-text {
+  display: none;
+}
+
+.login-pf #kc-header-wrapper {
+  background-image: url('../img/tamshai-logo.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  height: 150px;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto 30px;
+}
+
+/* Hide default header text */
+.login-pf #kc-header {
+  color: transparent;
+}
+
+/* Card styling */
+.login-pf .card-pf {
+  border-top: 4px solid #17a2b8;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+/* Primary button (Sign In) */
+.login-pf .btn-primary {
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 24px;
+  transition: all 0.3s ease;
+}
+
+.login-pf .btn-primary:hover,
+.login-pf .btn-primary:focus {
+  background-color: #138496;
+  border-color: #117a8b;
+  box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+}
+
+/* Links */
+.login-pf a {
+  color: #17a2b8;
+}
+
+.login-pf a:hover {
+  color: #138496;
+}
+
+/* Input focus state */
+.login-pf .form-control:focus {
+  border-color: #17a2b8;
+  box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
+}
+
+/* Form labels */
+.login-pf label {
+  color: #333;
+  font-weight: 500;
+}
+
+/* Alert styling (errors) */
+.login-pf .alert-error {
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+  color: #721c24;
+  border-radius: 6px;
+}
+
+/* TOTP/OTP input styling */
+.login-pf .otp-input,
+.login-pf input[name="otp"] {
+  font-family: 'Courier New', monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.5rem;
+  text-align: center;
+}
+
+/* Footer/powered by text */
+.login-pf #kc-info-wrapper {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 767px) {
+  .login-pf #kc-header-wrapper {
+    height: 120px;
+    max-width: 200px;
+  }
+
+  .login-pf .card-pf {
+    margin: 0 15px;
+  }
+}
+
+/* Custom scrollbar for dark theme */
+.login-pf ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.login-pf ::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+.login-pf ::-webkit-scrollbar-thumb {
+  background: #17a2b8;
+  border-radius: 4px;
+}

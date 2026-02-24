@@ -3,6 +3,7 @@
   "realm": "tamshai-customers",
   "displayName": "Tamshai Customer Support",
   "displayNameHtml": "<div class=\"kc-logo-text\"><span>Tamshai</span> Customer Portal</div>",
+  "loginTheme": "tamshai",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,

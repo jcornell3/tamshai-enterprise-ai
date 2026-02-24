@@ -3,6 +3,7 @@
   "realm": "tamshai-corp",
   "displayName": "Tamshai Corp",
   "displayNameHtml": "<div class=\"kc-logo-text\"><span>Tamshai Corp</span></div>",
+  "loginTheme": "tamshai",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
