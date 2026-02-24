@@ -283,6 +283,13 @@ export function useAIQuery({ domain }: UseAIQueryOptions): UseAIQueryReturn {
       const result = await response.json();
       console.log('Approval action result:', result);
 
+      // Check for error status in the response body (gateway returns 200 with error body)
+      if (result.status === 'error') {
+        console.error('Approval action returned error:', result);
+        alert(`Action failed: ${result.message || 'Unknown error'}`);
+        return;
+      }
+
       // Show success message
       alert(result.message || `${type === 'approve' ? 'Approved' : 'Rejected'} successfully`);
 

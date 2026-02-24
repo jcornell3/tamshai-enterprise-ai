@@ -118,15 +118,16 @@ export async function approveTimeOffRequest(
 
       const managerId = managerLookup.rows[0].id;
 
-      // Verify the request is from a direct report (or HR has override)
+      // Verify the request is from a direct report (or HR/Executive has override)
       const isDirectReport = request.manager_id === managerId;
       const isHR = userContext.roles.some(role => role === 'hr-write');
+      const isExecutive = userContext.roles.some(role => role === 'executive');
 
-      if (!isDirectReport && !isHR) {
+      if (!isDirectReport && !isHR && !isExecutive) {
         return createErrorResponse(
           'NOT_YOUR_REPORT',
           'You can only approve/reject requests from your direct reports',
-          'Contact HR if you need to process requests for employees outside your team'
+          'Contact HR or an executive if you need to process requests for employees outside your team'
         );
       }
 
