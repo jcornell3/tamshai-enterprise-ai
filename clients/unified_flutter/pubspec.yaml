@@ -41,7 +41,7 @@ dependencies:
   crypto: ^3.0.3
 
   # App info (version display)
-  package_info_plus: ^8.0.0
+  package_info_plus: ^9.0.0
 
   # Voice Input (v1.5)
   speech_to_text: ^7.0.0
