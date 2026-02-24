@@ -91,6 +91,24 @@ export async function getPendingExpenses(
     const values: any[] = [];
     let paramIndex = 1;
 
+    // CRITICAL: Filter to direct reports only (expense reports are manager-employee responsibility)
+    // Only finance-write and finance-read can see all expense reports
+    // Executives and managers only see expense reports from their direct reports
+    const hasFinanceRole = userContext.roles.some(role =>
+      role === 'finance-read' || role === 'finance-write'
+    );
+
+    if (!hasFinanceRole) {
+      // Join with HR employees to filter by manager relationship
+      // Note: expense_reports.employee_id references HR employees, manager_id is in hr.employees
+      whereClauses.push(`EXISTS (
+        SELECT 1 FROM hr.employees e
+        WHERE e.id = er.employee_id
+        AND e.manager_id = (SELECT id FROM hr.employees WHERE work_email = $${paramIndex++})
+      )`);
+      values.push(userContext.email);
+    }
+
     if (departmentCode) {
       whereClauses.push(`er.department_code = $${paramIndex++}`);
       values.push(departmentCode);

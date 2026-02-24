@@ -38,10 +38,18 @@ export const ApproveExpenseReportInputSchema = z.object({
 export type ApproveExpenseReportInput = z.infer<typeof ApproveExpenseReportInputSchema>;
 
 /**
- * Check if user has permission to approve expense reports
+ * Check if user has finance role to approve any expense report
+ * Note: Managers can approve their direct reports' expense reports (checked separately)
  */
-function hasApprovePermission(roles: string[]): boolean {
-  return roles.includes('finance-write') || roles.includes('executive');
+function hasFinanceApprovePermission(roles: string[]): boolean {
+  return roles.includes('finance-write');
+}
+
+/**
+ * Check if user is a manager (can approve direct reports' expense reports)
+ */
+function isManager(roles: string[]): boolean {
+  return roles.includes('manager') || roles.includes('executive');
 }
 
 /**
@@ -52,16 +60,11 @@ export async function approveExpenseReport(
   userContext: UserContext
 ): Promise<MCPToolResponse> {
   return withErrorHandling('approve_expense_report', async () => {
-    // 1. Check permissions
-    if (!hasApprovePermission(userContext.roles)) {
-      return handleInsufficientPermissions('finance-write or executive', userContext.roles);
-    }
-
     // Validate input
     const { reportId, approverNotes } = ApproveExpenseReportInputSchema.parse(input);
 
     try {
-      // 2. Verify expense report exists and get details
+      // 1. Verify expense report exists and get details including manager relationship
       const reportResult = await queryWithRLS(
         userContext,
         `
@@ -74,11 +77,14 @@ export async function approveExpenseReport(
           er.total_amount,
           er.status,
           er.submission_date,
-          (SELECT COUNT(*) FROM finance.expense_items ei WHERE ei.expense_report_id = er.id) as item_count
+          (SELECT COUNT(*) FROM finance.expense_items ei WHERE ei.expense_report_id = er.id) as item_count,
+          e.manager_id,
+          (SELECT id FROM hr.employees WHERE work_email = $2) as approver_employee_id
         FROM finance.expense_reports er
+        LEFT JOIN hr.employees e ON er.employee_id = e.id
         WHERE er.id = $1
         `,
-        [reportId]
+        [reportId, userContext.email]
       );
 
       if (reportResult.rowCount === 0) {
@@ -86,6 +92,20 @@ export async function approveExpenseReport(
       }
 
       const report = reportResult.rows[0];
+
+      // 2. Check permissions: finance-write can approve any, managers can approve direct reports
+      const hasFinanceRole = hasFinanceApprovePermission(userContext.roles);
+      const isDirectManager = report.manager_id === report.approver_employee_id;
+      const hasManagerRole = isManager(userContext.roles);
+
+      if (!hasFinanceRole && !(hasManagerRole && isDirectManager)) {
+        return createErrorResponse(
+          'NOT_YOUR_REPORT',
+          'You can only approve expense reports from your direct reports',
+          'Contact Finance if you need to process expense reports for employees outside your team',
+          { reportId, employeeId: report.employee_id }
+        );
+      }
 
       // 3. Check if report is in an approvable status (SUBMITTED or UNDER_REVIEW)
       if (report.status !== 'SUBMITTED' && report.status !== 'UNDER_REVIEW') {

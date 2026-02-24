@@ -778,9 +778,12 @@ app.post('/tools/delete_budget', createFinanceWriteAuthMiddleware(), async (req:
 });
 
 /**
- * Approve Expense Report Tool (WRITE - finance-write or executive only)
+ * Approve Expense Report Tool
+ *
+ * Authorization handled by tool: finance-write can approve any,
+ * managers can approve their direct reports' expense reports.
  */
-app.post('/tools/approve_expense_report', createFinanceWriteAuthMiddleware(), async (req: Request, res: Response) => {
+app.post('/tools/approve_expense_report', async (req: Request, res: Response) => {
   try {
     const { userContext, reportId, approverNotes } = req.body;
 

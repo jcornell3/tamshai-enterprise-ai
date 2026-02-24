@@ -253,6 +253,7 @@ router.post('/finance/tools/approve_expense_report', async (req: AuthenticatedRe
 router.post('/finance/tools/approve_budget', async (req: AuthenticatedRequest, res: Response) => {
   const { budgetId, approved, approvedAmount, approverNotes } = req.body;
   const authToken = req.headers.authorization?.replace('Bearer ', '') || '';
+  const userContext = req.userContext;
 
   if (!budgetId) {
     return res.status(400).json({
@@ -262,19 +263,47 @@ router.post('/finance/tools/approve_budget', async (req: AuthenticatedRequest, r
     });
   }
 
+  if (!userContext) {
+    return res.status(401).json({
+      status: 'error',
+      code: 'UNAUTHORIZED',
+      message: 'User context not found - authentication required',
+    });
+  }
+
   try {
     const mcpFinanceUrl = process.env.MCP_FINANCE_URL || `http://localhost:${process.env.DEV_MCP_FINANCE}`;
     const gatewayUrl = `http://localhost:${process.env.PORT || process.env.DEV_MCP_GATEWAY}`;
+    const internalSecret = process.env.MCP_INTERNAL_SECRET;
 
-    logger.info('[APPROVAL] Approving budget', { budgetId, approved });
+    if (!internalSecret) {
+      logger.error('[APPROVAL] MCP_INTERNAL_SECRET not configured');
+      return res.status(500).json({
+        status: 'error',
+        code: 'CONFIG_ERROR',
+        message: 'Internal authentication not configured',
+      });
+    }
 
-    // Call MCP Finance tool
+    logger.info('[APPROVAL] Approving budget', { budgetId, approved, userId: userContext.userId });
+
+    // Generate MCP internal token for service-to-service authentication
+    const internalToken = generateInternalToken(internalSecret, userContext.userId, userContext.roles);
+
+    // Call MCP Finance tool with userContext
     const mcpResponse = await axios.post(
       `${mcpFinanceUrl}/tools/approve_budget`,
-      { budgetId, approved: approved !== false, approvedAmount, approverNotes },
+      {
+        userContext,  // Include userContext in body
+        budgetId,
+        approved: approved !== false,
+        approvedAmount,
+        approverNotes
+      },
       {
         headers: {
           Authorization: `Bearer ${authToken}`,
+          [INTERNAL_TOKEN_HEADER]: internalToken,  // Add internal authentication
           'Content-Type': 'application/json',
         },
       }
