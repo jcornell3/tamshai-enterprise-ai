@@ -389,6 +389,8 @@ services:
       CADDY_HTTPS_PORT: ${PORT_CADDY_HTTPS}
       # v1.4: Admin API key for E2E snapshot/restore
       ADMIN_API_KEY: ${E2E_ADMIN_API_KEY:?E2E_ADMIN_API_KEY is required}
+      # H5+: Better Stack audit log forwarding (optional)
+      BETTER_STACK_SOURCE_TOKEN: ${BETTER_STACK_SOURCE_TOKEN:-}
     ports:
       - "${PORT_MCP_GATEWAY}:${PORT_MCP_GATEWAY}"
     depends_on:
