@@ -77,10 +77,17 @@ export async function getPendingTimeOff(
     const cursorData = cursor ? decodeCursor(cursor) : null;
 
     try {
-      // Always filter for pending status
+      // Filter for pending status and requests from the current user's direct reports
+      // This is an application-level filter - managers only see requests they can approve
+      // (hr-read gives query access but approvals are manager-employee responsibility)
       const whereClauses: string[] = ["r.status = 'pending'"];
       const values: any[] = [];
       let paramIndex = 1;
+
+      // CRITICAL: Only show requests from direct reports (employees where manager = current user)
+      // This ensures "show my approvals" returns actionable items, not all visible requests
+      whereClauses.push(`e.manager_id = (SELECT id FROM hr.employees WHERE work_email = $${paramIndex++})`);
+      values.push(userContext.email);
 
       if (typeCode) {
         whereClauses.push(`r.type_code = $${paramIndex++}`);
