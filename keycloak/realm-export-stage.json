@@ -238,16 +238,12 @@
         "title": ["CEO"]
       },
       "groups": ["/All-Employees", "/C-Suite"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -265,16 +261,12 @@
         "title": ["VP of Human Resources"]
       },
       "groups": ["/All-Employees", "/HR-Department", "/Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -292,16 +284,12 @@
         "title": ["Finance Director"]
       },
       "groups": ["/All-Employees", "/Finance-Team", "/Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -319,16 +307,12 @@
         "title": ["VP of Sales"]
       },
       "groups": ["/All-Employees", "/Sales-Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -346,16 +330,12 @@
         "title": ["Support Director"]
       },
       "groups": ["/All-Employees", "/Support-Team", "/Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -373,16 +353,12 @@
         "title": ["Engineering Manager"]
       },
       "groups": ["/All-Employees", "/Engineering-Managers"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -400,16 +376,12 @@
         "title": ["Software Engineer"]
       },
       "groups": ["/All-Employees", "/Engineering-Team"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     },
@@ -427,16 +399,12 @@
         "title": ["IT Intern"]
       },
       "groups": ["/All-Employees", "/IT-Team"],
+      "requiredActions": ["CONFIGURE_TOTP"],
       "credentials": [
         {
           "type": "password",
           "value": "__STAGE_USER_PASSWORD__",
           "temporary": false
-        },
-        {
-          "type": "otp",
-          "secretData": "{\"value\":\"__TEST_USER_TOTP_SECRET__\"}",
-          "credentialData": "{\"subType\":\"totp\",\"period\":30,\"digits\":6,\"algorithm\":\"HmacSHA256\"}"
         }
       ]
     }
