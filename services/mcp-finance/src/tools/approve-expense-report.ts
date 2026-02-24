@@ -64,47 +64,85 @@ export async function approveExpenseReport(
     const { reportId, approverNotes } = ApproveExpenseReportInputSchema.parse(input);
 
     try {
-      // 1. Verify expense report exists and get details including manager relationship
-      const reportResult = await queryWithRLS(
-        userContext,
-        `
-        SELECT
-          er.id,
-          er.report_number,
-          er.employee_id,
-          er.department_code,
-          er.title,
-          er.total_amount,
-          er.status,
-          er.submission_date,
-          (SELECT COUNT(*) FROM finance.expense_items ei WHERE ei.expense_report_id = er.id) as item_count,
-          e.manager_id,
-          (SELECT id FROM hr.employees WHERE work_email = $2) as approver_employee_id
-        FROM finance.expense_reports er
-        LEFT JOIN hr.employees e ON er.employee_id = e.id
-        WHERE er.id = $1
-        `,
-        [reportId, userContext.email]
-      );
-
-      if (reportResult.rowCount === 0) {
-        return handleExpenseReportNotFound(reportId);
-      }
-
-      const report = reportResult.rows[0];
-
-      // 2. Check permissions: finance-write can approve any, managers can approve direct reports
+      // Check finance-write permission first (can approve any expense report)
       const hasFinanceRole = hasFinanceApprovePermission(userContext.roles);
-      const isDirectManager = report.manager_id === report.approver_employee_id;
-      const hasManagerRole = isManager(userContext.roles);
 
-      if (!hasFinanceRole && !(hasManagerRole && isDirectManager)) {
-        return createErrorResponse(
-          'NOT_YOUR_REPORT',
-          'You can only approve expense reports from your direct reports',
-          'Contact Finance if you need to process expense reports for employees outside your team',
-          { reportId, employeeId: report.employee_id }
+      // 1. Verify expense report exists and get details
+      // Finance role holders use simple query (no HR join needed)
+      // Managers need HR join to verify they're approving their direct report
+      let report: Record<string, unknown>;
+
+      if (hasFinanceRole) {
+        // Simple query for finance role - no cross-database HR join
+        const reportResult = await queryWithRLS(
+          userContext,
+          `
+          SELECT
+            er.id,
+            er.report_number,
+            er.employee_id,
+            er.department_code,
+            er.title,
+            er.total_amount,
+            er.status,
+            er.submission_date,
+            (SELECT COUNT(*) FROM finance.expense_items ei WHERE ei.expense_report_id = er.id) as item_count
+          FROM finance.expense_reports er
+          WHERE er.id = $1
+          `,
+          [reportId]
         );
+
+        if (reportResult.rowCount === 0) {
+          return handleExpenseReportNotFound(reportId);
+        }
+        report = reportResult.rows[0];
+      } else {
+        // Full query with HR join for manager approval check
+        // NOTE: This requires hr.employees to be accessible from finance database
+        // In microservices setup, this would require either:
+        // - PostgreSQL Foreign Data Wrapper (FDW)
+        // - A finance.employees materialized view synced from HR
+        // - Internal API call to MCP HR
+        const reportResult = await queryWithRLS(
+          userContext,
+          `
+          SELECT
+            er.id,
+            er.report_number,
+            er.employee_id,
+            er.department_code,
+            er.title,
+            er.total_amount,
+            er.status,
+            er.submission_date,
+            (SELECT COUNT(*) FROM finance.expense_items ei WHERE ei.expense_report_id = er.id) as item_count,
+            e.manager_id,
+            (SELECT id FROM hr.employees WHERE work_email = $2) as approver_employee_id
+          FROM finance.expense_reports er
+          LEFT JOIN hr.employees e ON er.employee_id = e.id
+          WHERE er.id = $1
+          `,
+          [reportId, userContext.email]
+        );
+
+        if (reportResult.rowCount === 0) {
+          return handleExpenseReportNotFound(reportId);
+        }
+        report = reportResult.rows[0];
+
+        // Check manager permissions
+        const isDirectManager = report.manager_id === report.approver_employee_id;
+        const hasManagerRole = isManager(userContext.roles);
+
+        if (!(hasManagerRole && isDirectManager)) {
+          return createErrorResponse(
+            'NOT_YOUR_REPORT',
+            'You can only approve expense reports from your direct reports',
+            'Contact Finance if you need to process expense reports for employees outside your team',
+            { reportId, employeeId: report.employee_id as string }
+          );
+        }
       }
 
       // 3. Check if report is in an approvable status (SUBMITTED or UNDER_REVIEW)

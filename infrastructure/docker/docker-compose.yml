@@ -94,6 +94,16 @@ x-light-limits: &light-limits
       reservations:
         memory: 32M
 
+# API Gateway services: 1G limit, 256M reservation
+# Kong 3.4 uses LMDB which requires more memory and clean shutdowns
+x-gateway-limits: &gateway-limits
+  deploy:
+    resources:
+      limits:
+        memory: 1G
+      reservations:
+        memory: 256M
+
 # Common MCP service environment variables
 x-mcp-common-env: &mcp-common-env
   NODE_ENV: development
@@ -345,7 +355,7 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
-    <<: *mcp-limits
+    <<: *gateway-limits
     networks:
       - frontend-network
       - gateway-network
