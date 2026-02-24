@@ -22,10 +22,14 @@ const logger: Logger = {
   error: (msg) => console.error(`[ERROR] ${msg}`),
 };
 
+// Track approved items for cleanup
+const approvedItems: { type: string; id: string }[] = [];
+
 describe('Generative UI - Full Verification Suite', () => {
   let authProvider: ReturnType<typeof getTestAuthProvider>;
   let aliceToken: string;
   let bobToken: string;
+  let eveToken: string;
   let httpClient: AxiosInstance;
 
   beforeAll(async () => {
@@ -34,6 +38,7 @@ describe('Generative UI - Full Verification Suite', () => {
     // Get tokens for test users
     aliceToken = await authProvider.getUserToken('alice.chen'); // HR manager
     bobToken = await authProvider.getUserToken('bob.martinez'); // Finance manager
+    eveToken = await authProvider.getUserToken('eve.thompson'); // Executive (CEO)
 
     // Create axios client with default config
     httpClient = axios.create({
@@ -45,8 +50,27 @@ describe('Generative UI - Full Verification Suite', () => {
     });
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     authProvider.clearCache();
+
+    // Reset any approved items back to pending status for future test runs
+    // Uses E2E admin API key for privileged database operations
+    const adminApiKey = process.env.E2E_ADMIN_API_KEY;
+    if (adminApiKey && approvedItems.length > 0) {
+      console.log(`[CLEANUP] Resetting ${approvedItems.length} approved items...`);
+      for (const item of approvedItems) {
+        try {
+          await axios.post(
+            `${MCP_GATEWAY_URL}/api/admin/reset-test-fixture`,
+            { type: item.type, id: item.id },
+            { headers: { 'X-Admin-API-Key': adminApiKey } }
+          );
+          console.log(`[CLEANUP] Reset ${item.type} ${item.id}`);
+        } catch (error) {
+          console.warn(`[CLEANUP] Failed to reset ${item.type} ${item.id}:`, error);
+        }
+      }
+    }
   });
 
   describe('1. Approvals Queue - Multi-Domain Name Resolution', () => {
@@ -224,6 +248,9 @@ describe('Generative UI - Full Verification Suite', () => {
       // Verify the specific request is gone
       const stillExists = newTimeOffRequests.some((r: any) => r.id === requestToApprove.id);
       expect(stillExists).toBe(false);
+
+      // Track for cleanup
+      approvedItems.push({ type: 'time_off_request', id: requestToApprove.id });
     });
 
     test('should approve expense report and persist to database', async () => {
@@ -280,6 +307,65 @@ describe('Generative UI - Full Verification Suite', () => {
 
       const stillExists = newExpenseReports.some((e: any) => e.id === expenseToApprove.id);
       expect(stillExists).toBe(false);
+
+      // Track for cleanup
+      approvedItems.push({ type: 'expense_report', id: expenseToApprove.id });
+    });
+
+    test('should approve budget and persist to database (executive)', async () => {
+      // Get pending budgets via approvals queue (as Eve - executive)
+      const approvalsResponse = await httpClient.post(
+        '/api/display',
+        { directive: 'display:approvals:pending:userId=me' },
+        { headers: { Authorization: `Bearer ${eveToken}` } }
+      );
+
+      const budgetAmendments = approvalsResponse.data.component.props.budgetAmendments || [];
+
+      if (budgetAmendments.length === 0) {
+        console.log('[SKIP] No pending budgets to approve');
+        return;
+      }
+
+      const budgetToApprove = budgetAmendments[0];
+      const originalBudgetId = budgetToApprove.id;
+
+      // Approve via MCP Gateway
+      const approveResponse = await axios.post(
+        `${MCP_GATEWAY_URL}/api/mcp/finance/tools/approve_budget`,
+        { budgetId: originalBudgetId },
+        { headers: { Authorization: `Bearer ${eveToken}` } }
+      );
+
+      expect(approveResponse.status).toBe(200);
+
+      // Auto-confirm if needed
+      if (approveResponse.data.status === 'pending_confirmation') {
+        const confirmId = approveResponse.data.confirmationId;
+        const confirmResponse = await axios.post(
+          `${MCP_GATEWAY_URL}/api/confirm/${confirmId}`,
+          { approved: true },
+          { headers: { Authorization: `Bearer ${eveToken}` } }
+        );
+        expect(confirmResponse.status).toBe(200);
+      }
+
+      // Wait for DB write
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify budget is no longer in pending list
+      const verifyResponse = await httpClient.post(
+        '/api/display',
+        { directive: 'display:approvals:pending:userId=me' },
+        { headers: { Authorization: `Bearer ${eveToken}` } }
+      );
+
+      const newBudgetAmendments = verifyResponse.data.component.props.budgetAmendments || [];
+      const stillPending = newBudgetAmendments.some((b: any) => b.id === originalBudgetId);
+      expect(stillPending).toBe(false);
+
+      // Track for cleanup
+      approvedItems.push({ type: 'budget', id: originalBudgetId });
     });
   });
 

@@ -1019,6 +1019,16 @@ CREATE POLICY budget_department_submit ON finance.department_budgets
         AND department_code = current_setting('app.current_department_id', true)
     );
 
+-- Policy 6: Executive can approve/reject budgets (UPDATE for approval workflow)
+CREATE POLICY budget_executive_modify ON finance.department_budgets
+    FOR UPDATE
+    USING (
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
+    )
+    WITH CHECK (
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
+    );
+
 -- -----------------------------------------------------------------------------
 -- BUDGET APPROVAL HISTORY RLS (v1.5 - Issue #78)
 -- -----------------------------------------------------------------------------
@@ -1067,6 +1077,13 @@ CREATE POLICY budget_history_manager_insert ON finance.budget_approval_history
             WHERE db.id = budget_approval_history.budget_id
             AND db.department = current_setting('app.current_department_id', true)
         )
+    );
+
+-- Policy 6: Executive can insert history records (for approvals/rejections)
+CREATE POLICY budget_history_executive_insert ON finance.budget_approval_history
+    FOR INSERT
+    WITH CHECK (
+        string_to_array(current_setting('app.current_user_roles', true), ',') && ARRAY['executive']
     );
 
 -- -----------------------------------------------------------------------------

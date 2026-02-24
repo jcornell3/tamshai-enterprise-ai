@@ -92,8 +92,8 @@ export async function getPendingExpenses(
     let paramIndex = 1;
 
     // CRITICAL: Filter to direct reports only (expense reports are manager-employee responsibility)
-    // Only finance-write and finance-read can see all expense reports
-    // Executives and managers only see expense reports from their direct reports
+    // Only finance-read and finance-write can see all expense reports
+    // Managers (including executives) only see expense reports from their direct reports
     const hasFinanceRole = userContext.roles.some(role =>
       role === 'finance-read' || role === 'finance-write'
     );

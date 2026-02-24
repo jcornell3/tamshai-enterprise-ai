@@ -35,11 +35,24 @@
   color: transparent;
 }
 
+/* Login container - constrain width */
+.login-pf #kc-content {
+  max-width: 450px;
+  margin: 0 auto;
+}
+
+.login-pf #kc-content-wrapper {
+  max-width: 450px;
+  margin: 0 auto;
+}
+
 /* Card styling */
 .login-pf .card-pf {
   border-top: 4px solid #17a2b8;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   border-radius: 8px;
+  max-width: 450px;
+  margin: 0 auto;
 }
 
 /* Primary button (Sign In) */
