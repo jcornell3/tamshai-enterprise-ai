@@ -293,6 +293,8 @@ jobs:
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_USER_TOTP_SECRET_RAW: ${{ secrets.TEST_USER_TOTP_SECRET_RAW }}
           STAGE_USER_PASSWORD: ${{ secrets.STAGE_USER_PASSWORD }}
+          # Better Stack logging (optional - for audit log forwarding)
+          BETTER_STACK_SOURCE_TOKEN: ${{ secrets.BETTER_STACK_SOURCE_TOKEN }}
         run: |
           SSH_CMD="ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=40 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes $VPS_USER@$VPS_HOST"
 
@@ -329,6 +331,7 @@ jobs:
           upsert TEST_USER_PASSWORD "'"$TEST_USER_PASSWORD"'"
           upsert TEST_USER_TOTP_SECRET_RAW "'"$TEST_USER_TOTP_SECRET_RAW"'"
           upsert STAGE_USER_PASSWORD "'"$STAGE_USER_PASSWORD"'"
+          upsert BETTER_STACK_SOURCE_TOKEN "'"$BETTER_STACK_SOURCE_TOKEN"'"
           upsert KEYCLOAK_ADMIN admin'
 
           # Port variables use ensure (append-only) since they don't change
