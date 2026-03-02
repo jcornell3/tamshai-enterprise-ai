@@ -19,7 +19,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@tamshai/shared": "file:../shared",
-    "axios": "^1.13.5",
+    "axios": "^1.13.6",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
