@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@tamshai/shared": "file:../shared",
     "axios": "^1.13.5",
     "compression": "^1.8.1",
