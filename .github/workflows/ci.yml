@@ -43,7 +43,7 @@ jobs:
           npm run build
 
       - name: Upload shared artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: shared-dist
           path: |
@@ -139,7 +139,7 @@ jobs:
 
       - name: Upload type coverage report
         if: matrix.node-version == '20'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         with:
           name: type-coverage
           path: services/mcp-gateway/type-coverage.txt
@@ -1311,7 +1311,7 @@ jobs:
           MCP_GATEWAY_CLIENT_SECRET: ${{ env.MCP_GATEWAY_CLIENT_SECRET }}
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         if: always()
         with:
           name: playwright-report
@@ -1423,7 +1423,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload k6 results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         if: always()
         with:
           name: k6-results
@@ -1470,7 +1470,7 @@ jobs:
           severity-cutoff: critical
 
       - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         with:
           name: sbom
           path: |
