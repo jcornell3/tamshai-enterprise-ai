@@ -92,7 +92,7 @@ jobs:
           cache-dependency-path: services/mcp-gateway/package-lock.json
 
       - name: Download shared artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -185,7 +185,7 @@ jobs:
           cache-dependency-path: services/mcp-hr/package-lock.json
 
       - name: Download shared artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -653,7 +653,7 @@ jobs:
           cache-dependency-path: services/mcp-gateway/package-lock.json
 
       - name: Download shared artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -1161,7 +1161,7 @@ jobs:
       # Build and Start MCP Gateway
       # =========================================================================
       - name: Download shared artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: shared-dist
           path: services/shared/
@@ -1365,7 +1365,7 @@ jobs:
       # MCP Gateway Setup
       # =========================================================================
       - name: Download shared artifact
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: shared-dist
           path: services/shared/
