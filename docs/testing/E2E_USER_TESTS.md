@@ -1,8 +1,68 @@
-# E2E User Login Testing
+# E2E Testing
 
-This document describes the end-to-end testing approach for user login flows in Tamshai Enterprise AI, including handling TOTP (Time-based One-Time Password) authentication.
+Comprehensive end-to-end testing for Tamshai Enterprise AI, covering authentication flows, app pages, wizards, bulk operations, and cross-app journeys.
 
-**Last Updated**: February 16, 2026
+**Last Updated**: March 10, 2026
+
+## Test Suite Inventory
+
+17 E2E spec files with ~330 total test cases:
+
+| # | Spec File | Description | Tests | Category |
+|---|-----------|-------------|-------|----------|
+| 1 | `login-journey.ui.spec.ts` | Employee SSO login with TOTP | 6 | Auth |
+| 2 | `customer-login-journey.ui.spec.ts` | Customer portal login (no TOTP) | 13 | Auth |
+| 3 | `gateway.api.spec.ts` | MCP Gateway API endpoints, RBAC | 21 | API |
+| 4 | `sample-apps.ui.spec.ts` | Sample apps Phase 2 pages | 18 | Apps |
+| 5 | `customer-portal-pages.ui.spec.ts` | Customer portal page navigation | 12 | Apps |
+| 6 | `finance-budgets.ui.spec.ts` | Finance budgets page | 14 | Apps |
+| 7 | `finance-expense-reports.ui.spec.ts` | Finance expense reports page | 18 | Apps |
+| 8 | `finance-bulk.ui.spec.ts` | Finance invoice bulk operations | 17 | Apps |
+| 9 | `payroll-app.ui.spec.ts` | Payroll app pages | 23 | Apps |
+| 10 | `tax-app.ui.spec.ts` | Tax app pages | 31 | Apps |
+| 11 | `support-detail.ui.spec.ts` | Support detail pages | 15 | Apps |
+| 12 | `support-escalation.ui.spec.ts` | Support ticket escalation flow | 38 | Workflow |
+| 13 | `hr-wizard.ui.spec.ts` | HR time-off request wizard | 42 | Wizard |
+| 14 | `sales-lead-wizard.ui.spec.ts` | Sales lead conversion wizard | 22 | Wizard |
+| 15 | `payroll-wizard.ui.spec.ts` | Payroll run wizard | 18 | Wizard |
+| 16 | `generative-ui.ui.spec.ts` | Generative UI display directives | 13 | AI/UI |
+| 17 | `cross-app-executive.ui.spec.ts` | Cross-app executive journey | 9 | Journey |
+
+### Running Individual Suites
+
+```bash
+cd tests/e2e
+
+# Auth suites
+npx playwright test specs/login-journey.ui.spec.ts --reporter=list
+npx playwright test specs/customer-login-journey.ui.spec.ts --reporter=list
+
+# API suite
+npx playwright test specs/gateway.api.spec.ts --reporter=list
+
+# App page suites
+npx playwright test specs/sample-apps.ui.spec.ts --reporter=list
+npx playwright test specs/customer-portal-pages.ui.spec.ts --reporter=list
+npx playwright test specs/finance-budgets.ui.spec.ts --reporter=list
+npx playwright test specs/finance-expense-reports.ui.spec.ts --reporter=list
+npx playwright test specs/finance-bulk.ui.spec.ts --reporter=list
+npx playwright test specs/payroll-app.ui.spec.ts --reporter=list
+npx playwright test specs/tax-app.ui.spec.ts --reporter=list
+npx playwright test specs/support-detail.ui.spec.ts --reporter=list
+
+# Workflow & wizard suites
+npx playwright test specs/support-escalation.ui.spec.ts --reporter=list
+npx playwright test specs/hr-wizard.ui.spec.ts --reporter=list
+npx playwright test specs/sales-lead-wizard.ui.spec.ts --reporter=list
+npx playwright test specs/payroll-wizard.ui.spec.ts --reporter=list
+
+# AI/UI & journey suites
+npx playwright test specs/generative-ui.ui.spec.ts --reporter=list
+npx playwright test specs/cross-app-executive.ui.spec.ts --reporter=list
+
+# Run ALL E2E tests
+npx playwright test --reporter=list
+```
 
 ## Overview
 
@@ -434,12 +494,23 @@ jobs:
 ```text
 tests/e2e/
 ├── specs/
-│   ├── login-journey.ui.spec.ts           # Employee login journey (6 tests)
-│   ├── customer-login-journey.ui.spec.ts  # Customer login journey (13 tests)
-│   ├── gateway.api.spec.ts                # API gateway tests (21 tests)
-│   ├── sample-apps.ui.spec.ts             # Sample app UI tests
-│   ├── payroll-app.ui.spec.ts             # Payroll app UI tests
-│   └── ...                                # Other UI/wizard specs
+│   ├── login-journey.ui.spec.ts               # Employee login with TOTP (6 tests)
+│   ├── customer-login-journey.ui.spec.ts      # Customer login journey (13 tests)
+│   ├── gateway.api.spec.ts                    # API gateway tests (21 tests)
+│   ├── sample-apps.ui.spec.ts                 # Sample apps Phase 2 pages (18 tests)
+│   ├── customer-portal-pages.ui.spec.ts       # Customer portal pages (12 tests)
+│   ├── finance-budgets.ui.spec.ts             # Finance budgets page (14 tests)
+│   ├── finance-expense-reports.ui.spec.ts     # Finance expense reports (18 tests)
+│   ├── finance-bulk.ui.spec.ts                # Finance invoice bulk ops (17 tests)
+│   ├── payroll-app.ui.spec.ts                 # Payroll app pages (23 tests)
+│   ├── tax-app.ui.spec.ts                     # Tax app pages (31 tests)
+│   ├── support-detail.ui.spec.ts              # Support detail pages (15 tests)
+│   ├── support-escalation.ui.spec.ts          # Support escalation flow (38 tests)
+│   ├── hr-wizard.ui.spec.ts                   # HR time-off wizard (42 tests)
+│   ├── sales-lead-wizard.ui.spec.ts           # Sales lead wizard (22 tests)
+│   ├── payroll-wizard.ui.spec.ts              # Payroll run wizard (18 tests)
+│   ├── generative-ui.ui.spec.ts               # Generative UI directives (13 tests)
+│   └── cross-app-executive.ui.spec.ts         # Cross-app executive (9 tests)
 ├── global-setup.ts                  # TOTP provisioning (runs before all tests)
 ├── playwright.config.ts             # Playwright configuration (workers: 1)
 ├── package.json                     # Dependencies and scripts
@@ -533,5 +604,5 @@ npx playwright test specs/customer-login-journey.ui.spec.ts --reporter=list
 
 ---
 
-*Last Updated: February 16, 2026*
-*Status: ✅ Active - Verified on dev (Phoenix rebuild), stage, and prod*
+*Last Updated: March 10, 2026*
+*Status: ✅ Active - 17 spec files (~330 tests) - Verified on dev (Phoenix rebuild), stage, and prod*

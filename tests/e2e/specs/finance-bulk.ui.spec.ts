@@ -55,7 +55,8 @@ test.describe('Finance Invoice Bulk Operations', () => {
 
     // Now authenticate - the JWT will include the finance-write role
     authenticatedContext = await createAuthenticatedContext(browser);
-    await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
+    // Warm up with the exact URL the tests navigate to (avoids OIDC redirect_uri mismatch)
+    await warmUpContext(authenticatedContext, INVOICES_URL);
     authCreatedAt = Date.now();
     // Ensure invoices are in their seed data state before the suite
     await resetFinanceInvoices();
@@ -77,7 +78,7 @@ test.describe('Finance Invoice Bulk Operations', () => {
   // Access tokens have a 5-minute lifetime; re-warm after 3 minutes.
   test.beforeEach(async () => {
     if (Date.now() - authCreatedAt > 3 * 60 * 1000) {
-      await warmUpContext(authenticatedContext, `${BASE_URLS[ENV]}/finance/`);
+      await warmUpContext(authenticatedContext, INVOICES_URL);
       authCreatedAt = Date.now();
     }
   });

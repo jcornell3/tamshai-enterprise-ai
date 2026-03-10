@@ -134,20 +134,24 @@ async function ensureFreshTotpWindow(): Promise<void> {
 /**
  * Create an authenticated browser context.
  * Authenticates once via Keycloak SSO, then returns a context
- * whose session is available to all subsequent pages.
+ * whose SSO session cookies are available to all subsequent pages.
  *
- * IMPORTANT: The @tamshai/auth library stores OIDC tokens in sessionStorage
- * (per-tab). Playwright's context.newPage() creates new tabs with empty
- * sessionStorage. We capture the sessionStorage after auth and inject it
- * into all future pages via context.addInitScript() so every new page
- * starts with valid tokens.
+ * This matches the real user experience: authenticate once at the portal,
+ * then open app tabs that authenticate instantly via Keycloak SSO cookies.
+ *
+ * IMPORTANT: After creating the context, call warmUpContext() for each app
+ * URL the test suite will use. warmUpContext completes the OIDC redirect
+ * cycle and injects app-specific tokens so subsequent pages skip the redirect.
  *
  * TOTP WINDOW GUARD: Each call waits for a fresh 30-second TOTP window
  * to prevent Keycloak from rejecting a reused code.
  *
  * Usage in specs:
  *   let ctx: BrowserContext;
- *   test.beforeAll(async ({ browser }) => { ctx = await createAuthenticatedContext(browser); });
+ *   test.beforeAll(async ({ browser }) => {
+ *     ctx = await createAuthenticatedContext(browser);
+ *     await warmUpContext(ctx, `${BASE_URLS[ENV]}/finance/`);
+ *   });
  *   test.afterAll(async () => { await ctx?.close(); });
  *   test('...', async () => { const page = await ctx.newPage(); ... await page.close(); });
  */
@@ -158,35 +162,17 @@ export async function createAuthenticatedContext(browser: Browser): Promise<Brow
   });
   const page = await context.newPage();
   await authenticateUser(page);
-
-  // Capture sessionStorage (contains OIDC tokens) from the authenticated page
-  const sessionData = await page.evaluate(() => {
-    const data: Record<string, string> = {};
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i)!;
-      data[key] = sessionStorage.getItem(key)!;
-    }
-    return data;
-  });
-
   await page.close();
 
-  // Inject captured sessionStorage into every new page created in this context.
-  // This runs before the app's scripts, so the auth provider finds valid tokens
-  // immediately and skips the Keycloak redirect.
+  // The browser context now holds Keycloak SSO session cookies.
+  // When any new page navigates to an app URL, the OIDC library will:
+  //   1. Find no tokens in sessionStorage (empty per-tab storage)
+  //   2. Redirect to Keycloak
+  //   3. Keycloak recognizes the SSO cookie → instant redirect back (no login form)
+  //   4. App callback processes the code → tokens stored in sessionStorage
   //
-  // Each init script includes an expiresAt timestamp so that accumulated scripts
-  // from token refreshes become no-ops once their tokens expire (idempotent).
-  if (Object.keys(sessionData).length > 0) {
-    await context.addInitScript((data: { tokens: Record<string, string>; expiresAt: number }) => {
-      if (Date.now() < data.expiresAt) {
-        for (const [key, value] of Object.entries(data.tokens)) {
-          sessionStorage.setItem(key, value);
-        }
-      }
-    }, { tokens: sessionData, expiresAt: Date.now() + 4.5 * 60 * 1000 });
-  }
-
+  // Use warmUpContext() to complete this OIDC redirect cycle for a specific app
+  // so subsequent pages get pre-populated tokens via addInitScript.
   return context;
 }
 
