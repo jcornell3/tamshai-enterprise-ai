@@ -17,7 +17,7 @@
  * - Keycloak Admin API must be accessible
  */
 
-import { test, expect, BrowserContext } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import {
   createAuthenticatedContext,
   warmUpContext,
@@ -30,6 +30,24 @@ import {
 
 let authenticatedContext: BrowserContext | null = null;
 const EXECUTIVE_ROLE = 'executive';
+const APP_LOAD_TIMEOUT = 15000;
+const ELEMENT_VISIBLE_TIMEOUT = 5000;
+
+/**
+ * Wait for an app page to finish loading and render content.
+ * Waits for load state then checks for meaningful DOM content.
+ */
+async function waitForAppContent(page: Page, appName: string): Promise<string> {
+  await page.waitForLoadState('load');
+
+  // Wait for a heading or navigation to appear (indicates React rendered)
+  const contentLocator = page.locator('h1, h2, nav, [data-testid]').first();
+  await contentLocator.waitFor({ state: 'visible', timeout: APP_LOAD_TIMEOUT });
+
+  const bodyText = await page.textContent('body') || '';
+  expect(bodyText.trim().length, `${appName} app rendered a blank or near-empty page`).toBeGreaterThan(50);
+  return bodyText;
+}
 
 test.describe('Cross-App Executive Journey', () => {
   test.beforeAll(async ({ browser }) => {
@@ -61,19 +79,14 @@ test.describe('Cross-App Executive Journey', () => {
 
       try {
         await page.goto(`${BASE_URLS[ENV]}/`);
-        // Use 'load' instead of 'networkidle' - SSE connections keep network active
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'Portal');
 
-        // Wait for actual content to render
-        await page.locator('h1, h2, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
+        // Portal should show at least a heading
+        const heading = page.locator('h1, h2').first();
+        await expect(heading).toBeVisible({ timeout: ELEMENT_VISIBLE_TIMEOUT });
 
-        // Portal should show content — either app links, welcome page, or redirect to app
-        const pageText = await page.textContent('body') || '';
-
-        // At minimum, the portal should render something (not blank)
-        const hasContent = pageText.trim().length > 10;
-        const hasHeading = await page.locator('h1, h2').first().isVisible({ timeout: 5000 }).catch(() => false);
-        expect(hasContent || hasHeading).toBe(true);
+        // Verify the portal rendered substantive content (not just a shell)
+        expect(pageText.length).toBeGreaterThan(100);
       } finally {
         await page.close();
       }
@@ -85,19 +98,14 @@ test.describe('Cross-App Executive Journey', () => {
       const page = await authenticatedContext!.newPage();
 
       try {
-        // Warm up HR app context
         await page.goto(`${BASE_URLS[ENV]}/hr/`);
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'HR');
 
-        // Wait for app content to render
-        await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-        // HR app should show employee-related content
-        const hasDirectory = await page.locator('text=Employee Directory, text=Employees, h1:has-text("HR")').first().isVisible({ timeout: 5000 }).catch(() => false);
-        const hasOrgChart = await page.locator('text=Organization Chart, text=Org Chart').first().isVisible().catch(() => false);
-        const hasHRContent = await page.locator('h1, h2').first().isVisible().catch(() => false);
-
-        expect(hasDirectory || hasOrgChart || hasHRContent).toBe(true);
+        // HR app must contain HR-specific keywords
+        expect(
+          pageText,
+          `HR app did not render expected content. Page text: ${pageText.substring(0, 300)}`
+        ).toMatch(/employee|directory|org\s*chart|human\s*resource|hr\b|department/i);
       } finally {
         await page.close();
       }
@@ -106,20 +114,17 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Finance App', () => {
     test('navigates to Finance app and shows dashboard', async () => {
-      // SSO cookies from beforeAll are shared - no warmUpContext needed
       const page = await authenticatedContext!.newPage();
 
       try {
         await page.goto(`${BASE_URLS[ENV]}/finance/`);
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'Finance');
 
-        // Wait for app content to render
-        await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-        // Finance app should render dashboard content
-        const pageText = await page.textContent('body') || '';
-        const hasFinanceKeywords = pageText.match(/invoice|budget|finance|revenue|expense|dashboard/i);
-        expect(hasFinanceKeywords, `Finance app did not render expected content. Page text: ${pageText.substring(0, 200)}`).toBeTruthy();
+        // Finance app must contain finance-specific keywords
+        expect(
+          pageText,
+          `Finance app did not render expected content. Page text: ${pageText.substring(0, 300)}`
+        ).toMatch(/invoice|budget|finance|revenue|expense|dashboard/i);
       } finally {
         await page.close();
       }
@@ -128,20 +133,17 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Sales App', () => {
     test('navigates to Sales app and shows dashboard', async () => {
-      // SSO cookies from beforeAll are shared - no warmUpContext needed
       const page = await authenticatedContext!.newPage();
 
       try {
         await page.goto(`${BASE_URLS[ENV]}/sales/`);
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'Sales');
 
-        // Wait for app content to render
-        await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-        // Sales app should render dashboard content
-        const pageText = await page.textContent('body') || '';
-        const hasSalesKeywords = pageText.match(/sales|pipeline|leads|forecast|customer|dashboard/i);
-        expect(hasSalesKeywords, `Sales app did not render expected content. Page text: ${pageText.substring(0, 200)}`).toBeTruthy();
+        // Sales app must contain sales-specific keywords
+        expect(
+          pageText,
+          `Sales app did not render expected content. Page text: ${pageText.substring(0, 300)}`
+        ).toMatch(/sales|pipeline|leads|forecast|customer|dashboard/i);
       } finally {
         await page.close();
       }
@@ -150,20 +152,17 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Support App', () => {
     test('navigates to Support app and shows dashboard', async () => {
-      // SSO cookies from beforeAll are shared - no warmUpContext needed
       const page = await authenticatedContext!.newPage();
 
       try {
         await page.goto(`${BASE_URLS[ENV]}/support/`);
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'Support');
 
-        // Wait for app content to render
-        await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-        // Support app should render dashboard content
-        const pageText = await page.textContent('body') || '';
-        const hasSupportKeywords = pageText.match(/ticket|support|sla|knowledge|agent|dashboard/i);
-        expect(hasSupportKeywords, `Support app did not render expected content. Page text: ${pageText.substring(0, 200)}`).toBeTruthy();
+        // Support app must contain support-specific keywords
+        expect(
+          pageText,
+          `Support app did not render expected content. Page text: ${pageText.substring(0, 300)}`
+        ).toMatch(/ticket|support|sla|knowledge|agent|dashboard/i);
       } finally {
         await page.close();
       }
@@ -172,20 +171,17 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Payroll App', () => {
     test('navigates to Payroll app and loads dashboard', async () => {
-      // SSO cookies from beforeAll are shared - no warmUpContext needed
       const page = await authenticatedContext!.newPage();
 
       try {
         await page.goto(`${BASE_URLS[ENV]}/payroll/`);
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'Payroll');
 
-        // Wait for app content to render
-        await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-        // Payroll dashboard should render
-        const hasHeading = await page.locator('h1:has-text("Payroll")').isVisible({ timeout: 5000 }).catch(() => false);
-        const hasPayrollContent = await page.locator('h1, h2').first().isVisible().catch(() => false);
-        expect(hasHeading || hasPayrollContent).toBe(true);
+        // Payroll app must contain payroll-specific keywords
+        expect(
+          pageText,
+          `Payroll app did not render expected content. Page text: ${pageText.substring(0, 300)}`
+        ).toMatch(/payroll|pay\s*run|pay\s*stub|salary|compensation|dashboard/i);
       } finally {
         await page.close();
       }
@@ -194,20 +190,17 @@ test.describe('Cross-App Executive Journey', () => {
 
   test.describe('Tax App', () => {
     test('navigates to Tax app and loads dashboard', async () => {
-      // SSO cookies from beforeAll are shared - no warmUpContext needed
       const page = await authenticatedContext!.newPage();
 
       try {
         await page.goto(`${BASE_URLS[ENV]}/tax/`);
-        await page.waitForLoadState('load');
+        const pageText = await waitForAppContent(page, 'Tax');
 
-        // Wait for app content to render
-        await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-        // Tax dashboard should render
-        const hasHeading = await page.locator('h1:has-text("Tax")').isVisible({ timeout: 5000 }).catch(() => false);
-        const hasTaxContent = await page.locator('h1, h2').first().isVisible().catch(() => false);
-        expect(hasHeading || hasTaxContent).toBe(true);
+        // Tax app must contain tax-specific keywords
+        expect(
+          pageText,
+          `Tax app did not render expected content. Page text: ${pageText.substring(0, 300)}`
+        ).toMatch(/tax|filing|withholding|quarterly|w-2|1099|dashboard/i);
       } finally {
         await page.close();
       }
@@ -217,25 +210,23 @@ test.describe('Cross-App Executive Journey', () => {
   test.describe('User Context Consistency', () => {
     test('each app shows correct user display name', async () => {
       const apps = [
-        { name: 'HR', url: `${BASE_URLS[ENV]}/hr/` },
-        { name: 'Finance', url: `${BASE_URLS[ENV]}/finance/` },
-        { name: 'Support', url: `${BASE_URLS[ENV]}/support/` },
+        { name: 'HR', url: `${BASE_URLS[ENV]}/hr/`, keywords: /employee|hr|directory/i },
+        { name: 'Finance', url: `${BASE_URLS[ENV]}/finance/`, keywords: /invoice|budget|finance/i },
+        { name: 'Support', url: `${BASE_URLS[ENV]}/support/`, keywords: /ticket|support|knowledge/i },
       ];
 
       for (const app of apps) {
-        // SSO cookies from beforeAll are shared - no warmUpContext needed
         const page = await authenticatedContext!.newPage();
 
         try {
           await page.goto(app.url);
-          await page.waitForLoadState('load');
+          const bodyText = await waitForAppContent(page, app.name);
 
-          // Wait for content to render
-          await page.locator('h1, h2, nav, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
-
-          // Page should have content (not blank)
-          const bodyText = await page.textContent('body');
-          expect(bodyText?.length, `${app.name} app rendered blank page`).toBeGreaterThan(50);
+          // Each app should render domain-specific content
+          expect(
+            bodyText,
+            `${app.name} app did not render domain content. Page text: ${bodyText.substring(0, 200)}`
+          ).toMatch(app.keywords);
         } finally {
           await page.close();
         }
@@ -243,15 +234,11 @@ test.describe('Cross-App Executive Journey', () => {
     });
 
     test('each app shows role-appropriate navigation', async () => {
-      // SSO cookies from beforeAll are shared - no warmUpContext needed
       const hrPage = await authenticatedContext!.newPage();
 
       try {
         await hrPage.goto(`${BASE_URLS[ENV]}/hr/`);
-        await hrPage.waitForLoadState('load');
-
-        // Wait for content to render
-        await hrPage.locator('h1, h2, nav, aside, [data-testid]').first().waitFor({ timeout: 15000 }).catch(() => {});
+        await waitForAppContent(hrPage, 'HR');
 
         // HR should have nav links (sidebar or top nav)
         const navLinks = hrPage.locator('nav a, aside a, [role="navigation"] a');

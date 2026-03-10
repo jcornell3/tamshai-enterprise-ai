@@ -97,7 +97,23 @@ export async function customerListTickets(
 
     // Handle cursor-based pagination
     if (cursor) {
-      const decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
+      let decodedCursor: { lastCreatedAt: string };
+      try {
+        decodedCursor = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
+      } catch {
+        return createErrorResponse(
+          'INVALID_CURSOR',
+          'The pagination cursor is invalid or malformed',
+          'Remove the cursor parameter to start from the beginning, or use a cursor returned from a previous response.',
+        );
+      }
+      if (!decodedCursor.lastCreatedAt) {
+        return createErrorResponse(
+          'INVALID_CURSOR',
+          'The pagination cursor is missing required fields',
+          'Remove the cursor parameter to start from the beginning, or use a cursor returned from a previous response.',
+        );
+      }
       filter = {
         ...filter,
         created_at: { $lt: new Date(decodedCursor.lastCreatedAt) },

@@ -108,6 +108,15 @@ const missingVars = Object.entries(requiredEnvVars)
   .filter(([, value]) => !value)
   .map(([name]) => name);
 
+// CLAUDE_API_KEY is required unless running in test/mock mode
+const isMockMode = config.claude.apiKey.startsWith('sk-ant-test-');
+const isTestEnv = process.env.NODE_ENV === 'test';
+if (!config.claude.apiKey && !isTestEnv) {
+  missingVars.push('CLAUDE_API_KEY');
+} else if (config.claude.apiKey && !isMockMode && !isTestEnv && !config.claude.apiKey.startsWith('sk-ant-api')) {
+  console.warn('WARNING: CLAUDE_API_KEY does not match expected format (sk-ant-api*). Queries may fail.');
+}
+
 if (missingVars.length > 0) {
   console.error(`FATAL: Missing required environment variables: ${missingVars.join(', ')}`);
   console.error('The MCP Gateway cannot start without these configuration values.');
