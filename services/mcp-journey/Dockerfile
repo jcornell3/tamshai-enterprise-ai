@@ -7,7 +7,7 @@
 # =============================================================================
 # BUILD STAGE
 # =============================================================================
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Security: Update npm to fix CVE-2026-24842 (node-tar path traversal)
 RUN npm install -g npm@latest
@@ -42,7 +42,7 @@ RUN npm prune --production
 # =============================================================================
 # INDEXER STAGE - Builds the journey database
 # =============================================================================
-FROM node:20-alpine AS indexer
+FROM node:22-alpine AS indexer
 
 # Security: Update npm to fix CVE-2026-24842 (node-tar path traversal)
 RUN npm install -g npm@latest
@@ -74,7 +74,7 @@ RUN node dist/scripts/build-index.js || echo "Index build completed with warning
 # =============================================================================
 # PRODUCTION STAGE
 # =============================================================================
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 # Security: Apply Alpine security patches
 RUN apk update && apk upgrade --no-cache

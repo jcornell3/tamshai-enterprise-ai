@@ -7,7 +7,7 @@
 # =============================================================================
 # BUILD STAGE
 # =============================================================================
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ RUN npm prune --production
 # =============================================================================
 # PRODUCTION STAGE
 # =============================================================================
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 # Security: Apply Alpine security patches
 RUN apk update && apk upgrade --no-cache
