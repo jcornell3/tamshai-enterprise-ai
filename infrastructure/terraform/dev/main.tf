@@ -536,11 +536,104 @@ resource "null_resource" "wait_for_services" {
         sleep 2
       done
 
+      # Wait for Elasticsearch (port ${local.ports.elasticsearch})
+      for i in {1..45}; do
+        if curl -sf -u "elastic:$ELASTIC_PASSWORD" "http://localhost:${local.ports.elasticsearch}/_cluster/health?wait_for_status=yellow&timeout=2s" > /dev/null 2>&1; then
+          echo "Elasticsearch ready!"
+          break
+        fi
+        echo "Waiting for Elasticsearch... ($i/45)"
+        sleep 2
+      done
+
       echo "All critical services are healthy!"
       echo ""
       echo "Access your dev environment at: https://www.tamshai.local:${local.ports.caddy_https}"
       echo "(Accept the self-signed certificate warning in your browser)"
     EOT
+
+    environment = {
+      ELASTIC_PASSWORD = try(data.external.github_secrets.result.elastic_password, "")
+    }
+  }
+}
+
+# =============================================================================
+# ELASTICSEARCH DATA VERIFICATION
+# =============================================================================
+#
+# After services are healthy, verify Elasticsearch has sample data loaded.
+# The elasticsearch-init container in docker-compose.yml handles initial
+# loading, but it can fail silently. This resource verifies and reseeds
+# if needed — ensuring Phoenix rebuilds always have complete data.
+#
+# =============================================================================
+
+resource "null_resource" "elasticsearch_verify_data" {
+  count = var.auto_start_services ? 1 : 0
+
+  depends_on = [null_resource.wait_for_services]
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      echo "Verifying Elasticsearch sample data..."
+
+      ES_URL="http://localhost:${local.ports.elasticsearch}"
+      ES_AUTH="elastic:$ELASTIC_PASSWORD"
+
+      # Check if support_tickets index exists and has documents
+      TICKET_COUNT=$(curl -sf -u "$ES_AUTH" "$ES_URL/support_tickets/_count" 2>/dev/null | jq -r '.count // 0')
+      KB_COUNT=$(curl -sf -u "$ES_AUTH" "$ES_URL/knowledge_base/_count" 2>/dev/null | jq -r '.count // 0')
+
+      echo "Current data: $TICKET_COUNT support tickets, $KB_COUNT knowledge base articles"
+
+      if [ "$TICKET_COUNT" -ge 10 ] && [ "$KB_COUNT" -ge 12 ]; then
+        echo "✓ Elasticsearch data verified ($TICKET_COUNT tickets, $KB_COUNT KB articles)"
+        exit 0
+      fi
+
+      echo "Elasticsearch data incomplete or missing — reseeding..."
+
+      # Delete existing indexes (ignore errors if they don't exist)
+      curl -sf -u "$ES_AUTH" -X DELETE "$ES_URL/support_tickets,knowledge_base" > /dev/null 2>&1 || true
+
+      # Wait for deletion to complete
+      sleep 2
+
+      # Load sample data from support-data.ndjson
+      NDJSON_FILE="$PROJECT_ROOT/sample-data/support-data.ndjson"
+      if [ ! -f "$NDJSON_FILE" ]; then
+        echo "ERROR: $NDJSON_FILE not found"
+        exit 1
+      fi
+
+      RESPONSE=$(curl -sf -u "$ES_AUTH" -X POST "$ES_URL/_bulk" \
+        -H "Content-Type: application/x-ndjson" \
+        --data-binary "@$NDJSON_FILE" 2>&1)
+
+      if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to load Elasticsearch data"
+        echo "$RESPONSE"
+        exit 1
+      fi
+
+      # Verify the load
+      sleep 2
+      TICKET_COUNT=$(curl -sf -u "$ES_AUTH" "$ES_URL/support_tickets/_count" 2>/dev/null | jq -r '.count // 0')
+      KB_COUNT=$(curl -sf -u "$ES_AUTH" "$ES_URL/knowledge_base/_count" 2>/dev/null | jq -r '.count // 0')
+
+      echo "✓ Elasticsearch reseeded: $TICKET_COUNT support tickets, $KB_COUNT KB articles"
+    EOT
+
+    environment = {
+      ELASTIC_PASSWORD = try(data.external.github_secrets.result.elastic_password, "")
+      PROJECT_ROOT     = var.project_root
+    }
   }
 }
 
