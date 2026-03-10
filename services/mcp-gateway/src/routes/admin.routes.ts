@@ -12,14 +12,14 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
+import crypto from 'crypto';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Pool } from 'pg';
 import { createLogger } from '@tamshai/shared';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // PostgreSQL connection pools for test fixture reset
@@ -129,9 +129,11 @@ function adminRoutesEnabled(req: Request, res: Response, next: () => void) {
     });
   }
 
-  // Validate admin key
-  const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== ADMIN_API_KEY) {
+  // Validate admin key (timing-safe comparison to prevent timing attacks)
+  const adminKey = req.headers['x-admin-key'] as string | undefined;
+  const keyValid = adminKey && adminKey.length === ADMIN_API_KEY.length &&
+    crypto.timingSafeEqual(Buffer.from(adminKey), Buffer.from(ADMIN_API_KEY));
+  if (!keyValid) {
     logger.warn('Invalid admin key provided');
     return res.status(401).json({
       status: 'error',
@@ -186,22 +188,18 @@ async function restorePostgresSnapshot(snapshotFile: string, database: string): 
 
   const env = { ...process.env, PGPASSWORD: DB_CONFIG.postgres.password };
 
-  // Drop and recreate database - use parameterized psql with -v for the database name
-  const terminateCmd = `psql -h ${safeHost} -p ${safePort} -U postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${safeDb}' AND pid <> pg_backend_pid();"`;
-  const dropCmd = `psql -h ${safeHost} -p ${safePort} -U postgres -c "DROP DATABASE IF EXISTS ${safeDb};"`;
-  const createCmd = `psql -h ${safeHost} -p ${safePort} -U postgres -c "CREATE DATABASE ${safeDb} OWNER ${safeUser};"`;
-
+  // Drop and recreate database using execFile (no shell interpolation)
   try {
-    await execAsync(`${terminateCmd} && ${dropCmd} && ${createCmd}`, { env });
+    await execFileAsync('psql', ['-h', safeHost, '-p', safePort, '-U', 'postgres', '-c', `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${safeDb}' AND pid <> pg_backend_pid();`], { env });
+    await execFileAsync('psql', ['-h', safeHost, '-p', safePort, '-U', 'postgres', '-c', `DROP DATABASE IF EXISTS ${safeDb};`], { env });
+    await execFileAsync('psql', ['-h', safeHost, '-p', safePort, '-U', 'postgres', '-c', `CREATE DATABASE ${safeDb} OWNER ${safeUser};`], { env });
   } catch (error) {
     logger.warn('Database drop/create warning', { database: safeDb, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 
-  // Restore from snapshot
-  const restoreCmd = `pg_restore -h ${safeHost} -p ${safePort} -U ${safeUser} -d ${safeDb} --clean --if-exists ${snapshotFile}`;
-
+  // Restore from snapshot using execFile
   try {
-    await execAsync(restoreCmd, { env });
+    await execFileAsync('pg_restore', ['-h', safeHost, '-p', safePort, '-U', safeUser, '-d', safeDb, '--clean', '--if-exists', snapshotFile], { env });
     logger.info('Restored PostgreSQL snapshot', { snapshotFile, database: safeDb });
   } catch (error) {
     // pg_restore may return non-zero for warnings - check if data was restored
@@ -241,23 +239,18 @@ async function restoreMongoSnapshot(snapshotDir: string, database: string): Prom
   const safeUser = validateShellArg(DB_CONFIG.mongodb.user, 'MONGODB_USER');
   const safeDb = validateShellArg(database, 'database');
 
-  // Pass password via environment variable to avoid shell exposure
-  const env = { ...process.env, MONGO_PWD: DB_CONFIG.mongodb.password };
+  const password = DB_CONFIG.mongodb.password || '';
 
-  // Drop existing database
-  const dropCmd = `mongosh --host ${safeHost} --port ${safePort} -u ${safeUser} -p "$MONGO_PWD" --authenticationDatabase admin --eval "db.getSiblingDB('${safeDb}').dropDatabase()"`;
-
+  // Drop existing database using execFile (no shell interpolation)
   try {
-    await execAsync(dropCmd, { env });
+    await execFileAsync('mongosh', ['--host', safeHost, '--port', safePort, '-u', safeUser, '-p', password, '--authenticationDatabase', 'admin', '--eval', `db.getSiblingDB('${safeDb}').dropDatabase()`]);
   } catch (error) {
     logger.warn('MongoDB drop warning', { database: safeDb, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 
-  // Restore from snapshot
-  const restoreCmd = `mongorestore --host ${safeHost} --port ${safePort} -u ${safeUser} -p "$MONGO_PWD" --authenticationDatabase admin --db ${safeDb} ${snapshotDir}/${safeDb}`;
-
+  // Restore from snapshot using execFile
   try {
-    await execAsync(restoreCmd, { env });
+    await execFileAsync('mongorestore', ['--host', safeHost, '--port', safePort, '-u', safeUser, '-p', password, '--authenticationDatabase', 'admin', '--db', safeDb, `${snapshotDir}/${safeDb}`]);
     logger.info('Restored MongoDB snapshot', { snapshotDir, database: safeDb });
   } catch (error) {
     logger.warn('MongoDB restore warning', { database: safeDb, error: error instanceof Error ? error.message : 'Unknown error' });

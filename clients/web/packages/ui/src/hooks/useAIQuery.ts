@@ -117,13 +117,13 @@ export function useAIQuery({ domain }: UseAIQueryOptions): UseAIQueryReturn {
    */
   const detectDirective = useCallback((text: string): string | null => {
     // First try the primary domain
-    const primaryRegex = new RegExp(`display:${domain}:(\\w+):([^\\s]*)`);
+    const primaryRegex = new RegExp(`display:${domain}:(\\w+):([\\w.:_-]*)`);
     const primaryMatch = text.match(primaryRegex);
     if (primaryMatch) return primaryMatch[0];
 
     // Also check for cross-domain 'approvals' directive (used by HR and Finance apps)
     if (domain === 'hr' || domain === 'finance') {
-      const approvalsRegex = /display:approvals:(\w+):([^\s]*)/;
+      const approvalsRegex = /display:approvals:(\w+):([\w.:_-]*)/;
       const approvalsMatch = text.match(approvalsRegex);
       if (approvalsMatch) return approvalsMatch[0];
     }

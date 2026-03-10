@@ -9,32 +9,28 @@ function create_user_and_database() {
     local database=$1
     local user=$2
     local password=$3
-    
-    echo "Creating user '$user' and database '$database'"
-    
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-        DO \$\$
-        BEGIN
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$user') THEN
-                CREATE USER $user WITH PASSWORD '$password';
-            END IF;
-        END
-        \$\$;
 
-        -- Ensure user does NOT have BYPASSRLS to enforce RLS policies
-        ALTER ROLE $user NOBYPASSRLS;
-        
-        SELECT 'CREATE DATABASE $database OWNER $user'
-        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$database')\gexec
-        
-        GRANT ALL PRIVILEGES ON DATABASE $database TO $user;
+    echo "Creating user '$user' and database '$database'"
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" \
+         -v db_user="$user" -v db_password="$password" -v db_name="$database" <<-'EOSQL'
+        SELECT format('CREATE USER %I WITH PASSWORD %L', :'db_user', :'db_password')
+        WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = :'db_user')\gexec
+
+        SELECT format('ALTER ROLE %I NOBYPASSRLS', :'db_user')\gexec
+
+        SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user')
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name')\gexec
+
+        SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'db_name', :'db_user')\gexec
 EOSQL
 
     # Connect to the specific database and grant schema permissions
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$database" <<-EOSQL
-        GRANT ALL ON SCHEMA public TO $user;
-        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $user;
-        ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $user;
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$database" \
+         -v db_user="$user" <<-'EOSQL'
+        SELECT format('GRANT ALL ON SCHEMA public TO %I', :'db_user')\gexec
+        SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO %I', :'db_user')\gexec
+        SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO %I', :'db_user')\gexec
 EOSQL
 }
 
@@ -58,21 +54,17 @@ fi
 if [ -n "${TAMSHAI_APP_PASSWORD:-}" ]; then
     echo "Creating tamshai_app user for RLS-enforced MCP connections..."
 
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-        DO \$\$
-        BEGIN
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app') THEN
-                CREATE ROLE tamshai_app WITH LOGIN PASSWORD '$TAMSHAI_APP_PASSWORD';
-                RAISE NOTICE 'Created tamshai_app user';
-            ELSE
-                -- Update password if user already exists (idempotent)
-                ALTER ROLE tamshai_app WITH PASSWORD '$TAMSHAI_APP_PASSWORD';
-                RAISE NOTICE 'Updated tamshai_app password';
-            END IF;
-            -- Ensure NO BYPASSRLS - critical for RLS enforcement
-            ALTER ROLE tamshai_app NOBYPASSRLS;
-        END
-        \$\$;
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" \
+         -v app_password="$TAMSHAI_APP_PASSWORD" <<-'EOSQL'
+        SELECT format('CREATE ROLE tamshai_app WITH LOGIN PASSWORD %L', :'app_password')
+        WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app')\gexec
+
+        -- Update password if user already exists (idempotent)
+        SELECT format('ALTER ROLE tamshai_app WITH PASSWORD %L', :'app_password')
+        WHERE EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'tamshai_app')\gexec
+
+        -- Ensure NO BYPASSRLS - critical for RLS enforcement
+        ALTER ROLE tamshai_app NOBYPASSRLS;
 EOSQL
 
     echo "tamshai_app user ready"

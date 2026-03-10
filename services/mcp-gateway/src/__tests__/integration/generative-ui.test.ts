@@ -18,7 +18,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { generateInternalToken, INTERNAL_TOKEN_HEADER } from '@tamshai/shared';
-import { getImpersonatedToken } from './setup';
+import { getImpersonatedToken, TEST_USERS } from './setup';
 
 // Get internal secret from environment (required for gateway auth)
 const MCP_INTERNAL_SECRET = process.env.MCP_INTERNAL_SECRET || '';
@@ -40,33 +40,7 @@ const CONFIG = {
   mcpGatewayUrl: process.env.MCP_GATEWAY_URL || 'http://127.0.0.1:3100',
 };
 
-// Test users with their roles (matching setup.ts TEST_USERS)
-const TEST_USERS = {
-  executive: {
-    userId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b',
-    username: 'eve.thompson',
-    email: 'eve@tamshai.local',
-    roles: ['executive'],
-  },
-  hrRead: {
-    userId: 'f104eddc-21ab-457c-a254-78051ad7ad67',
-    username: 'alice.chen',
-    email: 'alice@tamshai.local',
-    roles: ['hr-read'],
-  },
-  financeRead: {
-    userId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1',
-    username: 'bob.martinez',
-    email: 'bob@tamshai.local',
-    roles: ['finance-read'],
-  },
-  manager: {
-    userId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d',
-    username: 'nina.patel',
-    email: 'nina.p@tamshai.local',
-    roles: ['manager'],
-  },
-};
+// TEST_USERS imported from ./setup (single source of truth for user IDs and roles)
 
 interface DisplayRequest {
   directive: string;
@@ -112,8 +86,10 @@ function createMcpUiClient(): AxiosInstance {
   });
 }
 
-// Cache tokens by username to avoid repeated Keycloak calls
-const tokenCache = new Map<string, string>();
+// Cache tokens by username with TTL to avoid repeated Keycloak calls
+// Tokens expire from cache after 4 minutes (access tokens live 5 min)
+const TOKEN_CACHE_TTL_MS = 4 * 60 * 1000;
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 /**
  * Map roles to pre-seeded real users who exist in BOTH Keycloak and hr.employees.
@@ -144,10 +120,11 @@ async function postDisplay(
 ): Promise<{ status: number; data: DisplayResponse }> {
   // Get JWT token for the user
   const realUsername = ROLE_TO_REAL_USER[userContext.roles[0]] || 'eve.thompson';
-  let token = tokenCache.get(realUsername);
+  const cached = tokenCache.get(realUsername);
+  let token = cached && cached.expiresAt > Date.now() ? cached.token : undefined;
   if (!token) {
     token = await getImpersonatedToken(realUsername);
-    tokenCache.set(realUsername, token);
+    tokenCache.set(realUsername, { token, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
   }
 
   const response = await client.post<DisplayResponse>(

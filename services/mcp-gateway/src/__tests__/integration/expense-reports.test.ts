@@ -21,14 +21,15 @@
  * Total: 32 tests
  *
  * Test Fixtures (from finance-data.sql):
- * - EXP-2026-001: Nina Patel, APPROVED, $2,450 (conference trip)
- * - EXP-2026-002: Marcus Johnson, SUBMITTED, $385.50 (team lunch)
- * - EXP-2026-003: Carol Johnson, REIMBURSED, $875 (client dinner)
- * - EXP-2026-004: Frank Davis, DRAFT, $156.75 (office supplies)
- * - EXP-2026-005: Alice Chen, UNDER_REVIEW, $3,200 (HR conference)
- * - EXP-2026-006: Nina Patel, REJECTED, $599 (training - missing receipts)
- * - EXP-2026-007: Bob Martinez, APPROVED, $1,200 (software subscription)
- * - EXP-2026-008: Eve Thompson, SUBMITTED, $4,850 (executive travel)
+ * - EXP-YYYY-001: Nina Patel, APPROVED, $2,450 (conference trip)
+ * - EXP-YYYY-002: Marcus Johnson, SUBMITTED, $385.50 (team lunch)
+ * - EXP-YYYY-003: Carol Johnson, REIMBURSED, $875 (client dinner)
+ * - EXP-YYYY-004: Frank Davis, DRAFT, $156.75 (office supplies)
+ * - EXP-YYYY-005: Alice Chen, UNDER_REVIEW, $3,200 (HR conference)
+ * - EXP-YYYY-006: Nina Patel, REJECTED, $599 (training - missing receipts)
+ * - EXP-YYYY-007: Bob Martinez, APPROVED, $1,200 (software subscription)
+ * - EXP-YYYY-008: Eve Thompson, SUBMITTED, $4,850 (executive travel)
+ * Note: YYYY refers to the current fiscal year. Actual IDs use the year from sample data.
  */
 
 import { Client } from 'pg';

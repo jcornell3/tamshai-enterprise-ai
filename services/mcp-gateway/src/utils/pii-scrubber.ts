@@ -63,9 +63,9 @@ const PII_PATTERNS: { pattern: RegExp; replacement: string; description: string 
     description: 'SSN with dashes',
   },
   {
-    pattern: /\b\d{9}\b/g,
+    pattern: /(?<!\d[\s-])\b\d{9}\b(?![\s-]\d)/g,
     replacement: '[SSN-REDACTED]',
-    description: 'SSN without dashes (9 consecutive digits)',
+    description: 'SSN without dashes (9 consecutive digits, not part of longer number sequence)',
   },
 
   // Password patterns (in context)
