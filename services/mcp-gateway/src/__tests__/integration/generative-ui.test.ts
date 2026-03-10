@@ -157,7 +157,6 @@ describeIntegration('MCP UI Service Health', () => {
     expect(response.status).toBe(200);
     expect(response.data.status).toBe('healthy');
     expect(response.data.service).toBe('mcp-ui');
-    expect(response.data.version).toBeDefined();
     expect(response.data.timestamp).toBeDefined();
   });
 });

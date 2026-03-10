@@ -299,7 +299,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       expect(result.rows).toBeDefined();
     });
 
-    test('should have required columns: id, budget_id, action, actor_id, action_at, comments', async () => {
+    test('should have required columns: id, budget_id, action, actor_email, action_at, comments', async () => {
       // TDD RED: This table DOES NOT EXIST in v1.3
       // Expected error: "relation \"finance.budget_approval_history\" does not exist"
 
@@ -308,7 +308,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           id,
           budget_id,
           action,
-          actor_id,
+          actor_email,
           action_at,
           comments
         FROM finance.budget_approval_history
@@ -789,6 +789,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             userId: TEST_USERS.manager.userId, // Department head
             email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
+            departmentId: TEST_USERS.manager.departmentCode, // Required for RLS
           },
           budgetId: 'BUD-ENG-2024-SAL', // DRAFT budget
         }
@@ -813,20 +814,21 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       );
 
       try {
-        // Submit budget (use a different DRAFT budget)
+        // Submit budget (use an ENG DRAFT budget that manager can see via RLS)
         await financeClient.post<MCPToolResponse>('/tools/submit_budget', {
           userContext: {
             userId: TEST_USERS.manager.userId,
             email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
+            departmentId: TEST_USERS.manager.departmentCode,
           },
-          budgetId: 'BUD-HR-2024-SAL', // DRAFT budget
+          budgetId: 'BUD-ENG-2024-SAL', // DRAFT budget in manager's department
         });
 
         // Verify submitted_by (finance user can see all budgets)
         const result = await client.query(`
           SELECT submitted_by FROM finance.department_budgets
-          WHERE budget_id = 'BUD-HR-2024-SAL'
+          WHERE budget_id = 'BUD-ENG-2024-SAL'
         `);
 
         expect(result.rows[0].submitted_by).toBe(TEST_USERS.manager.email);
@@ -848,12 +850,13 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       try {
         const beforeTime = new Date();
 
-        // Submit budget (use a different DRAFT budget)
+        // Submit budget - use finance-write user who can see all departments
         await financeClient.post<MCPToolResponse>('/tools/submit_budget', {
           userContext: {
-            userId: TEST_USERS.manager.userId,
-            email: TEST_USERS.manager.email,
-            roles: TEST_USERS.manager.roles,
+            userId: TEST_USERS.financeWrite.userId,
+            email: TEST_USERS.financeWrite.email,
+            roles: TEST_USERS.financeWrite.roles,
+            departmentId: TEST_USERS.financeWrite.departmentCode,
           },
           budgetId: 'BUD-FIN-2024-SAL', // DRAFT budget
         });
@@ -902,12 +905,14 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       // Use a test fixture budget that's already in PENDING_APPROVAL
 
       // First: try to submit an already PENDING_APPROVAL budget
+      // BUD-TEST-PENDING-2 is in HR department
       const response = await financeClient.post<MCPToolResponse>(
         '/tools/submit_budget',
         {
           userContext: {
-            userId: TEST_USERS.manager.userId,
-            roles: TEST_USERS.manager.roles,
+            userId: TEST_USERS.financeWrite.userId,
+            roles: TEST_USERS.financeWrite.roles,
+            departmentId: TEST_USERS.financeWrite.departmentCode,
           },
           budgetId: 'BUD-TEST-PENDING-2', // Already PENDING_APPROVAL
         }
@@ -966,6 +971,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
       expect(employeeResponse.data.code).toBe('UNAUTHORIZED');
 
       // Try to submit as manager (should succeed)
+      // Use ENG budget since manager (nina.patel) is in Engineering department
       const managerResponse = await financeClient.post<MCPToolResponse>(
         '/tools/submit_budget',
         {
@@ -973,8 +979,9 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
             userId: TEST_USERS.manager.userId,
             email: TEST_USERS.manager.email,
             roles: TEST_USERS.manager.roles,
+            departmentId: TEST_USERS.manager.departmentCode,
           },
-          budgetId: 'BUD-MKT-2024-MKT', // DRAFT budget
+          budgetId: 'BUD-ENG-2024-SAL', // DRAFT budget in manager's department
         }
       );
 
@@ -1112,7 +1119,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
           WHERE budget_id = $1
         `, [testBudgetId]);
 
-        // Resubmit (should work)
+        // Resubmit (should work - budget is in ENG, manager is in ENG)
         const response = await financeClient.post<MCPToolResponse>(
           '/tools/submit_budget',
           {
@@ -1120,6 +1127,7 @@ describe('Budget Approval Workflow - TDD RED PHASE', () => {
               userId: TEST_USERS.manager.userId,
               email: TEST_USERS.manager.email,
               roles: TEST_USERS.manager.roles,
+              departmentId: TEST_USERS.manager.departmentCode,
             },
             budgetId: testBudgetId,
           }

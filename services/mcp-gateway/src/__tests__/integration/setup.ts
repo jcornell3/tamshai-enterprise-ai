@@ -179,6 +179,10 @@ export async function createUserClient(
   await client.query(`SET app.current_user_roles = '${escapeSetValue(roles.join(','))}'`);
   if (department) {
     await client.query(`SET app.current_user_department = '${escapeSetValue(department)}'`);
+    // Finance RLS policies use app.current_department_id (set by finance.set_user_context)
+    if (database === 'finance') {
+      await client.query(`SET app.current_department_id = '${escapeSetValue(department)}'`);
+    }
   }
   if (userEmail) {
     await client.query(`SET app.current_user_email = '${escapeSetValue(userEmail)}'`);
@@ -188,8 +192,26 @@ export async function createUserClient(
 }
 
 /**
+ * Department name to code mapping for finance RLS
+ * Finance RLS policies check department_code (e.g., 'ENG') not department name ('Engineering')
+ */
+const DEPARTMENT_CODE_MAP: Record<string, string> = {
+  'Engineering': 'ENG',
+  'Finance': 'FIN',
+  'HR': 'HR',
+  'Human Resources': 'HR',
+  'Sales': 'SALES',
+  'Marketing': 'MKT',
+  'IT': 'IT',
+  'Executive': 'EXEC',
+  'Support': 'SUP',
+  'Customer Support': 'SUP',
+};
+
+/**
  * Create a database client for finance database with specific user context
  * Convenience wrapper for createUserClient with database='finance'
+ * Automatically maps department names to department codes for finance RLS
  */
 export async function createFinanceUserClient(
   userId: string,
@@ -197,7 +219,11 @@ export async function createFinanceUserClient(
   department?: string,
   email?: string
 ): Promise<Client> {
-  return createUserClient(userId, roles, department, email, 'finance');
+  // Map department name to code if it's a full name (finance RLS uses department_code)
+  const deptForRLS = department && DEPARTMENT_CODE_MAP[department]
+    ? DEPARTMENT_CODE_MAP[department]
+    : department;
+  return createUserClient(userId, roles, deptForRLS, email, 'finance');
 }
 
 /**
@@ -213,6 +239,7 @@ export const TEST_USERS = {
     email: 'frank@tamshai.local',
     roles: ['user'],
     department: 'IT',
+    departmentCode: 'IT',
     employeeId: 'b6c7d8e9-0f1a-2b3c-4d5e-6f7a8b9c0d1e',
   },
   // Regular employee
@@ -223,6 +250,7 @@ export const TEST_USERS = {
     email: 'marcus.j@tamshai.local',
     roles: ['user'],
     department: 'Engineering',
+    departmentCode: 'ENG',
     employeeId: 'e1000000-0000-0000-0000-000000000052',
   },
   // Manager - can see direct reports
@@ -233,6 +261,7 @@ export const TEST_USERS = {
     email: 'nina.p@tamshai.local',
     roles: ['manager'],
     department: 'Engineering',
+    departmentCode: 'ENG',
     employeeId: 'a5b6c7d8-9e0f-1a2b-3c4d-5e6f7a8b9c0d',
   },
   // HR Read - can see all employees
@@ -243,6 +272,7 @@ export const TEST_USERS = {
     email: 'alice@tamshai.local',
     roles: ['hr-read'],
     department: 'HR',
+    departmentCode: 'HR',
     employeeId: 'f104eddc-21ab-457c-a254-78051ad7ad67',
   },
   // HR Write - full HR access
@@ -253,6 +283,7 @@ export const TEST_USERS = {
     email: 'alice@tamshai.local',
     roles: ['hr-read', 'hr-write'],
     department: 'HR',
+    departmentCode: 'HR',
     employeeId: 'f104eddc-21ab-457c-a254-78051ad7ad67',
   },
   // Finance Read - can see finance data
@@ -262,7 +293,8 @@ export const TEST_USERS = {
     username: 'bob.martinez',
     email: 'bob@tamshai.local',
     roles: ['finance-read'],
-    department: 'FIN',  // Use department code as in finance RLS
+    department: 'Finance',
+    departmentCode: 'FIN',
     employeeId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1',
   },
   // Finance Write - full finance access
@@ -272,7 +304,8 @@ export const TEST_USERS = {
     username: 'bob.martinez',
     email: 'bob@tamshai.local',
     roles: ['finance-read', 'finance-write'],
-    department: 'FIN',
+    department: 'Finance',
+    departmentCode: 'FIN',
     employeeId: '1e8f62b4-37a5-4e67-bb91-45d1e9e3a0f1',
   },
   // Executive - cross-department access
@@ -283,6 +316,7 @@ export const TEST_USERS = {
     email: 'eve@tamshai.local',
     roles: ['executive'],
     department: 'Executive',
+    departmentCode: 'EXEC',
     employeeId: 'e9f0a1b2-3c4d-5e6f-7a8b-9c0d1e2f3a4b',
   },
   // Sales - for cross-schema tests
@@ -293,6 +327,7 @@ export const TEST_USERS = {
     email: 'carol@tamshai.local',
     roles: ['sales-read', 'sales-write'],
     department: 'Sales',
+    departmentCode: 'SALES',
     employeeId: 'c0e1c8a4-5d6e-4f9b-8a3c-7e2d1f0b9a8c',
   },
 };

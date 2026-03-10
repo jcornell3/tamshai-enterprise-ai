@@ -12,23 +12,24 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE SCHEMA IF NOT EXISTS finance;
 
 -- App user: RLS-enforced access
+-- DELETE is included because RLS policies (FOR ALL) control who can delete via role checks
 GRANT USAGE ON SCHEMA finance TO tamshai;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA finance TO tamshai;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
 ALTER USER tamshai SET row_security = on;
 
 -- Set default privileges for future tables
-ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tamshai;
 ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT USAGE, SELECT ON SEQUENCES TO tamshai;
 
 -- tamshai_app user is created by init-multiple-databases.sh with password from
 -- TAMSHAI_APP_PASSWORD env var. This user does NOT have BYPASSRLS - RLS enforced.
 
--- Grant permissions to tamshai_app (RLS-enforced, no DELETE)
+-- Grant permissions to tamshai_app (RLS-enforced, DELETE controlled by RLS policies)
 GRANT USAGE ON SCHEMA finance TO tamshai_app;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE ON TABLES TO tamshai_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO tamshai_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA finance GRANT USAGE, SELECT ON SEQUENCES TO tamshai_app;
 
 -- =============================================================================
@@ -1056,7 +1057,7 @@ CREATE POLICY budget_history_department_access ON finance.budget_approval_histor
         AND EXISTS (
             SELECT 1 FROM finance.department_budgets db
             WHERE db.id = budget_approval_history.budget_id
-            AND db.department = current_setting('app.current_department_id', true)
+            AND db.department_code = current_setting('app.current_department_id', true)
         )
     );
 
@@ -1075,7 +1076,7 @@ CREATE POLICY budget_history_manager_insert ON finance.budget_approval_history
         AND EXISTS (
             SELECT 1 FROM finance.department_budgets db
             WHERE db.id = budget_approval_history.budget_id
-            AND db.department = current_setting('app.current_department_id', true)
+            AND db.department_code = current_setting('app.current_department_id', true)
         )
     );
 
@@ -1636,16 +1637,16 @@ ON CONFLICT DO NOTHING;
 -- =============================================================================
 -- GRANTS
 -- =============================================================================
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA finance TO tamshai;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO tamshai;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tamshai;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tamshai;
 GRANT EXECUTE ON FUNCTION finance.set_user_context TO tamshai;
 
--- Grant permissions to tamshai_app for RLS-enforced access
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
+-- Grant permissions to tamshai_app for RLS-enforced access (DELETE controlled by RLS policies)
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA finance TO tamshai_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA finance TO tamshai_app;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO tamshai_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tamshai_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tamshai_app;
 GRANT EXECUTE ON FUNCTION finance.set_user_context TO tamshai_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA finance TO tamshai_app;

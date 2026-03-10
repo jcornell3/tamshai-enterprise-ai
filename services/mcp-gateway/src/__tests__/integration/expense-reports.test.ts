@@ -761,7 +761,7 @@ describe('Expense Reports Integration Tests - v1.5', () => {
       expect(response.data.status).toBe('error');
       expect(response.data.code).toBe('INSUFFICIENT_PERMISSIONS');
       // suggestedAction contains user-friendly message about requesting access
-      expect(response.data.suggestedAction).toContain('Finance');
+      expect(response.data.suggestedAction).toContain('permissions');
     });
 
     test('rejects approval of non-SUBMITTED/UNDER_REVIEW reports', async () => {

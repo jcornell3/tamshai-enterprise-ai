@@ -66,6 +66,12 @@ export async function approveExpenseReport(
     try {
       // Check finance-write permission first (can approve any expense report)
       const hasFinanceRole = hasFinanceApprovePermission(userContext.roles);
+      const hasManagerRole = isManager(userContext.roles);
+
+      // Early permission check: must have finance-write or manager role
+      if (!hasFinanceRole && !hasManagerRole) {
+        return handleInsufficientPermissions('approve_expense_report', userContext.roles);
+      }
 
       // 1. Verify expense report exists and get details
       // Finance role holders use simple query (no HR join needed)
