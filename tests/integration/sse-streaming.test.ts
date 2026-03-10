@@ -338,7 +338,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
   });
 
   describe('GET /api/query Endpoint (EventSource compatible)', () => {
-    test('GET endpoint works with query parameter', async () => {
+    test('GET endpoint works with Authorization header', async () => {
       const token = await authProvider.getUserToken(TEST_USERS.executive.username);
 
       const result = await new Promise<{ fullContent: string; error?: string }>(
@@ -349,7 +349,6 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
 
           const url = new URL(`${CONFIG.gatewayUrl}/api/query`);
           url.searchParams.set('q', 'Hello');
-          url.searchParams.set('token', token);
 
           const req = http.request(
             {
@@ -359,6 +358,7 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
               method: 'GET',
               headers: {
                 Accept: 'text/event-stream',
+                Authorization: `Bearer ${token}`,
               },
             },
             (res) => {
@@ -436,6 +436,26 @@ describe('SSE Streaming Tests - Simulating TamshaiAI App', () => {
         expect(result.fullContent).toContain('[Mock Response]');
       }
     }, 90000);
+
+    test('Rejects token passed via query parameter with 401', async () => {
+      const token = await authProvider.getUserToken(TEST_USERS.executive.username);
+
+      try {
+        await axios.get(`${CONFIG.gatewayUrl}/api/query`, {
+          params: { q: 'Hello', token },
+          headers: { Accept: 'text/event-stream' },
+        });
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error) && error.response) {
+          expect(error.response.status).toBe(401);
+          expect(error.response.data.error).toContain('query parameter is no longer accepted');
+        } else {
+          throw error;
+        }
+      }
+    });
   });
 });
 
