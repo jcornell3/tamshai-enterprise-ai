@@ -1181,6 +1181,8 @@ jobs:
           PORT: ${{ vars.DEV_MCP_GATEWAY }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
+          NODE_ENV: test
           # No /auth path prefix - matches integration tests
           KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
@@ -1385,6 +1387,8 @@ jobs:
           PORT: ${{ vars.DEV_MCP_GATEWAY }}
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          CLAUDE_API_KEY: sk-ant-test-dummy-key-for-ci
+          NODE_ENV: test
           # Use localhost for Keycloak (running in Docker with port mapping)
           KEYCLOAK_URL: http://localhost:${{ vars.DEV_KEYCLOAK }}
           KEYCLOAK_REALM: tamshai-corp
