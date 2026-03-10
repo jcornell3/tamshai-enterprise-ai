@@ -31,5 +31,8 @@
     "ts-jest": "^29.4.6",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "minimatch": "^10.2.3"
   }
 }
