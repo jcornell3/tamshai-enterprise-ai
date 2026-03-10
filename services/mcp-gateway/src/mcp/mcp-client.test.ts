@@ -328,7 +328,9 @@ describe('MCPClient', () => {
       expect(result.error).toBe('Network error');
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('MCP server hr error'),
-        networkError
+        expect.objectContaining({
+          error: 'Network error',
+        })
       );
     });
 
