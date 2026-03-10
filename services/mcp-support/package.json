@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "overrides": {
     "undici": ">=6.23.0",
-    "minimatch": "^10.2.3"
+    "minimatch": "^10.2.3",
+    "test-exclude": "^7.0.2"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
