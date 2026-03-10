@@ -293,12 +293,30 @@ export class MCPClient {
         };
       }
 
-      this.logger.error(`MCP server ${server.name} error after ${durationMs}ms:`, error);
+      const errorDetail: { message: string; httpStatus?: number; responseBody?: string } = {
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+
+      if (axios.isAxiosError(error)) {
+        errorDetail.httpStatus = error.response?.status;
+        const body = error.response?.data;
+        if (body) {
+          errorDetail.responseBody = typeof body === 'string' ? body.substring(0, 500) : JSON.stringify(body).substring(0, 500);
+        }
+      }
+
+      this.logger.error(`MCP server ${server.name} error after ${durationMs}ms:`, {
+        error: errorDetail.message,
+        httpStatus: errorDetail.httpStatus,
+        responseBody: errorDetail.responseBody,
+      });
       return {
         server: server.name,
         status: 'error',
         data: null,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorDetail.httpStatus
+          ? `HTTP ${errorDetail.httpStatus}: ${errorDetail.message}`
+          : errorDetail.message,
         durationMs,
       };
     }

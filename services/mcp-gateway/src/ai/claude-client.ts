@@ -182,12 +182,11 @@ When answering questions:
     const response = textContent && 'text' in textContent ? textContent.text : 'No response generated.';
 
     // Log cache metrics for prompt caching monitoring
-    const usage = message.usage as unknown as Record<string, unknown>;
     this.logger.info('Claude query completed', {
       responseLength: response.length,
       usage: message.usage,
-      cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
-      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+      cacheCreationTokens: message.usage.cache_creation_input_tokens ?? 0,
+      cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
     });
 
     return response;
@@ -250,12 +249,11 @@ When answering questions:
     const response = textContent && 'text' in textContent ? textContent.text : 'No response generated.';
 
     // Log cache metrics for prompt caching monitoring
-    const usage = message.usage as unknown as Record<string, unknown>;
     this.logger.info('Claude query completed', {
       responseLength: response.length,
       usage: message.usage,
-      cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
-      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+      cacheCreationTokens: message.usage.cache_creation_input_tokens ?? 0,
+      cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
     });
 
     return response;

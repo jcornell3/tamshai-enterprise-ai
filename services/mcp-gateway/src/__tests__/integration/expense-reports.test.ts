@@ -154,128 +154,140 @@ const TEST_REPORTS = {
 async function resetExpenseReportFixtures(): Promise<void> {
   // Use admin pool with BYPASSRLS to reset fixtures
   const pool = getAdminPoolFinanceReset();
+  const client = await pool.connect();
 
-  // =================================================================
-  // LEGACY SAMPLE DATA FIXTURES (read-only tests)
-  // =================================================================
+  try {
+    await client.query('BEGIN');
 
-  // Reset SUBMITTED fixtures
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'SUBMITTED',
-        approved_by = NULL, approved_at = NULL,
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id IN ($1, $2)
-  `, [TEST_REPORTS.SUBMITTED_MARCUS, TEST_REPORTS.SUBMITTED_EVE]);
+    // =================================================================
+    // LEGACY SAMPLE DATA FIXTURES (read-only tests)
+    // =================================================================
 
-  // Reset UNDER_REVIEW fixture
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'UNDER_REVIEW',
-        approved_by = NULL, approved_at = NULL,
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id = $1
-  `, [TEST_REPORTS.UNDER_REVIEW_ALICE]);
+    // Reset SUBMITTED fixtures
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'SUBMITTED',
+          approved_by = NULL, approved_at = NULL,
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id IN ($1, $2)
+    `, [TEST_REPORTS.SUBMITTED_MARCUS, TEST_REPORTS.SUBMITTED_EVE]);
 
-  // Reset APPROVED fixtures (for reimburse tests)
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'APPROVED',
-        approved_by = 'bob.martinez@tamshai.com',
-        approved_at = NOW() - interval '2 days',
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id IN ($1, $2)
-  `, [TEST_REPORTS.APPROVED_NINA, TEST_REPORTS.APPROVED_BOB]);
+    // Reset UNDER_REVIEW fixture
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'UNDER_REVIEW',
+          approved_by = NULL, approved_at = NULL,
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id = $1
+    `, [TEST_REPORTS.UNDER_REVIEW_ALICE]);
 
-  // Reset REJECTED fixture
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'REJECTED',
-        rejected_by = 'bob.martinez@tamshai.com',
-        rejected_at = NOW() - interval '3 days',
-        rejection_reason = 'Missing receipts for online course purchases. Please upload all receipts and resubmit.',
-        approved_by = NULL, approved_at = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id = $1
-  `, [TEST_REPORTS.REJECTED_NINA]);
+    // Reset APPROVED fixtures (for reimburse tests)
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'APPROVED',
+          approved_by = 'bob.martinez@tamshai.com',
+          approved_at = NOW() - interval '2 days',
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id IN ($1, $2)
+    `, [TEST_REPORTS.APPROVED_NINA, TEST_REPORTS.APPROVED_BOB]);
 
-  // Reset REIMBURSED fixture
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'REIMBURSED',
-        approved_by = 'bob.martinez@tamshai.com',
-        approved_at = NOW() - interval '6 days',
-        reimbursed_by = 'bob.martinez@tamshai.com',
-        reimbursed_at = NOW() - interval '2 days',
-        payment_reference = 'ACH-20260118-001'
-    WHERE id = $1
-  `, [TEST_REPORTS.REIMBURSED_CAROL]);
+    // Reset REJECTED fixture
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'REJECTED',
+          rejected_by = 'bob.martinez@tamshai.com',
+          rejected_at = NOW() - interval '3 days',
+          rejection_reason = 'Missing receipts for online course purchases. Please upload all receipts and resubmit.',
+          approved_by = NULL, approved_at = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id = $1
+    `, [TEST_REPORTS.REJECTED_NINA]);
 
-  // Reset DRAFT fixture
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'DRAFT',
-        submission_date = NULL, submitted_at = NULL,
-        approved_by = NULL, approved_at = NULL,
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id = $1
-  `, [TEST_REPORTS.DRAFT_FRANK]);
+    // Reset REIMBURSED fixture
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'REIMBURSED',
+          approved_by = 'bob.martinez@tamshai.com',
+          approved_at = NOW() - interval '6 days',
+          reimbursed_by = 'bob.martinez@tamshai.com',
+          reimbursed_at = NOW() - interval '2 days',
+          payment_reference = 'ACH-20260118-001'
+      WHERE id = $1
+    `, [TEST_REPORTS.REIMBURSED_CAROL]);
 
-  // =================================================================
-  // DEDICATED TEST FIXTURES (workflow tests - each test gets its own)
-  // =================================================================
+    // Reset DRAFT fixture
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'DRAFT',
+          submission_date = NULL, submitted_at = NULL,
+          approved_by = NULL, approved_at = NULL,
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id = $1
+    `, [TEST_REPORTS.DRAFT_FRANK]);
 
-  // Reset APPROVAL test fixtures to SUBMITTED status
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'SUBMITTED',
-        submission_date = '2026-02-01',
-        submitted_at = '2026-02-01 09:00:00',
-        approved_by = NULL, approved_at = NULL,
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id IN ($1, $2, $3)
-  `, [TEST_REPORTS.TEST_APR_PERM, TEST_REPORTS.TEST_APR_CONFIRM, TEST_REPORTS.TEST_APR_EXEC]);
+    // =================================================================
+    // DEDICATED TEST FIXTURES (workflow tests - each test gets its own)
+    // =================================================================
 
-  // Reset REJECTION test fixtures to UNDER_REVIEW status
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'UNDER_REVIEW',
-        submission_date = '2026-02-01',
-        submitted_at = '2026-02-01 12:00:00',
-        approved_by = NULL, approved_at = NULL,
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id IN ($1, $2)
-  `, [TEST_REPORTS.TEST_REJ_CONFIRM, TEST_REPORTS.TEST_REJ_EXEC]);
+    // Reset APPROVAL test fixtures to SUBMITTED status
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'SUBMITTED',
+          submission_date = '2026-02-01',
+          submitted_at = '2026-02-01 09:00:00',
+          approved_by = NULL, approved_at = NULL,
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id IN ($1, $2, $3)
+    `, [TEST_REPORTS.TEST_APR_PERM, TEST_REPORTS.TEST_APR_CONFIRM, TEST_REPORTS.TEST_APR_EXEC]);
 
-  // Reset REIMBURSEMENT test fixtures to APPROVED status
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'APPROVED',
-        submission_date = '2026-02-01',
-        submitted_at = '2026-02-01 14:00:00',
-        approved_by = 'eve.thompson@tamshai.com',
-        approved_at = '2026-02-02 10:00:00',
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id IN ($1, $2)
-  `, [TEST_REPORTS.TEST_RMB_STATUS, TEST_REPORTS.TEST_RMB_EXEC]);
+    // Reset REJECTION test fixtures to UNDER_REVIEW status
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'UNDER_REVIEW',
+          submission_date = '2026-02-01',
+          submitted_at = '2026-02-01 12:00:00',
+          approved_by = NULL, approved_at = NULL,
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id IN ($1, $2)
+    `, [TEST_REPORTS.TEST_REJ_CONFIRM, TEST_REPORTS.TEST_REJ_EXEC]);
 
-  // Reset DENIED CONFIRMATION test fixture to SUBMITTED status
-  await pool.query(`
-    UPDATE finance.expense_reports
-    SET status = 'SUBMITTED',
-        submission_date = '2026-02-01',
-        submitted_at = '2026-02-01 16:00:00',
-        approved_by = NULL, approved_at = NULL,
-        rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
-        reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
-    WHERE id = $1
-  `, [TEST_REPORTS.TEST_DENY]);
+    // Reset REIMBURSEMENT test fixtures to APPROVED status
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'APPROVED',
+          submission_date = '2026-02-01',
+          submitted_at = '2026-02-01 14:00:00',
+          approved_by = 'eve.thompson@tamshai.com',
+          approved_at = '2026-02-02 10:00:00',
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id IN ($1, $2)
+    `, [TEST_REPORTS.TEST_RMB_STATUS, TEST_REPORTS.TEST_RMB_EXEC]);
+
+    // Reset DENIED CONFIRMATION test fixture to SUBMITTED status
+    await client.query(`
+      UPDATE finance.expense_reports
+      SET status = 'SUBMITTED',
+          submission_date = '2026-02-01',
+          submitted_at = '2026-02-01 16:00:00',
+          approved_by = NULL, approved_at = NULL,
+          rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+          reimbursed_by = NULL, reimbursed_at = NULL, payment_reference = NULL
+      WHERE id = $1
+    `, [TEST_REPORTS.TEST_DENY]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 
   console.log('   ✅ Expense report test fixtures reset to initial states');
 }

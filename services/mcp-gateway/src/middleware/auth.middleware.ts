@@ -66,16 +66,17 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
     } else if (tokenFromQuery) {
-      // DEPRECATED: Token in URL is logged and visible in browser history
-      // This is kept for backwards compatibility with EventSource clients
-      // New clients should use POST /api/query with fetch() streaming
-      token = tokenFromQuery;
-      logger.warn('Token passed via query parameter (deprecated)', {
+      // REJECTED: Query param tokens are a security risk (visible in logs, browser history, referer headers)
+      // All clients must use Authorization header. EventSource clients should use POST /api/query with fetch() streaming.
+      logger.warn('Rejected query parameter token (deprecated and disabled)', {
         path: req.path,
         method: req.method,
-        // Don't log the actual token for security
-        warning: 'Query param tokens are visible in logs and browser history',
       });
+      res.status(401).json({
+        error: 'Token via query parameter is no longer accepted. Use Authorization header instead.',
+        migration: 'Use POST /api/query with fetch() streaming and Authorization: Bearer <token> header.',
+      });
+      return;
     } else {
       res.status(401).json({ error: 'Missing or invalid authorization header' });
       return;

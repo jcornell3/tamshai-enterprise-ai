@@ -24,8 +24,14 @@ import { getImpersonatedToken } from './setup';
 const MCP_INTERNAL_SECRET = process.env.MCP_INTERNAL_SECRET || '';
 
 // CI Environment Check
-// Skip all tests in CI - requires full Docker network setup
+// These tests require the MCP UI service and full Docker network (inter-container hostname resolution).
+// In CI, only unit tests run; generative UI integration tests run locally with docker-compose.
 const isCI = process.env.CI === 'true';
+if (isCI) {
+  test('generative UI integration tests skipped in CI (requires Docker network)', () => {
+    console.log('Skipping 25 generative UI integration tests — requires MCP UI service and Docker network. Run locally with docker-compose.');
+  });
+}
 const describeIntegration = isCI ? describe.skip : describe;
 
 // Test configuration

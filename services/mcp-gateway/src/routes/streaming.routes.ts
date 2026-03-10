@@ -17,7 +17,7 @@
 import { Router, Request, Response, RequestHandler } from 'express';
 import { Logger } from 'winston';
 import Anthropic from '@anthropic-ai/sdk';
-import type { TextBlockParam } from '@anthropic-ai/sdk/resources/messages';
+import type { TextBlockParam, RawMessageStartEvent, Usage } from '@anthropic-ai/sdk/resources/messages';
 import {
   MCPToolResponse,
   isSuccessResponse,
@@ -644,7 +644,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
       }
 
       // Track usage from stream events for cache metrics (declared here for both mock and real mode)
-      let streamUsage: Record<string, unknown> = {};
+      let streamUsage: Partial<Usage> = {};
 
       // MOCK MODE: Return simulated streaming response for testing/CI
       if (isMockMode(config.claudeApiKey)) {
@@ -680,7 +680,7 @@ export function createStreamingRoutes(deps: StreamingRoutesDependencies): Router
           }
 
           if (chunk.type === 'message_start') {
-            const startEvent = chunk as unknown as { message?: { usage?: Record<string, unknown> } };
+            const startEvent = chunk as RawMessageStartEvent;
             if (startEvent.message?.usage) {
               streamUsage = startEvent.message.usage;
             }

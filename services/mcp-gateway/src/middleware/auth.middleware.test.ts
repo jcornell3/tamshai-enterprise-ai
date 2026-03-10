@@ -79,22 +79,25 @@ describe('Auth Middleware', () => {
         expect(next).toHaveBeenCalled();
       });
 
-      it('should extract token from query parameter (deprecated)', async () => {
-        mockJwtValidator.validateToken.mockResolvedValue(TEST_USERS.financeManager);
+      it('should reject token from query parameter with 401', async () => {
         req.query = { token: 'query-token' };
 
         const middleware = createAuthMiddleware(config);
         await middleware(req as Request, res as Response, next);
 
-        expect(mockJwtValidator.validateToken).toHaveBeenCalledWith('query-token');
+        expect(mockJwtValidator.validateToken).not.toHaveBeenCalled();
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          'Token passed via query parameter (deprecated)',
+          'Rejected query parameter token (deprecated and disabled)',
           expect.objectContaining({
             path: '/api/test',
             method: 'GET',
           })
         );
-        expect(next).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+          error: 'Token via query parameter is no longer accepted. Use Authorization header instead.',
+        }));
+        expect(next).not.toHaveBeenCalled();
       });
 
       it('should prefer Authorization header over query parameter', async () => {

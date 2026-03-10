@@ -356,6 +356,106 @@ describe('MCP Gateway Routes', () => {
     });
   });
 
+  describe('Redis Failure Scenarios', () => {
+    test('returns 500 when Redis getPendingConfirmation throws', async () => {
+      const getPendingConfirmation = redisUtils.getPendingConfirmation as jest.Mock;
+      getPendingConfirmation.mockRejectedValueOnce(new Error('Redis connection refused'));
+
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use((req: Request, _res: Response, next: NextFunction) => {
+        (req as AuthenticatedRequest).userContext = {
+          userId: 'test-user-123',
+          username: 'test.user',
+          roles: ['hr-read'],
+        };
+        next();
+      });
+
+      testApp.post('/api/confirm/:confirmationId', async (req: Request, res: Response) => {
+        const userContext = (req as AuthenticatedRequest).userContext;
+        const { confirmationId } = req.params;
+
+        if (!userContext) {
+          res.status(401).json({ error: 'Authentication required' });
+          return;
+        }
+
+        try {
+          const pendingAction = await (redisUtils.getPendingConfirmation as jest.Mock)(confirmationId);
+          if (!pendingAction) {
+            res.status(404).json({ error: 'Confirmation not found or expired' });
+            return;
+          }
+          res.json({ status: 'confirmed' });
+        } catch {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+      });
+
+      const response = await request(testApp)
+        .post('/api/confirm/test-id')
+        .send({ approved: true });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toHaveProperty('error', 'Internal server error');
+    });
+
+    test('returns 500 when Redis deletePendingConfirmation throws', async () => {
+      const getPendingConfirmation = redisUtils.getPendingConfirmation as jest.Mock;
+      const deletePendingConfirmation = redisUtils.deletePendingConfirmation as jest.Mock;
+      getPendingConfirmation.mockResolvedValueOnce({ action: 'delete_employee', employeeId: 'emp-123' });
+      deletePendingConfirmation.mockRejectedValueOnce(new Error('Redis timeout'));
+
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use((req: Request, _res: Response, next: NextFunction) => {
+        (req as AuthenticatedRequest).userContext = {
+          userId: 'test-user-123',
+          username: 'test.user',
+          roles: ['hr-read'],
+        };
+        next();
+      });
+
+      testApp.post('/api/confirm/:confirmationId', async (req: Request, res: Response) => {
+        const userContext = (req as AuthenticatedRequest).userContext;
+        const { confirmationId } = req.params;
+        const { approved } = req.body;
+
+        if (!userContext) {
+          res.status(401).json({ error: 'Authentication required' });
+          return;
+        }
+
+        try {
+          const pendingAction = await (redisUtils.getPendingConfirmation as jest.Mock)(confirmationId);
+          if (!pendingAction) {
+            res.status(404).json({ error: 'Confirmation not found or expired' });
+            return;
+          }
+
+          if (approved) {
+            await (redisUtils.deletePendingConfirmation as jest.Mock)(confirmationId);
+            res.json({ status: 'confirmed', action: pendingAction.action });
+          } else {
+            await (redisUtils.deletePendingConfirmation as jest.Mock)(confirmationId);
+            res.json({ status: 'cancelled', action: pendingAction.action });
+          }
+        } catch {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+      });
+
+      const response = await request(testApp)
+        .post('/api/confirm/test-id')
+        .send({ approved: true });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toHaveProperty('error', 'Internal server error');
+    });
+  });
+
   describe('Error Handling', () => {
     test('handles malformed JSON gracefully', async () => {
       app.post('/api/test', (req: Request, res: Response) => {
