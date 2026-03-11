@@ -179,61 +179,87 @@ export async function createAuthenticatedContext(browser: Browser): Promise<Brow
 /**
  * Warm up an authenticated context by visiting an app URL.
  *
- * The initial tokens captured by createAuthenticatedContext come from the
- * portal page. When a sub-app (e.g. /support/, /payroll/) loads, its OIDC
- * client may not accept portal-scoped tokens and will silently redirect
- * through Keycloak SSO to obtain app-specific tokens.
+ * After createAuthenticatedContext establishes Keycloak SSO cookies,
+ * this function opens a page to an app URL and waits for the full
+ * OIDC redirect cycle to complete:
+ *   1. App loads → OIDC lib detects no tokens → redirects to Keycloak
+ *   2. Keycloak recognizes SSO cookie → redirects back with auth code
+ *   3. App callback exchanges code → stores tokens in sessionStorage
+ *   4. App renders
  *
- * This function completes that redirect cycle and re-captures the resulting
- * sessionStorage so every subsequent page in the context starts with the
- * correct tokens — eliminating further redirects.
+ * After the cycle completes, captures the OIDC tokens and injects them
+ * into all future pages via addInitScript — eliminating further redirects.
+ *
+ * IMPORTANT: Uses URL-based polling to detect redirect completion, not
+ * generic selectors. This prevents false-positive matches on Keycloak
+ * pages and handles cold JVM startup where redirects are slower.
  *
  * @param ctx - Authenticated browser context from createAuthenticatedContext
- * @param url - Target app URL to warm up (e.g. BASE_URLS[ENV] + '/support/sla')
- * @param selectors - Optional CSS selector to wait for (default: '[data-testid], .page-container')
+ * @param url - Target app URL to warm up (e.g. BASE_URLS[ENV] + '/payroll/')
  */
 export async function warmUpContext(
   ctx: BrowserContext,
   url: string,
-  selectors: string = '[data-testid], .page-container, h1, h2',
 ): Promise<void> {
   const warmup = await ctx.newPage();
   try {
-    // Use 'load' instead of 'networkidle' - SSE connections keep network active
+    // Extract the app's base path to detect when OIDC redirect returns to the app
+    const targetOrigin = new URL(url).origin;
+    const targetPath = new URL(url).pathname.split('/').filter(Boolean)[0] || '';
+
+    // Navigate to app URL. This triggers the OIDC redirect cycle.
+    // Use 'load' instead of 'networkidle' — SSE connections keep network active.
     await warmup.goto(url, {
       timeout: 60000,
       waitUntil: 'load',
     });
-    // Wait for the app to fully render (after potential OIDC redirect cycle)
-    try {
-      await warmup.waitForSelector(selectors, { timeout: 30000 });
-    } catch {
-      // Selector wait failed, but OIDC redirect may have completed.
-      // Wait a bit more for tokens to settle in sessionStorage.
-      await warmup.waitForTimeout(2000);
+
+    // Poll until the page URL is back on the app domain (not Keycloak)
+    // AND sessionStorage contains OIDC tokens. This handles the full
+    // redirect cycle: app → Keycloak → callback → app.
+    const maxWaitMs = 60000;
+    const pollIntervalMs = 500;
+    const startTime = Date.now();
+    let sessionData: Record<string, string> = {};
+    let hasOidcTokens = false;
+
+    while (Date.now() - startTime < maxWaitMs) {
+      // Check if page URL is on the target app (not Keycloak auth endpoint)
+      const currentUrl = warmup.url();
+      const isOnApp = currentUrl.startsWith(targetOrigin) &&
+        !currentUrl.includes('/auth/realms/') &&
+        !currentUrl.includes('/callback');
+
+      if (isOnApp) {
+        // Page is on the app — check for OIDC tokens in sessionStorage
+        sessionData = await warmup.evaluate(() => {
+          const data: Record<string, string> = {};
+          for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i)!;
+            data[key] = sessionStorage.getItem(key)!;
+          }
+          return data;
+        });
+
+        hasOidcTokens = Object.keys(sessionData).some(
+          key => key.includes('oidc') || key.includes('token') || key.includes('authority')
+        );
+
+        if (hasOidcTokens) {
+          break;
+        }
+      }
+
+      await warmup.waitForTimeout(pollIntervalMs);
     }
 
-    // Re-capture sessionStorage which now contains app-specific OIDC tokens
-    let sessionData = await warmup.evaluate(() => {
-      const data: Record<string, string> = {};
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i)!;
-        data[key] = sessionStorage.getItem(key)!;
-      }
-      return data;
-    });
-
-    // Validate: OIDC tokens should contain keys with 'oidc' or 'token' patterns.
-    // If the page redirected to Keycloak login instead of the app, sessionStorage
-    // will be empty or contain only Keycloak-page data (no OIDC tokens).
-    const hasOidcTokens = Object.keys(sessionData).some(
-      key => key.includes('oidc') || key.includes('token') || key.includes('authority')
-    );
-
     if (!hasOidcTokens) {
-      // Captured data is from Keycloak login page, not the app — re-authenticate
+      // OIDC redirect didn't complete — try full re-authentication
       try {
         await authenticateUser(warmup);
+        // Navigate back to the app URL after re-auth
+        await warmup.goto(url, { timeout: 30000, waitUntil: 'load' });
+        await warmup.waitForTimeout(2000);
         sessionData = await warmup.evaluate(() => {
           const data: Record<string, string> = {};
           for (let i = 0; i < sessionStorage.length; i++) {
@@ -247,9 +273,9 @@ export async function warmUpContext(
       }
     }
 
-    // Add new initScript with app-specific tokens. Each script includes an
-    // expiresAt timestamp so accumulated scripts from prior warmups become
-    // no-ops once their tokens expire — keeping the mechanism idempotent.
+    // Inject captured tokens into all future pages in this context.
+    // Each initScript includes an expiresAt timestamp so accumulated
+    // scripts from prior warmups become no-ops once expired (idempotent).
     if (Object.keys(sessionData).length > 0) {
       await ctx.addInitScript((data: { tokens: Record<string, string>; expiresAt: number }) => {
         if (Date.now() < data.expiresAt) {
@@ -259,8 +285,9 @@ export async function warmUpContext(
         }
       }, { tokens: sessionData, expiresAt: Date.now() + 4.5 * 60 * 1000 });
     }
-  } catch {
-    // Warm-up failure is non-fatal; tests may still pass via Keycloak SSO cookies
+  } catch (error) {
+    // Log warmup failures — they indicate auth infrastructure issues
+    console.error(`[warmUpContext] Failed for ${url}: ${error}`);
   }
   await warmup.close();
 }
