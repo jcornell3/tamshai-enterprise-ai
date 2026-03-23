@@ -34,7 +34,7 @@
     "swagger-ui-express": "^5.0.0",
     "uuid": "^13.0.0",
     "winston": "^3.17.0",
-    "yaml": "^2.3.4"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",
